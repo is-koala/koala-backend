@@ -51,13 +51,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/company-contact-invitations/{invitationId}").hasAnyRole("USER", "ADMIN")
 
                         //company endpoints
-                        .requestMatchers(HttpMethod.POST,"/companies/").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST,"/companies").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/companies/{companyId}/contact-invitations").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/companies/{companyId}/contact-invitations").hasAnyRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/companies/{companyId}/jobs").hasAnyRole("USER", "ADMIN")
 
                         //image endpoints
-                        .requestMatchers(HttpMethod.POST,"/images/").hasAnyRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST,"/images").hasAnyRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE,"/images/{imageId}").hasAnyRole("USER", "ADMIN")
 
                         //notification endpoints

@@ -29,7 +29,7 @@ public class ImagesController {
 
 
 
-    @PostMapping("/")
+    @PostMapping
     public ResponseEntity<SuccessDataResult<UploadImageResponseDto>> uploadImage(@RequestParam("image") MultipartFile image){
 
         UploadImageResponseDto responseImage = imageService.uploadImageDto(image);

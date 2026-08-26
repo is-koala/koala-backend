@@ -2,7 +2,7 @@ package com.exskylab.koala.core.constants;
 
 public class NotificationMessages {
 
-    public static final String CHANNEL_NOT_EMAIL = "{notifiation.channel.not.email}";
+    public static final String CHANNEL_NOT_EMAIL = "{notification.channel.not.email}";
     public static final String EMAIL_TASK_CANNOT_BE_SENT_TO_QUEUE = "{notification.email.task.cannot.be.sent.to.queue}";
     public static final String SMS_TASK_CANNOT_BE_SENT_TO_QUEUE = "{notification.sms.task.cannot.be.sent.to.queue}";
     public static final String PUSH_TASK_CANNOT_BE_SENT_TO_QUEUE = "{notification.push.task.cannot.be.sent.to.queue}";

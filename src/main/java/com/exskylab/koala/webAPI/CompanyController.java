@@ -43,7 +43,7 @@ public class CompanyController {
     }
 
 
-    @PostMapping(value = "/", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<SuccessDataResult<CompanyDto>> addCompany(
             @RequestPart("company") @Valid CreateCompanyRequestDto createCompanyRequestDto,
             @RequestPart(value = "logo", required = false) MultipartFile logo){

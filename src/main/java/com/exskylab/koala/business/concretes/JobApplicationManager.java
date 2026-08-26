@@ -110,7 +110,7 @@ public class JobApplicationManager implements JobApplicationService {
 
         ApplicationStatus status;
         try{
-            status = ApplicationStatus.valueOf(jobApplicationsApplicationIdPatchRequestDto.getStatus());
+            status = ApplicationStatus.valueOf(jobApplicationsApplicationIdPatchRequestDto.getStatus().trim().toUpperCase());
         } catch (IllegalArgumentException e) {
             logger.error("Invalid status value: {}", jobApplicationsApplicationIdPatchRequestDto.getStatus());
             throw new IllegalArgumentException(JobApplicationMessages.INVALID_APPLICATION_STATUS);
