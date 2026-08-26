@@ -16,8 +16,8 @@ public class MultiLanguageSupportConfig {
     @Bean
     public LocaleResolver localeResolver() {
         AcceptHeaderLocaleResolver localeResolver = new AcceptHeaderLocaleResolver();
-        localeResolver.setDefaultLocale(new Locale("tr"));
-        localeResolver.setSupportedLocales(List.of(new Locale("en"), new Locale("tr")));
+        localeResolver.setDefaultLocale(Locale.of("tr"));
+        localeResolver.setSupportedLocales(List.of(Locale.of("en"), Locale.of("tr")));
         return localeResolver;
     }
 

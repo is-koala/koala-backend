@@ -12,8 +12,8 @@ import com.exskylab.koala.core.producers.notification.PushTaskDto;
 import com.exskylab.koala.core.producers.notification.SmsTaskDto;
 import com.exskylab.koala.dataAccess.NotificationDao;
 import com.exskylab.koala.entities.*;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -97,7 +97,7 @@ public class NotificationManager implements NotificationService {
 
         try {
             notification.setTemplateParameters(objectMapper.writeValueAsString(finalTemplateParameters));
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             logger.error("Error while serializing template parameters for email with {} ErrorMessage: {}", recipientInfo, e.getMessage());
             throw new TemplateParametersSerializationException("{parameters.could.not.serialize}");
         }
@@ -161,7 +161,7 @@ public class NotificationManager implements NotificationService {
 
         try {
             notification.setTemplateParameters(objectMapper.writeValueAsString(finalTemplateParameters));
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             logger.error("Error while serializing template parameters for email with userId: {} ErrorMessage: {}", sendSmsDto.getRecipient().getId(), e.getMessage());
             throw new TemplateParametersSerializationException("{parameters.could.not.serialize}");
         }
@@ -240,7 +240,7 @@ public class NotificationManager implements NotificationService {
 
             try{
                 notification.setTemplateParameters(objectMapper.writeValueAsString(finalTemplateParameters));
-            }catch (JsonProcessingException e){
+            }catch (JacksonException e){
                 logger.error("Error while serializing template parameters for push notification with userId: {} ErrorMessage: {}", recipient.getId(), e.getMessage());
                 throw new TemplateParametersSerializationException("{parameters.could.not.serialize}");
             }
