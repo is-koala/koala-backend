@@ -14,6 +14,8 @@ import java.security.SecureRandom;
 @Service
 public class PhoneVerificationManager implements PhoneVerificationService {
 
+    private static final SecureRandom RANDOM = new SecureRandom();
+
     private final PhoneVerificationDao phoneVerificationDao;
 
     private final SmsService smsService;
@@ -29,8 +31,7 @@ public class PhoneVerificationManager implements PhoneVerificationService {
     public PhoneVerification startPhoneVerification(String newPhoneNumber, User user) {
         logger.info("Starting phone verification for user with id: {}, phoneNumber: {}", user.getId(), newPhoneNumber);
 
-        SecureRandom random = new SecureRandom();
-        int code = 100000 + random.nextInt(900000);
+        int code = 100000 + RANDOM.nextInt(900000);
         String verificationCode = String.valueOf(code);
 
 

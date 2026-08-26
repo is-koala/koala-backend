@@ -19,6 +19,8 @@ import java.time.LocalDateTime;
 @Service
 public class EmailVerificationManager implements EmailVerificationService {
 
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
     private final EmailVerificationDao emailVerificationDao;
 
     private final Logger logger = LoggerFactory.getLogger(EmailVerificationManager.class);
@@ -45,8 +47,7 @@ public class EmailVerificationManager implements EmailVerificationService {
         emailVerification.setUser(user);
         emailVerification.setNewEmail(newEmail);
         emailVerification.setOldEmail(user.getEmail());
-        SecureRandom secureRandom = new SecureRandom();
-        int verificationCode = 100000 + secureRandom.nextInt(900000);
+        int verificationCode = 100000 + SECURE_RANDOM.nextInt(900000);
         emailVerification.setToken(String.valueOf(verificationCode));
         emailVerification.setExpiresAt(LocalDateTime.now().plusMinutes(15));
         emailVerification = emailVerificationDao.save(emailVerification);

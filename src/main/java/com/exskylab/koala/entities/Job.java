@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -71,8 +72,8 @@ public class Job extends BaseEntity{
     @Enumerated(EnumType.STRING)
     private SalaryType salaryType;
 
-    @Column(name = "salary")
-    private double salary;
+    @Column(name = "salary", precision = 19, scale = 2)
+    private BigDecimal salary;
 
     @Column(name = "min_age")
     private int minAge;

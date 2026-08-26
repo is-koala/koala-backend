@@ -9,6 +9,7 @@ import com.exskylab.koala.core.dtos.jobAssignment.request.JobAssignmentsAssignme
 import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentsAssignmentIdStatusPatchResponseDto;
 import com.exskylab.koala.core.exceptions.AssignmentAlreadyAnsweredException;
+import com.exskylab.koala.core.helpers.CommissionCalculator;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.UserNotWorkerForAssignmentException;
 import com.exskylab.koala.core.mappers.JobAssignmentMapper;
@@ -25,25 +26,28 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-public class JobAssigmentManager implements JobAssignmentService {
+public class JobAssignmentManager implements JobAssignmentService {
 
     private final JobAssignmentDao jobAssignmentDao;
 
-    private final Logger logger = LoggerFactory.getLogger(JobAssigmentManager.class);
+    private final Logger logger = LoggerFactory.getLogger(JobAssignmentManager.class);
     private final SecurityService securityService;
     private final JobAssignmentMapper jobAssignmentMapper;
     private final IyzicoPaymentService iyzicoPaymentService;
     private final CompanyContactService companyContactService;
     private final UserService userService;
+    private final CommissionCalculator commissionCalculator;
 
 
-    public JobAssigmentManager(JobAssignmentDao jobAssignmentDao, SecurityService securityService, JobAssignmentMapper jobAssignmentMapper, IyzicoPaymentService iyzicoPaymentService, CompanyContactService companyContactService, UserService userService) {
+    public JobAssignmentManager(JobAssignmentDao jobAssignmentDao, SecurityService securityService, JobAssignmentMapper jobAssignmentMapper, IyzicoPaymentService iyzicoPaymentService, CompanyContactService companyContactService, UserService userService,
+                               CommissionCalculator commissionCalculator) {
         this.jobAssignmentDao = jobAssignmentDao;
         this.securityService = securityService;
         this.jobAssignmentMapper = jobAssignmentMapper;
         this.iyzicoPaymentService = iyzicoPaymentService;
         this.companyContactService = companyContactService;
         this.userService = userService;
+        this.commissionCalculator = commissionCalculator;
     }
 
 
@@ -54,6 +58,7 @@ public class JobAssigmentManager implements JobAssignmentService {
     }
 
     @Override
+    @Transactional
     public JobAssignmentsAssignmentIdStatusPatchResponseDto answerToAssignment(UUID assignmentId, JobAssignmentsAssignmentIdStatusPatchRequestDto jobAssignmentsAssignmentIdStatusPatchRequestDto) {
         logger.info("Answering to job assignment from");
         var assignment = jobAssignmentDao.findWithDetailsForPaymentById(assignmentId).orElseThrow(() -> {
@@ -147,15 +152,18 @@ public class JobAssigmentManager implements JobAssignmentService {
         }
 
 
-        double workerPayout = job.getSalary();
-        double koalaCommission = calculateCommission(workerPayout);
-        double totalPriceToCharge = workerPayout+koalaCommission;
+        CommissionCalculator.Breakdown breakdown = commissionCalculator.calculate(job.getSalary());
+
+        assignment.setWorkerPayout(breakdown.workerPayout());
+        assignment.setCommissionAmount(breakdown.commission());
+        assignment.setCommissionRate(breakdown.rate());
+        assignment.setTotalCharged(breakdown.totalCharged());
 
         PaymentSessionRequestDto iyzicoRequest = new PaymentSessionRequestDto();
 
         iyzicoRequest.setConversationId(assignmentId.toString());
-        iyzicoRequest.setPrice(totalPriceToCharge);
-        iyzicoRequest.setPaidPrice(totalPriceToCharge);
+        iyzicoRequest.setPrice(breakdown.totalCharged().doubleValue());
+        iyzicoRequest.setPaidPrice(breakdown.totalCharged().doubleValue());
         iyzicoRequest.setCurrency("TRY");
         iyzicoRequest.setBasketId(assignmentId.toString());
         iyzicoRequest.setPaymentGroup("PRODUCT");
@@ -166,9 +174,9 @@ public class JobAssigmentManager implements JobAssignmentService {
         IyzicoBasketItemDto basketItem = new IyzicoBasketItemDto();
         basketItem.setId(job.getId().toString());
         basketItem.setName(job.getTitle());
-        basketItem.setPrice(totalPriceToCharge);
+        basketItem.setPrice(breakdown.totalCharged().doubleValue());
         basketItem.setSubMerchantKey(worker.getIyzicoSubmerchantKey());
-        basketItem.setSubMerchantPrice(workerPayout);
+        basketItem.setSubMerchantPrice(breakdown.workerPayout().doubleValue());
         iyzicoRequest.setBasketItems(List.of(basketItem));
 
         PaymentSessionResponseDto paymentSession = iyzicoPaymentService.initiateCheckoutFormPayment(iyzicoRequest);
@@ -276,7 +284,4 @@ public class JobAssigmentManager implements JobAssignmentService {
         return merchantDto;
     }
 
-    private double calculateCommission(double workerPayout) {
-        return workerPayout*7.5/100;
-    }
 }

@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 
 @Component
@@ -21,17 +22,22 @@ public class CorrelationIdFilter implements Filter {
     private static final String MDC_KEY = "correlationId";
 
 
+    private static final Pattern SAFE_ID = Pattern.compile("[A-Za-z0-9._-]{1,64}");
+
+    private static String sanitize(String candidate) {
+        if (candidate == null || !SAFE_ID.matcher(candidate).matches()) {
+            return UUID.randomUUID().toString();
+        }
+        return candidate;
+    }
+
     @Override
     public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse, FilterChain filterChain) throws IOException, ServletException {
 
         HttpServletRequest request = (HttpServletRequest) servletRequest;
         HttpServletResponse response = (HttpServletResponse) servletResponse;
 
-        String correlationId = request.getHeader(CORRELATION_ID_HEADER_NAME);
-
-        if (correlationId == null || correlationId.isEmpty()){
-            correlationId = UUID.randomUUID().toString();
-        }
+        String correlationId = sanitize(request.getHeader(CORRELATION_ID_HEADER_NAME));
 
 
         MDC.put(MDC_KEY, correlationId);

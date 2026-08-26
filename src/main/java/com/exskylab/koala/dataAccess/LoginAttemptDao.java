@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.UUID;
 
 @Repository
-public interface LoginAttempDao extends JpaRepository<LoginAttempt, UUID> {
+public interface LoginAttemptDao extends JpaRepository<LoginAttempt, UUID> {
 
 
 

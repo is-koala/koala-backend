@@ -12,7 +12,6 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.security.web.header.writers.StaticHeadersWriter;
 
 @Configuration
 @EnableWebSecurity
@@ -107,10 +106,6 @@ public class SecurityConfig {
 
                         .anyRequest().authenticated()
                 )
-                .headers(headers ->
-                        headers.addHeaderWriter(new StaticHeadersWriter("X-Correlation-Id", ""))
-                )
-
 
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-08-26-01-jobs-salary-numeric" author="koala">
+        <modifyDataType tableName="jobs" columnName="salary" newDataType="NUMERIC(19, 2)"/>
+        <rollback>
+            <modifyDataType tableName="jobs" columnName="salary" newDataType="DOUBLE PRECISION"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-08-26-02-assignments-final-payout-numeric" author="koala">
+        <modifyDataType tableName="job_assignments" columnName="final_payout" newDataType="NUMERIC(19, 2)"/>
+        <rollback>
+            <modifyDataType tableName="job_assignments" columnName="final_payout" newDataType="FLOAT"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-08-26-03-assignments-money-breakdown" author="koala">
+        <addColumn tableName="job_assignments">
+            <column name="worker_payout" type="NUMERIC(19, 2)"/>
+            <column name="commission_amount" type="NUMERIC(19, 2)"/>
+            <column name="commission_rate" type="NUMERIC(6, 4)"/>
+            <column name="total_charged" type="NUMERIC(19, 2)"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="job_assignments">
+                <column name="worker_payout"/>
+                <column name="commission_amount"/>
+                <column name="commission_rate"/>
+                <column name="total_charged"/>
+            </dropColumn>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

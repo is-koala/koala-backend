@@ -2,8 +2,8 @@ package com.exskylab.koala.core.exceptions;
 
 import org.springframework.http.HttpStatus;
 
-public class UserNotAssosiatedWithCompanyException extends KoalaException {
-    public UserNotAssosiatedWithCompanyException(String message) {
+public class UserNotAssociatedWithCompanyException extends KoalaException {
+    public UserNotAssociatedWithCompanyException(String message) {
         super(message, HttpStatus.FORBIDDEN);
     }
 }

@@ -24,6 +24,8 @@ import java.util.UUID;
 @Service
 public class SessionManager implements SessionService {
 
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
     private final SessionDao sessionDao;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
@@ -117,9 +119,8 @@ public class SessionManager implements SessionService {
     }
 
     private String generateSecureRandomToken() {
-        SecureRandom secureRandom = new SecureRandom();
         byte[] randomBytes = new byte[32];
-        secureRandom.nextBytes(randomBytes);
+        SECURE_RANDOM.nextBytes(randomBytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
     }
 }

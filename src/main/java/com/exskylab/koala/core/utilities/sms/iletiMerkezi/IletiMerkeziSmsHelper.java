@@ -32,8 +32,8 @@ public class IletiMerkeziSmsHelper implements SmsService {
         logger.info("Sending sms to: {}", phoneNumbers);
         String apiUrl = "https://api.iletimerkezi.com/v1/send-sms/json";
         Authentication authentication = new Authentication(properties.getApiKey(), properties.getApiHash());
-        Receipents receipents = new Receipents(phoneNumbers);
-        Message message = new Message(messageText, receipents);
+        Recipients recipients = new Recipients(phoneNumbers);
+        Message message = new Message(messageText, recipients);
 
         Order order = new Order(
                 properties.getSender(),

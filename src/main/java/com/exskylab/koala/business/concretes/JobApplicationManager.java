@@ -8,7 +8,7 @@ import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationsAppli
 import com.exskylab.koala.core.dtos.jobApplication.response.JobsJobIdApplicationsGetResponseDto;
 import com.exskylab.koala.core.dtos.jobApplication.response.JobsJobIdApplicationsPostResponseDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
-import com.exskylab.koala.core.exceptions.UserNotAssosiatedWithCompanyException;
+import com.exskylab.koala.core.exceptions.UserNotAssociatedWithCompanyException;
 import com.exskylab.koala.core.mappers.JobApplicationMapper;
 import com.exskylab.koala.dataAccess.JobApplicationDao;
 import com.exskylab.koala.entities.*;
@@ -84,6 +84,7 @@ public class JobApplicationManager implements JobApplicationService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<JobsJobIdApplicationsGetResponseDto> getJobApplicationsByIdJobId(String jobId) {
         logger.info("Fetching job applications for job id: {}", jobId);
         Job job = jobService.getById(jobId);
@@ -104,6 +105,7 @@ public class JobApplicationManager implements JobApplicationService {
     }
 
     @Override
+    @Transactional
     public JobApplicationsApplicationIdPatchResponseDto respondToApplication(String applicationId, JobApplicationsApplicationIdPatchRequestDto jobApplicationsApplicationIdPatchRequestDto) {
         logger.info("Responding to application with id: {}", applicationId);
 
@@ -170,7 +172,7 @@ public class JobApplicationManager implements JobApplicationService {
             if (!companyContactService.isUserAContactOfCompany(job.getCompany().getId(), authenticatedUser.getId())) {
                 logger.warn("User with id: {} is not a contact of company with id: {}",
                         authenticatedUser.getId(), job.getCompany().getId());
-                throw new UserNotAssosiatedWithCompanyException(JobApplicationMessages.USER_NOT_CONTACT_OF_COMPANY_TO_VIEW_APPLICATIONS);
+                throw new UserNotAssociatedWithCompanyException(JobApplicationMessages.USER_NOT_CONTACT_OF_COMPANY_TO_VIEW_APPLICATIONS);
             }
             return;
         }

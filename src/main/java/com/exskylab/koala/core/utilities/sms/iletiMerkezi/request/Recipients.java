@@ -9,7 +9,7 @@ import lombok.Setter;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class Receipents {
+public class Recipients {
     private String[] number;
 
 }

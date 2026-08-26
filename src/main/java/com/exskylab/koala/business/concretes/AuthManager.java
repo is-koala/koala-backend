@@ -76,19 +76,14 @@ public class AuthManager implements AuthService {
             return;
         }
 
-        PendingRegistration pendingRegistration = null;
-        try{
-            pendingRegistration = pendingRegistrationService.getByEmail(authStartRegistrationDto.getEmail());
-        }catch (Exception e){
-            logger.debug("No pending registration found, a new one will be created.");
-        }
+        pendingRegistrationService.findByEmail(authStartRegistrationDto.getEmail())
+                .ifPresent(existing -> {
+                    logger.info("Replacing the existing pending registration so the verification mail can be resent.");
+                    pendingRegistrationService.deleteById(existing.getId());
+                });
 
-        if (pendingRegistration != null){
-            logger.info("Replacing the existing pending registration so the verification mail can be resent.");
-            pendingRegistrationService.deleteById(pendingRegistration.getId());
-        }
-
-        pendingRegistration = pendingRegistrationService.createPendingRegistration(authStartRegistrationDto);
+        PendingRegistration pendingRegistration =
+                pendingRegistrationService.createPendingRegistration(authStartRegistrationDto);
         logger.info("Pending registration created with id: {}", pendingRegistration.getId());
 
         String verificationLink = appProperties.frontendUrl()+ "/complete-registration?token=" + pendingRegistration.getToken();

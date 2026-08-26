@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -52,8 +53,20 @@ public class JobAssignment extends BaseEntity{
     @Column(name = "work_hours")
     private int workHours;
 
-    @Column(name = "final_payout")
-    private Float finalPayout;
+    @Column(name = "final_payout", precision = 19, scale = 2)
+    private BigDecimal finalPayout;
+
+    @Column(name = "worker_payout", precision = 19, scale = 2)
+    private BigDecimal workerPayout;
+
+    @Column(name = "commission_amount", precision = 19, scale = 2)
+    private BigDecimal commissionAmount;
+
+    @Column(name = "commission_rate", precision = 6, scale = 4)
+    private BigDecimal commissionRate;
+
+    @Column(name = "total_charged", precision = 19, scale = 2)
+    private BigDecimal totalCharged;
 
     @Column(name = "notes")
     private String notes;

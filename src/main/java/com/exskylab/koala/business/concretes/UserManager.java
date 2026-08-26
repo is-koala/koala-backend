@@ -80,11 +80,6 @@ public class UserManager implements UserService {
     }
 
     @Override
-    public User getByPhoneNumber(String phoneNumber) {
-        return null;
-    }
-
-    @Override
     public User getById(UUID id) {
         return userDao.findById(id)
                 .orElseThrow(() -> new UserNotFoundException("{user.not.found.by.id}"));
@@ -101,38 +96,13 @@ public class UserManager implements UserService {
     }
 
     @Override
-    public User updateOwnUser(UpdateUserDto updateUserDto) {
-        return null;
-    }
-
-    @Override
-    public User updateUserProfile(UUID userId, UpdateUserDto updateUserDto) {
-        return null;
-    }
-
-    @Override
-    public User delete(UUID id) {
-        return null;
-    }
-
-    @Override
     public boolean existsByEmail(String email) {
         return userDao.existsByEmail(email);
     }
 
     @Override
-    public boolean existsByPhoneNumber(String phoneNumber) {
-        return false;
-    }
-
-    @Override
     public boolean existsById(UUID id) {
-        return false;
-    }
-
-    @Override
-    public void changePassword(UUID id, String newUnencodedPassword) {
-
+        return userDao.existsById(id);
     }
 
     @Override
@@ -259,6 +229,7 @@ public class UserManager implements UserService {
 
 
     @Override
+    @Transactional
     public void updateCurrentUserPassword(UserMeChangePasswordPutRequestDto userMeChangePasswordPutRequestDto, UUID currentSessionId) {
         logger.info("Updating current user password.");
         User currentUser = securityService.getAuthenticatedUserFromContext();
@@ -328,16 +299,7 @@ public class UserManager implements UserService {
     }
 
     @Override
-    public Address addAddressToAuthenticatedUser(CreateAddressRequestDto createAddressRequestDto) {
-        logger.info("Adding new address to authenticated user.");
-        User currentUser = securityService.getAuthenticatedUserFromContext();
-        logger.info("Adding address for user with ID: {}", currentUser.getId());
-
-        var address = addressService.createAddress(createAddressRequestDto);
-        return null;
-    }
-
-    @Override
+    @Transactional
     public void verificateIdentityofAuthenticatedUser(UsersMeIdentityVerificationRequestDto usersMeIdentityVerificationRequestDto) {
         logger.info("Verificating identity of authenticated user.");
         User currentUser = securityService.getAuthenticatedUserFromContext();
@@ -373,6 +335,7 @@ public class UserManager implements UserService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public UserMeResponseDto getCurrentUserFromDatabaseDto() {
         logger.info("Getting current user DTO.");
         var authenticatedUser = securityService.getAuthenticatedUserFromDatabase();
@@ -380,6 +343,7 @@ public class UserManager implements UserService {
     }
 
     @Override
+    @Transactional
     public AddressDto updateAddressForCurrentUser(CreateAddressRequestDto addressDto) {
         logger.info("Updating address for current user.");
         var currentUser = securityService.getAuthenticatedUserFromContext();
@@ -399,8 +363,9 @@ public class UserManager implements UserService {
     }
 
     @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        return null;
+    public UserDetails loadUserByUsername(String username) {
+        return userDao.findByEmail(username)
+                .orElseThrow(() -> new UsernameNotFoundException(UserMessages.NOT_FOUND_BY_EMAIL));
     }
 
 

@@ -13,6 +13,6 @@ public class Message {
 
     private String text;
 
-    private Receipents receipents;
+    private Recipients recipients;
 
 }

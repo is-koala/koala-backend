@@ -7,7 +7,7 @@ import com.exskylab.koala.core.dtos.company.response.CompanyDto;
 import com.exskylab.koala.core.dtos.companyContact.request.InviteContactToCompanyDto;
 import com.exskylab.koala.core.dtos.notification.request.SendEmailDto;
 import com.exskylab.koala.core.exceptions.CompanyNotFoundException;
-import com.exskylab.koala.core.exceptions.UserNotAssosiatedWithCompanyException;
+import com.exskylab.koala.core.exceptions.UserNotAssociatedWithCompanyException;
 import com.exskylab.koala.core.mappers.CompanyMapper;
 import com.exskylab.koala.dataAccess.CompanyDao;
 import com.exskylab.koala.entities.*;
@@ -155,7 +155,7 @@ public class CompanyManager implements CompanyService {
 
         if (!isAdmin){
             logger.warn("User with id: {} is not an admin of company with id: {}, terminating request!", currentUser.getId(), companyId);
-            throw new UserNotAssosiatedWithCompanyException(CompanyMessages.USER_NOT_ASSOCIATED_WITH_COMPANY);
+            throw new UserNotAssociatedWithCompanyException(CompanyMessages.USER_NOT_ASSOCIATED_WITH_COMPANY);
         }
 
         var userToInvite = userService.getByEmail(contactToCompanyDto.getEmail());

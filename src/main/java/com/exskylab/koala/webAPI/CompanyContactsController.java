@@ -6,12 +6,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/company-contacts")
-public class CompanyContactsControler {
+public class CompanyContactsController {
 
     private final CompanyContactService companyContactService;
 
 
-    public CompanyContactsControler(CompanyContactService companyContactService) {
+    public CompanyContactsController(CompanyContactService companyContactService) {
         this.companyContactService = companyContactService;
     }
 

@@ -6,6 +6,8 @@ import com.exskylab.koala.core.dtos.auth.request.AuthStartRegistrationDto;
 import com.exskylab.koala.core.exceptions.PendingRegistrationNotFoundException;
 import com.exskylab.koala.dataAccess.PendingRegistrationDao;
 import com.exskylab.koala.entities.PendingRegistration;
+
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -59,4 +61,9 @@ public class PendingRegistrationManager implements PendingRegistrationService {
     }
 
 
+
+    @Override
+    public Optional<PendingRegistration> findByEmail(String email) {
+        return pendingRegistrationDao.findByEmail(email);
+    }
 }

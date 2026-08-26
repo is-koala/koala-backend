@@ -8,6 +8,8 @@ import com.exskylab.koala.entities.JobEmployerType;
 import com.exskylab.koala.entities.JobStatus;
 import com.exskylab.koala.entities.JobType;
 import com.exskylab.koala.entities.SalaryType;
+import java.math.BigDecimal;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -54,7 +56,7 @@ public class CompaniesCompanyIdJobsPostResponseDto {
 
     private SalaryType salaryType;
 
-    private double salary;
+    private BigDecimal salary;
 
     private int minAge;
 

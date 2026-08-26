@@ -93,7 +93,7 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
         var currentUser = securityService.getAuthenticatedUserFromContext();
 
         if (!invitation.getInvitedUser().getId().equals(currentUser.getId())){
-            throw new UserNotAssosiatedWithInvitationException(CompanyContactInvitationMessages.USER_NOT_ASSOCIATED_WITH_INVITATION);
+            throw new UserNotAssociatedWithInvitationException(CompanyContactInvitationMessages.USER_NOT_ASSOCIATED_WITH_INVITATION);
         }
 
         if (invitation.getStatus() != CompanyContactInvitationStatus.PENDING) {
@@ -165,7 +165,7 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
 
         if (!isAdmin){
             logger.warn("User with id: {} is not a contact of company with id: {}, terminating request!", currentUser.getId(), companyId);
-            throw new UserNotAssosiatedWithCompanyException(CompanyMessages.USER_NOT_ASSOCIATED_WITH_COMPANY);
+            throw new UserNotAssociatedWithCompanyException(CompanyMessages.USER_NOT_ASSOCIATED_WITH_COMPANY);
         }
 
         var invitations = getInvitationsByCompanyId(companyId);

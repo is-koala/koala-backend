@@ -3,6 +3,7 @@ package com.exskylab.koala.core.constants;
 import org.springframework.http.HttpStatus;
 
 public class UserMessages {
+    public static final String NOT_FOUND_BY_EMAIL = "{user.not.found.by.email}";
     public static final String USER_RETRIEVED_SUCCESSFULLY = "{user.retrieved.successfully}";
     public static final String INVALID_EMAIL = "{user.invalid.email}";
     public static final String FIRST_NAME_CANNOT_BE_EMPTY = "{user.first.name.cannot.be.empty}";

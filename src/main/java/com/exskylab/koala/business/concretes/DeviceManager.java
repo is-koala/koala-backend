@@ -7,7 +7,7 @@ import com.exskylab.koala.dataAccess.DeviceDao;
 import com.exskylab.koala.entities.Device;
 import com.exskylab.koala.entities.DeviceType;
 import com.exskylab.koala.entities.User;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import nl.basjes.parse.useragent.UserAgent;
 import nl.basjes.parse.useragent.UserAgentAnalyzer;
 import org.springframework.stereotype.Service;
@@ -36,6 +36,7 @@ public class DeviceManager implements DeviceService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<Device> getDevicesByUserIdAndPushTokenNotNull(UUID id) {
         return deviceDao.findAllByUser_IdAndPushTokenIsNotNull(id);
     }

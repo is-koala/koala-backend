@@ -6,6 +6,8 @@ import com.exskylab.koala.core.dtos.address.request.CreateAddressRequestDto;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import java.math.BigDecimal;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -46,7 +48,7 @@ public class UsersMeJobsPostRequestDto {
     private String salaryType;
 
     @Min(value = 1, message = JobMessages.SALARY_MIN_VALUE)
-    private double salary;
+    private BigDecimal salary;
 
     @NotNull(message = JobMessages.START_DATE_TIME_NOT_NULL)
     private LocalDateTime startDateTime;

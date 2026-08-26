@@ -21,22 +21,16 @@ import java.util.UUID;
 public interface UserService extends UserDetailsService {
 
     User getByEmail(String email);
-    User getByPhoneNumber(String phoneNumber);
     User getById(UUID id);
     List<User> getAll();
 
     User save(User user);
-    User updateOwnUser(UpdateUserDto updateUserDto);
-    User updateUserProfile(UUID userId, UpdateUserDto updateUserDto);
 
 
-    User delete(UUID id);
 
     boolean existsByEmail(String email);
-    boolean existsByPhoneNumber(String phoneNumber);
     boolean existsById(UUID id);
 
-    void changePassword(UUID id, String newUnencodedPassword);
 
 
     UserUpdateResponseDto patchCurrentUser(UserMePatchRequestDto userMePatchRequestDto);
@@ -49,7 +43,6 @@ public interface UserService extends UserDetailsService {
 
     void updateEmailVerification(User user, String newEmail);
 
-    Address addAddressToAuthenticatedUser(@Valid CreateAddressRequestDto createAddressRequestDto);
 
     void verificateIdentityofAuthenticatedUser(UsersMeIdentityVerificationRequestDto usersMeIdentityVerificationRequestDto);
 

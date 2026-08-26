@@ -107,6 +107,9 @@ jwt:
   password-reset:
     expiration-ms: ${JWT_PASSWORD_RESET_EXPIRATION_MS:900000}
 
+commission:
+  rate: ${COMMISSION_RATE:0.075}
+
 session:
   refresh-validity-days: ${SESSION_REFRESH_VALIDITY_DAYS:30}
   refresh-sliding-window-days: ${SESSION_REFRESH_SLIDING_WINDOW_DAYS:7}
