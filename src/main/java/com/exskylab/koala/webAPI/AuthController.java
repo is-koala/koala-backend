@@ -5,6 +5,7 @@ import com.exskylab.koala.core.constants.AuthMessages;
 import com.exskylab.koala.core.dtos.auth.request.*;
 import com.exskylab.koala.core.dtos.auth.response.AuthSetPasswordDto;
 import com.exskylab.koala.core.dtos.auth.response.TokenResponseDto;
+import com.exskylab.koala.core.helpers.BearerTokenExtractor;
 import com.exskylab.koala.core.security.JwtService;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.core.utilities.results.SuccessResult;
@@ -97,9 +98,7 @@ public class AuthController {
     public ResponseEntity<SuccessDataResult<TokenResponseDto>> refreshToken(@RequestBody @Valid RefreshTokenDto refreshTokenDto, HttpServletRequest request){
         String ipAddress = getClientIpAddress(request);
         String userAgent = request.getHeader("User-Agent");
-        String authHeader = request.getHeader("Authorization");
-        String expiredToken = authHeader.substring(7);
-        UUID sessionId = jwtService.extractSessionId(expiredToken);
+        UUID sessionId = jwtService.extractSessionId(BearerTokenExtractor.extract(request));
 
         var response = authService.refreshToken(refreshTokenDto, sessionId, ipAddress, userAgent);
 
@@ -115,9 +114,7 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<SuccessResult> logout(HttpServletRequest request){
-        String authHeader = request.getHeader("Authorization");
-        String token = authHeader.substring(7);
-        UUID sessionId = jwtService.extractSessionId(token);
+        UUID sessionId = jwtService.extractSessionId(BearerTokenExtractor.extract(request));
 
         authService.logout(sessionId);
 

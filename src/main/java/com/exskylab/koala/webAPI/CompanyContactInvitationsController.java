@@ -6,6 +6,7 @@ import com.exskylab.koala.core.dtos.companyContactInvitation.request.AnswerToCon
 import com.exskylab.koala.core.dtos.companyContactInvitation.response.GetCompanyContactInvitationDto;
 import com.exskylab.koala.core.mappers.CompanyContactInvitationMapper;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -27,9 +28,9 @@ public class CompanyContactInvitationsController {
 
 
     @PostMapping("/{invitationId}")
-    public ResponseEntity<SuccessDataResult<GetCompanyContactInvitationDto>> answerToInvitation(@PathVariable UUID invitationId, @RequestBody AnswerToContactInvitationDto answerToContactInvitationDto){
+    public ResponseEntity<SuccessDataResult<GetCompanyContactInvitationDto>> answerToInvitation(@PathVariable UUID invitationId, @RequestBody @Valid AnswerToContactInvitationDto answerToContactInvitationDto){
 
-        var result = companyContactInvitationService.answerToInvitation(invitationId, answerToContactInvitationDto.isAccepted());
+        var result = companyContactInvitationService.answerToInvitation(invitationId, answerToContactInvitationDto.getAccepted());
 
         return ResponseEntity.status(HttpStatus.OK)
                 .body(new SuccessDataResult<>(

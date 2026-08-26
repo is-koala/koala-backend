@@ -6,6 +6,8 @@ public class AuthMessages {
     public static final String EMAIL_NOT_NULL = "{user.email.not.null}";
     public static final String INVALID_EMAIL = "{user.email.invalid}";
     public static final String START_REGISTRATION_SUCCESS = "{auth.start.registration.success}";
+    public static final String NOT_VALID_AUTHORIZATION_HEADER = "{auth.not.valid.authorization.header}";
+    public static final String ANSWER_NOT_NULL = "{auth.answer.not.null}";
     public static final String USER_ALREADY_EXISTS_WITH_THIS_EMAIL = "{auth.user.already.exists.with.this.email}";
     public static final String REGISTRATION_TOKEN_NOT_NULL = "{auth.registration.token.not.null}";
     public static final String VERIFY_REGISTRATION_TOKEN_SUCCESS = "{auth.verify.registration.token.success}";

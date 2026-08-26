@@ -13,6 +13,7 @@ import com.exskylab.koala.core.dtos.user.request.UserMePatchRequestDto;
 import com.exskylab.koala.core.dtos.user.request.UsersMeIdentityVerificationRequestDto;
 import com.exskylab.koala.core.dtos.user.response.UserMeResponseDto;
 import com.exskylab.koala.core.dtos.user.response.UserUpdateResponseDto;
+import com.exskylab.koala.core.helpers.BearerTokenExtractor;
 import com.exskylab.koala.core.mappers.JobMapper;
 import com.exskylab.koala.core.mappers.UserMapper;
 import com.exskylab.koala.core.security.JwtService;
@@ -83,9 +84,7 @@ public class UserController {
     @PutMapping("/me/password")
     public ResponseEntity<SuccessResult> updateCurrentUserPassword(@RequestBody @Valid UserMeChangePasswordPutRequestDto userMeChangePasswordPutRequestDto,
                                                                    HttpServletRequest request){
-        String authHeader = request.getHeader("Authorization");
-        String token = authHeader.substring(7);
-        UUID currentSessionId = jwtService.extractSessionId(token);
+        UUID currentSessionId = jwtService.extractSessionId(BearerTokenExtractor.extract(request));
 
         userService.updateCurrentUserPassword(userMeChangePasswordPutRequestDto, currentSessionId);
 

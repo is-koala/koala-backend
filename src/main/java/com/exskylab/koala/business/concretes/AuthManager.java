@@ -69,33 +69,27 @@ public class AuthManager implements AuthService {
     @Override
     @Transactional
     public void startRegistration(AuthStartRegistrationDto authStartRegistrationDto) {
-        logger.info("Starting registration for email: {}", authStartRegistrationDto.getEmail());
+        logger.info("Starting registration.");
 
-        //checking if user alrdy exists
         if (userService.existsByEmail(authStartRegistrationDto.getEmail())){
-            logger.warn("User with email {} already exists", authStartRegistrationDto.getEmail());
-            throw new UserAlreadyExistsException(AuthMessages.USER_ALREADY_EXISTS_WITH_THIS_EMAIL);
+            logger.info("Registration requested for an address that already has an account. Responding without disclosing it.");
+            return;
         }
 
-        //creating pending registration
         PendingRegistration pendingRegistration = null;
         try{
             pendingRegistration = pendingRegistrationService.getByEmail(authStartRegistrationDto.getEmail());
         }catch (Exception e){
-            logger.info("No pending registration found for email: {}, creating a new one.", authStartRegistrationDto.getEmail());
+            logger.debug("No pending registration found, a new one will be created.");
         }
 
-        if (pendingRegistration != null && pendingRegistration.getExpiresAt().isBefore(LocalDateTime.now())){
-            logger.info("user already has a pending registration, but it has expired. Deleting the old one. email: {}", authStartRegistrationDto.getEmail());
+        if (pendingRegistration != null){
+            logger.info("Replacing the existing pending registration so the verification mail can be resent.");
             pendingRegistrationService.deleteById(pendingRegistration.getId());
-        }
-        if (pendingRegistration != null && pendingRegistration.getExpiresAt().isAfter(LocalDateTime.now())){
-            logger.info("User already has a pending registration, no need to create a new one. email: {}", authStartRegistrationDto.getEmail());
-            throw new UserAlreadyExistsException(AuthMessages.PENDING_REGISTRATION_ALREADY_EXISTS);
         }
 
         pendingRegistration = pendingRegistrationService.createPendingRegistration(authStartRegistrationDto);
-        logger.info("Pending registration created for email: {}", authStartRegistrationDto.getEmail());
+        logger.info("Pending registration created with id: {}", pendingRegistration.getId());
 
         String verificationLink = appProperties.frontendUrl()+ "/complete-registration?token=" + pendingRegistration.getToken();
 
@@ -113,9 +107,9 @@ public class AuthManager implements AuthService {
         sendEmailDto.setSubject("Koala kayıt işlemi için e-posta doğrulaması");
 
         notificationService.sendEmail(sendEmailDto, DispatchPriority.CRITICAL, true);
-        logger.info("Verification email sent to: {}", authStartRegistrationDto.getEmail());
+        logger.info("Verification email queued for pending registration id: {}", pendingRegistration.getId());
 
-        logger.info("Registration process started successfully for email: {}", authStartRegistrationDto.getEmail());
+        logger.info("Registration process started successfully for pending registration id: {}", pendingRegistration.getId());
     }
 
     @Override

@@ -8,6 +8,7 @@ import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationsAppli
 import com.exskylab.koala.core.dtos.jobApplication.response.JobsJobIdApplicationsGetResponseDto;
 import com.exskylab.koala.core.dtos.jobApplication.response.JobsJobIdApplicationsPostResponseDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
+import com.exskylab.koala.core.exceptions.UserNotAssosiatedWithCompanyException;
 import com.exskylab.koala.core.mappers.JobApplicationMapper;
 import com.exskylab.koala.dataAccess.JobApplicationDao;
 import com.exskylab.koala.entities.*;
@@ -126,6 +127,8 @@ public class JobApplicationManager implements JobApplicationService {
             throw new IllegalArgumentException(JobApplicationMessages.JOB_APPLICATION_ALREADY_RESPONDED);
         }
 
+        assertCurrentUserIsEmployerOf(jobApplication.getJob());
+
 
         jobApplication.setStatus(status);
         jobApplication.setAnsweredDateTime(LocalDateTime.now());
@@ -158,5 +161,24 @@ public class JobApplicationManager implements JobApplicationService {
 
         return jobApplicationMapper.toJobApplicationsApplicationIdPatchResponseDto(jobApplication);
 
+    }
+
+    private void assertCurrentUserIsEmployerOf(Job job) {
+        User authenticatedUser = securityService.getAuthenticatedUserFromContext();
+
+        if (job.getEmployerType() == JobEmployerType.COMPANY) {
+            if (!companyContactService.isUserAContactOfCompany(job.getCompany().getId(), authenticatedUser.getId())) {
+                logger.warn("User with id: {} is not a contact of company with id: {}",
+                        authenticatedUser.getId(), job.getCompany().getId());
+                throw new UserNotAssosiatedWithCompanyException(JobApplicationMessages.USER_NOT_CONTACT_OF_COMPANY_TO_VIEW_APPLICATIONS);
+            }
+            return;
+        }
+
+        if (!job.getCreator().getId().equals(authenticatedUser.getId())) {
+            logger.warn("User with id: {} is not the creator of job with id: {}",
+                    authenticatedUser.getId(), job.getId());
+            throw new ResourceNotFoundException(JobApplicationMessages.USER_NOT_CREATOR_OF_INDIVIDUAL_JOB_TO_VIEW_APPLICATIONS);
+        }
     }
 }

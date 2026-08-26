@@ -4,6 +4,7 @@ import com.exskylab.koala.business.abstracts.UserVerificationService;
 import com.exskylab.koala.core.constants.UserVerificationMessages;
 import com.exskylab.koala.core.dtos.userVerification.request.VerificationRequestDto;
 import com.exskylab.koala.core.utilities.results.SuccessResult;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -23,7 +24,7 @@ public class VerificationsController {
 
 
     @PostMapping("/{id}")
-    public ResponseEntity<SuccessResult> verify(@PathVariable UUID id, @RequestBody VerificationRequestDto verificationRequestDto){
+    public ResponseEntity<SuccessResult> verify(@PathVariable UUID id, @RequestBody @Valid VerificationRequestDto verificationRequestDto){
 
         userVerificationService.verify(id, verificationRequestDto);
 

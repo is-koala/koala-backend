@@ -74,7 +74,7 @@ public class JobAssigmentManager implements JobAssignmentService {
             throw new UserNotWorkerForAssignmentException(JobAssignmentMessages.NOT_WORKER_FOR_ASSIGNMENT);
         }
 
-        if (jobAssignmentsAssignmentIdStatusPatchRequestDto.isAccepted()){
+        if (Boolean.TRUE.equals(jobAssignmentsAssignmentIdStatusPatchRequestDto.getAccepted())){
             assignment.setStatus(AssignmentStatus.CONFIRMED);
             assignment.setPaymentStatus(PaymentStatus.PENDING_COLLECTION);
             logger.info("Job assignment with id {} has been accepted", assignmentId);
@@ -116,7 +116,7 @@ public class JobAssigmentManager implements JobAssignmentService {
 
         switch (job.getEmployerType()){
             case INDIVIDUAL -> {
-               if (!job.getCreator().getId().equals(creator.getId())) {
+               if (!currentUser.getId().equals(creator.getId())) {
                      logger.warn("User with id {} is not the creator of the job with id {}", currentUser.getId(), job.getId());
                      throw new UserNotWorkerForAssignmentException(JobAssignmentMessages.NOT_CREATOR_OF_JOB);
                }

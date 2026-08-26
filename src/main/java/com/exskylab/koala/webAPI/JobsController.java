@@ -8,6 +8,7 @@ import com.exskylab.koala.core.dtos.jobApplication.response.JobsJobIdApplication
 import com.exskylab.koala.core.dtos.jobApplication.response.JobsJobIdApplicationsPostResponseDto;
 import com.exskylab.koala.core.mappers.JobApplicationMapper;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
+import jakarta.validation.Valid;
 import com.exskylab.koala.entities.JobApplication;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,7 +34,7 @@ public class JobsController {
 
 
     @PostMapping("/{jobId}/applications")
-    public ResponseEntity<SuccessDataResult<JobsJobIdApplicationsPostResponseDto>> applyToJob(@PathVariable String jobId, @RequestBody JobsJobIdApplicationsPostRequestDto jobsJobIdApplicationsPostResponseDto){
+    public ResponseEntity<SuccessDataResult<JobsJobIdApplicationsPostResponseDto>> applyToJob(@PathVariable String jobId, @RequestBody @Valid JobsJobIdApplicationsPostRequestDto jobsJobIdApplicationsPostResponseDto){
 
         JobsJobIdApplicationsPostResponseDto jobApplicationsDto = jobApplicationService.applyToJob(jobId, jobsJobIdApplicationsPostResponseDto);
 
