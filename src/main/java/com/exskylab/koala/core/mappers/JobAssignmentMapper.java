@@ -5,47 +5,22 @@ import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentsAssignm
 import com.exskylab.koala.core.dtos.jobAssignment.response.ShortJobAssignmentDto;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.PaymentSessionResponseDto;
 import com.exskylab.koala.entities.JobAssignment;
-import org.springframework.stereotype.Component;
+import org.mapstruct.InjectionStrategy;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 
-@Component
-public class JobAssignmentMapper {
+@Mapper(componentModel = "spring",
+        uses = {JobMapper.class, UserMapper.class, CompanyMapper.class},
+        injectionStrategy = InjectionStrategy.CONSTRUCTOR)
+public interface JobAssignmentMapper {
 
-    private final JobMapper jobMapper;
-    private final UserMapper userMapper;
-    private final CompanyMapper companyMapper;
+    ShortJobAssignmentDto toShortJobAssignmentDto(JobAssignment jobAssignment);
 
-    public JobAssignmentMapper(JobMapper jobMapper, UserMapper userMapper, CompanyMapper companyMapper) {
-        this.jobMapper = jobMapper;
-        this.userMapper = userMapper;
-        this.companyMapper = companyMapper;
-    }
+    @Mapping(target = "company", source = "job.company")
+    JobAssignmentsAssignmentIdStatusPatchResponseDto toJobAssignmentsAssignmentIdStatusPatchResponseDto(
+            JobAssignment jobAssignment);
 
-    public ShortJobAssignmentDto toShortJobAssignmentDto(JobAssignment jobAssignment){
-        ShortJobAssignmentDto dto = new ShortJobAssignmentDto();
-        dto.setId(jobAssignment.getId());
-        dto.setStatus(jobAssignment.getStatus());
-        dto.setAssignmentDateTime(jobAssignment.getAssignmentDateTime());
-
-        return dto;
-    }
-
-    public JobAssignmentsAssignmentIdStatusPatchResponseDto toJobAssignmentsAssignmentIdStatusPatchResponseDto(JobAssignment jobAssignment){
-        JobAssignmentsAssignmentIdStatusPatchResponseDto dto = new JobAssignmentsAssignmentIdStatusPatchResponseDto();
-        dto.setId(jobAssignment.getId());
-        dto.setAssignmentDateTime(jobAssignment.getAssignmentDateTime());
-        dto.setStatus(jobAssignment.getStatus());
-        dto.setJob(jobMapper.toShortJobDto(jobAssignment.getJob()));
-        dto.setWorker(userMapper.toSafeUserDto(jobAssignment.getWorker()));
-        dto.setCompany(companyMapper.toOnlyCompanyDto(jobAssignment.getJob().getCompany()));
-        return dto;
-    }
-
-    public JobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto tojobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto(PaymentSessionResponseDto paymentSessionResponseDto){
-        JobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto dto = new JobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto();
-        dto.setToken(paymentSessionResponseDto.getToken());
-        dto.setPaymentPageUrl(paymentSessionResponseDto.getPaymentPageUrl());
-        return dto;
-
-    }
-
+    JobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto
+            tojobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto(
+            PaymentSessionResponseDto paymentSessionResponseDto);
 }

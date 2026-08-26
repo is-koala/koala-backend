@@ -1,28 +1,15 @@
 package com.exskylab.koala.core.mappers;
 
 import com.exskylab.koala.core.dtos.images.response.UploadImageResponseDto;
-import com.exskylab.koala.core.properties.R2Properties;
 import com.exskylab.koala.entities.Image;
-import org.springframework.stereotype.Component;
+import org.mapstruct.InjectionStrategy;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 
-@Component
-public class ImageMapper {
+@Mapper(componentModel = "spring", uses = MediaUrlResolver.class,
+        injectionStrategy = InjectionStrategy.CONSTRUCTOR)
+public interface ImageMapper {
 
-    private final R2Properties r2Properties;
-
-    public ImageMapper(R2Properties r2Properties) {
-        this.r2Properties = r2Properties;
-    }
-
-    public UploadImageResponseDto toUploadImageResponseDto(Image image) {
-        return new UploadImageResponseDto(
-                image.getId(),
-                image.getFileName(),
-                image.getFileType(),
-                r2Properties.getPublicUrl()+ "/" + image.getFileUrl(),
-                image.getFileSize()
-        );
-    }
-
-
+    @Mapping(target = "fileUrl", source = "image", qualifiedByName = "imageToPublicUrl")
+    UploadImageResponseDto toUploadImageResponseDto(Image image);
 }
