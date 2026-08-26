@@ -21,12 +21,10 @@ import java.util.UUID;
 public class ImagesController {
 
     private final ImageService imageService;
-    private final ImageMapper imageMapper;
 
 
-    public ImagesController(ImageService imageService, ImageMapper imageMapper) {
+    public ImagesController(ImageService imageService) {
         this.imageService = imageService;
-        this.imageMapper = imageMapper;
     }
 
 

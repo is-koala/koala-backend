@@ -12,6 +12,7 @@ import com.exskylab.koala.core.dtos.user.request.UsersMeIdentityVerificationRequ
 import com.exskylab.koala.core.dtos.user.response.UserMeResponseDto;
 import com.exskylab.koala.core.dtos.user.response.UserUpdateResponseDto;
 import com.exskylab.koala.core.exceptions.UserNotFoundException;
+import com.exskylab.koala.core.helpers.IbanValidator;
 import com.exskylab.koala.core.mappers.AddressMapper;
 import com.exskylab.koala.core.mappers.UserMapper;
 import com.exskylab.koala.core.producers.user.UserProducerService;
@@ -218,13 +219,13 @@ public class UserManager implements UserService {
             if (userMePatchRequestDto.getIban() !=null){
                 logger.info("Updating iban to: {}, from {}", userMePatchRequestDto.getIban(), currentUser.getIban());
 
-                boolean isValidIban = validateIban(userMePatchRequestDto.getIban());
+                boolean isValidIban = IbanValidator.isValid(userMePatchRequestDto.getIban());
 
                 if (!isValidIban){
                     throw new ValidationException(UserMessages.INVALID_IBAN);
                 }
 
-                currentUser.setIban(userMePatchRequestDto.getIban().replaceAll("\\s", ""));
+                currentUser.setIban(IbanValidator.normalize(userMePatchRequestDto.getIban()));
             }
 
             if (userMePatchRequestDto.getAbout() != null){
@@ -402,34 +403,6 @@ public class UserManager implements UserService {
         return null;
     }
 
-
-    private boolean validateIban(String iban) {
-
-        iban = iban.replaceAll("\\s", "");
-
-        if (iban.length() != 26) return false;
-
-        if (!iban.substring(0, 2).matches("[A-Z]{2}")) return false;
-
-        String reformantted = iban.substring(4) + iban.substring(0, 4);
-
-        StringBuilder numericIban = new StringBuilder();
-        for (char ch : reformantted.toCharArray()){
-            if (Character.isLetter(ch)){
-                numericIban.append(Character.getNumericValue(ch));
-            }else{
-                numericIban.append(ch);
-            }
-        }
-
-        String num = numericIban.toString();
-        int mod = 0;
-        for (int i = 0; i <num.length() ; i++) {
-            mod = (mod*10 + (num.charAt(i) - '0')) % 97;
-        }
-
-        return mod == 1;
-    }
 
     private String capitalizeFirstLetter(String input) {
         if (input == null || input.isBlank()) {

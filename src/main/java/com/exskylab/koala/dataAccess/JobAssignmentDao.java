@@ -17,7 +17,7 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
             "job.creator",
             "job.company",
             "job.address",
-            "job.creator.addresses"
+            "job.creator.address"
     })
     Optional<JobAssignment> findWithDetailsForPaymentById(UUID id);
 

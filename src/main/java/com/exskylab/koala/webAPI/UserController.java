@@ -39,15 +39,13 @@ import java.util.UUID;
 public class UserController {
 
     private final UserService userService;
-    private final UserMapper userMapper;
     private final JwtService jwtService;
     private final SecurityService securityService;
     private final JobService jobService;
     private final JobMapper jobMapper;
 
-    public UserController(UserService userService, UserMapper userMapper, JwtService jwtService, SecurityService securityService, JobService jobService, JobMapper jobMapper) {
+    public UserController(UserService userService, JwtService jwtService, SecurityService securityService, JobService jobService, JobMapper jobMapper) {
         this.userService = userService;
-        this.userMapper= userMapper;
         this.jwtService = jwtService;
         this.securityService = securityService;
         this.jobService = jobService;
