@@ -1,19 +1,23 @@
-FROM maven:3.8.4-openjdk-17 AS build
-
+FROM maven:3.9-eclipse-temurin-25 AS build
 WORKDIR /app
 
 COPY pom.xml .
+RUN mvn -B dependency:go-offline
 
-RUN mvn dependency:go-offline -B
+COPY src ./src
+RUN mvn -B clean package -DskipTests
 
-COPY src/ ./src/
+FROM eclipse-temurin:25-jre-alpine
+WORKDIR /app
 
-RUN mvn -f /app/pom.xml clean package -DskipTests
+RUN addgroup -S koala && adduser -S koala -G koala
 
-FROM  eclipse-temurin:17-jdk
+COPY --from=build --chown=koala:koala /app/target/*.jar app.jar
 
+USER koala
 EXPOSE 8080
 
-COPY --from=build /app/target/*.jar /app/app.jar
+HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
+    CMD wget -qO- http://localhost:8080/actuator/health/readiness || exit 1
 
-ENTRYPOINT ["java","-jar","/app/app.jar"]
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "app.jar"]

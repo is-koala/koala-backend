@@ -91,6 +91,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/job-assignments/{assignmentId}/payment-session/initiate").hasAnyRole("USER", "ADMIN")
 
 
+                        //actuator
+                        .requestMatchers("/actuator/health/**").permitAll()
+                        .requestMatchers("/actuator/**").hasRole("ADMIN")
+
                         //swagger
                         .requestMatchers("/swagger-ui/**").permitAll()
                         .requestMatchers("/v3/api-docs/**").permitAll()

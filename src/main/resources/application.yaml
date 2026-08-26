@@ -1,0 +1,126 @@
+spring:
+  application:
+    name: koala
+
+  config:
+    import: optional:file:./.env[.properties]
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/koalaDB}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+
+  jpa:
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:validate}
+    show-sql: ${JPA_SHOW_SQL:false}
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+      jakarta:
+        persistence:
+          validation:
+            mode: none
+
+  liquibase:
+    enabled: true
+    change-log: classpath:/db/changelog/db.changelog-master.xml
+
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: ${RABBITMQ_VHOST:/}
+
+  messages:
+    basename: messages
+    encoding: UTF-8
+
+  servlet:
+    multipart:
+      max-file-size: ${MAX_FILE_SIZE:10MB}
+      max-request-size: ${MAX_REQUEST_SIZE:10MB}
+
+server:
+  port: ${SERVER_PORT:8080}
+  forward-headers-strategy: framework
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  info:
+    env:
+      enabled: true
+
+logging:
+  level:
+    com.exskylab.koala: ${APP_LOG_LEVEL:INFO}
+    org.springframework.security: ${SECURITY_LOG_LEVEL:INFO}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+app:
+  api-url: ${API_URL:http://localhost:8080}
+  frontend-url: ${FRONTEND_URL:http://localhost:3000}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+
+jwt:
+  secret: ${JWT_SECRET:}
+  access-token:
+    expiration-ms: ${JWT_ACCESS_TOKEN_EXPIRATION_MS:43200000}
+  password-set:
+    expiration-ms: ${JWT_PASSWORD_SET_EXPIRATION_MS:600000}
+  password-reset:
+    expiration-ms: ${JWT_PASSWORD_RESET_EXPIRATION_MS:900000}
+
+session:
+  refresh-validity-days: ${SESSION_REFRESH_VALIDITY_DAYS:30}
+  refresh-sliding-window-days: ${SESSION_REFRESH_SLIDING_WINDOW_DAYS:7}
+
+sms:
+  iletiMerkezi:
+    apiKey: ${SMS_API_KEY:}
+    apiHash: ${SMS_API_HASH:}
+    sender: ${SMS_SENDER:KOALA}
+
+r2:
+  endpoint: ${R2_ENDPOINT:}
+  publicUrl: ${R2_PUBLIC_URL:}
+  accessKey: ${R2_ACCESS_KEY:}
+  secretKey: ${R2_SECRET_KEY:}
+  bucketName: ${R2_BUCKET_NAME:koala-media}
+
+iyzico:
+  apiKey: ${IYZICO_API_KEY:}
+  secretKey: ${IYZICO_SECRET_KEY:}
+  baseUrl: ${IYZICO_BASE_URL:https://sandbox-api.iyzipay.com}

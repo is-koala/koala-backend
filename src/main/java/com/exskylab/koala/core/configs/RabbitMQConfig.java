@@ -5,6 +5,7 @@ import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.annotation.EnableRabbit;
 import org.springframework.amqp.rabbit.config.RetryInterceptorBuilder;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
+import org.springframework.boot.autoconfigure.amqp.SimpleRabbitListenerContainerFactoryConfigurer;
 import org.springframework.amqp.rabbit.config.StatefulRetryOperationsInterceptorFactoryBean;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -119,9 +120,11 @@ public class RabbitMQConfig {
     }
 
     @Bean
-    public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(ConnectionFactory connectionFactory) {
+    public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
+            SimpleRabbitListenerContainerFactoryConfigurer configurer,
+            ConnectionFactory connectionFactory) {
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
-        factory.setConnectionFactory(connectionFactory);
+        configurer.configure(factory, connectionFactory);
         factory.setMessageConverter(messageConverter());
         return factory;
     }
@@ -154,11 +157,12 @@ public class RabbitMQConfig {
 
     @Bean(name = "iyzicoListenerContainerFactory")
     public SimpleRabbitListenerContainerFactory iyzicoListenerContainerFactory(
+            SimpleRabbitListenerContainerFactoryConfigurer configurer,
             ConnectionFactory connectionFactory,
             StatefulRetryOperationsInterceptor iyzicoRetryInterceptor) {
 
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
-        factory.setConnectionFactory(connectionFactory);
+        configurer.configure(factory, connectionFactory);
         factory.setMessageConverter(messageConverter());
 
         factory.setAdviceChain(iyzicoRetryInterceptor);

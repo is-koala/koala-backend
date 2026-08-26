@@ -5,6 +5,7 @@ import com.exskylab.koala.core.constants.SessionMessages;
 import com.exskylab.koala.core.dtos.session.response.CreatedSessionInfo;
 import com.exskylab.koala.core.exceptions.SessionNotFoundException;
 import com.exskylab.koala.core.exceptions.UserNotFoundException;
+import com.exskylab.koala.core.properties.SessionProperties;
 import com.exskylab.koala.core.security.JwtService;
 import com.exskylab.koala.dataAccess.SessionDao;
 import com.exskylab.koala.entities.Device;
@@ -26,12 +27,15 @@ public class SessionManager implements SessionService {
     private final SessionDao sessionDao;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final SessionProperties sessionProperties;
     private Logger logger = LoggerFactory.getLogger(SessionManager.class);
 
-    public SessionManager(SessionDao sessionDao, PasswordEncoder passwordEncoder, JwtService jwtService) {
+    public SessionManager(SessionDao sessionDao, PasswordEncoder passwordEncoder, JwtService jwtService,
+                          SessionProperties sessionProperties) {
         this.sessionDao = sessionDao;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
+        this.sessionProperties = sessionProperties;
     }
 
     @Override
@@ -53,7 +57,7 @@ public class SessionManager implements SessionService {
         session.setDevice(device);
         session.setIpAddress(ipAddress);
         session.setRefreshTokenHash(hashedRefreshToken);
-        session.setRefreshExpiresAt(LocalDateTime.now().plusDays(30));
+        session.setRefreshExpiresAt(LocalDateTime.now().plusDays(sessionProperties.getRefreshValidityDays()));
         session.setActive(true);
         session.setLastAccessedAt(LocalDateTime.now());
 

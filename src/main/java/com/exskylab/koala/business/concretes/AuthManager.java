@@ -3,6 +3,7 @@ package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.*;
 import com.exskylab.koala.core.properties.AppProperties;
+import com.exskylab.koala.core.properties.SessionProperties;
 import com.exskylab.koala.core.constants.AuthMessages;
 import com.exskylab.koala.core.dtos.auth.request.*;
 import com.exskylab.koala.core.dtos.auth.response.AuthSetPasswordDto;
@@ -37,6 +38,7 @@ public class AuthManager implements AuthService {
     private final SessionService sessionService;
     private final LoginAttemptService loginAttemptService;
     private final SecurityService securityService;
+    private final SessionProperties sessionProperties;
 
     private Logger logger = LoggerFactory.getLogger(AuthManager.class);
 
@@ -49,7 +51,8 @@ public class AuthManager implements AuthService {
                        DeviceService deviceService,
                        SessionService sessionService,
                        LoginAttemptService loginAttemptService,
-                       SecurityService securityService) {
+                       SecurityService securityService,
+                       SessionProperties sessionProperties) {
         this.userService = userService;
         this.pendingRegistrationService = pendingRegistrationService;
         this.notificationService = notificationService;
@@ -60,6 +63,7 @@ public class AuthManager implements AuthService {
         this.sessionService = sessionService;
         this.loginAttemptService = loginAttemptService;
         this.securityService = securityService;
+        this.sessionProperties = sessionProperties;
     }
 
     @Override
@@ -286,9 +290,9 @@ public class AuthManager implements AuthService {
         LocalDateTime currentRefreshExpiresAt = session.getRefreshExpiresAt();
 
 
-        if (currentRefreshExpiresAt.isBefore(now.plusDays(7))){
-            session.setRefreshExpiresAt(now.plusDays(30));
-            logger.info("Refresh token will expire in 30 days for session ID: {}", sessionId);
+        if (currentRefreshExpiresAt.isBefore(now.plusDays(sessionProperties.getRefreshSlidingWindowDays()))){
+            session.setRefreshExpiresAt(now.plusDays(sessionProperties.getRefreshValidityDays()));
+            logger.info("Refresh token expiry extended for session ID: {}", sessionId);
         }
 
         session.setLastAccessedAt(now);
