@@ -135,6 +135,11 @@ public class SecurityConfig {
                         //payout endpoints
                         .requestMatchers(HttpMethod.GET, "/users/me/payouts").hasAnyRole("USER", "ADMIN")
 
+                        //storage endpoints
+                        .requestMatchers(HttpMethod.GET, "/uploads/images/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/uploads/public/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/uploads/files/**").hasAnyRole("USER", "ADMIN")
+
                         //realtime endpoints
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/users/{userId}/presence").hasAnyRole("USER", "ADMIN")

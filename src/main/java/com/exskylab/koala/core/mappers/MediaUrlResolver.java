@@ -1,6 +1,6 @@
 package com.exskylab.koala.core.mappers;
 
-import com.exskylab.koala.core.properties.R2Properties;
+import com.exskylab.koala.core.helpers.StorageUrlResolver;
 import com.exskylab.koala.entities.Image;
 import com.exskylab.koala.entities.Media;
 import org.mapstruct.Named;
@@ -9,25 +9,19 @@ import org.springframework.stereotype.Component;
 @Component
 public class MediaUrlResolver {
 
-    private final R2Properties r2Properties;
+    private final StorageUrlResolver storageUrlResolver;
 
-    public MediaUrlResolver(R2Properties r2Properties) {
-        this.r2Properties = r2Properties;
+    public MediaUrlResolver(StorageUrlResolver storageUrlResolver) {
+        this.storageUrlResolver = storageUrlResolver;
     }
 
     @Named("imageToPublicUrl")
     public String toPublicUrl(Image image) {
-        if (image == null || image.getFileUrl() == null) {
-            return null;
-        }
-        return r2Properties.getPublicUrl() + "/" + image.getFileUrl();
+        return image == null ? null : storageUrlResolver.urlFor(image.getFileUrl());
     }
 
     @Named("mediaToPublicUrl")
     public String toFileUrl(Media media) {
-        if (media == null || media.getFileUrl() == null) {
-            return null;
-        }
-        return r2Properties.getPublicUrl() + "/" + media.getFileUrl();
+        return media == null ? null : storageUrlResolver.urlFor(media.getFileUrl());
     }
 }

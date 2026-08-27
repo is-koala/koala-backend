@@ -2,18 +2,19 @@ package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.ImageService;
 import com.exskylab.koala.business.abstracts.SecurityService;
-import com.exskylab.koala.core.configs.r2.FolderType;
+import com.exskylab.koala.core.utilities.storage.FolderType;
 import com.exskylab.koala.core.constants.ImageMessages;
 import com.exskylab.koala.core.dtos.images.response.UploadImageResponseDto;
 import com.exskylab.koala.core.exceptions.ImageUploadError;
 import com.exskylab.koala.core.mappers.ImageMapper;
-import com.exskylab.koala.core.utilities.storage.R2StorageService;
+import com.exskylab.koala.core.utilities.storage.StorageService;
 import com.exskylab.koala.dataAccess.ImageDao;
 import com.exskylab.koala.entities.Image;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.entities.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.exskylab.koala.core.helpers.UploadValidator;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -27,37 +28,33 @@ import java.util.UUID;
 public class ImageManager implements ImageService {
 
     private final ImageDao imageDao;
-    private final R2StorageService r2StorageService;
+    private final StorageService storageService;
     private final SecurityService securityService;
     private final static Logger logger = LoggerFactory.getLogger(ImageManager.class);
     private final ImageMapper imageMapper;
+    private final UploadValidator uploadValidator;
 
 
-    public ImageManager(ImageDao imageDao, R2StorageService r2StorageService, SecurityService securityService, ImageMapper imageMapper) {
+    public ImageManager(ImageDao imageDao, StorageService storageService, SecurityService securityService,
+                        ImageMapper imageMapper, UploadValidator uploadValidator) {
         this.imageDao = imageDao;
-        this.r2StorageService = r2StorageService;
+        this.storageService = storageService;
         this.securityService = securityService;
         this.imageMapper = imageMapper;
+        this.uploadValidator = uploadValidator;
     }
 
 
     @Override
     public Image uploadImage(MultipartFile image) {
         logger.info("Uploading image file: {}", image.getOriginalFilename());
-        if (image.isEmpty()){
-            logger.error("Image upload failed: Image file is empty.");
-            throw new ImageUploadError(ImageMessages.IMAGE_EMPTY_ERROR);
-        }
-
-        if (image.getSize() > 10 * 1024 * 1024) {
-            logger.error("Image upload failed: Image file size exceeds the limit of 10 MB.");
-            throw new ImageUploadError(ImageMessages.IMAGE_SIZE_ERROR);
-        }
+        uploadValidator.validate(image, FolderType.IMAGE,
+                ImageMessages.IMAGE_EMPTY_ERROR, ImageMessages.IMAGE_SIZE_ERROR);
 
         try {
             byte[] cleanImageBytes = removeMetadata(image);
 
-            String imageKey = r2StorageService.uploadFile(
+            String imageKey = storageService.uploadFile(
                     cleanImageBytes,
                     image.getOriginalFilename(),
                     image.getContentType(),

@@ -36,6 +36,8 @@ import com.exskylab.koala.core.properties.AutoCompletionProperties;
 import com.exskylab.koala.dataAccess.DisputeDao;
 import org.springframework.data.domain.PageRequest;
 import java.time.LocalDateTime;
+import com.exskylab.koala.business.abstracts.SettingsService;
+import com.exskylab.koala.core.constants.SettingKeys;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -68,6 +70,7 @@ public class JobAssignmentManager implements JobAssignmentService {
     private final DisputeDao disputeDao;
     private final PayoutService payoutService;
     private final AutoCompletionProperties autoCompletionProperties;
+    private final SettingsService settingsService;
 
 
     public JobAssignmentManager(JobAssignmentDao jobAssignmentDao, SecurityService securityService, JobAssignmentMapper jobAssignmentMapper, IyzicoPaymentService iyzicoPaymentService, CompanyContactService companyContactService, UserService userService,
@@ -76,7 +79,8 @@ public class JobAssignmentManager implements JobAssignmentService {
                                BankAccountService bankAccountService, PageableSanitizer pageableSanitizer,
                                AssignmentParticipants participants, BadgeService badgeService,
                                DisputeDao disputeDao, PayoutService payoutService,
-                               AutoCompletionProperties autoCompletionProperties) {
+                               AutoCompletionProperties autoCompletionProperties,
+                               SettingsService settingsService) {
         this.jobAssignmentDao = jobAssignmentDao;
         this.securityService = securityService;
         this.jobAssignmentMapper = jobAssignmentMapper;
@@ -94,6 +98,7 @@ public class JobAssignmentManager implements JobAssignmentService {
         this.disputeDao = disputeDao;
         this.payoutService = payoutService;
         this.autoCompletionProperties = autoCompletionProperties;
+        this.settingsService = settingsService;
     }
 
 
@@ -362,8 +367,11 @@ public class JobAssignmentManager implements JobAssignmentService {
     @Override
     @Transactional(readOnly = true)
     public List<UUID> findAutoCompletableAssignmentIds() {
+        int graceDays = settingsService.intValue(SettingKeys.AUTO_COMPLETION_GRACE_DAYS,
+                autoCompletionProperties.getGraceDays());
+
         LocalDateTime endedBefore = LocalDateTime.now(autoCompletionProperties.getZoneId())
-                .minusDays(autoCompletionProperties.getGraceDays());
+                .minusDays(graceDays);
 
         return jobAssignmentDao.findAutoCompletableIds(
                 List.of(AssignmentStatus.CONFIRMED, AssignmentStatus.IN_PROGRESS),

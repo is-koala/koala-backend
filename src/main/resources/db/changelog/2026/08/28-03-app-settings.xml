@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-08-28-04-app-settings" author="koala">
+        <createTable tableName="app_settings">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="setting_key" type="VARCHAR(128)">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uk_app_settings_key"/>
+            </column>
+            <column name="setting_value" type="VARCHAR(512)"><constraints nullable="false"/></column>
+            <column name="description" type="VARCHAR(512)"/>
+        </createTable>
+        <sql>
+            INSERT INTO app_settings (id, setting_key, setting_value, description) VALUES
+                ('9a1c0f10-0003-4c00-8000-000000000001', 'assignment.auto-completion.grace-days', '3',
+                 'İş bitiminden kaç gün sonra atama kendiliğinden tamamlansın.'),
+                ('9a1c0f10-0003-4c00-8000-000000000002', 'cancellation.free-window-hours', '24',
+                 'İşverenin cezasız iptal edebileceği süre (saat).'),
+                ('9a1c0f10-0003-4c00-8000-000000000003', 'cancellation.late-fee-rate', '0.50',
+                 'Pencere içinde iptalde kesilen oran.')
+            ON CONFLICT (setting_key) DO NOTHING;
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

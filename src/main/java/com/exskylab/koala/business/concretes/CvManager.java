@@ -2,18 +2,19 @@ package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.CvService;
 import com.exskylab.koala.business.abstracts.SecurityService;
-import com.exskylab.koala.core.configs.r2.FolderType;
+import com.exskylab.koala.core.utilities.storage.FolderType;
 import com.exskylab.koala.core.constants.CvMessages;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import jakarta.validation.ValidationException;
 import com.exskylab.koala.core.mappers.MediaUrlResolver;
-import com.exskylab.koala.core.utilities.storage.R2StorageService;
+import com.exskylab.koala.core.utilities.storage.StorageService;
 import com.exskylab.koala.dataAccess.MediaDao;
 import com.exskylab.koala.dataAccess.UserDao;
 import com.exskylab.koala.entities.File;
 import com.exskylab.koala.entities.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.exskylab.koala.core.helpers.UploadValidator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -25,48 +26,36 @@ import java.util.UUID;
 @Service
 public class CvManager implements CvService {
 
-    private static final long MAX_SIZE_BYTES = 10L * 1024 * 1024;
-
-    private static final Set<String> ALLOWED_TYPES = Set.of(
-            "application/pdf",
-            "application/msword",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-
     private final Logger logger = LoggerFactory.getLogger(CvManager.class);
 
     private final MediaDao mediaDao;
     private final UserDao userDao;
-    private final R2StorageService r2StorageService;
+    private final StorageService storageService;
     private final SecurityService securityService;
+    private final UploadValidator uploadValidator;
     private final MediaUrlResolver mediaUrlResolver;
 
-    public CvManager(MediaDao mediaDao, UserDao userDao, R2StorageService r2StorageService,
-                     SecurityService securityService, MediaUrlResolver mediaUrlResolver) {
+    public CvManager(MediaDao mediaDao, UserDao userDao, StorageService storageService,
+                     SecurityService securityService, MediaUrlResolver mediaUrlResolver,
+                     UploadValidator uploadValidator) {
         this.mediaDao = mediaDao;
         this.userDao = userDao;
-        this.r2StorageService = r2StorageService;
+        this.storageService = storageService;
         this.securityService = securityService;
         this.mediaUrlResolver = mediaUrlResolver;
+        this.uploadValidator = uploadValidator;
     }
 
     @Override
     @Transactional
     public File uploadCv(MultipartFile document) {
-        if (document == null || document.isEmpty()) {
-            throw new ValidationException(CvMessages.EMPTY);
-        }
-        if (document.getSize() > MAX_SIZE_BYTES) {
-            throw new ValidationException(CvMessages.SIZE_EXCEEDED);
-        }
-        if (!ALLOWED_TYPES.contains(document.getContentType())) {
-            throw new ValidationException(CvMessages.UNSUPPORTED_TYPE);
-        }
+        uploadValidator.validate(document, FolderType.FILE, CvMessages.EMPTY, CvMessages.SIZE_EXCEEDED);
 
         User currentUser = securityService.getAuthenticatedUser();
 
         String key;
         try {
-            key = r2StorageService.uploadFile(document.getBytes(), document.getOriginalFilename(),
+            key = storageService.uploadFile(document.getBytes(), document.getOriginalFilename(),
                     document.getContentType(), FolderType.FILE);
         } catch (IOException e) {
             logger.error("CV upload failed for user {}: {}", currentUser.getId(), e.getMessage());

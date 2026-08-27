@@ -150,12 +150,21 @@ sms:
     apiHash: ${SMS_API_HASH:}
     sender: ${SMS_SENDER:KOALA}
 
-r2:
-  endpoint: ${R2_ENDPOINT:}
-  publicUrl: ${R2_PUBLIC_URL:}
-  accessKey: ${R2_ACCESS_KEY:}
-  secretKey: ${R2_SECRET_KEY:}
-  bucketName: ${R2_BUCKET_NAME:koala-media}
+storage:
+  type: ${STORAGE_TYPE:local}
+  bucket: ${STORAGE_BUCKET:}
+  region: ${STORAGE_REGION:eu-central-1}
+  access-key: ${STORAGE_ACCESS_KEY:}
+  secret-key: ${STORAGE_SECRET_KEY:}
+  endpoint: ${STORAGE_ENDPOINT:}
+  public-url: ${STORAGE_PUBLIC_URL:}
+  signed-url-minutes: ${STORAGE_SIGNED_URL_MINUTES:15}
+  local:
+    path: ${STORAGE_LOCAL_PATH:uploads}
+
+upload:
+  max-image-size-mb: ${UPLOAD_MAX_IMAGE_SIZE_MB:10}
+  max-file-size-mb: ${UPLOAD_MAX_FILE_SIZE_MB:10}
 
 iyzico:
   apiKey: ${IYZICO_API_KEY:}

@@ -2,6 +2,8 @@ package com.exskylab.koala.core.helpers;
 
 import com.exskylab.koala.core.properties.CancellationProperties;
 import com.exskylab.koala.entities.CancellationParty;
+import com.exskylab.koala.business.abstracts.SettingsService;
+import com.exskylab.koala.core.constants.SettingKeys;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -16,9 +18,11 @@ public class CancellationPolicy {
     private static final int MONEY_SCALE = 2;
 
     private final CancellationProperties properties;
+    private final SettingsService settingsService;
 
-    public CancellationPolicy(CancellationProperties properties) {
+    public CancellationPolicy(CancellationProperties properties, SettingsService settingsService) {
         this.properties = properties;
+        this.settingsService = settingsService;
     }
 
     public Duration noticeBefore(LocalDateTime jobStart, Instant now) {
@@ -50,10 +54,20 @@ public class CancellationPolicy {
         if (!notice.isPositive()) {
             return BigDecimal.ONE.setScale(4);
         }
-        if (notice.toHours() >= properties.getFreeWindowHours()) {
+        if (notice.toHours() >= freeWindowHours()) {
             return BigDecimal.ZERO.setScale(4);
         }
-        return properties.getLateFeeRate().setScale(4, RoundingMode.HALF_UP);
+        return lateFeeRate().setScale(4, RoundingMode.HALF_UP);
+    }
+
+    private int freeWindowHours() {
+        return settingsService.intValue(SettingKeys.CANCELLATION_FREE_WINDOW_HOURS,
+                properties.getFreeWindowHours());
+    }
+
+    private BigDecimal lateFeeRate() {
+        return settingsService.decimalValue(SettingKeys.CANCELLATION_LATE_FEE_RATE,
+                properties.getLateFeeRate());
     }
 
     private static BigDecimal zero() {
