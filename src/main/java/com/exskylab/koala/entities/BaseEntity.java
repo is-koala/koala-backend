@@ -39,6 +39,16 @@ public abstract class BaseEntity {
     @JoinColumn(name = "updated_by_id")
     private User updatedBy;
 
+    @Column(name = "is_deleted", nullable = false)
+    private boolean deleted = false;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "deleted_by_id")
+    private User deletedBy;
+
     public abstract UUID getId();
 
     @Override

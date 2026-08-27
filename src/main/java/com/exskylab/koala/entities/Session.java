@@ -1,6 +1,8 @@
 package com.exskylab.koala.entities;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -10,6 +12,8 @@ import lombok.Setter;
 import java.time.Instant;
 import java.util.UUID;
 
+@SQLDelete(sql = "UPDATE sessions SET is_deleted = true, deleted_at = now() WHERE id = ?")
+@SQLRestriction("is_deleted = false")
 @Entity
 @Getter
 @Setter

@@ -100,14 +100,8 @@ public class ImageManager implements ImageService {
             throw new ImageUploadError(ImageMessages.IMAGE_PERMISSION_ERROR);
         }
 
-        try {
-            r2StorageService.deleteFile(image.get().getFileUrl());
-            imageDao.deleteById(imageId);
-            logger.info("Image with ID {} deleted successfully by userID {}", imageId, user.getId());
-        } catch (Exception e) {
-            logger.error("Image deletion failed for ID {}: errorMessage {}", imageId, e.getMessage());
-            throw new ImageUploadError(ImageMessages.IMAGE_DELETE_ERROR);
-        }
+        imageDao.deleteById(imageId);
+        logger.info("Image with ID {} soft deleted by userID {}", imageId, user.getId());
     }
 
 

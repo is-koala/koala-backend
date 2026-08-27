@@ -2,6 +2,8 @@ package com.exskylab.koala.entities;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
 import lombok.*;
 
 import java.time.LocalDate;
@@ -9,6 +11,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+@SQLDelete(sql = "UPDATE users SET is_deleted = true, deleted_at = now() WHERE id = ?")
+@SQLRestriction("is_deleted = false")
 @Entity
 @Getter
 @Setter

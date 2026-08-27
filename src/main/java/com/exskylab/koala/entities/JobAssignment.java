@@ -1,6 +1,8 @@
 package com.exskylab.koala.entities;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -14,6 +16,8 @@ import java.util.UUID;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
+@SQLDelete(sql = "UPDATE job_assignments SET is_deleted = true, deleted_at = now() WHERE id = ?")
+@SQLRestriction("is_deleted = false")
 @Entity
 @Table(name ="job_assignments")
 public class JobAssignment extends BaseEntity{

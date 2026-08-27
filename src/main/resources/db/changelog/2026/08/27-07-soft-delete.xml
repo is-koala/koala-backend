@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-08-27-14-soft-delete-columns" author="koala">
+        <sql splitStatements="false">
+            DO $$
+            DECLARE
+                target RECORD;
+            BEGIN
+                FOR target IN
+                    SELECT c.table_name
+                    FROM information_schema.columns c
+                    JOIN information_schema.tables t
+                      ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+                    WHERE c.table_schema = 'public'
+                      AND t.table_type = 'BASE TABLE'
+                      AND c.column_name = 'created_at'
+                      AND c.table_name NOT IN ('databasechangelog', 'databasechangeloglock')
+                LOOP
+                    EXECUTE format('ALTER TABLE public.%I ADD COLUMN IF NOT EXISTS is_deleted boolean NOT NULL DEFAULT false', target.table_name);
+                    EXECUTE format('ALTER TABLE public.%I ADD COLUMN IF NOT EXISTS deleted_at timestamptz', target.table_name);
+                    EXECUTE format('ALTER TABLE public.%I ADD COLUMN IF NOT EXISTS deleted_by_id uuid', target.table_name);
+                    EXECUTE format('CREATE INDEX IF NOT EXISTS idx_%s_is_deleted ON public.%I (is_deleted)', target.table_name, target.table_name);
+                END LOOP;
+            END $$;
+        </sql>
+        <rollback>
+            <sql splitStatements="false">
+                DO $$
+                DECLARE
+                    target RECORD;
+                BEGIN
+                    FOR target IN
+                        SELECT c.table_name
+                        FROM information_schema.columns c
+                        WHERE c.table_schema = 'public' AND c.column_name = 'is_deleted'
+                    LOOP
+                        EXECUTE format('ALTER TABLE public.%I DROP COLUMN IF EXISTS is_deleted', target.table_name);
+                        EXECUTE format('ALTER TABLE public.%I DROP COLUMN IF EXISTS deleted_at', target.table_name);
+                        EXECUTE format('ALTER TABLE public.%I DROP COLUMN IF EXISTS deleted_by_id', target.table_name);
+                    END LOOP;
+                END $$;
+            </sql>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-08-27-15-partial-unique-indexes" author="koala">
+        <sql splitStatements="true" endDelimiter=";">
+            CREATE UNIQUE INDEX IF NOT EXISTS uk_users_email_active
+                ON public.users (email) WHERE is_deleted = false;
+            CREATE UNIQUE INDEX IF NOT EXISTS uk_bank_accounts_iban_active
+                ON public.bank_accounts (user_id, iban) WHERE is_deleted = false;
+        </sql>
+        <rollback>
+            <sql splitStatements="true" endDelimiter=";">
+                DROP INDEX IF EXISTS uk_users_email_active;
+                DROP INDEX IF EXISTS uk_bank_accounts_iban_active;
+            </sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>
