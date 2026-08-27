@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 @Entity
@@ -40,4 +41,24 @@ public class Badge {
 
     @Column(name = "sort_order", nullable = false)
     private int sortOrder;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "rule_type", nullable = false, length = 48)
+    private BadgeRuleType ruleType;
+
+    @Column(name = "min_count")
+    private Integer minCount;
+
+    @Column(name = "min_average_rating", precision = 3, scale = 2)
+    private BigDecimal minAverageRating;
+
+    @Column(name = "min_review_count")
+    private Integer minReviewCount;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "icon_id")
+    private Image icon;
+
+    @Column(name = "is_active", nullable = false)
+    private boolean active = true;
 }

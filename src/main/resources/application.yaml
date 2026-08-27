@@ -130,12 +130,10 @@ assignment:
     zone-id: ${ASSIGNMENT_AUTO_COMPLETION_ZONE_ID:Europe/Istanbul}
     cron: ${ASSIGNMENT_AUTO_COMPLETION_CRON:0 15 * * * *}
 
-badge:
-  thresholds:
-    GEZGIN_SILVER:
-      min-count: ${BADGE_GEZGIN_SILVER_MIN_COUNT:5}
-    GEZGIN_GOLD:
-      min-count: ${BADGE_GEZGIN_GOLD_MIN_COUNT:25}
+realtime:
+  enabled: ${REALTIME_ENABLED:true}
+  endpoint: ${REALTIME_ENDPOINT:/ws}
+  typing-timeout: ${REALTIME_TYPING_TIMEOUT:5s}
 
 cancellation:
   free-window-hours: ${CANCELLATION_FREE_WINDOW_HOURS:24}

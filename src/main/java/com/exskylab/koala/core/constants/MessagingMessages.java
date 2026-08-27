@@ -13,4 +13,5 @@ public class MessagingMessages {
     public static final String USER_BLOCKED = "{messaging.user.blocked}";
     public static final String USER_UNBLOCKED = "{messaging.user.unblocked}";
     public static final String CANNOT_BLOCK_SELF = "{messaging.cannot.block.self}";
+    public static final String PRESENCE_FETCHED = "{messaging.presence.fetched}";
 }

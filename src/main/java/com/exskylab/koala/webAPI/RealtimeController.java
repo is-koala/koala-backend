@@ -1,0 +1,63 @@
+package com.exskylab.koala.webAPI;
+
+import com.exskylab.koala.business.abstracts.MessagingService;
+import com.exskylab.koala.business.abstracts.PresenceService;
+import com.exskylab.koala.core.constants.MessagingMessages;
+import com.exskylab.koala.core.dtos.realtime.response.PresenceDto;
+import com.exskylab.koala.core.realtime.RealtimePublisher;
+import com.exskylab.koala.core.security.UserPrincipal;
+import com.exskylab.koala.core.utilities.results.SuccessDataResult;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.handler.annotation.DestinationVariable;
+import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.security.core.Authentication;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.UUID;
+
+@Controller
+public class RealtimeController {
+
+    private final MessagingService messagingService;
+    private final PresenceService presenceService;
+    private final RealtimePublisher realtimePublisher;
+
+    public RealtimeController(MessagingService messagingService, PresenceService presenceService,
+                              RealtimePublisher realtimePublisher) {
+        this.messagingService = messagingService;
+        this.presenceService = presenceService;
+        this.realtimePublisher = realtimePublisher;
+    }
+
+    @MessageMapping("/conversations/{conversationId}/typing")
+    public void typing(@DestinationVariable UUID conversationId, Authentication authentication) {
+        UserPrincipal principal = (UserPrincipal) authentication.getPrincipal();
+        messagingService.assertParticipant(conversationId, principal.id());
+        realtimePublisher.typing(conversationId, principal.id());
+    }
+
+    @GetMapping("/users/{userId}/presence")
+    @ResponseBody
+    public ResponseEntity<SuccessDataResult<PresenceDto>> presenceOf(@PathVariable UUID userId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                new PresenceDto(userId, presenceService.isOnline(userId), presenceService.lastSeenAt(userId)),
+                MessagingMessages.PRESENCE_FETCHED, HttpStatus.OK));
+    }
+
+    @PostMapping("/presence/lookup")
+    @ResponseBody
+    public ResponseEntity<SuccessDataResult<List<PresenceDto>>> presenceOfMany(
+            @RequestBody List<UUID> userIds) {
+
+        List<PresenceDto> statuses = presenceService.statusOf(userIds).entrySet().stream()
+                .map(entry -> new PresenceDto(entry.getKey(), entry.getValue(),
+                        presenceService.lastSeenAt(entry.getKey())))
+                .toList();
+
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                statuses, MessagingMessages.PRESENCE_FETCHED, HttpStatus.OK));
+    }
+}

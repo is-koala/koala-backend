@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-08-28-02-badge-rule-columns" author="koala">
+        <addColumn tableName="badges">
+            <column name="rule_type" type="VARCHAR(48)"/>
+            <column name="min_count" type="INTEGER"/>
+            <column name="min_average_rating" type="NUMERIC(3,2)"/>
+            <column name="min_review_count" type="INTEGER"/>
+            <column name="icon_id" type="UUID"/>
+            <column name="is_active" type="BOOLEAN" defaultValueBoolean="true"><constraints nullable="false"/></column>
+        </addColumn>
+        <addForeignKeyConstraint baseTableName="badges" baseColumnNames="icon_id"
+                                 constraintName="fk_badges_icon"
+                                 referencedTableName="media" referencedColumnNames="id"/>
+    </changeSet>
+
+    <changeSet id="2026-08-28-03-badge-rule-backfill" author="koala">
+        <sql>
+            UPDATE badges SET rule_type = 'COMPLETED_ASSIGNMENTS' WHERE rule_type IS NULL;
+            UPDATE badges SET min_count = 5  WHERE code = 'GEZGIN_SILVER' AND min_count IS NULL;
+            UPDATE badges SET min_count = 25 WHERE code = 'GEZGIN_GOLD'   AND min_count IS NULL;
+        </sql>
+        <addNotNullConstraint tableName="badges" columnName="rule_type" columnDataType="VARCHAR(48)"/>
+    </changeSet>
+
+</databaseChangeLog>

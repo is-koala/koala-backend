@@ -30,4 +30,6 @@ public interface MessagingService {
     List<UserBlock> getMyBlocks();
 
     Map<UUID, Long> unreadCounts(Collection<UUID> conversationIds);
+
+    void assertParticipant(UUID conversationId, UUID userId);
 }

@@ -12,8 +12,10 @@ public final class BearerTokenExtractor {
     }
 
     public static String extract(HttpServletRequest request) {
-        String header = request.getHeader("Authorization");
+        return extractHeader(request.getHeader("Authorization"));
+    }
 
+    public static String extractHeader(String header) {
         if (header == null || !header.startsWith(PREFIX)) {
             throw new NotValidAuthorizationHeaderException(AuthMessages.NOT_VALID_AUTHORIZATION_HEADER);
         }

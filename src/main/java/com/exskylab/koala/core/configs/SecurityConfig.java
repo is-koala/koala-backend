@@ -135,6 +135,11 @@ public class SecurityConfig {
                         //payout endpoints
                         .requestMatchers(HttpMethod.GET, "/users/me/payouts").hasAnyRole("USER", "ADMIN")
 
+                        //realtime endpoints
+                        .requestMatchers("/ws/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/users/{userId}/presence").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/presence/lookup").hasAnyRole("USER", "ADMIN")
+
                         //messaging endpoints
                         .requestMatchers("/conversations/**", "/jobs/{jobId}/conversation").hasAnyRole("USER", "ADMIN")
                         .requestMatchers("/users/me/blocks/**").hasAnyRole("USER", "ADMIN")

@@ -1,6 +1,7 @@
 package com.exskylab.koala.dataAccess;
 
 import com.exskylab.koala.entities.Badge;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -13,5 +14,11 @@ public interface BadgeDao extends JpaRepository<Badge, UUID> {
 
     Optional<Badge> findByCode(String code);
 
+    boolean existsByCode(String code);
+
+    @EntityGraph(attributePaths = {"icon"})
     List<Badge> findAllByOrderBySortOrderAsc();
+
+    @EntityGraph(attributePaths = {"icon"})
+    List<Badge> findAllByActiveTrueOrderBySortOrderAsc();
 }

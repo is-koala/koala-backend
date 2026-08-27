@@ -6,5 +6,5 @@ import com.exskylab.koala.entities.BadgeTier;
 import java.time.Instant;
 
 public record BadgeDto(String code, BadgeFamily family, BadgeTier tier,
-                       String name, String description, Instant earnedAt) {
+                       String name, String description, String iconUrl, Instant earnedAt) {
 }

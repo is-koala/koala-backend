@@ -1,5 +1,9 @@
 package com.exskylab.koala.entities;
 
 public enum BadgeFamily {
-    GEZGIN
+    GEZGIN,
+    RATING,
+    IDENTITY,
+    PUNCTUALITY,
+    OTHER
 }

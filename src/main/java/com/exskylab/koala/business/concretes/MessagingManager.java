@@ -14,6 +14,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import com.exskylab.koala.core.mappers.MessagingMapper;
+import com.exskylab.koala.core.realtime.RealtimePublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,12 +45,15 @@ public class MessagingManager implements MessagingService {
     private final SecurityService securityService;
     private final CompanyContactService companyContactService;
     private final PageableSanitizer pageableSanitizer;
+    private final RealtimePublisher realtimePublisher;
+    private final MessagingMapper messagingMapper;
 
     public MessagingManager(ConversationDao conversationDao, MessageDao messageDao,
                             UserBlockDao userBlockDao, JobDao jobDao,
                             JobApplicationDao jobApplicationDao, UserDao userDao,
                             SecurityService securityService, CompanyContactService companyContactService,
-                            PageableSanitizer pageableSanitizer) {
+                            PageableSanitizer pageableSanitizer, RealtimePublisher realtimePublisher,
+                            MessagingMapper messagingMapper) {
         this.conversationDao = conversationDao;
         this.messageDao = messageDao;
         this.userBlockDao = userBlockDao;
@@ -58,6 +63,8 @@ public class MessagingManager implements MessagingService {
         this.securityService = securityService;
         this.companyContactService = companyContactService;
         this.pageableSanitizer = pageableSanitizer;
+        this.realtimePublisher = realtimePublisher;
+        this.messagingMapper = messagingMapper;
     }
 
     @Override
@@ -103,6 +110,8 @@ public class MessagingManager implements MessagingService {
         conversation.setLastMessageBody(saved.getBody());
         conversationDao.save(conversation);
 
+        realtimePublisher.messageSent(conversationId, messagingMapper.toMessageDto(saved));
+
         logger.info("Message {} sent in conversation {}", saved.getId(), conversationId);
         return saved;
     }
@@ -128,8 +137,13 @@ public class MessagingManager implements MessagingService {
     @Transactional
     public int markRead(UUID conversationId) {
         loadParticipating(conversationId);
-        return messageDao.markConversationRead(conversationId,
-                securityService.getAuthenticatedUserId(), Instant.now());
+        UUID readerId = securityService.getAuthenticatedUserId();
+
+        int marked = messageDao.markConversationRead(conversationId, readerId, Instant.now());
+        if (marked > 0) {
+            realtimePublisher.conversationRead(conversationId, readerId);
+        }
+        return marked;
     }
 
     @Override
@@ -209,5 +223,16 @@ public class MessagingManager implements MessagingService {
         return messageDao.countUnreadByConversationIds(conversationIds, securityService.getAuthenticatedUserId())
                 .stream()
                 .collect(Collectors.toMap(row -> (UUID) row[0], row -> (Long) row[1]));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public void assertParticipant(UUID conversationId, UUID userId) {
+        Conversation conversation = conversationDao.findWithParticipantsById(conversationId)
+                .orElseThrow(() -> new ResourceNotFoundException(MessagingMessages.CONVERSATION_NOT_FOUND));
+
+        if (!conversation.hasParticipant(userId)) {
+            throw new ResourceNotFoundException(MessagingMessages.CONVERSATION_NOT_FOUND);
+        }
     }
 }
