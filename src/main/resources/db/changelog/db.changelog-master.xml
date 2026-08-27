@@ -28,4 +28,5 @@
     <include file="db/changelog/2026/08/27-06-legal.xml"/>
     <include file="db/changelog/2026/08/27-07-soft-delete.xml"/>
     <include file="db/changelog/2026/08/27-08-marketplace-core.xml"/>
+    <include file="db/changelog/2026/08/27-09-marketplace-operations.xml"/>
 </databaseChangeLog>

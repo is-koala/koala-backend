@@ -122,6 +122,11 @@ rate-limit:
 commission:
   rate: ${COMMISSION_RATE:0.075}
 
+cancellation:
+  free-window-hours: ${CANCELLATION_FREE_WINDOW_HOURS:24}
+  late-fee-rate: ${CANCELLATION_LATE_FEE_RATE:0.50}
+  zone-id: ${CANCELLATION_ZONE_ID:Europe/Istanbul}
+
 session:
   refresh-validity-days: ${SESSION_REFRESH_VALIDITY_DAYS:30}
   refresh-sliding-window-days: ${SESSION_REFRESH_SLIDING_WINDOW_DAYS:7}

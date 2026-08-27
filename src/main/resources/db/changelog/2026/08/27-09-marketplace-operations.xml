@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-08-27-21-cancellations" author="koala">
+        <createTable tableName="cancellations">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="job_assignment_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="cancelled_by_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="cancelled_by_party" type="VARCHAR(16)"><constraints nullable="false"/></column>
+            <column name="reason" type="VARCHAR(1000)"/>
+            <column name="notice_minutes" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="fee_rate" type="NUMERIC(6,4)"><constraints nullable="false"/></column>
+            <column name="fee_amount" type="NUMERIC(19,2)"><constraints nullable="false"/></column>
+            <column name="refund_amount" type="NUMERIC(19,2)"><constraints nullable="false"/></column>
+            <column name="cancelled_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
+            <column name="deleted_by_id" type="UUID"/>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="cancellations" baseColumnNames="job_assignment_id"
+                                 constraintName="fk_cancellations_assignment"
+                                 referencedTableName="job_assignments" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="cancellations" baseColumnNames="cancelled_by_id"
+                                 constraintName="fk_cancellations_user"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <sql>
+            CREATE UNIQUE INDEX uk_cancellations_assignment_active
+                ON cancellations (job_assignment_id) WHERE is_deleted = false;
+        </sql>
+    </changeSet>
+
+    <changeSet id="2026-08-27-22-disputes" author="koala">
+        <createTable tableName="disputes">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="job_assignment_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="opened_by_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="status" type="VARCHAR(16)"><constraints nullable="false"/></column>
+            <column name="reason" type="VARCHAR(2000)"><constraints nullable="false"/></column>
+            <column name="resolution" type="VARCHAR(24)"/>
+            <column name="resolution_note" type="VARCHAR(2000)"/>
+            <column name="resolved_by_id" type="UUID"/>
+            <column name="resolved_at" type="TIMESTAMPTZ"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
+            <column name="deleted_by_id" type="UUID"/>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="disputes" baseColumnNames="job_assignment_id"
+                                 constraintName="fk_disputes_assignment"
+                                 referencedTableName="job_assignments" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="disputes" baseColumnNames="opened_by_id"
+                                 constraintName="fk_disputes_opened_by"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="disputes" baseColumnNames="resolved_by_id"
+                                 constraintName="fk_disputes_resolved_by"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <sql>
+            CREATE UNIQUE INDEX uk_disputes_assignment_open
+                ON disputes (job_assignment_id) WHERE is_deleted = false AND status &lt;&gt; 'RESOLVED';
+        </sql>
+    </changeSet>
+
+    <changeSet id="2026-08-27-23-reports" author="koala">
+        <createTable tableName="reports">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="reporter_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="reported_user_id" type="UUID"/>
+            <column name="job_id" type="UUID"/>
+            <column name="message_id" type="UUID"/>
+            <column name="reason" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="description" type="VARCHAR(2000)"/>
+            <column name="status" type="VARCHAR(16)"><constraints nullable="false"/></column>
+            <column name="reviewed_by_id" type="UUID"/>
+            <column name="review_note" type="VARCHAR(2000)"/>
+            <column name="reviewed_at" type="TIMESTAMPTZ"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
+            <column name="deleted_by_id" type="UUID"/>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="reports" baseColumnNames="reporter_id"
+                                 constraintName="fk_reports_reporter"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="reports" baseColumnNames="reported_user_id"
+                                 constraintName="fk_reports_reported_user"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="reports" baseColumnNames="job_id"
+                                 constraintName="fk_reports_job"
+                                 referencedTableName="jobs" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="reports" baseColumnNames="message_id"
+                                 constraintName="fk_reports_message"
+                                 referencedTableName="messages" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="reports" baseColumnNames="reviewed_by_id"
+                                 constraintName="fk_reports_reviewed_by"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <createIndex tableName="reports" indexName="idx_reports_status">
+            <column name="status"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="2026-08-27-24-work-sessions" author="koala">
+        <createTable tableName="work_sessions">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="job_assignment_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="check_in_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="check_out_at" type="TIMESTAMPTZ"/>
+            <column name="check_in_latitude" type="NUMERIC(9,6)"/>
+            <column name="check_in_longitude" type="NUMERIC(9,6)"/>
+            <column name="check_out_latitude" type="NUMERIC(9,6)"/>
+            <column name="check_out_longitude" type="NUMERIC(9,6)"/>
+            <column name="minutes" type="INTEGER"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
+            <column name="deleted_by_id" type="UUID"/>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="work_sessions" baseColumnNames="job_assignment_id"
+                                 constraintName="fk_work_sessions_assignment"
+                                 referencedTableName="job_assignments" referencedColumnNames="id"/>
+        <sql>
+            CREATE UNIQUE INDEX uk_work_sessions_open_per_assignment
+                ON work_sessions (job_assignment_id) WHERE is_deleted = false AND check_out_at IS NULL;
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

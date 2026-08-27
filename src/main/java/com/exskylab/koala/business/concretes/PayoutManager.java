@@ -1,10 +1,12 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.PayoutService;
+import com.exskylab.koala.core.constants.DisputeMessages;
 import com.exskylab.koala.core.constants.PayoutMessages;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
 import com.exskylab.koala.dataAccess.BankAccountDao;
+import com.exskylab.koala.dataAccess.DisputeDao;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
 import com.exskylab.koala.dataAccess.PaymentDao;
 import com.exskylab.koala.dataAccess.PayoutDao;
@@ -32,16 +34,18 @@ public class PayoutManager implements PayoutService {
     private final PaymentDao paymentDao;
     private final JobAssignmentDao jobAssignmentDao;
     private final BankAccountDao bankAccountDao;
+    private final DisputeDao disputeDao;
     private final PaymentStateMachine stateMachine;
 
     public PayoutManager(PayoutDao payoutDao, RefundDao refundDao, PaymentDao paymentDao,
                          JobAssignmentDao jobAssignmentDao, BankAccountDao bankAccountDao,
-                         PaymentStateMachine stateMachine) {
+                         DisputeDao disputeDao, PaymentStateMachine stateMachine) {
         this.payoutDao = payoutDao;
         this.refundDao = refundDao;
         this.paymentDao = paymentDao;
         this.jobAssignmentDao = jobAssignmentDao;
         this.bankAccountDao = bankAccountDao;
+        this.disputeDao = disputeDao;
         this.stateMachine = stateMachine;
     }
 
@@ -59,6 +63,10 @@ public class PayoutManager implements PayoutService {
 
         if (!stateMachine.canRelease(assignment)) {
             throw new IllegalStateException(PayoutMessages.NOT_READY_FOR_RELEASE);
+        }
+
+        if (disputeDao.existsByJobAssignmentIdAndStatusIn(jobAssignmentId, DisputeManager.ACTIVE)) {
+            throw new IllegalStateException(DisputeMessages.BLOCKS_RELEASE);
         }
 
         Payment payment = settledPayment(jobAssignmentId);

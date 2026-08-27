@@ -1,0 +1,31 @@
+package com.exskylab.koala.core.dtos.report.request;
+
+import com.exskylab.koala.core.constants.ReportMessages;
+import com.exskylab.koala.entities.ReportReason;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.util.UUID;
+
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+public class CreateReportDto {
+
+    private UUID reportedUserId;
+
+    private UUID jobId;
+
+    private UUID messageId;
+
+    @NotNull(message = ReportMessages.TARGET_REQUIRED)
+    private ReportReason reason;
+
+    @Size(max = 2000)
+    private String description;
+}

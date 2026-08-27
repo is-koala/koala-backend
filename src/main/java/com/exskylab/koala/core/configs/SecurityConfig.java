@@ -114,6 +114,34 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/payouts/job-assignments/{assignmentId}/release").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/payouts/job-assignments/{assignmentId}/refund").hasRole("ADMIN")
 
+                        //messaging endpoints
+                        .requestMatchers("/conversations/**").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers("/users/me/blocks/**").hasAnyRole("USER", "ADMIN")
+
+                        //assignment operation endpoints
+                        .requestMatchers(HttpMethod.POST, "/job-assignments/{assignmentId}/cancel").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/job-assignments/{assignmentId}/cancellation").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/job-assignments/{assignmentId}/disputes").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/job-assignments/{assignmentId}/disputes").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/job-assignments/{assignmentId}/check-in").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/job-assignments/{assignmentId}/check-out").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/job-assignments/{assignmentId}/work-sessions").hasAnyRole("USER", "ADMIN")
+
+                        //dispute administration endpoints
+                        .requestMatchers(HttpMethod.GET, "/disputes/pending").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/disputes/{disputeId}/resolve").hasRole("ADMIN")
+
+                        //report endpoints
+                        .requestMatchers(HttpMethod.POST, "/reports").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/reports/me").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/reports").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/reports/{reportId}/review").hasRole("ADMIN")
+
+                        //review endpoints
+                        .requestMatchers(HttpMethod.POST, "/reviews/job-assignments/{assignmentId}").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/reviews/users/{userId}").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/reviews/users/{userId}/summary").permitAll()
+
                         //actuator
                         .requestMatchers("/actuator/health/**").permitAll()
                         .requestMatchers("/actuator/**").hasRole("ADMIN")
