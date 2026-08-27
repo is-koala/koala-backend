@@ -109,9 +109,6 @@ public class User extends BaseEntity {
     @Column(name = "is_employer")
     private boolean isEmployer = false;
 
-    @Column(name = "iban")
-    private String iban;
-
     @Column(name = "iyzico_submerchant_key")
     private String iyzicoSubmerchantKey;
 

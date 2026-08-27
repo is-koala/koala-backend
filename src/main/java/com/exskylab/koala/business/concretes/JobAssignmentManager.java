@@ -9,6 +9,7 @@ import com.exskylab.koala.core.dtos.jobAssignment.request.JobAssignmentsAssignme
 import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentsAssignmentIdStatusPatchResponseDto;
 import com.exskylab.koala.core.exceptions.AssignmentAlreadyAnsweredException;
+import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.business.abstracts.PaymentService;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
@@ -43,11 +44,13 @@ public class JobAssignmentManager implements JobAssignmentService {
     private final PaymentService paymentService;
     private final PaymentStateMachine paymentStateMachine;
     private final AppProperties appProperties;
+    private final BankAccountService bankAccountService;
 
 
     public JobAssignmentManager(JobAssignmentDao jobAssignmentDao, SecurityService securityService, JobAssignmentMapper jobAssignmentMapper, IyzicoPaymentService iyzicoPaymentService, CompanyContactService companyContactService, UserService userService,
                                CommissionCalculator commissionCalculator, PaymentService paymentService,
-                               PaymentStateMachine paymentStateMachine, AppProperties appProperties) {
+                               PaymentStateMachine paymentStateMachine, AppProperties appProperties,
+                               BankAccountService bankAccountService) {
         this.jobAssignmentDao = jobAssignmentDao;
         this.securityService = securityService;
         this.jobAssignmentMapper = jobAssignmentMapper;
@@ -58,6 +61,7 @@ public class JobAssignmentManager implements JobAssignmentService {
         this.paymentService = paymentService;
         this.paymentStateMachine = paymentStateMachine;
         this.appProperties = appProperties;
+        this.bankAccountService = bankAccountService;
     }
 
 
@@ -274,11 +278,8 @@ public class JobAssignmentManager implements JobAssignmentService {
         }else {
             throw new IllegalArgumentException(JobAssignmentMessages.ADDRESS_NOT_PROVIDED_FOR_WORKER);
         }
-        if (worker.getIban() != null && !worker.getIban().isBlank()) {
-            merchantDto.setIban(worker.getIban());
-        }else {
-            throw new IllegalArgumentException(JobAssignmentMessages.IBAN_NOT_PROVIDED_FOR_WORKER);
-        }
+        merchantDto.setIban(bankAccountService.findPrimaryIban(worker.getId())
+                .orElseThrow(() -> new IllegalArgumentException(JobAssignmentMessages.IBAN_NOT_PROVIDED_FOR_WORKER)));
         merchantDto.setSubMerchantType(SubMerchantType.PERSONAL);
         if (worker.isIdentityVerified()){
             merchantDto.setIdentityNumber(worker.getTcIdentityNumber());

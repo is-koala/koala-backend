@@ -13,7 +13,6 @@ import com.exskylab.koala.core.dtos.user.request.UsersMeIdentityVerificationRequ
 import com.exskylab.koala.core.dtos.user.response.UserMeResponseDto;
 import com.exskylab.koala.core.dtos.user.response.UserUpdateResponseDto;
 import com.exskylab.koala.core.exceptions.UserNotFoundException;
-import com.exskylab.koala.core.helpers.IbanValidator;
 import com.exskylab.koala.core.mappers.AddressMapper;
 import com.exskylab.koala.core.mappers.UserMapper;
 import com.exskylab.koala.core.producers.user.UserProducerService;
@@ -48,6 +47,7 @@ public class UserManager implements UserService {
     private final KimlikPaylasimSistemiService kimlikPaylasimSistemiService;
     private final AddressMapper addressMapper;
     private final UserProducerService userProducerService;
+    private final BankAccountService bankAccountService;
 
     public UserManager(UserDao userDao,
                        EmailVerificationService emailVerificationService,
@@ -58,7 +58,8 @@ public class UserManager implements UserService {
                        SecurityService securityService,
                        AddressService addressService,
                        KimlikPaylasimSistemiService kimlikPaylasimSistemiService,
-                       AddressMapper addressMapper, UserProducerService userProducerService) {
+                       AddressMapper addressMapper, UserProducerService userProducerService,
+                       BankAccountService bankAccountService) {
         this.userDao = userDao;
         this.emailVerificationService = emailVerificationService;
         this.userMapper = userMapper;
@@ -70,6 +71,7 @@ public class UserManager implements UserService {
         this.kimlikPaylasimSistemiService = kimlikPaylasimSistemiService;
         this.addressMapper = addressMapper;
         this.userProducerService = userProducerService;
+        this.bankAccountService = bankAccountService;
     }
 
     @Override
@@ -188,13 +190,7 @@ public class UserManager implements UserService {
             if (userMePatchRequestDto.getIban() !=null){
                 logger.info("IBAN updated for user id: {}", currentUser.getId());
 
-                boolean isValidIban = IbanValidator.isValid(userMePatchRequestDto.getIban());
-
-                if (!isValidIban){
-                    throw new ValidationException(UserMessages.INVALID_IBAN);
-                }
-
-                currentUser.setIban(IbanValidator.normalize(userMePatchRequestDto.getIban()));
+                bankAccountService.savePrimaryAccount(currentUser, userMePatchRequestDto.getIban());
             }
 
             if (userMePatchRequestDto.getAbout() != null){

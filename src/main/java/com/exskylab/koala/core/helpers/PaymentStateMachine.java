@@ -14,13 +14,23 @@ public class PaymentStateMachine {
     private static final Map<PaymentStatus, Set<PaymentStatus>> ALLOWED = Map.of(
             PaymentStatus.PENDING_COLLECTION, Set.of(PaymentStatus.HELD_IN_ESCROW, PaymentStatus.FAILED),
             PaymentStatus.FAILED, Set.of(PaymentStatus.HELD_IN_ESCROW, PaymentStatus.FAILED),
-            PaymentStatus.HELD_IN_ESCROW, Set.of(PaymentStatus.REFUNDED),
+            PaymentStatus.HELD_IN_ESCROW, Set.of(PaymentStatus.RELEASED_TO_WORKER, PaymentStatus.REFUNDED),
+            PaymentStatus.RELEASED_TO_WORKER, Set.of(),
             PaymentStatus.REFUNDED, Set.of());
 
     public boolean canInitiate(JobAssignment assignment) {
         return assignment.getStatus() == AssignmentStatus.CONFIRMED
                 && (assignment.getPaymentStatus() == PaymentStatus.PENDING_COLLECTION
                     || assignment.getPaymentStatus() == PaymentStatus.FAILED);
+    }
+
+    public boolean canRelease(JobAssignment assignment) {
+        return assignment.getStatus() == AssignmentStatus.COMPLETED
+                && assignment.getPaymentStatus() == PaymentStatus.HELD_IN_ESCROW;
+    }
+
+    public boolean canRefund(JobAssignment assignment) {
+        return assignment.getPaymentStatus() == PaymentStatus.HELD_IN_ESCROW;
     }
 
     public boolean canTransition(PaymentStatus from, PaymentStatus to) {

@@ -94,6 +94,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/payments/callback").permitAll()
                         .requestMatchers(HttpMethod.GET, "/payments/job-assignments/{assignmentId}").hasAnyRole("USER", "ADMIN")
 
+                        //payout endpoints
+                        .requestMatchers(HttpMethod.GET, "/payouts/me").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/payouts/job-assignments/{assignmentId}/release").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/payouts/job-assignments/{assignmentId}/refund").hasRole("ADMIN")
+
                         //actuator
                         .requestMatchers("/actuator/health/**").permitAll()
                         .requestMatchers("/actuator/**").hasRole("ADMIN")

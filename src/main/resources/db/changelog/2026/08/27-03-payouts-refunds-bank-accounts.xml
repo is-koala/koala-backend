@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-08-27-03-create-bank-accounts" author="koala">
+        <createTable tableName="bank_accounts">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="user_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="iban" type="VARCHAR(34)"><constraints nullable="false"/></column>
+            <column name="account_holder_name" type="VARCHAR(255)"/>
+            <column name="is_primary" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="is_active" type="BOOLEAN" defaultValueBoolean="true"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="bank_accounts" baseColumnNames="user_id"
+                                 constraintName="fk_bank_accounts_user"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <createIndex tableName="bank_accounts" indexName="idx_bank_accounts_user">
+            <column name="user_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="2026-08-27-04-migrate-user-iban" author="koala">
+        <sql>
+            INSERT INTO bank_accounts (id, user_id, iban, account_holder_name, is_primary, is_active, created_at)
+            SELECT gen_random_uuid(), u.id, u.iban,
+                   trim(coalesce(u.first_name, '') || ' ' || coalesce(u.last_name, '')),
+                   true, true, now()
+            FROM users u
+            WHERE u.iban IS NOT NULL AND length(trim(u.iban)) > 0;
+        </sql>
+        <rollback>
+            <sql>DELETE FROM bank_accounts;</sql>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-08-27-05-create-payouts" author="koala">
+        <createTable tableName="payouts">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="job_assignment_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="payment_id" type="UUID">
+                <constraints unique="true" uniqueConstraintName="uk_payouts_payment"/>
+            </column>
+            <column name="worker_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="bank_account_id" type="UUID"/>
+            <column name="amount" type="NUMERIC(19, 2)"><constraints nullable="false"/></column>
+            <column name="currency" type="VARCHAR(3)"><constraints nullable="false"/></column>
+            <column name="status" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="provider_reference" type="VARCHAR(128)"/>
+            <column name="failure_reason" type="VARCHAR(512)"/>
+            <column name="completed_at" type="TIMESTAMPTZ"/>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="payouts" baseColumnNames="job_assignment_id"
+                                 constraintName="fk_payouts_job_assignment"
+                                 referencedTableName="job_assignments" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="payouts" baseColumnNames="payment_id"
+                                 constraintName="fk_payouts_payment"
+                                 referencedTableName="payments" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="payouts" baseColumnNames="worker_id"
+                                 constraintName="fk_payouts_worker"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="payouts" baseColumnNames="bank_account_id"
+                                 constraintName="fk_payouts_bank_account"
+                                 referencedTableName="bank_accounts" referencedColumnNames="id"/>
+    </changeSet>
+
+    <changeSet id="2026-08-27-06-create-refunds" author="koala">
+        <createTable tableName="refunds">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="payment_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="amount" type="NUMERIC(19, 2)"><constraints nullable="false"/></column>
+            <column name="currency" type="VARCHAR(3)"><constraints nullable="false"/></column>
+            <column name="status" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="reason" type="VARCHAR(512)"/>
+            <column name="provider_refund_id" type="VARCHAR(128)"/>
+            <column name="completed_at" type="TIMESTAMPTZ"/>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="refunds" baseColumnNames="payment_id"
+                                 constraintName="fk_refunds_payment"
+                                 referencedTableName="payments" referencedColumnNames="id"/>
+    </changeSet>
+
+</databaseChangeLog>

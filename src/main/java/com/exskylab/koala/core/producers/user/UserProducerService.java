@@ -1,6 +1,7 @@
 package com.exskylab.koala.core.producers.user;
 
 import com.exskylab.koala.core.configs.RabbitMQConfig;
+import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.entities.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,11 +12,13 @@ import org.springframework.stereotype.Service;
 public class UserProducerService {
 
     private final RabbitTemplate rabbitTemplate;
+    private final BankAccountService bankAccountService;
 
     private final Logger logger = LoggerFactory.getLogger(UserProducerService.class);
 
-    public UserProducerService(RabbitTemplate rabbitTemplate) {
+    public UserProducerService(RabbitTemplate rabbitTemplate, BankAccountService bankAccountService) {
         this.rabbitTemplate = rabbitTemplate;
+        this.bankAccountService = bankAccountService;
     }
 
 
@@ -59,7 +62,7 @@ public class UserProducerService {
         eventDto.setEmail(updatedUser.getEmail());
         eventDto.setGsmNumber(updatedUser.getPhoneNumber());
         eventDto.setAddress(fullAddress);
-        eventDto.setIban(updatedUser.getIban());
+        eventDto.setIban(bankAccountService.findPrimaryIban(updatedUser.getId()).orElse(null));
         eventDto.setIdentityNumber(updatedUser.getTcIdentityNumber());
         eventDto.setIyzicoSubMerchantKey(updatedUser.getIyzicoSubmerchantKey());
 
