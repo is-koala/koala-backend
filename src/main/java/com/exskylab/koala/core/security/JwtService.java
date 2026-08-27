@@ -2,6 +2,7 @@ package com.exskylab.koala.core.security;
 
 import com.exskylab.koala.entities.User;
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
@@ -123,6 +124,16 @@ public class JwtService {
     public UUID extractSessionId(String token){
         String jti = extractClaim(token, Claims::getId);
         return UUID.fromString(jti);
+    }
+
+    public UUID extractSessionIdAllowingExpired(String token) {
+        Claims claims;
+        try {
+            claims = extractAllClaims(token);
+        } catch (ExpiredJwtException e) {
+            claims = e.getClaims();
+        }
+        return UUID.fromString(claims.getId());
     }
 
     public UUID extractUserId(String token) {

@@ -93,7 +93,7 @@ public class AuthController {
 
     @PostMapping("/refresh-token")
     public ResponseEntity<SuccessDataResult<TokenResponseDto>> refreshToken(@RequestBody @Valid RefreshTokenDto refreshTokenDto, HttpServletRequest request){
-        UUID sessionId = jwtService.extractSessionId(BearerTokenExtractor.extract(request));
+        UUID sessionId = jwtService.extractSessionIdAllowingExpired(BearerTokenExtractor.extract(request));
 
         var response = authService.refreshToken(refreshTokenDto, sessionId, ClientContext.from(request));
 

@@ -26,10 +26,14 @@ import org.springframework.web.servlet.HandlerExceptionResolver;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.Set;
 import java.util.UUID;
 
 @Component
 public class SessionAuthFilter extends OncePerRequestFilter {
+
+    private static final Set<String> SELF_AUTHENTICATING_PATHS = Set.of("/auth/refresh-token");
+
 
     private final SessionService sessionService;
     private final JwtService jwtService;
@@ -124,5 +128,9 @@ public class SessionAuthFilter extends OncePerRequestFilter {
 
         filterChain.doFilter(request, response);
     }
-}
 
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return SELF_AUTHENTICATING_PATHS.contains(request.getRequestURI());
+    }
+}
