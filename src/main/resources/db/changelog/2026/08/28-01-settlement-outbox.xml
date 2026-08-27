@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-08-28-01-settlement-tasks" author="koala">
+        <createTable tableName="settlement_tasks">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="payment_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="job_assignment_id" type="UUID"/>
+            <column name="operation" type="VARCHAR(16)"><constraints nullable="false"/></column>
+            <column name="provider_transaction_id" type="VARCHAR(128)"><constraints nullable="false"/></column>
+            <column name="status" type="VARCHAR(16)"><constraints nullable="false"/></column>
+            <column name="attempts" type="INTEGER" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="next_attempt_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="last_error" type="VARCHAR(1000)"/>
+            <column name="completed_at" type="TIMESTAMPTZ"/>
+            <column name="provider_reference" type="VARCHAR(128)"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
+            <column name="deleted_by_id" type="UUID"/>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="settlement_tasks" baseColumnNames="payment_id"
+                                 constraintName="fk_settlement_tasks_payment"
+                                 referencedTableName="payments" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="settlement_tasks" baseColumnNames="job_assignment_id"
+                                 constraintName="fk_settlement_tasks_assignment"
+                                 referencedTableName="job_assignments" referencedColumnNames="id"/>
+        <sql>
+            CREATE UNIQUE INDEX uk_settlement_tasks_payment_operation
+                ON settlement_tasks (payment_id, operation) WHERE is_deleted = false;
+            CREATE INDEX idx_settlement_tasks_due
+                ON settlement_tasks (status, next_attempt_at) WHERE is_deleted = false;
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

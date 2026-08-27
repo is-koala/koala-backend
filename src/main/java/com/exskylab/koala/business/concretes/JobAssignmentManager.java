@@ -31,6 +31,11 @@ import com.exskylab.koala.business.abstracts.BadgeService;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.entities.CancellationParty;
 import java.time.Instant;
+import com.exskylab.koala.business.abstracts.PayoutService;
+import com.exskylab.koala.core.properties.AutoCompletionProperties;
+import com.exskylab.koala.dataAccess.DisputeDao;
+import org.springframework.data.domain.PageRequest;
+import java.time.LocalDateTime;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -60,13 +65,18 @@ public class JobAssignmentManager implements JobAssignmentService {
     private final PageableSanitizer pageableSanitizer;
     private final AssignmentParticipants participants;
     private final BadgeService badgeService;
+    private final DisputeDao disputeDao;
+    private final PayoutService payoutService;
+    private final AutoCompletionProperties autoCompletionProperties;
 
 
     public JobAssignmentManager(JobAssignmentDao jobAssignmentDao, SecurityService securityService, JobAssignmentMapper jobAssignmentMapper, IyzicoPaymentService iyzicoPaymentService, CompanyContactService companyContactService, UserService userService,
                                CommissionCalculator commissionCalculator, PaymentService paymentService,
                                PaymentStateMachine paymentStateMachine, AppProperties appProperties,
                                BankAccountService bankAccountService, PageableSanitizer pageableSanitizer,
-                               AssignmentParticipants participants, BadgeService badgeService) {
+                               AssignmentParticipants participants, BadgeService badgeService,
+                               DisputeDao disputeDao, PayoutService payoutService,
+                               AutoCompletionProperties autoCompletionProperties) {
         this.jobAssignmentDao = jobAssignmentDao;
         this.securityService = securityService;
         this.jobAssignmentMapper = jobAssignmentMapper;
@@ -81,6 +91,9 @@ public class JobAssignmentManager implements JobAssignmentService {
         this.pageableSanitizer = pageableSanitizer;
         this.participants = participants;
         this.badgeService = badgeService;
+        this.disputeDao = disputeDao;
+        this.payoutService = payoutService;
+        this.autoCompletionProperties = autoCompletionProperties;
     }
 
 
@@ -339,14 +352,57 @@ public class JobAssignmentManager implements JobAssignmentService {
             throw new IllegalStateException(JobAssignmentMessages.NOT_COMPLETABLE);
         }
 
+        JobAssignment saved = markCompleted(assignment);
+
+        logger.info("Assignment {} marked completed by employer {}", assignmentId,
+                securityService.getAuthenticatedUserId());
+        return saved;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UUID> findAutoCompletableAssignmentIds() {
+        LocalDateTime endedBefore = LocalDateTime.now(autoCompletionProperties.getZoneId())
+                .minusDays(autoCompletionProperties.getGraceDays());
+
+        return jobAssignmentDao.findAutoCompletableIds(
+                List.of(AssignmentStatus.CONFIRMED, AssignmentStatus.IN_PROGRESS),
+                PaymentStatus.HELD_IN_ESCROW,
+                endedBefore,
+                PageRequest.of(0, autoCompletionProperties.getBatchSize()));
+    }
+
+    @Override
+    @Transactional
+    public boolean autoCompleteAssignment(UUID assignmentId) {
+        JobAssignment assignment = jobAssignmentDao.findWithDetailsForPaymentById(assignmentId)
+                .orElse(null);
+
+        if (assignment == null
+                || (assignment.getStatus() != AssignmentStatus.CONFIRMED
+                    && assignment.getStatus() != AssignmentStatus.IN_PROGRESS)
+                || assignment.getPaymentStatus() != PaymentStatus.HELD_IN_ESCROW) {
+            return false;
+        }
+
+        if (disputeDao.existsByJobAssignmentIdAndStatusIn(assignmentId, DisputeManager.ACTIVE)) {
+            logger.info("Assignment {} has an open dispute, auto completion skipped.", assignmentId);
+            return false;
+        }
+
+        markCompleted(assignment);
+        payoutService.releaseToWorker(assignmentId);
+
+        logger.info("Assignment {} auto completed after the grace period and escrow released.", assignmentId);
+        return true;
+    }
+
+    private JobAssignment markCompleted(JobAssignment assignment) {
         assignment.setStatus(AssignmentStatus.COMPLETED);
         assignment.setActualCompletionDateTime(Instant.now());
 
         JobAssignment saved = jobAssignmentDao.save(assignment);
         badgeService.evaluate(assignment.getWorker().getId());
-
-        logger.info("Assignment {} marked completed by employer {}", assignmentId,
-                securityService.getAuthenticatedUserId());
         return saved;
     }
 }

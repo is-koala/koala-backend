@@ -18,4 +18,6 @@ public interface PayoutDao extends JpaRepository<Payout, UUID> {
     List<Payout> findAllByWorkerIdOrderByCreatedAtDesc(UUID workerId);
 
     boolean existsByJobAssignmentId(UUID jobAssignmentId);
+
+    java.util.Optional<Payout> findByJobAssignmentId(UUID jobAssignmentId);
 }

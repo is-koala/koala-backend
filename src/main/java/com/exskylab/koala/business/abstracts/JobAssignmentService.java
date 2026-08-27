@@ -6,6 +6,7 @@ import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentsAssignm
 import com.exskylab.koala.entities.JobAssignment;
 import jakarta.validation.Valid;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.data.domain.Page;
@@ -22,4 +23,8 @@ public interface JobAssignmentService {
     Page<JobAssignment> getMyAssignments(boolean asEmployer, Pageable pageable);
 
     JobAssignment completeAssignment(UUID assignmentId);
+
+    List<UUID> findAutoCompletableAssignmentIds();
+
+    boolean autoCompleteAssignment(UUID assignmentId);
 }

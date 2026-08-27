@@ -7,6 +7,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import java.util.List;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
@@ -36,4 +39,17 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
     Page<JobAssignment> findAllByJobCreatorId(UUID creatorId, Pageable pageable);
 
     long countByWorkerIdAndStatus(UUID workerId, AssignmentStatus status);
+
+    @Query("""
+            select a.id from JobAssignment a
+            where a.status in :statuses
+              and a.paymentStatus = :paymentStatus
+              and a.job.endDateTime is not null
+              and a.job.endDateTime <= :endedBefore
+            order by a.job.endDateTime asc
+            """)
+    List<UUID> findAutoCompletableIds(@Param("statuses") List<AssignmentStatus> statuses,
+                                      @Param("paymentStatus") PaymentStatus paymentStatus,
+                                      @Param("endedBefore") java.time.LocalDateTime endedBefore,
+                                      Pageable pageable);
 }

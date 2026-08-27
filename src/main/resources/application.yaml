@@ -122,6 +122,14 @@ rate-limit:
 commission:
   rate: ${COMMISSION_RATE:0.075}
 
+assignment:
+  auto-completion:
+    enabled: ${ASSIGNMENT_AUTO_COMPLETION_ENABLED:true}
+    grace-days: ${ASSIGNMENT_AUTO_COMPLETION_GRACE_DAYS:3}
+    batch-size: ${ASSIGNMENT_AUTO_COMPLETION_BATCH_SIZE:100}
+    zone-id: ${ASSIGNMENT_AUTO_COMPLETION_ZONE_ID:Europe/Istanbul}
+    cron: ${ASSIGNMENT_AUTO_COMPLETION_CRON:0 15 * * * *}
+
 badge:
   thresholds:
     GEZGIN_SILVER:
@@ -156,3 +164,10 @@ iyzico:
   secretKey: ${IYZICO_SECRET_KEY:}
   baseUrl: ${IYZICO_BASE_URL:https://sandbox-api.iyzipay.com}
   settlementEnabled: ${IYZICO_SETTLEMENT_ENABLED:true}
+  settlement-retry:
+    enabled: ${IYZICO_SETTLEMENT_RETRY_ENABLED:true}
+    max-attempts: ${IYZICO_SETTLEMENT_MAX_ATTEMPTS:8}
+    initial-backoff: ${IYZICO_SETTLEMENT_INITIAL_BACKOFF:1m}
+    max-backoff: ${IYZICO_SETTLEMENT_MAX_BACKOFF:6h}
+    batch-size: ${IYZICO_SETTLEMENT_BATCH_SIZE:50}
+    cron: ${IYZICO_SETTLEMENT_CRON:0 */5 * * * *}
