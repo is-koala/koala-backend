@@ -47,6 +47,7 @@ public class UsersMeJobsPostRequestDto {
     @NotBlank(message = JobMessages.SALARY_TYPE_NOT_BLANK)
     private String salaryType;
 
+    @NotNull(message = JobMessages.MINIMUM_SALARY_NOT_NULL)
     @Min(value = 1, message = JobMessages.SALARY_MIN_VALUE)
     private BigDecimal salary;
 
@@ -56,13 +57,16 @@ public class UsersMeJobsPostRequestDto {
     @NotNull(message = JobMessages.END_DATE_TIME_NOT_NULL)
     private LocalDateTime endDateTime;
 
+    @NotNull(message = JobMessages.MINIMUM_AGE_NOT_NULL)
     @Min(value = 1, message = JobMessages.MINIMUM_AGE_VALUE)
-    private int minAge;
+    private Integer minAge;
 
-    private int maxAge;
+    @NotNull(message = JobMessages.MAXIMUM_AGE_NOT_NULL)
+    @Min(value = 1, message = JobMessages.MAXIMUM_AGE_VALUE)
+    private Integer maxAge;
 
     @NotNull(message = JobMessages.EXPERIENCE_REQUIRED_NOT_NULL)
-    private boolean experienceRequired;
+    private Boolean experienceRequired;
 
     private String dressCode;
 

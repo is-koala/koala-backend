@@ -14,6 +14,10 @@ import com.exskylab.koala.dataAccess.JobApplicationDao;
 import com.exskylab.koala.entities.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import com.exskylab.koala.core.helpers.PageableSanitizer;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +28,10 @@ import java.util.UUID;
 @Service
 public class JobApplicationManager implements JobApplicationService {
 
+    private static final java.util.Set<String> MY_APPLICATIONS_SORTABLE =
+            java.util.Set.of("applicationDateTime", "answeredDateTime", "status");
+
+
     private final JobApplicationDao jobApplicationDao;
     private final JobService jobService;
     private final CompanyContactService companyContactService;
@@ -32,17 +40,20 @@ public class JobApplicationManager implements JobApplicationService {
 
     private final Logger logger = LoggerFactory.getLogger(JobApplicationManager.class);
     private final JobApplicationMapper jobApplicationMapper;
+    private final PageableSanitizer pageableSanitizer;
 
 
     public JobApplicationManager(JobApplicationDao jobApplicationDao, JobService jobService,
                                  SecurityService securityService, CompanyContactService companyContactService,
-                                 JobAssignmentService jobAssignmentService, JobApplicationMapper jobApplicationMapper) {
+                                 JobAssignmentService jobAssignmentService, JobApplicationMapper jobApplicationMapper,
+                                 PageableSanitizer pageableSanitizer) {
         this.jobApplicationDao = jobApplicationDao;
         this.jobService = jobService;
         this.securityService = securityService;
         this.companyContactService = companyContactService;
         this.jobAssignmentService = jobAssignmentService;
         this.jobApplicationMapper = jobApplicationMapper;
+        this.pageableSanitizer = pageableSanitizer;
     }
 
     @Override
@@ -182,5 +193,18 @@ public class JobApplicationManager implements JobApplicationService {
                     authenticatedUser.getId(), job.getId());
             throw new ResourceNotFoundException(JobApplicationMessages.USER_NOT_CREATOR_OF_INDIVIDUAL_JOB_TO_VIEW_APPLICATIONS);
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<JobApplication> getMyApplications(ApplicationStatus status, Pageable requested) {
+        pageableSanitizer.rejectUnknownSort(requested, MY_APPLICATIONS_SORTABLE);
+        Pageable pageable = pageableSanitizer.sanitize(requested, MY_APPLICATIONS_SORTABLE,
+                Sort.by(Sort.Direction.DESC, "applicationDateTime"));
+
+        UUID userId = securityService.getAuthenticatedUserId();
+        return status == null
+                ? jobApplicationDao.findAllByUserId(userId, pageable)
+                : jobApplicationDao.findAllByUserIdAndStatus(userId, status, pageable);
     }
 }

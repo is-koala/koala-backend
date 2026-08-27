@@ -2,6 +2,7 @@ package com.exskylab.koala.core.mappers;
 
 import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentsAssignmentIdStatusPatchResponseDto;
+import com.exskylab.koala.core.dtos.jobAssignment.response.MyAssignmentDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.ShortJobAssignmentDto;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.PaymentSessionResponseDto;
 import com.exskylab.koala.entities.JobAssignment;
@@ -23,4 +24,8 @@ public interface JobAssignmentMapper {
     JobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto
             tojobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto(
             PaymentSessionResponseDto paymentSessionResponseDto);
+
+    MyAssignmentDto toMyAssignmentDto(JobAssignment jobAssignment);
+
+    java.util.List<MyAssignmentDto> toMyAssignmentDtoList(java.util.List<JobAssignment> assignments);
 }

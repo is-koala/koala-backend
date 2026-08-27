@@ -9,10 +9,18 @@ import com.exskylab.koala.entities.JobApplication;
 
 import java.util.List;
 
+import com.exskylab.koala.entities.ApplicationStatus;
+
+import org.springframework.data.domain.Page;
+
+import org.springframework.data.domain.Pageable;
+
 public interface JobApplicationService {
     JobsJobIdApplicationsPostResponseDto applyToJob(String jobId, JobsJobIdApplicationsPostRequestDto jobsJobIdApplicationsPostRequestDto);
 
     List<JobsJobIdApplicationsGetResponseDto> getJobApplicationsByIdJobId(String jobId);
 
     JobApplicationsApplicationIdPatchResponseDto respondToApplication(String applicationId, JobApplicationsApplicationIdPatchRequestDto jobApplicationsApplicationIdPatchRequestDto);
+
+    Page<JobApplication> getMyApplications(ApplicationStatus status, Pageable pageable);
 }

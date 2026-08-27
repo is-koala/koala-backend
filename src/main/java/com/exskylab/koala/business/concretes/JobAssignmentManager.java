@@ -23,6 +23,10 @@ import com.exskylab.koala.dataAccess.JobAssignmentDao;
 import com.exskylab.koala.entities.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import com.exskylab.koala.core.helpers.PageableSanitizer;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,6 +35,10 @@ import java.util.UUID;
 
 @Service
 public class JobAssignmentManager implements JobAssignmentService {
+
+    private static final java.util.Set<String> MY_ASSIGNMENTS_SORTABLE =
+            java.util.Set.of("assignmentDateTime", "actualCompletionDateTime", "status");
+
 
     private final JobAssignmentDao jobAssignmentDao;
 
@@ -45,12 +53,13 @@ public class JobAssignmentManager implements JobAssignmentService {
     private final PaymentStateMachine paymentStateMachine;
     private final AppProperties appProperties;
     private final BankAccountService bankAccountService;
+    private final PageableSanitizer pageableSanitizer;
 
 
     public JobAssignmentManager(JobAssignmentDao jobAssignmentDao, SecurityService securityService, JobAssignmentMapper jobAssignmentMapper, IyzicoPaymentService iyzicoPaymentService, CompanyContactService companyContactService, UserService userService,
                                CommissionCalculator commissionCalculator, PaymentService paymentService,
                                PaymentStateMachine paymentStateMachine, AppProperties appProperties,
-                               BankAccountService bankAccountService) {
+                               BankAccountService bankAccountService, PageableSanitizer pageableSanitizer) {
         this.jobAssignmentDao = jobAssignmentDao;
         this.securityService = securityService;
         this.jobAssignmentMapper = jobAssignmentMapper;
@@ -62,6 +71,7 @@ public class JobAssignmentManager implements JobAssignmentService {
         this.paymentStateMachine = paymentStateMachine;
         this.appProperties = appProperties;
         this.bankAccountService = bankAccountService;
+        this.pageableSanitizer = pageableSanitizer;
     }
 
 
@@ -291,4 +301,16 @@ public class JobAssignmentManager implements JobAssignmentService {
         return merchantDto;
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public Page<JobAssignment> getMyAssignments(boolean asEmployer, Pageable requested) {
+        pageableSanitizer.rejectUnknownSort(requested, MY_ASSIGNMENTS_SORTABLE);
+        Pageable pageable = pageableSanitizer.sanitize(requested, MY_ASSIGNMENTS_SORTABLE,
+                Sort.by(Sort.Direction.DESC, "assignmentDateTime"));
+
+        UUID userId = securityService.getAuthenticatedUserId();
+        return asEmployer
+                ? jobAssignmentDao.findAllByJobCreatorId(userId, pageable)
+                : jobAssignmentDao.findAllByWorkerId(userId, pageable);
+    }
 }

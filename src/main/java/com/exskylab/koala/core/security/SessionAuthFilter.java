@@ -25,6 +25,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 import java.io.IOException;
+import com.exskylab.koala.entities.Session;
+
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
@@ -34,6 +37,8 @@ public class SessionAuthFilter extends OncePerRequestFilter {
 
     private static final Set<String> SELF_AUTHENTICATING_PATHS = Set.of("/auth/refresh-token");
 
+
+    private static final Duration LAST_ACCESS_WRITE_INTERVAL = Duration.ofMinutes(5);
 
     private final SessionService sessionService;
     private final JwtService jwtService;
@@ -98,11 +103,9 @@ public class SessionAuthFilter extends OncePerRequestFilter {
             }
 
 
-            session.setLastAccessedAt(Instant.now());
-            sessionService.save(session);
+            touchLastAccess(session);
 
-
-            UserPrincipal principal = UserPrincipal.from(user);
+            UserPrincipal principal = UserPrincipal.from(user, session.getId());
 
             UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                     principal,
@@ -132,5 +135,17 @@ public class SessionAuthFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         return SELF_AUTHENTICATING_PATHS.contains(request.getRequestURI());
+    }
+
+    private void touchLastAccess(Session session) {
+        Instant now = Instant.now();
+        Instant lastAccessedAt = session.getLastAccessedAt();
+
+        if (lastAccessedAt != null && lastAccessedAt.isAfter(now.minus(LAST_ACCESS_WRITE_INTERVAL))) {
+            return;
+        }
+
+        session.setLastAccessedAt(now);
+        sessionService.save(session);
     }
 }

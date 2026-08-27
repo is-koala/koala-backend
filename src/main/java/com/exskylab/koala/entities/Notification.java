@@ -70,6 +70,9 @@ public class Notification extends BaseEntity{
     @Column(name = "external_id")
     private String externalId;
 
+    @Column(name = "read_at")
+    private Instant readAt;
+
     @Column(name = "failure_reason")
     private String failureReason;
 

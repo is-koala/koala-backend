@@ -148,3 +148,4 @@ iyzico:
   apiKey: ${IYZICO_API_KEY:}
   secretKey: ${IYZICO_SECRET_KEY:}
   baseUrl: ${IYZICO_BASE_URL:https://sandbox-api.iyzipay.com}
+  settlementEnabled: ${IYZICO_SETTLEMENT_ENABLED:true}

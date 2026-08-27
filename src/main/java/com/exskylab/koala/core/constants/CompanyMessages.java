@@ -19,4 +19,9 @@ public class CompanyMessages {
     public static final String COMPANY_CONTACT_INVITATIONS_LISTED_SUCCESS = "{company.contact.invitations.listed.success}";
     public static final String JOB_CREATED_SUCCESS =  "{job.created.success}";
     public static final String COMPANY_ADDRESS_NOT_NULL = "{company.address.not.null}";
+    public static final String LAST_ADMIN_CANNOT_BE_REMOVED = "{company.last.admin.cannot.be.removed}";
+    public static final String COMPANY_FETCHED = "{company.fetched}";
+    public static final String COMPANY_UPDATED = "{company.updated}";
+    public static final String CONTACTS_LISTED = "{company.contacts.listed}";
+    public static final String CONTACT_REMOVED = "{company.contact.removed}";
 }

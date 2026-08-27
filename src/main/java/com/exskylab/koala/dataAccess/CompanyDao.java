@@ -13,4 +13,6 @@ public interface CompanyDao extends JpaRepository<Company, UUID> {
 
     Optional<Company> findById(UUID id);
 
+    org.springframework.data.domain.Page<Company> findAllByApproved(boolean approved,
+            org.springframework.data.domain.Pageable pageable);
 }

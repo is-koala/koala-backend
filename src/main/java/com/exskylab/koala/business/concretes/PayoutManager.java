@@ -14,6 +14,8 @@ import com.exskylab.koala.dataAccess.RefundDao;
 import com.exskylab.koala.entities.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.exskylab.koala.core.properties.IyzicoProperties;
+import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,10 +38,13 @@ public class PayoutManager implements PayoutService {
     private final BankAccountDao bankAccountDao;
     private final DisputeDao disputeDao;
     private final PaymentStateMachine stateMachine;
+    private final IyzicoPaymentService iyzicoPaymentService;
+    private final IyzicoProperties iyzicoProperties;
 
     public PayoutManager(PayoutDao payoutDao, RefundDao refundDao, PaymentDao paymentDao,
                          JobAssignmentDao jobAssignmentDao, BankAccountDao bankAccountDao,
-                         DisputeDao disputeDao, PaymentStateMachine stateMachine) {
+                         DisputeDao disputeDao, PaymentStateMachine stateMachine,
+                         IyzicoPaymentService iyzicoPaymentService, IyzicoProperties iyzicoProperties) {
         this.payoutDao = payoutDao;
         this.refundDao = refundDao;
         this.paymentDao = paymentDao;
@@ -47,6 +52,8 @@ public class PayoutManager implements PayoutService {
         this.bankAccountDao = bankAccountDao;
         this.disputeDao = disputeDao;
         this.stateMachine = stateMachine;
+        this.iyzicoPaymentService = iyzicoPaymentService;
+        this.iyzicoProperties = iyzicoProperties;
     }
 
     @Override
@@ -82,6 +89,7 @@ public class PayoutManager implements PayoutService {
         payout.setCurrency(CURRENCY);
         payout.setStatus(PayoutStatus.PENDING);
 
+        settleWithProvider(payout, payment);
         stateMachine.transition(assignment, PaymentStatus.RELEASED_TO_WORKER);
 
         Payout saved = payoutDao.save(payout);
@@ -113,6 +121,7 @@ public class PayoutManager implements PayoutService {
         refund.setStatus(RefundStatus.PENDING);
         refund.setReason(reason);
 
+        withholdFromProvider(payment);
         stateMachine.transition(assignment, PaymentStatus.REFUNDED);
 
         Refund saved = refundDao.save(refund);
@@ -131,5 +140,39 @@ public class PayoutManager implements PayoutService {
                 .filter(p -> p.getStatus() == PaymentAttemptStatus.SUCCEEDED)
                 .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException(PayoutMessages.NO_SETTLED_PAYMENT));
+    }
+
+    private void settleWithProvider(Payout payout, Payment payment) {
+        if (!iyzicoProperties.isSettlementEnabled()) {
+            logger.warn("Provider settlement is disabled, payout {} stays PENDING.", payout.getId());
+            return;
+        }
+
+        String transactionId = payment.getProviderTransactionId();
+        if (transactionId == null || transactionId.isBlank()) {
+            logger.warn("Payment {} carries no provider transaction id, payout stays PENDING.", payment.getId());
+            return;
+        }
+
+        var approval = iyzicoPaymentService.approvePaymentSettlement(transactionId);
+        payout.setStatus(PayoutStatus.PROCESSING);
+        payout.setProviderReference(approval == null ? null : approval.getPaymentTransactionId());
+        logger.info("Settlement approved with the provider for transaction {}", transactionId);
+    }
+
+    private void withholdFromProvider(Payment payment) {
+        if (!iyzicoProperties.isSettlementEnabled()) {
+            logger.warn("Provider settlement is disabled, nothing withheld for payment {}.", payment.getId());
+            return;
+        }
+
+        String transactionId = payment.getProviderTransactionId();
+        if (transactionId == null || transactionId.isBlank()) {
+            logger.warn("Payment {} carries no provider transaction id, nothing to withhold.", payment.getId());
+            return;
+        }
+
+        iyzicoPaymentService.disapprovePaymentSettlement(transactionId);
+        logger.info("Settlement withheld with the provider for transaction {}", transactionId);
     }
 }

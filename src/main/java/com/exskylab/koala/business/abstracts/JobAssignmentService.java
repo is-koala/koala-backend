@@ -8,6 +8,10 @@ import jakarta.validation.Valid;
 
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+
+import org.springframework.data.domain.Pageable;
+
 public interface JobAssignmentService {
     JobAssignment save(JobAssignment jobAssignment);
 
@@ -15,4 +19,5 @@ public interface JobAssignmentService {
 
     JobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto initiatePaymentSession(UUID assignmentId, String clientIpAddress);
 
+    Page<JobAssignment> getMyAssignments(boolean asEmployer, Pageable pageable);
 }

@@ -29,4 +29,8 @@ public class JobMessages {
     public static final String JOB_SAVED = "{job.saved}";
     public static final String JOB_UNSAVED = "{job.unsaved}";
     public static final String USER_CANNOT_APPLY_TO_OWN_JOB = "{job.user.cannot.apply.to.own.job}";
+    public static final String MINIMUM_AGE_NOT_NULL = "{job.minimum.age.not.null}";
+    public static final String MAXIMUM_AGE_NOT_NULL = "{job.maximum.age.not.null}";
+    public static final String MAXIMUM_AGE_VALUE = "{job.maximum.age.value}";
+    public static final String MAXIMUM_AGE_BELOW_MINIMUM = "{job.maximum.age.below.minimum}";
 }

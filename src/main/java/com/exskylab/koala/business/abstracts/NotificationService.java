@@ -4,6 +4,9 @@ import com.exskylab.koala.core.dtos.notification.request.*;
 import com.exskylab.koala.entities.DispatchPriority;
 import com.exskylab.koala.entities.Notification;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 import java.util.UUID;
 
 public interface NotificationService {
@@ -23,4 +26,10 @@ public interface NotificationService {
     Notification save(Notification notification);
 
     void setAsOpened(UUID id);
+
+    Page<Notification> getMyNotifications(Pageable pageable);
+
+    long myUnreadCount();
+
+    int markAllRead();
 }

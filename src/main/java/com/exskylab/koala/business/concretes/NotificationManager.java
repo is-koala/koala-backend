@@ -17,6 +17,9 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import java.time.Instant;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -351,6 +354,22 @@ public class NotificationManager implements NotificationService {
 
  */
 
+    @Override
+    @Transactional(readOnly = true)
+    public Page<Notification> getMyNotifications(Pageable pageable) {
+        return notificationDao.findAllByRecipientIdOrderByCreatedAtDesc(
+                securityService.getAuthenticatedUserId(), pageable);
+    }
 
+    @Override
+    @Transactional(readOnly = true)
+    public long myUnreadCount() {
+        return notificationDao.countByRecipientIdAndReadAtIsNull(securityService.getAuthenticatedUserId());
+    }
 
+    @Override
+    @Transactional
+    public int markAllRead() {
+        return notificationDao.markAllRead(securityService.getAuthenticatedUserId(), Instant.now());
+    }
 }

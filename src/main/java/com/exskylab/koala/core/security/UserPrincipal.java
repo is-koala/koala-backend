@@ -9,13 +9,18 @@ import java.util.Collection;
 import java.util.Set;
 import java.util.UUID;
 
-public record UserPrincipal(UUID id, String email, Set<Role> roles) implements UserDetails {
+public record UserPrincipal(UUID id, String email, Set<Role> roles, UUID sessionId) implements UserDetails {
 
     public static UserPrincipal from(User user) {
+        return from(user, null);
+    }
+
+    public static UserPrincipal from(User user, UUID sessionId) {
         return new UserPrincipal(
                 user.getId(),
                 user.getEmail(),
-                user.getAuthorities() == null ? Set.of() : Set.copyOf(user.getAuthorities()));
+                user.getAuthorities() == null ? Set.of() : Set.copyOf(user.getAuthorities()),
+                sessionId);
     }
 
     public boolean hasRole(Role role) {

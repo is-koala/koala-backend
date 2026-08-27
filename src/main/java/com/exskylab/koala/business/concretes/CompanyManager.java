@@ -15,6 +15,15 @@ import com.exskylab.koala.entities.*;
 import jakarta.persistence.EntityManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.exskylab.koala.core.constants.AdminMessages;
+import com.exskylab.koala.core.dtos.company.request.UpdateCompanyRequestDto;
+import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
+import com.exskylab.koala.dataAccess.CompanyContactDao;
+import com.exskylab.koala.entities.CompanyContact;
+import com.exskylab.koala.entities.CompanyContactRole;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -37,13 +46,16 @@ public class CompanyManager implements CompanyService {
 
     private final EntityManager entityManager;
     private final CompanyMapper companyMapper;
+    private final CompanyContactDao companyContactDao;
 
     public CompanyManager(CompanyDao companyDao, UserService userService,
                           NotificationService notificationService, ImageService imageService,
                           CompanyContactInvitationService companyContactInvitationService,
                           SecurityService securityService, AddressService addressService,
-                          EntityManager entityManager, CompanyMapper companyMapper) {
+                          EntityManager entityManager, CompanyMapper companyMapper,
+                          CompanyContactDao companyContactDao) {
         this.companyDao = companyDao;
+        this.companyContactDao = companyContactDao;
         this.userService = userService;
         this.notificationService = notificationService;
         this.imageService = imageService;
@@ -227,5 +239,96 @@ public class CompanyManager implements CompanyService {
         logger.info("Company created email queued for contact {}", LogMasks.email(sendEmailDtoToContact.getDestinationEmail()));
 
         logger.info("Company created emails sent successfully for company with id: {}", savedCompany.getId());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CompanyDto getCompanyDetail(UUID companyId) {
+        return companyMapper.toCompanyDto(getCompanyById(companyId));
+    }
+
+    @Override
+    @Transactional
+    public CompanyDto updateCompany(UUID companyId, UpdateCompanyRequestDto request) {
+        requireCompanyAdmin(companyId);
+        Company company = getCompanyById(companyId);
+
+        if (request.getName() != null) {
+            company.setName(request.getName());
+        }
+        if (request.getEmail() != null) {
+            company.setEmail(request.getEmail());
+        }
+        if (request.getPhoneNumber() != null) {
+            company.setPhoneNumber(request.getPhoneNumber());
+        }
+        if (request.getWebsite() != null) {
+            company.setWebsite(request.getWebsite());
+        }
+        if (request.getDescription() != null) {
+            company.setDescription(request.getDescription());
+        }
+
+        Company saved = companyDao.save(company);
+        logger.info("Company {} updated by user {}", companyId, securityService.getAuthenticatedUserId());
+        return companyMapper.toCompanyDto(saved);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<CompanyContact> getContacts(UUID companyId) {
+        requireCompanyMember(companyId);
+        return companyContactDao.findAllByCompanyId(companyId);
+    }
+
+    @Override
+    @Transactional
+    public void removeContact(UUID companyId, UUID userId) {
+        requireCompanyAdmin(companyId);
+
+        CompanyContact contact = companyContactDao.findByCompanyIdAndUserId(companyId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException(CompanyMessages.USER_NOT_ASSOCIATED_WITH_COMPANY));
+
+        if (contact.getRole() == CompanyContactRole.ADMIN
+                && companyContactDao.countByCompanyIdAndRole(companyId, CompanyContactRole.ADMIN) <= 1) {
+            throw new IllegalStateException(CompanyMessages.LAST_ADMIN_CANNOT_BE_REMOVED);
+        }
+
+        companyContactDao.delete(contact);
+        logger.info("Contact {} removed from company {}", userId, companyId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<Company> getCompaniesByApproval(boolean approved, Pageable pageable) {
+        return companyDao.findAllByApproved(approved, pageable);
+    }
+
+    @Override
+    @Transactional
+    public Company approveCompany(UUID companyId) {
+        Company company = getCompanyById(companyId);
+
+        if (company.isApproved()) {
+            throw new IllegalStateException(AdminMessages.COMPANY_ALREADY_APPROVED);
+        }
+
+        company.setApproved(true);
+        Company saved = companyDao.save(company);
+        logger.info("Company {} approved by admin {}", companyId, securityService.getAuthenticatedUserId());
+        return saved;
+    }
+
+    private void requireCompanyMember(UUID companyId) {
+        if (!companyContactDao.existsByCompanyIdAndUserId(companyId, securityService.getAuthenticatedUserId())) {
+            throw new ResourceNotFoundException(CompanyMessages.USER_NOT_ASSOCIATED_WITH_COMPANY);
+        }
+    }
+
+    private void requireCompanyAdmin(UUID companyId) {
+        if (!companyContactDao.existsByCompanyIdAndUserIdAndRole(companyId,
+                securityService.getAuthenticatedUserId(), CompanyContactRole.ADMIN)) {
+            throw new ResourceNotFoundException(CompanyMessages.USER_NOT_ASSOCIATED_WITH_COMPANY);
+        }
     }
 }

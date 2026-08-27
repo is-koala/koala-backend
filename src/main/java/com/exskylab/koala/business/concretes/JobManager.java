@@ -20,6 +20,7 @@ import com.exskylab.koala.dataAccess.JobDao;
 import com.exskylab.koala.entities.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import jakarta.validation.ValidationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -115,9 +116,10 @@ public class JobManager implements JobService {
         job.setEndDateTime(usersMeJobsPostRequestDto.getEndDateTime());
         job.setSalaryType(salaryType);
         job.setSalary(usersMeJobsPostRequestDto.getSalary());
+        assertAgeRange(usersMeJobsPostRequestDto.getMinAge(), usersMeJobsPostRequestDto.getMaxAge());
         job.setMinAge(usersMeJobsPostRequestDto.getMinAge());
         job.setMaxAge(usersMeJobsPostRequestDto.getMaxAge());
-        job.setExperienceRequired(usersMeJobsPostRequestDto.isExperienceRequired());
+        job.setExperienceRequired(usersMeJobsPostRequestDto.getExperienceRequired());
         job.setDressCode(usersMeJobsPostRequestDto.getDressCode());
         job.setStatus(JobStatus.OPEN);
 
@@ -154,7 +156,7 @@ public class JobManager implements JobService {
 
         var jobCategory = jobCategoryService.getJobCategoryById(UUID.fromString(companiesCompanyIdJobsPostRequestDto.getCategoryId()));
 
-        if (jobCategory.isRequiresInsurance() && !companiesCompanyIdJobsPostRequestDto.isInsuranceRequired()){
+        if (jobCategory.isRequiresInsurance() && !Boolean.TRUE.equals(companiesCompanyIdJobsPostRequestDto.getInsuranceRequired())){
             logger.error("Job category with id: {} requires insurance but insuranceRequired is false. Cannot create job.", jobCategory.getId());
             throw new IllegalArgumentException(JobMessages.JOB_CATEGORY_REQUIRES_INSURANCE);
         }
@@ -181,16 +183,17 @@ public class JobManager implements JobService {
         job.setSector(companiesCompanyIdJobsPostRequestDto.getSector());
         job.setPosition(companiesCompanyIdJobsPostRequestDto.getPosition());
         job.setDuties(companiesCompanyIdJobsPostRequestDto.getDuties());
-        job.setInsuranceRequired(companiesCompanyIdJobsPostRequestDto.isInsuranceRequired());
+        job.setInsuranceRequired(companiesCompanyIdJobsPostRequestDto.getInsuranceRequired());
         job.setAddress(address);
         job.setType(type);
         job.setStartDateTime(companiesCompanyIdJobsPostRequestDto.getStartDateTime());
         job.setEndDateTime(companiesCompanyIdJobsPostRequestDto.getEndDateTime());
         job.setSalaryType(salaryType);
         job.setSalary(companiesCompanyIdJobsPostRequestDto.getSalary());
+        assertAgeRange(companiesCompanyIdJobsPostRequestDto.getMinAge(), companiesCompanyIdJobsPostRequestDto.getMaxAge());
         job.setMinAge(companiesCompanyIdJobsPostRequestDto.getMinAge());
         job.setMaxAge(companiesCompanyIdJobsPostRequestDto.getMaxAge());
-        job.setExperienceRequired(companiesCompanyIdJobsPostRequestDto.isExperienceRequired());
+        job.setExperienceRequired(companiesCompanyIdJobsPostRequestDto.getExperienceRequired());
         job.setDressCode(companiesCompanyIdJobsPostRequestDto.getDressCode());
         job.setStatus(JobStatus.OPEN);
 
@@ -304,5 +307,11 @@ public class JobManager implements JobService {
 
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private void assertAgeRange(Integer minAge, Integer maxAge) {
+        if (maxAge < minAge) {
+            throw new ValidationException(JobMessages.MAXIMUM_AGE_BELOW_MINIMUM);
+        }
     }
 }

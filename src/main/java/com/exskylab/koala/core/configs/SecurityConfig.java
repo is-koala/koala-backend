@@ -56,6 +56,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/companies/{companyId}/contact-invitations").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/companies/{companyId}/contact-invitations").hasAnyRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/companies/{companyId}/jobs").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/companies/{companyId}").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/companies/{companyId}").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/companies/{companyId}/contacts").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/companies/{companyId}/contacts/{userId}").hasAnyRole("USER", "ADMIN")
+
+                        //admin endpoints
+                        .requestMatchers("/admin/**").hasRole("ADMIN")
 
                         //image endpoints
                         .requestMatchers(HttpMethod.POST,"/images").hasAnyRole("ADMIN")
@@ -72,6 +79,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/users/me/identity-verification").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/users/me/jobs").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/users/me/address").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/users/me/applications").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/users/me/assignments").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/users/me/sessions").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/users/me/sessions").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/users/me/sessions/{sessionId}").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/users/me/notifications").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/users/me/notifications/read").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/users/me/saved-jobs").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/users/me/saved-jobs/{jobId}").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/users/me/saved-jobs/{jobId}").hasAnyRole("USER", "ADMIN")

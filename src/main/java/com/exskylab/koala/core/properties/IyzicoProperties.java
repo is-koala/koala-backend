@@ -17,4 +17,13 @@ public class IyzicoProperties {
 
     private String baseUrl;
 
+    private boolean settlementEnabled = true;
+
+    public boolean isSettlementEnabled() {
+        return settlementEnabled;
+    }
+
+    public void setSettlementEnabled(boolean settlementEnabled) {
+        this.settlementEnabled = settlementEnabled;
+    }
 }

@@ -13,6 +13,10 @@ import com.exskylab.koala.entities.Session;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import com.exskylab.koala.core.constants.MyWorkMessages;
+import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
+import java.util.List;
+import com.exskylab.koala.business.abstracts.SecurityService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,14 +32,16 @@ public class SessionManager implements SessionService {
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final SessionDao sessionDao;
+    private final SecurityService securityService;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final SessionProperties sessionProperties;
     private Logger logger = LoggerFactory.getLogger(SessionManager.class);
 
     public SessionManager(SessionDao sessionDao, PasswordEncoder passwordEncoder, JwtService jwtService,
-                          SessionProperties sessionProperties) {
+                          SessionProperties sessionProperties, SecurityService securityService) {
         this.sessionDao = sessionDao;
+        this.securityService = securityService;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.sessionProperties = sessionProperties;
@@ -123,5 +129,43 @@ public class SessionManager implements SessionService {
         byte[] randomBytes = new byte[32];
         SECURE_RANDOM.nextBytes(randomBytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Session> getMyActiveSessions() {
+        return sessionDao.findAllByDevice_User_IdAndIsActive(securityService.getAuthenticatedUserId(), true);
+    }
+
+    @Override
+    @Transactional
+    public void revokeSession(UUID sessionId) {
+        Session session = sessionDao.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException(MyWorkMessages.SESSION_NOT_FOUND));
+
+        if (!session.getDevice().getUser().getId().equals(securityService.getAuthenticatedUserId())) {
+            throw new ResourceNotFoundException(MyWorkMessages.SESSION_NOT_FOUND);
+        }
+
+        session.setActive(false);
+        sessionDao.save(session);
+        logger.info("Session {} revoked by its owner", sessionId);
+    }
+
+    @Override
+    @Transactional
+    public int revokeAllOtherSessions() {
+        UUID currentSessionId = securityService.getAuthenticatedPrincipal().sessionId();
+        UUID userId = securityService.getAuthenticatedUserId();
+
+        List<Session> others = sessionDao.findAllByDevice_User_IdAndIsActive(userId, true).stream()
+                .filter(session -> !session.getId().equals(currentSessionId))
+                .toList();
+
+        others.forEach(session -> session.setActive(false));
+        sessionDao.saveAll(others);
+
+        logger.info("{} other sessions revoked for user {}", others.size(), userId);
+        return others.size();
     }
 }

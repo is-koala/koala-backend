@@ -3,6 +3,7 @@ package com.exskylab.koala.core.mappers;
 import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationsApplicationIdPatchResponseDto;
 import com.exskylab.koala.core.dtos.jobApplication.response.JobsJobIdApplicationsGetResponseDto;
 import com.exskylab.koala.core.dtos.jobApplication.response.JobsJobIdApplicationsPostResponseDto;
+import com.exskylab.koala.core.dtos.jobApplication.response.MyApplicationDto;
 import com.exskylab.koala.entities.JobApplication;
 import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
@@ -27,4 +28,9 @@ public interface JobApplicationMapper {
     @Mapping(target = "applicant", source = "user")
     JobApplicationsApplicationIdPatchResponseDto toJobApplicationsApplicationIdPatchResponseDto(
             JobApplication jobApplication);
+
+    @Mapping(target = "assignmentId", source = "assignment.id")
+    MyApplicationDto toMyApplicationDto(JobApplication jobApplication);
+
+    List<MyApplicationDto> toMyApplicationDtoList(List<JobApplication> jobApplications);
 }
