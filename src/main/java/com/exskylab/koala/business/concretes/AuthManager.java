@@ -3,6 +3,7 @@ package com.exskylab.koala.business.concretes;
 import com.exskylab.koala.core.helpers.LogMasks;
 
 import com.exskylab.koala.business.abstracts.*;
+import com.exskylab.koala.core.helpers.ClientContext;
 import com.exskylab.koala.core.properties.AppProperties;
 import com.exskylab.koala.core.properties.SessionProperties;
 import com.exskylab.koala.core.constants.AuthMessages;
@@ -130,7 +131,7 @@ public class AuthManager implements AuthService {
     @Override
     @Transactional
     public TokenResponseDto completeRegistration(AuthCompleteRegistrationDto authCompleteRegistrationDto,
-                                                 String ipAddress, String userAgent) {
+                                                 ClientContext client) {
         UUID pendingRegistrationId = jwtService.extractPendingRegistrationId(authCompleteRegistrationDto.getSetPasswordToken());
 
         PendingRegistration pendingRegistration = pendingRegistrationService.getById(pendingRegistrationId);
@@ -158,21 +159,18 @@ public class AuthManager implements AuthService {
         pendingRegistrationService.deleteById(pendingRegistrationId);
 
         Device device = deviceService.findOrCreateDevice(
-                savedUser,
-                ipAddress,
-                userAgent
-        );
+                savedUser, client.ipAddress(), client.userAgent(), client.deviceId());
 
         logger.info("Device created or found for user ID: {}", savedUser.getId());
 
-        CreatedSessionInfo createdSessionInfo = sessionService.createSession(device, ipAddress);
+        CreatedSessionInfo createdSessionInfo = sessionService.createSession(device, client.ipAddress());
         logger.info("Session created for user ID: {}, session ID: {}", savedUser.getId(), createdSessionInfo.session().getId());
 
         LoginAttempt attempt = new LoginAttempt();
         attempt.setUser(savedUser);
         attempt.setEmailAttempted(savedUser.getEmail());
         attempt.setSuccess(true);
-        attempt.setIpAddress(ipAddress);
+        attempt.setIpAddress(client.ipAddress());
         attempt.setDeviceName(device.getName());
         loginAttemptService.save(attempt);
 
@@ -187,7 +185,7 @@ public class AuthManager implements AuthService {
     }
 
     @Override
-    public TokenResponseDto login(AuthLoginDto authLoginDto, String ipAddress, String userAgent) {
+    public TokenResponseDto login(AuthLoginDto authLoginDto, ClientContext client) {
         logger.info("Login attempt for {}", LogMasks.email(authLoginDto.getEmail()));
 
         var user = userService.getByEmail(authLoginDto.getEmail());
@@ -198,8 +196,8 @@ public class AuthManager implements AuthService {
             loginAttempt.setEmailAttempted(authLoginDto.getEmail());
             loginAttempt.setSuccess(false);
             loginAttempt.setFailureReason("Invalid email or password");
-            loginAttempt.setIpAddress(ipAddress);
-            loginAttempt.setDeviceName(userAgent);
+            loginAttempt.setIpAddress(client.ipAddress());
+            loginAttempt.setDeviceName(client.userAgent());
             loginAttempt.setUser(user);
             loginAttemptService.save(loginAttempt);
 
@@ -207,10 +205,7 @@ public class AuthManager implements AuthService {
         }
 
         Device device = deviceService.findOrCreateDevice(
-                user,
-                ipAddress,
-                userAgent
-        );
+                user, client.ipAddress(), client.userAgent(), client.deviceId());
 
         logger.info("Device found or created for user ID: {}", user.getId());
 
@@ -223,11 +218,11 @@ public class AuthManager implements AuthService {
         loginAttempt.setUser(user);
         loginAttempt.setEmailAttempted(user.getEmail());
         loginAttempt.setSuccess(true);
-        loginAttempt.setIpAddress(ipAddress);
+        loginAttempt.setIpAddress(client.ipAddress());
         loginAttempt.setDeviceName(device.getName());
         loginAttemptService.save(loginAttempt);
 
-        CreatedSessionInfo createdSessionInfo = sessionService.createSession(device, ipAddress);
+        CreatedSessionInfo createdSessionInfo = sessionService.createSession(device, client.ipAddress());
 
 
         logger.info("Session created for user ID: {}, session ID: {}", user.getId(), createdSessionInfo.session().getId());
@@ -240,7 +235,7 @@ public class AuthManager implements AuthService {
     }
 
     @Override
-    public TokenResponseDto refreshToken(RefreshTokenDto refreshTokenDto, UUID sessionId, String ipAddress, String userAgent) {
+    public TokenResponseDto refreshToken(RefreshTokenDto refreshTokenDto, UUID sessionId, ClientContext client) {
         logger.info("Refreshing token for session ID: {}", sessionId);
         var session = sessionService.findActiveSessionById(sessionId);
 
@@ -258,16 +253,8 @@ public class AuthManager implements AuthService {
             throw new TokenExpiredException(AuthMessages.REFRESH_TOKEN_EXPIRED);
         }
 
-        Device currentDevice;
-        try{
-            currentDevice = deviceService.findDeviceByUserAndUserAgent(
-                    session.getDevice().getUser(),
-                    userAgent
-            );
-        }catch (Exception e){
-            currentDevice = null;
-            logger.warn("Device not found for session ID: {}, user agent: {}", sessionId, userAgent);
-        }
+        Device currentDevice = deviceService.findDevice(
+                session.getDevice().getUser(), client.userAgent(), client.deviceId()).orElse(null);
 
         if (currentDevice == null || !session.getDevice().getId().equals(currentDevice.getId())){
             session.setActive(false);
@@ -288,7 +275,7 @@ public class AuthManager implements AuthService {
 
         session.setLastAccessedAt(now);
         session.getDevice().setLastSeenAt(now);
-        session.setIpAddress(ipAddress);
+        session.setIpAddress(client.ipAddress());
         sessionService.save(session);
 
         String newAccessToken = jwtService.generateAccessToken(session.getDevice().getUser(), session.getId());

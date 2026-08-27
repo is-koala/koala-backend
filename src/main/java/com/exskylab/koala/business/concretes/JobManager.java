@@ -250,6 +250,10 @@ public class JobManager implements JobService {
                 criteria.getMaxSalary(),
                 criteria.getInsuranceRequired(),
                 criteria.getExperienceRequired(),
+                criteria.getMinLatitude(),
+                criteria.getMaxLatitude(),
+                criteria.getMinLongitude(),
+                criteria.getMaxLongitude(),
                 pageable);
 
         return PageDto.of(ids, jobMapper.toJobSummaryDtoList(inIdOrder(ids.getContent())));

@@ -4,12 +4,14 @@ import com.exskylab.koala.entities.Device;
 import com.exskylab.koala.entities.User;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface DeviceService {
+
     List<Device> getDevicesByUserIdAndPushTokenNotNull(UUID id);
 
-    Device findOrCreateDevice(User user, String ipAddress, String userAgent);
+    Device findOrCreateDevice(User user, String ipAddress, String userAgent, String clientDeviceId);
 
-    Device findDeviceByUserAndUserAgent(User user, String userAgent);
+    Optional<Device> findDevice(User user, String userAgent, String clientDeviceId);
 }

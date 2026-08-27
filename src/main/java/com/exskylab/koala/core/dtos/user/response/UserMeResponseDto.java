@@ -1,6 +1,11 @@
 package com.exskylab.koala.core.dtos.user.response;
 
 import com.exskylab.koala.core.dtos.address.response.AddressDto;
+import com.exskylab.koala.core.dtos.company.response.CompanyMembershipDto;
+import com.exskylab.koala.entities.Role;
+
+import java.util.List;
+import java.util.Set;
 import com.exskylab.koala.entities.Gender;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -41,6 +46,18 @@ public class UserMeResponseDto {
     private String interests;
 
     private AddressDto address;
+
+    private boolean employer;
+
+    private boolean emailVerified;
+
+    private boolean phoneVerified;
+
+    private boolean identityVerified;
+
+    private Set<Role> roles;
+
+    private List<CompanyMembershipDto> companies;
 
 
 }

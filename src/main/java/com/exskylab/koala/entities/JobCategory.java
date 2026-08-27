@@ -24,6 +24,9 @@ public class JobCategory {
     @Column(name = "name")
     private String name;
 
+    @Column(name = "code", nullable = false, unique = true, length = 64)
+    private String code;
+
     @Column(name = "requires_insurance")
     private boolean requiresInsurance;
 

@@ -17,6 +17,8 @@ public class JobCategoryDto {
 
     private String name;
 
+    private String code;
+
     private boolean requiresInsurance;
 
 }

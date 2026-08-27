@@ -1,8 +1,7 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.DeviceService;
-import com.exskylab.koala.core.constants.DeviceMessages;
-import com.exskylab.koala.core.exceptions.DeviceNotFoundException;
+import com.exskylab.koala.core.helpers.DeviceIdentity;
 import com.exskylab.koala.dataAccess.DeviceDao;
 import com.exskylab.koala.entities.Device;
 import com.exskylab.koala.entities.DeviceType;
@@ -43,7 +42,65 @@ public class DeviceManager implements DeviceService {
 
     @Override
     @Transactional
-    public Device findOrCreateDevice(User user, String ipAddress, String userAgent) {
+    public Device findOrCreateDevice(User user, String ipAddress, String userAgent, String clientDeviceId) {
+        String deviceId = DeviceIdentity.sanitize(clientDeviceId);
+
+        if (deviceId != null) {
+            Optional<Device> byClientId = deviceDao.findByUser_IdAndClientDeviceId(user.getId(), deviceId);
+            if (byClientId.isPresent()) {
+                Device device = byClientId.get();
+                device.setLastSeenAt(Instant.now());
+                device.setName(describe(userAgent));
+                device.setType(typeOf(userAgent));
+                return deviceDao.save(device);
+            }
+            return deviceDao.save(newDevice(user, userAgent, deviceId));
+        }
+
+        return findOrCreateByUserAgent(user, userAgent);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Device> findDevice(User user, String userAgent, String clientDeviceId) {
+        String deviceId = DeviceIdentity.sanitize(clientDeviceId);
+
+        if (deviceId != null) {
+            return deviceDao.findByUser_IdAndClientDeviceId(user.getId(), deviceId);
+        }
+
+        return deviceDao.findByUserAndNameAndType(user, describe(userAgent), typeOf(userAgent));
+    }
+
+    private Device newDevice(User user, String userAgent, String clientDeviceId) {
+        Device device = new Device();
+        device.setUser(user);
+        device.setClientDeviceId(clientDeviceId);
+        device.setName(describe(userAgent));
+        device.setType(typeOf(userAgent));
+        device.setPushToken(null);
+        device.setFirstSeenAt(Instant.now());
+        device.setLastSeenAt(Instant.now());
+        return device;
+    }
+
+    private String describe(String userAgent) {
+        UserAgent agent = userAgentAnalyzer.parse(normalize(userAgent));
+        return String.format("%s (%s)", agent.getValue(UserAgent.DEVICE_NAME),
+                agent.getValue(UserAgent.OPERATING_SYSTEM_NAME_VERSION));
+    }
+
+    private DeviceType typeOf(String userAgent) {
+        UserAgent agent = userAgentAnalyzer.parse(normalize(userAgent));
+        return toDeviceType(agent.getValue(UserAgent.OPERATING_SYSTEM_NAME_VERSION),
+                agent.getValue(UserAgent.AGENT_NAME_VERSION));
+    }
+
+    private String normalize(String userAgent) {
+        return userAgent == null || userAgent.isBlank() ? "unknown" : userAgent;
+    }
+
+    private Device findOrCreateByUserAgent(User user, String userAgent) {
         if (userAgent == null || userAgent.isBlank()){
             userAgent = "unknown";
         }
@@ -80,23 +137,6 @@ public class DeviceManager implements DeviceService {
 
     }
 
-    @Override
-    @Transactional
-    public Device findDeviceByUserAndUserAgent(User user, String userAgent) {
-        if (userAgent == null || userAgent.isBlank()){
-            userAgent = "unknown";
-        }
-
-        UserAgent agent = userAgentAnalyzer.parse(userAgent);
-        String deviceName = agent.getValue(UserAgent.DEVICE_NAME);
-        String operatingSystem = agent.getValue(UserAgent.OPERATING_SYSTEM_NAME_VERSION);
-        DeviceType deviceType = toDeviceType(operatingSystem, agent.getValue(UserAgent.AGENT_NAME_VERSION));
-        String finalDeviceName = String.format("%s (%s)", deviceName, operatingSystem);
-
-        return deviceDao.findByUserAndNameAndType(user, finalDeviceName, deviceType)
-                .orElseThrow(() -> new DeviceNotFoundException(DeviceMessages.DEVICE_NOT_FOUND_BY_USER_AND_USER_AGENT));
-
-    }
 
     private DeviceType toDeviceType(String operatingSystem, String agentName) {
 

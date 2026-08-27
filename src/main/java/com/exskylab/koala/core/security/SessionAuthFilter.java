@@ -4,6 +4,7 @@ import com.exskylab.koala.business.abstracts.DeviceService;
 import com.exskylab.koala.business.abstracts.SessionService;
 import com.exskylab.koala.core.configs.RequestLoggingFilter;
 import com.exskylab.koala.core.constants.AuthMessages;
+import com.exskylab.koala.core.helpers.DeviceIdentity;
 import com.exskylab.koala.core.exceptions.DeviceDoesntMatchException;
 import com.exskylab.koala.core.exceptions.SessionDoesntMatch;
 import com.exskylab.koala.core.exceptions.SessionNotFoundException;
@@ -79,16 +80,8 @@ public class SessionAuthFilter extends OncePerRequestFilter {
                 return;
             }
 
-            Device currentDevice;
-            try{
-                currentDevice = deviceService.findDeviceByUserAndUserAgent(
-                        user,
-                        request.getHeader("User-Agent")
-                );
-            }catch (Exception e){
-                currentDevice = null;
-                logger.error("Users token doesnt match with current device. Deactivating session ID: {}", session.getId());
-            }
+            Device currentDevice = deviceService.findDevice(
+                    user, request.getHeader("User-Agent"), DeviceIdentity.fromRequest(request)).orElse(null);
 
             if (currentDevice == null || !session.getDevice().getId().equals(currentDevice.getId())){
                 session.setActive(false);

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-08-27-08-devices-client-id" author="koala">
+        <addColumn tableName="devices">
+            <column name="client_device_id" type="VARCHAR(128)"/>
+        </addColumn>
+        <createIndex tableName="devices" indexName="idx_devices_user_client_id">
+            <column name="user_id"/>
+            <column name="client_device_id"/>
+        </createIndex>
+        <rollback>
+            <dropIndex tableName="devices" indexName="idx_devices_user_client_id"/>
+            <dropColumn tableName="devices" columnName="client_device_id"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-08-27-09-job-categories-code" author="koala">
+        <addColumn tableName="job_categories">
+            <column name="code" type="VARCHAR(64)"/>
+        </addColumn>
+        <sql>
+            UPDATE job_categories
+            SET code = upper(regexp_replace(translate(name,
+                    'çğıöşüÇĞİÖŞÜ', 'cgiosuCGIOSU'), '[^A-Za-z0-9]+', '_', 'g'))
+            WHERE code IS NULL;
+        </sql>
+        <addNotNullConstraint tableName="job_categories" columnName="code" columnDataType="VARCHAR(64)"/>
+        <addUniqueConstraint tableName="job_categories" columnNames="code"
+                             constraintName="uk_job_categories_code"/>
+        <rollback>
+            <dropUniqueConstraint tableName="job_categories" constraintName="uk_job_categories_code"/>
+            <dropColumn tableName="job_categories" columnName="code"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

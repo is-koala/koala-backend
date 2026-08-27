@@ -37,4 +37,8 @@ public class JobSummaryDto {
     private String cityName;
     private String districtName;
     private String companyName;
+
+    private Double latitude;
+
+    private Double longitude;
 }

@@ -6,6 +6,7 @@ import com.exskylab.koala.core.dtos.auth.request.*;
 import com.exskylab.koala.core.dtos.auth.response.AuthSetPasswordDto;
 import com.exskylab.koala.core.dtos.auth.response.TokenResponseDto;
 import com.exskylab.koala.core.helpers.BearerTokenExtractor;
+import com.exskylab.koala.core.helpers.ClientContext;
 import com.exskylab.koala.core.security.JwtService;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.core.utilities.results.SuccessResult;
@@ -58,10 +59,8 @@ public class AuthController {
     public ResponseEntity<SuccessDataResult<TokenResponseDto>> completeRegistration(@RequestBody @Valid AuthCompleteRegistrationDto authCompleteRegistrationDto,
                                                                                     HttpServletRequest request){
 
-        String userAgent = request.getHeader("User-Agent");
-        String ipAddress = getClientIpAddress(request);
 
-        var response = authService.completeRegistration(authCompleteRegistrationDto, ipAddress, userAgent);
+        var response = authService.completeRegistration(authCompleteRegistrationDto, ClientContext.from(request));
 
 
         return ResponseEntity.status(HttpStatus.CREATED).body(
@@ -78,10 +77,8 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<SuccessDataResult<TokenResponseDto>> login(@RequestBody @Valid AuthLoginDto authLoginDto, HttpServletRequest request){
 
-        String ipAddress = getClientIpAddress(request);
-        String userAgent = request.getHeader("User-Agent");
 
-        var response = authService.login(authLoginDto, ipAddress, userAgent);
+        var response = authService.login(authLoginDto, ClientContext.from(request));
 
         return ResponseEntity.status(HttpStatus.OK).body(
                 new SuccessDataResult<>(
@@ -96,11 +93,9 @@ public class AuthController {
 
     @PostMapping("/refresh-token")
     public ResponseEntity<SuccessDataResult<TokenResponseDto>> refreshToken(@RequestBody @Valid RefreshTokenDto refreshTokenDto, HttpServletRequest request){
-        String ipAddress = getClientIpAddress(request);
-        String userAgent = request.getHeader("User-Agent");
         UUID sessionId = jwtService.extractSessionId(BearerTokenExtractor.extract(request));
 
-        var response = authService.refreshToken(refreshTokenDto, sessionId, ipAddress, userAgent);
+        var response = authService.refreshToken(refreshTokenDto, sessionId, ClientContext.from(request));
 
         return ResponseEntity.status(HttpStatus.OK).body(
                 new SuccessDataResult<>(
@@ -141,18 +136,6 @@ public class AuthController {
                 new SuccessResult(AuthMessages.PASSWORD_RESET_COMPLETED, HttpStatus.OK));
     }
 
-    private String getClientIpAddress(HttpServletRequest request) {
-        String remoteAddr = "";
-        if(request != null){
-            remoteAddr = request.getHeader("X-FORWARDED-FOR");
-            if (remoteAddr == null || "".equals(remoteAddr)){
-                remoteAddr = request.getRemoteAddr();
-            }
-        }
-
-        return  remoteAddr;
-
-    }
 
 
 }

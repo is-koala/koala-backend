@@ -1,6 +1,7 @@
 package com.exskylab.koala.core.mappers;
 
 import com.exskylab.koala.core.dtos.job.response.CompaniesCompanyIdJobsPostResponseDto;
+import com.exskylab.koala.core.dtos.job.response.JobDetailDto;
 import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
 import com.exskylab.koala.core.dtos.job.response.ShortJobDto;
 import com.exskylab.koala.core.dtos.job.response.UsersMeJobsPostResponseDto;
@@ -25,7 +26,11 @@ public interface JobMapper {
     @Mapping(target = "cityName", source = "address.city.name")
     @Mapping(target = "districtName", source = "address.district.name")
     @Mapping(target = "companyName", source = "company.name")
+    @Mapping(target = "latitude", source = "address.latitude")
+    @Mapping(target = "longitude", source = "address.longitude")
     JobSummaryDto toJobSummaryDto(Job job);
+
+    JobDetailDto toJobDetailDto(Job job);
 
     List<JobSummaryDto> toJobSummaryDtoList(List<Job> jobs);
 }

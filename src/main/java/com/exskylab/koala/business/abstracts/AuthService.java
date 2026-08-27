@@ -1,6 +1,7 @@
 package com.exskylab.koala.business.abstracts;
 
 import com.exskylab.koala.core.dtos.auth.request.*;
+import com.exskylab.koala.core.helpers.ClientContext;
 import com.exskylab.koala.core.dtos.auth.response.AuthSetPasswordDto;
 import com.exskylab.koala.core.dtos.auth.response.TokenResponseDto;
 
@@ -12,11 +13,11 @@ public interface AuthService {
 
     AuthSetPasswordDto verifyRegistrationToken(AuthVerifyRegistrationTokenDto authVerifyRegistrationTokenDto);
 
-    TokenResponseDto completeRegistration(AuthCompleteRegistrationDto authCompleteRegistrationDto, String ipAddress, String userAgent);
+    TokenResponseDto completeRegistration(AuthCompleteRegistrationDto authCompleteRegistrationDto, ClientContext client);
 
-    TokenResponseDto login(AuthLoginDto authLoginDto, String ipAddress, String userAgent);
+    TokenResponseDto login(AuthLoginDto authLoginDto, ClientContext client);
 
-    TokenResponseDto refreshToken(RefreshTokenDto refreshTokenDto, UUID sessionId, String ipAddress, String userAgent);
+    TokenResponseDto refreshToken(RefreshTokenDto refreshTokenDto, UUID sessionId, ClientContext client);
 
     void logout(UUID sessionId);
 

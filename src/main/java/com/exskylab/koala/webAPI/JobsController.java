@@ -10,6 +10,7 @@ import com.exskylab.koala.core.mappers.JobApplicationMapper;
 import com.exskylab.koala.core.constants.JobMessages;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.job.request.JobSearchCriteria;
+import com.exskylab.koala.core.dtos.job.response.JobDetailDto;
 import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
 import com.exskylab.koala.core.mappers.JobMapper;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
@@ -55,9 +56,9 @@ public class JobsController {
     }
 
     @GetMapping("/{jobId}")
-    public ResponseEntity<SuccessDataResult<JobSummaryDto>> getJob(@PathVariable UUID jobId) {
+    public ResponseEntity<SuccessDataResult<JobDetailDto>> getJob(@PathVariable UUID jobId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
-                jobMapper.toJobSummaryDto(jobService.getDetailedById(jobId)),
+                jobMapper.toJobDetailDto(jobService.getDetailedById(jobId)),
                 JobMessages.JOB_RETRIEVED, HttpStatus.OK));
     }
 

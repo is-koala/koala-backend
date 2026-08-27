@@ -33,6 +33,9 @@ public class Device extends BaseEntity{
     @Column(name = "name")
     private String name;
 
+    @Column(name = "client_device_id", length = 128)
+    private String clientDeviceId;
+
     @Column(name = "push_token", length = 512)
     private String pushToken;
 

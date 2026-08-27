@@ -28,4 +28,12 @@ public class JobSearchCriteria {
     private BigDecimal maxSalary;
     private Boolean insuranceRequired;
     private Boolean experienceRequired;
+
+    private Double minLatitude;
+
+    private Double maxLatitude;
+
+    private Double minLongitude;
+
+    private Double maxLongitude;
 }
