@@ -11,6 +11,8 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 @Repository
@@ -31,4 +33,14 @@ public interface MessageDao extends JpaRepository<Message, UUID> {
                              @Param("readAt") Instant readAt);
 
     long countByConversationIdAndSenderIdNotAndReadAtIsNull(UUID conversationId, UUID readerId);
+
+    @Query("""
+            select m.conversation.id, count(m) from Message m
+            where m.conversation.id in :conversationIds
+              and m.sender.id <> :readerId
+              and m.readAt is null
+            group by m.conversation.id
+            """)
+    List<Object[]> countUnreadByConversationIds(@Param("conversationIds") Collection<UUID> conversationIds,
+                                               @Param("readerId") UUID readerId);
 }

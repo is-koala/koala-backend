@@ -59,6 +59,9 @@ public class User extends BaseEntity {
     @Column(name ="tc_identity_number")
     private String tcIdentityNumber;
 
+    @Column(name = "job_title")
+    private String jobTitle;
+
     @Column(name = "about")
     private String about;
 
@@ -79,6 +82,10 @@ public class User extends BaseEntity {
 
     @Column(name = "identity_verified")
     private boolean identityVerified;
+
+    @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JoinColumn(name = "cv_id", referencedColumnName = "id")
+    private File cv;
 
     @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JoinColumn(name = "address_id", referencedColumnName = "id")

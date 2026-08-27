@@ -19,9 +19,8 @@ public interface MessagingMapper {
 
     List<MessageDto> toMessageDtoList(List<Message> messages);
 
-    @Mapping(target = "jobId", source = "job.id")
-    @Mapping(target = "jobTitle", source = "job.title")
-    ConversationDto toConversationDto(Conversation conversation);
-
-    List<ConversationDto> toConversationDtoList(List<Conversation> conversations);
+    @Mapping(target = "jobId", source = "conversation.job.id")
+    @Mapping(target = "jobTitle", source = "conversation.job.title")
+    @Mapping(target = "unreadCount", source = "unreadCount")
+    ConversationDto toConversationDto(Conversation conversation, long unreadCount);
 }

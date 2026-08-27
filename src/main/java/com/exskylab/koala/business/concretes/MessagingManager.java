@@ -20,7 +20,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
+import java.util.Collection;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class MessagingManager implements MessagingService {
@@ -97,6 +100,7 @@ public class MessagingManager implements MessagingService {
 
         Message saved = messageDao.save(message);
         conversation.setLastMessageAt(saved.getSentAt());
+        conversation.setLastMessageBody(saved.getBody());
         conversationDao.save(conversation);
 
         logger.info("Message {} sent in conversation {}", saved.getId(), conversationId);
@@ -194,5 +198,16 @@ public class MessagingManager implements MessagingService {
                 || userBlockDao.existsByBlockerIdAndBlockedId(second, first)) {
             throw new UserNotAssociatedWithCompanyException(MessagingMessages.BLOCKED);
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, Long> unreadCounts(Collection<UUID> conversationIds) {
+        if (conversationIds.isEmpty()) {
+            return Map.of();
+        }
+        return messageDao.countUnreadByConversationIds(conversationIds, securityService.getAuthenticatedUserId())
+                .stream()
+                .collect(Collectors.toMap(row -> (UUID) row[0], row -> (Long) row[1]));
     }
 }

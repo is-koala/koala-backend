@@ -72,6 +72,15 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/users/me/identity-verification").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/users/me/jobs").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/users/me/address").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/users/me/saved-jobs").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/users/me/saved-jobs/{jobId}").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/users/me/saved-jobs/{jobId}").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/users/me/cv").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/users/me/cv").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/users/me/educations").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/users/me/educations").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/users/me/educations/{educationId}").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/users/me/educations/{educationId}").hasAnyRole("USER", "ADMIN")
 
                         //verification endpoints
                         .requestMatchers(HttpMethod.POST, "/user-verifications/{id}").hasAnyRole("USER", "ADMIN")

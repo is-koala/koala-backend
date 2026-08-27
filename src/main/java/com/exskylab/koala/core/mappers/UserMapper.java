@@ -9,18 +9,20 @@ import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-@Mapper(componentModel = "spring", uses = {MediaUrlResolver.class, AddressMapper.class},
+@Mapper(componentModel = "spring", uses = {MediaUrlResolver.class, AddressMapper.class, EducationMapper.class},
         injectionStrategy = InjectionStrategy.CONSTRUCTOR)
 public interface UserMapper {
 
     @Mapping(target = "profilePictureUrl", source = "profilePicture", qualifiedByName = "imageToPublicUrl")
     SafeUserDto toSafeUserDto(User user);
 
-    @Mapping(target = "profilePictureUrl", source = "profilePicture", qualifiedByName = "imageToPublicUrl")
-    @Mapping(target = "employer", source = "employer")
-    @Mapping(target = "roles", source = "authorities")
-    @Mapping(target = "companies", source = "companyContacts")
-    UserMeResponseDto toUserMeResponseDto(User user);
+    @Mapping(target = "profilePictureUrl", source = "user.profilePicture", qualifiedByName = "imageToPublicUrl")
+    @Mapping(target = "employer", source = "user.employer")
+    @Mapping(target = "roles", source = "user.authorities")
+    @Mapping(target = "companies", source = "user.companyContacts")
+    @Mapping(target = "cvUrl", source = "user.cv", qualifiedByName = "mediaToPublicUrl")
+    @Mapping(target = "maskedIban", source = "maskedIban")
+    UserMeResponseDto toUserMeResponseDto(User user, String maskedIban);
 
     @Mapping(target = "companyId", source = "company.id")
     @Mapping(target = "companyName", source = "company.name")

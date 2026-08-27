@@ -33,6 +33,8 @@ public class UserMePatchRequestDto {
 
     private String gender;
 
+    private String jobTitle;
+
     private String about;
 
     private String qualifications;

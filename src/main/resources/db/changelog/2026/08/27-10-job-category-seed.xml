@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-08-27-25-job-category-codes-to-english" author="koala">
+        <sql>
+            UPDATE job_categories SET code = 'PHOTOGRAPHY' WHERE code = 'FOTOGRAFCILIK';
+            UPDATE job_categories SET code = 'WAITER'      WHERE code IN ('GARSONLUK', 'GARSON');
+            UPDATE job_categories SET code = 'PET_CARE'    WHERE code IN ('HAYVAN_BAKIMI', 'HAYVAN_BAKICILIGI');
+            UPDATE job_categories SET code = 'DESIGN'      WHERE code = 'TASARIM';
+            UPDATE job_categories SET code = 'BARISTA'     WHERE code = 'BARISTA';
+        </sql>
+    </changeSet>
+
+    <changeSet id="2026-08-27-26-job-category-seed" author="koala">
+        <sql>
+            INSERT INTO job_categories (id, code, name, requires_insurance) VALUES
+                ('9a1c0f10-0001-4c00-8000-000000000001', 'PHOTOGRAPHY', 'Fotoğrafçılık', false),
+                ('9a1c0f10-0001-4c00-8000-000000000002', 'WAITER',      'Garsonluk',     false),
+                ('9a1c0f10-0001-4c00-8000-000000000003', 'PET_CARE',    'Hayvan Bakımı', false),
+                ('9a1c0f10-0001-4c00-8000-000000000004', 'DESIGN',      'Tasarım',       false),
+                ('9a1c0f10-0001-4c00-8000-000000000005', 'BARISTA',     'Barista',       false)
+            ON CONFLICT (code) DO NOTHING;
+        </sql>
+        <rollback>
+            <sql>
+                DELETE FROM job_categories
+                WHERE id IN ('9a1c0f10-0001-4c00-8000-000000000001',
+                             '9a1c0f10-0001-4c00-8000-000000000002',
+                             '9a1c0f10-0001-4c00-8000-000000000003',
+                             '9a1c0f10-0001-4c00-8000-000000000004',
+                             '9a1c0f10-0001-4c00-8000-000000000005');
+            </sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

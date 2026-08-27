@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-08-27-27-user-job-title-and-cv" author="koala">
+        <addColumn tableName="users">
+            <column name="job_title" type="VARCHAR(255)"/>
+            <column name="cv_id" type="UUID"/>
+        </addColumn>
+        <addForeignKeyConstraint baseTableName="users" baseColumnNames="cv_id"
+                                 constraintName="fk_users_cv"
+                                 referencedTableName="media" referencedColumnNames="id"/>
+        <rollback>
+            <dropForeignKeyConstraint baseTableName="users" constraintName="fk_users_cv"/>
+            <dropColumn tableName="users" columnName="cv_id"/>
+            <dropColumn tableName="users" columnName="job_title"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-08-27-28-conversation-last-message-body" author="koala">
+        <addColumn tableName="conversations">
+            <column name="last_message_body" type="VARCHAR(4000)"/>
+        </addColumn>
+        <sql>
+            UPDATE conversations c
+            SET last_message_body = (
+                SELECT m.body FROM messages m
+                WHERE m.conversation_id = c.id AND m.is_deleted = false
+                ORDER BY m.sent_at DESC LIMIT 1);
+        </sql>
+        <rollback>
+            <dropColumn tableName="conversations" columnName="last_message_body"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

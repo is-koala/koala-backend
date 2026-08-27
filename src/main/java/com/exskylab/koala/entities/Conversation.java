@@ -41,6 +41,9 @@ public class Conversation extends BaseEntity {
     @Column(name = "last_message_at")
     private Instant lastMessageAt;
 
+    @Column(name = "last_message_body", length = 4000)
+    private String lastMessageBody;
+
     public boolean hasParticipant(UUID userId) {
         return (employer != null && employer.getId().equals(userId))
                 || (worker != null && worker.getId().equals(userId));

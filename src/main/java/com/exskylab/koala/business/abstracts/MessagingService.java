@@ -7,6 +7,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
+import java.util.Collection;
+import java.util.Map;
 import java.util.UUID;
 
 public interface MessagingService {
@@ -26,4 +28,6 @@ public interface MessagingService {
     void unblock(UUID blockedUserId);
 
     List<UserBlock> getMyBlocks();
+
+    Map<UUID, Long> unreadCounts(Collection<UUID> conversationIds);
 }

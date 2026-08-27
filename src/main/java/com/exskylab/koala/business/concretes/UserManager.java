@@ -48,6 +48,7 @@ public class UserManager implements UserService {
     private final AddressMapper addressMapper;
     private final UserProducerService userProducerService;
     private final BankAccountService bankAccountService;
+    private final PhoneVerificationService phoneVerificationService;
 
     public UserManager(UserDao userDao,
                        EmailVerificationService emailVerificationService,
@@ -59,7 +60,8 @@ public class UserManager implements UserService {
                        AddressService addressService,
                        KimlikPaylasimSistemiService kimlikPaylasimSistemiService,
                        AddressMapper addressMapper, UserProducerService userProducerService,
-                       BankAccountService bankAccountService) {
+                       BankAccountService bankAccountService,
+                       PhoneVerificationService phoneVerificationService) {
         this.userDao = userDao;
         this.emailVerificationService = emailVerificationService;
         this.userMapper = userMapper;
@@ -72,6 +74,7 @@ public class UserManager implements UserService {
         this.addressMapper = addressMapper;
         this.userProducerService = userProducerService;
         this.bankAccountService = bankAccountService;
+        this.phoneVerificationService = phoneVerificationService;
     }
 
     @Override
@@ -167,7 +170,17 @@ public class UserManager implements UserService {
 
 
         if (userMePatchRequestDto.getPhoneNumber() != null){
-            //TODO: IMPLEMENT PHONE NUMBER CHANGE AFTER COMPANY CREATED
+            if (!userMePatchRequestDto.getPhoneNumber().equals(currentUser.getPhoneNumber())) {
+                logger.info("Phone change requested for user id: {}", currentUser.getId());
+                var phoneVerification = phoneVerificationService.startPhoneVerification(
+                        userMePatchRequestDto.getPhoneNumber(), currentUser);
+                pendingVerifications.add(phoneVerification);
+
+                logger.info("Phone verification code queued for {}",
+                        LogMasks.phone(userMePatchRequestDto.getPhoneNumber()));
+            } else {
+                logger.info("Phone number is the same as the current user's number. No need to update.");
+            }
         }
 
         if (userMePatchRequestDto.getEmail() != null) {
@@ -208,6 +221,10 @@ public class UserManager implements UserService {
                 currentUser.setExperiences(userMePatchRequestDto.getExperiences());
             }
 
+            if (userMePatchRequestDto.getJobTitle() != null){
+                currentUser.setJobTitle(userMePatchRequestDto.getJobTitle());
+            }
+
             if (userMePatchRequestDto.getInterests() != null){
                 logger.info("Updating interests to: {}, from {}", userMePatchRequestDto.getInterests(), currentUser.getInterests());
                 currentUser.setInterests(userMePatchRequestDto.getInterests());
@@ -219,7 +236,7 @@ public class UserManager implements UserService {
 
             logger.info("User with ID: {} patched successfully.", savedUser.getId());
 
-            return new UserUpdateResponseDto(userMapper.toUserMeResponseDto(savedUser), pendingVerifications);
+            return new UserUpdateResponseDto(toMeDto(savedUser), pendingVerifications);
     }
 
 
@@ -333,8 +350,7 @@ public class UserManager implements UserService {
     @Transactional(readOnly = true)
     public UserMeResponseDto getCurrentUserFromDatabaseDto() {
         logger.debug("Getting current user DTO.");
-        var authenticatedUser = securityService.getAuthenticatedUser();
-        return userMapper.toUserMeResponseDto(authenticatedUser);
+        return toMeDto(securityService.getAuthenticatedUser());
     }
 
     @Override
@@ -358,6 +374,13 @@ public class UserManager implements UserService {
     }
 
 
+
+    private UserMeResponseDto toMeDto(User user) {
+        String maskedIban = bankAccountService.findPrimaryIban(user.getId())
+                .map(LogMasks::iban)
+                .orElse(null);
+        return userMapper.toUserMeResponseDto(user, maskedIban);
+    }
 
     private String capitalizeFirstLetter(String input) {
         if (input == null || input.isBlank()) {

@@ -5,6 +5,7 @@ import com.exskylab.koala.core.constants.MessagingMessages;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.messaging.request.SendMessageDto;
 import com.exskylab.koala.core.dtos.messaging.response.ConversationDto;
+import com.exskylab.koala.entities.Conversation;
 import com.exskylab.koala.core.dtos.messaging.response.MessageDto;
 import com.exskylab.koala.core.mappers.MessagingMapper;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
@@ -35,8 +36,15 @@ public class ConversationsController {
             @PageableDefault(size = 20) Pageable pageable) {
 
         var page = messagingService.getMyConversations(pageable);
+        var unread = messagingService.unreadCounts(page.getContent().stream().map(Conversation::getId).toList());
+
+        var content = page.getContent().stream()
+                .map(conversation -> messagingMapper.toConversationDto(
+                        conversation, unread.getOrDefault(conversation.getId(), 0L)))
+                .toList();
+
         return ResponseEntity.ok(new SuccessDataResult<>(
-                PageDto.of(page, messagingMapper.toConversationDtoList(page.getContent())),
+                PageDto.of(page, content),
                 MessagingMessages.CONVERSATIONS_LISTED, HttpStatus.OK));
     }
 
@@ -45,7 +53,7 @@ public class ConversationsController {
             @PathVariable UUID jobId, @RequestParam(required = false) UUID workerId) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
-                messagingMapper.toConversationDto(messagingService.openConversation(jobId, workerId)),
+                messagingMapper.toConversationDto(messagingService.openConversation(jobId, workerId), 0L),
                 MessagingMessages.CONVERSATIONS_LISTED, HttpStatus.OK));
     }
 
