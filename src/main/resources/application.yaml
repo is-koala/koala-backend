@@ -122,6 +122,13 @@ rate-limit:
 commission:
   rate: ${COMMISSION_RATE:0.075}
 
+badge:
+  thresholds:
+    GEZGIN_SILVER:
+      min-count: ${BADGE_GEZGIN_SILVER_MIN_COUNT:5}
+    GEZGIN_GOLD:
+      min-count: ${BADGE_GEZGIN_GOLD_MIN_COUNT:25}
+
 cancellation:
   free-window-hours: ${CANCELLATION_FREE_WINDOW_HOURS:24}
   late-fee-rate: ${CANCELLATION_LATE_FEE_RATE:0.50}

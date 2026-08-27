@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.business.abstracts.BadgeService;
 import com.exskylab.koala.business.abstracts.CompanyContactService;
 import com.exskylab.koala.business.abstracts.ReviewService;
 import com.exskylab.koala.business.abstracts.SecurityService;
@@ -40,11 +41,12 @@ public class ReviewManager implements ReviewService {
     private final SecurityService securityService;
     private final CompanyContactService companyContactService;
     private final PageableSanitizer pageableSanitizer;
+    private final BadgeService badgeService;
 
     public ReviewManager(ReviewDao reviewDao, RatingSummaryDao ratingSummaryDao,
                          JobAssignmentDao jobAssignmentDao, UserDao userDao,
                          SecurityService securityService, CompanyContactService companyContactService,
-                         PageableSanitizer pageableSanitizer) {
+                         PageableSanitizer pageableSanitizer, BadgeService badgeService) {
         this.reviewDao = reviewDao;
         this.ratingSummaryDao = ratingSummaryDao;
         this.jobAssignmentDao = jobAssignmentDao;
@@ -52,6 +54,7 @@ public class ReviewManager implements ReviewService {
         this.securityService = securityService;
         this.companyContactService = companyContactService;
         this.pageableSanitizer = pageableSanitizer;
+        this.badgeService = badgeService;
     }
 
     @Override
@@ -84,6 +87,7 @@ public class ReviewManager implements ReviewService {
 
         Review saved = reviewDao.save(review);
         applyToSummary(subject, rating);
+        badgeService.evaluate(subject.getId());
 
         logger.info("Review {} left on assignment {} about user {}", saved.getId(), jobAssignmentId, subject.getId());
         return saved;

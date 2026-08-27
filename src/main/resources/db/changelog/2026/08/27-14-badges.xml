@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-08-27-31-badges" author="koala">
+        <createTable tableName="badges">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="code" type="VARCHAR(64)"><constraints nullable="false" unique="true"
+                                                                uniqueConstraintName="uk_badges_code"/></column>
+            <column name="family" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="tier" type="VARCHAR(16)"><constraints nullable="false"/></column>
+            <column name="name" type="VARCHAR(255)"><constraints nullable="false"/></column>
+            <column name="description" type="VARCHAR(512)"/>
+            <column name="sort_order" type="INTEGER" defaultValueNumeric="0"><constraints nullable="false"/></column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="2026-08-27-32-user-badges" author="koala">
+        <createTable tableName="user_badges">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="user_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="badge_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="earned_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
+            <column name="deleted_by_id" type="UUID"/>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="user_badges" baseColumnNames="user_id"
+                                 constraintName="fk_user_badges_user"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="user_badges" baseColumnNames="badge_id"
+                                 constraintName="fk_user_badges_badge"
+                                 referencedTableName="badges" referencedColumnNames="id"/>
+        <sql>
+            CREATE UNIQUE INDEX uk_user_badges_user_badge
+                ON user_badges (user_id, badge_id) WHERE is_deleted = false;
+        </sql>
+    </changeSet>
+
+    <changeSet id="2026-08-27-33-badge-seed" author="koala">
+        <sql>
+            INSERT INTO badges (id, code, family, tier, name, description, sort_order) VALUES
+                ('9a1c0f10-0002-4c00-8000-000000000001', 'GEZGIN_SILVER', 'GEZGIN', 'SILVER',
+                 'Koala Gezgin — Gümüş', 'Tamamlanan iş sayısıyla kazanılır.', 10),
+                ('9a1c0f10-0002-4c00-8000-000000000002', 'GEZGIN_GOLD', 'GEZGIN', 'GOLD',
+                 'Koala Gezgin — Altın', 'Tamamlanan iş sayısıyla kazanılır.', 20)
+            ON CONFLICT (code) DO NOTHING;
+        </sql>
+        <rollback>
+            <sql>
+                DELETE FROM badges WHERE code IN ('GEZGIN_SILVER', 'GEZGIN_GOLD');
+            </sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

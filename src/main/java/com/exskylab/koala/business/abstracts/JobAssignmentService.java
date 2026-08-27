@@ -20,4 +20,6 @@ public interface JobAssignmentService {
     JobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto initiatePaymentSession(UUID assignmentId, String clientIpAddress);
 
     Page<JobAssignment> getMyAssignments(boolean asEmployer, Pageable pageable);
+
+    JobAssignment completeAssignment(UUID assignmentId);
 }

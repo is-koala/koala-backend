@@ -33,4 +33,5 @@
     <include file="db/changelog/2026/08/27-11-user-profile-fields.xml"/>
     <include file="db/changelog/2026/08/27-12-notification-read-state.xml"/>
     <include file="db/changelog/2026/08/27-13-company-contact-audit.xml"/>
+    <include file="db/changelog/2026/08/27-14-badges.xml"/>
 </databaseChangeLog>

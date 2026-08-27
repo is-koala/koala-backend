@@ -27,6 +27,10 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
+import com.exskylab.koala.business.abstracts.BadgeService;
+import com.exskylab.koala.core.helpers.AssignmentParticipants;
+import com.exskylab.koala.entities.CancellationParty;
+import java.time.Instant;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,12 +58,15 @@ public class JobAssignmentManager implements JobAssignmentService {
     private final AppProperties appProperties;
     private final BankAccountService bankAccountService;
     private final PageableSanitizer pageableSanitizer;
+    private final AssignmentParticipants participants;
+    private final BadgeService badgeService;
 
 
     public JobAssignmentManager(JobAssignmentDao jobAssignmentDao, SecurityService securityService, JobAssignmentMapper jobAssignmentMapper, IyzicoPaymentService iyzicoPaymentService, CompanyContactService companyContactService, UserService userService,
                                CommissionCalculator commissionCalculator, PaymentService paymentService,
                                PaymentStateMachine paymentStateMachine, AppProperties appProperties,
-                               BankAccountService bankAccountService, PageableSanitizer pageableSanitizer) {
+                               BankAccountService bankAccountService, PageableSanitizer pageableSanitizer,
+                               AssignmentParticipants participants, BadgeService badgeService) {
         this.jobAssignmentDao = jobAssignmentDao;
         this.securityService = securityService;
         this.jobAssignmentMapper = jobAssignmentMapper;
@@ -72,6 +79,8 @@ public class JobAssignmentManager implements JobAssignmentService {
         this.appProperties = appProperties;
         this.bankAccountService = bankAccountService;
         this.pageableSanitizer = pageableSanitizer;
+        this.participants = participants;
+        this.badgeService = badgeService;
     }
 
 
@@ -312,5 +321,32 @@ public class JobAssignmentManager implements JobAssignmentService {
         return asEmployer
                 ? jobAssignmentDao.findAllByJobCreatorId(userId, pageable)
                 : jobAssignmentDao.findAllByWorkerId(userId, pageable);
+    }
+
+    @Override
+    @Transactional
+    public JobAssignment completeAssignment(UUID assignmentId) {
+        JobAssignment assignment = jobAssignmentDao.findWithDetailsForPaymentById(assignmentId)
+                .orElseThrow(() -> new ResourceNotFoundException(JobAssignmentMessages.NOT_FOUND));
+
+        if (participants.partyOf(assignment, securityService.getAuthenticatedUserId())
+                .filter(party -> party == CancellationParty.EMPLOYER).isEmpty()) {
+            throw new ResourceNotFoundException(JobAssignmentMessages.ONLY_EMPLOYER_CAN_COMPLETE);
+        }
+
+        if (assignment.getStatus() != AssignmentStatus.CONFIRMED
+                && assignment.getStatus() != AssignmentStatus.IN_PROGRESS) {
+            throw new IllegalStateException(JobAssignmentMessages.NOT_COMPLETABLE);
+        }
+
+        assignment.setStatus(AssignmentStatus.COMPLETED);
+        assignment.setActualCompletionDateTime(Instant.now());
+
+        JobAssignment saved = jobAssignmentDao.save(assignment);
+        badgeService.evaluate(assignment.getWorker().getId());
+
+        logger.info("Assignment {} marked completed by employer {}", assignmentId,
+                securityService.getAuthenticatedUserId());
+        return saved;
     }
 }

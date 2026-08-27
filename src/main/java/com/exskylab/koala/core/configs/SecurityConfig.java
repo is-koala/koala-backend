@@ -142,6 +142,7 @@ public class SecurityConfig {
                         .requestMatchers("/users/me/blocks/**").hasAnyRole("USER", "ADMIN")
 
                         //assignment operation endpoints
+                        .requestMatchers(HttpMethod.POST, "/job-assignments/{assignmentId}/complete").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/job-assignments/{assignmentId}/cancel").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/job-assignments/{assignmentId}/cancellation").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/job-assignments/{assignmentId}/disputes").hasAnyRole("USER", "ADMIN")
@@ -159,6 +160,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/reports/me").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/reports").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/reports/{reportId}/review").hasRole("ADMIN")
+
+                        //badge endpoints
+                        .requestMatchers(HttpMethod.GET, "/users/{userId}/badges").permitAll()
 
                         //review endpoints
                         .requestMatchers(HttpMethod.POST, "/reviews/job-assignments/{assignmentId}").hasAnyRole("USER", "ADMIN")

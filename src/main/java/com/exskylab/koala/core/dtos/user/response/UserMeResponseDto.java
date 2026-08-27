@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import com.exskylab.koala.core.dtos.address.response.AddressDto;
 import com.exskylab.koala.core.dtos.company.response.CompanyMembershipDto;
+import com.exskylab.koala.core.dtos.badge.response.BadgeDto;
 import com.exskylab.koala.core.dtos.education.response.EducationDto;
 import com.exskylab.koala.entities.Role;
 
@@ -57,6 +58,8 @@ public class UserMeResponseDto {
     private String cvUrl;
 
     private List<EducationDto> educations;
+
+    private List<BadgeDto> badges;
 
     private AddressDto address;
 

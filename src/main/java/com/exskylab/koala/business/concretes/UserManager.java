@@ -14,6 +14,7 @@ import com.exskylab.koala.core.dtos.user.response.UserMeResponseDto;
 import com.exskylab.koala.core.dtos.user.response.UserUpdateResponseDto;
 import com.exskylab.koala.core.exceptions.UserNotFoundException;
 import com.exskylab.koala.core.mappers.AddressMapper;
+import com.exskylab.koala.core.mappers.BadgeMapper;
 import com.exskylab.koala.core.mappers.UserMapper;
 import com.exskylab.koala.core.producers.user.UserProducerService;
 import com.exskylab.koala.core.utilities.kps.KimlikPaylasimSistemiService;
@@ -51,6 +52,8 @@ public class UserManager implements UserService {
     private final UserProducerService userProducerService;
     private final BankAccountService bankAccountService;
     private final PhoneVerificationService phoneVerificationService;
+    private final BadgeService badgeService;
+    private final BadgeMapper badgeMapper;
 
     public UserManager(UserDao userDao,
                        EmailVerificationService emailVerificationService,
@@ -63,7 +66,8 @@ public class UserManager implements UserService {
                        KimlikPaylasimSistemiService kimlikPaylasimSistemiService,
                        AddressMapper addressMapper, UserProducerService userProducerService,
                        BankAccountService bankAccountService,
-                       PhoneVerificationService phoneVerificationService) {
+                       PhoneVerificationService phoneVerificationService,
+                       BadgeService badgeService, BadgeMapper badgeMapper) {
         this.userDao = userDao;
         this.emailVerificationService = emailVerificationService;
         this.userMapper = userMapper;
@@ -77,6 +81,8 @@ public class UserManager implements UserService {
         this.userProducerService = userProducerService;
         this.bankAccountService = bankAccountService;
         this.phoneVerificationService = phoneVerificationService;
+        this.badgeService = badgeService;
+        this.badgeMapper = badgeMapper;
     }
 
     @Override
@@ -343,6 +349,7 @@ public class UserManager implements UserService {
         currentUser.setBirthDate(usersMeIdentityVerificationRequestDto.getBirthDate());
         currentUser.setTcIdentityNumber(usersMeIdentityVerificationRequestDto.getTcIdentityNumber());
         var savedUser = userDao.save(currentUser);
+        badgeService.evaluate(savedUser.getId());
         userProducerService.publishUserProfileUpdated(savedUser);
         logger.info("Identity verification successful for user with ID: {}", currentUser.getId());
 
@@ -381,7 +388,8 @@ public class UserManager implements UserService {
         String maskedIban = bankAccountService.findPrimaryIban(user.getId())
                 .map(LogMasks::iban)
                 .orElse(null);
-        return userMapper.toUserMeResponseDto(user, maskedIban);
+        return userMapper.toUserMeResponseDto(user, maskedIban,
+                badgeMapper.toBadgeDtoList(badgeService.getBadgesOf(user.getId())));
     }
 
     private String capitalizeFirstLetter(String input) {
