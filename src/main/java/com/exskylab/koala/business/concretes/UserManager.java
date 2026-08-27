@@ -224,11 +224,6 @@ public class UserManager implements UserService {
                 currentUser.setQualifications(userMePatchRequestDto.getQualifications());
             }
 
-            if (userMePatchRequestDto.getExperiences() !=null){
-                logger.info("Updating experiences to: {}, from {}", userMePatchRequestDto.getExperiences(), currentUser.getExperiences());
-                currentUser.setExperiences(userMePatchRequestDto.getExperiences());
-            }
-
             if (userMePatchRequestDto.getJobTitle() != null){
                 currentUser.setJobTitle(userMePatchRequestDto.getJobTitle());
             }

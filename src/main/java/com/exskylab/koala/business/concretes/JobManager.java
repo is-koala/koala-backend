@@ -21,6 +21,7 @@ import com.exskylab.koala.entities.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import jakarta.validation.ValidationException;
+import com.exskylab.koala.business.abstracts.JobAlertService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,9 +48,11 @@ public class JobManager implements JobService {
     private final JobMapper jobMapper;
     private final PageableSanitizer pageableSanitizer;
     private final CompanyContactService companyContactService;
+    private final JobAlertService jobAlertService;
 
     public JobManager(JobDao jobDao, SecurityService securityService, JobCategoryService jobCategoryService, AddressService addressService, CompanyService companyService, JobMapper jobMapper,
-                      PageableSanitizer pageableSanitizer, CompanyContactService companyContactService) {
+                      PageableSanitizer pageableSanitizer, CompanyContactService companyContactService,
+                      JobAlertService jobAlertService) {
         this.jobDao = jobDao;
         this.securityService = securityService;
         this.jobCategoryService = jobCategoryService;
@@ -58,6 +61,7 @@ public class JobManager implements JobService {
         this.jobMapper = jobMapper;
         this.pageableSanitizer = pageableSanitizer;
         this.companyContactService = companyContactService;
+        this.jobAlertService = jobAlertService;
     }
 
     @Override
@@ -124,6 +128,7 @@ public class JobManager implements JobService {
         job.setStatus(JobStatus.OPEN);
 
         Job savedJob = jobDao.save(job);
+        jobAlertService.notifyMatching(savedJob);
         logger.info("Saved individual job with id: {}", savedJob.getId());
 
         return jobMapper.toUsersMeJobsPostResponseDto(savedJob);
@@ -199,6 +204,7 @@ public class JobManager implements JobService {
 
 
         Job savedJob = jobDao.save(job);
+        jobAlertService.notifyMatching(savedJob);
         logger.info("Saved corporate job with id: {}", savedJob.getId());
 
 

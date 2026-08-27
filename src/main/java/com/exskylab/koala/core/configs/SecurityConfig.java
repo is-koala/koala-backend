@@ -135,6 +135,17 @@ public class SecurityConfig {
                         //payout endpoints
                         .requestMatchers(HttpMethod.GET, "/users/me/payouts").hasAnyRole("USER", "ADMIN")
 
+                        //worker profile endpoints
+                        .requestMatchers(HttpMethod.GET, "/users/{userId}/experiences").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/users/{userId}/availability").permitAll()
+                        .requestMatchers("/users/me/experiences/**", "/users/me/experiences").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers("/users/me/availability/**", "/users/me/availability").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers("/users/me/job-alerts/**", "/users/me/job-alerts").hasAnyRole("USER", "ADMIN")
+
+                        //employer tool endpoints
+                        .requestMatchers("/users/me/talent-pool/**", "/users/me/talent-pool").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers("/users/me/job-templates/**", "/users/me/job-templates").hasAnyRole("USER", "ADMIN")
+
                         //storage endpoints
                         .requestMatchers(HttpMethod.GET, "/uploads/images/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/uploads/public/**").permitAll()

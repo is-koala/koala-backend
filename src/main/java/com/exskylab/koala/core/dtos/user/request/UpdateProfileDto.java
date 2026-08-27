@@ -39,8 +39,6 @@ public class UpdateProfileDto {
 
     private String qualifications;
 
-    private String experiences;
-
     private String interests;
 
     private String iban;

@@ -122,6 +122,10 @@ rate-limit:
 commission:
   rate: ${COMMISSION_RATE:0.075}
 
+job-alert:
+  enabled: ${JOB_ALERT_ENABLED:true}
+  max-per-user: ${JOB_ALERT_MAX_PER_USER:10}
+
 assignment:
   auto-completion:
     enabled: ${ASSIGNMENT_AUTO_COMPLETION_ENABLED:true}

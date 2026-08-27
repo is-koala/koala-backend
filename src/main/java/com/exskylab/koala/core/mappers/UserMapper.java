@@ -9,7 +9,7 @@ import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-@Mapper(componentModel = "spring", uses = {MediaUrlResolver.class, AddressMapper.class, EducationMapper.class},
+@Mapper(componentModel = "spring", uses = {MediaUrlResolver.class, AddressMapper.class, EducationMapper.class, ExperienceMapper.class},
         injectionStrategy = InjectionStrategy.CONSTRUCTOR)
 public interface UserMapper {
 

@@ -37,4 +37,5 @@
     <include file="db/changelog/2026/08/28-01-settlement-outbox.xml"/>
     <include file="db/changelog/2026/08/28-02-badge-rules-to-table.xml"/>
     <include file="db/changelog/2026/08/28-03-app-settings.xml"/>
+    <include file="db/changelog/2026/08/28-04-worker-and-employer-tools.xml"/>
 </databaseChangeLog>

@@ -68,8 +68,8 @@ public class User extends BaseEntity {
     @Column(name = "qualifications")
     private String qualifications;
 
-    @Column(name = "experiences")
-    private String experiences;
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<Experience> experiences;
 
     @Column(name = "interests")
     private String interests;
