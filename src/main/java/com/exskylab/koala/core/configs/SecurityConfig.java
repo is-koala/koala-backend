@@ -77,6 +77,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/user-verifications/{id}").hasAnyRole("USER", "ADMIN")
 
 
+                        //legal endpoints
+                        .requestMatchers(HttpMethod.GET, "/legal/agreements").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/legal/consents/me").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/legal/consents").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/legal/account-deletion").hasAnyRole("USER", "ADMIN")
+
                         //reference data (public)
                         .requestMatchers(HttpMethod.GET, "/reference/**").permitAll()
 

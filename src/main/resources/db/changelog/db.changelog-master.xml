@@ -25,4 +25,5 @@
     <include file="db/changelog/2026/08/27-03-payouts-refunds-bank-accounts.xml"/>
     <include file="db/changelog/2026/08/27-04-drop-user-iban.xml"/>
     <include file="db/changelog/2026/08/27-05-device-client-id.xml"/>
+    <include file="db/changelog/2026/08/27-06-legal.xml"/>
 </databaseChangeLog>

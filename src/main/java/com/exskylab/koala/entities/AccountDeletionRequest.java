@@ -1,0 +1,44 @@
+package com.exskylab.koala.entities;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.time.Instant;
+import java.util.UUID;
+
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Entity
+@Table(name = "account_deletion_requests")
+public class AccountDeletionRequest extends BaseEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(name = "id")
+    private UUID id;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 32)
+    private AccountDeletionStatus status;
+
+    @Column(name = "reason", length = 512)
+    private String reason;
+
+    @Column(name = "requested_at", nullable = false)
+    private Instant requestedAt;
+
+    @Column(name = "processed_at")
+    private Instant processedAt;
+
+    @Column(name = "blocked_reason", length = 512)
+    private String blockedReason;
+}

@@ -1,6 +1,8 @@
 package com.exskylab.koala.dataAccess;
 
+import com.exskylab.koala.entities.AssignmentStatus;
 import com.exskylab.koala.entities.JobAssignment;
+import com.exskylab.koala.entities.PaymentStatus;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
@@ -20,5 +22,9 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
             "job.creator.address"
     })
     Optional<JobAssignment> findWithDetailsForPaymentById(UUID id);
+
+    boolean existsByWorkerIdAndPaymentStatus(UUID workerId, PaymentStatus paymentStatus);
+
+    boolean existsByWorkerIdAndStatusIn(UUID workerId, java.util.List<AssignmentStatus> statuses);
 
 }

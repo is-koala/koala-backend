@@ -42,6 +42,7 @@ public class AuthManager implements AuthService {
     private final LoginAttemptService loginAttemptService;
     private final SecurityService securityService;
     private final SessionProperties sessionProperties;
+    private final LegalService legalService;
 
     private Logger logger = LoggerFactory.getLogger(AuthManager.class);
 
@@ -55,7 +56,8 @@ public class AuthManager implements AuthService {
                        SessionService sessionService,
                        LoginAttemptService loginAttemptService,
                        SecurityService securityService,
-                       SessionProperties sessionProperties) {
+                       SessionProperties sessionProperties,
+                       LegalService legalService) {
         this.userService = userService;
         this.pendingRegistrationService = pendingRegistrationService;
         this.notificationService = notificationService;
@@ -67,6 +69,7 @@ public class AuthManager implements AuthService {
         this.loginAttemptService = loginAttemptService;
         this.securityService = securityService;
         this.sessionProperties = sessionProperties;
+        this.legalService = legalService;
     }
 
     @Override
@@ -132,6 +135,8 @@ public class AuthManager implements AuthService {
     @Transactional
     public TokenResponseDto completeRegistration(AuthCompleteRegistrationDto authCompleteRegistrationDto,
                                                  ClientContext client) {
+        legalService.assertMandatoryConsentsGranted(authCompleteRegistrationDto.getConsents());
+
         UUID pendingRegistrationId = jwtService.extractPendingRegistrationId(authCompleteRegistrationDto.getSetPasswordToken());
 
         PendingRegistration pendingRegistration = pendingRegistrationService.getById(pendingRegistrationId);
@@ -155,6 +160,8 @@ public class AuthManager implements AuthService {
         User savedUser = userService.save(newUser);
 
         logger.info("User created successfully with ID: {}", savedUser.getId());
+
+        legalService.recordConsents(savedUser, authCompleteRegistrationDto.getConsents(), client);
 
         pendingRegistrationService.deleteById(pendingRegistrationId);
 

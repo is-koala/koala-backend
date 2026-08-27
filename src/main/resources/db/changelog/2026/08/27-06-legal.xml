@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-08-27-10-agreement-versions" author="koala">
+        <createTable tableName="agreement_versions">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="type" type="VARCHAR(48)"><constraints nullable="false"/></column>
+            <column name="version" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="locale" type="VARCHAR(8)"><constraints nullable="false"/></column>
+            <column name="content_url" type="VARCHAR(512)"/>
+            <column name="content_hash" type="VARCHAR(128)"/>
+            <column name="mandatory" type="BOOLEAN" defaultValueBoolean="true"><constraints nullable="false"/></column>
+            <column name="effective_from" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="retired_at" type="TIMESTAMPTZ"/>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+        </createTable>
+        <addUniqueConstraint tableName="agreement_versions" columnNames="type, version, locale"
+                             constraintName="uk_agreement_versions_type_version_locale"/>
+    </changeSet>
+
+    <changeSet id="2026-08-27-11-consent-records" author="koala">
+        <createTable tableName="consent_records">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="user_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="agreement_version_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="granted" type="BOOLEAN"><constraints nullable="false"/></column>
+            <column name="recorded_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="ip_address" type="VARCHAR(45)"/>
+            <column name="user_agent" type="VARCHAR(512)"/>
+            <column name="revoked_at" type="TIMESTAMPTZ"/>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="consent_records" baseColumnNames="user_id"
+                                 constraintName="fk_consent_records_user"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="consent_records" baseColumnNames="agreement_version_id"
+                                 constraintName="fk_consent_records_agreement"
+                                 referencedTableName="agreement_versions" referencedColumnNames="id"/>
+        <createIndex tableName="consent_records" indexName="idx_consent_records_user">
+            <column name="user_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="2026-08-27-12-account-deletion-requests" author="koala">
+        <createTable tableName="account_deletion_requests">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="user_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="status" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="reason" type="VARCHAR(512)"/>
+            <column name="requested_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="processed_at" type="TIMESTAMPTZ"/>
+            <column name="blocked_reason" type="VARCHAR(512)"/>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="account_deletion_requests" baseColumnNames="user_id"
+                                 constraintName="fk_deletion_requests_user"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+    </changeSet>
+
+    <changeSet id="2026-08-27-13-seed-agreement-versions" author="koala">
+        <sql>
+            INSERT INTO agreement_versions (id, type, version, locale, mandatory, effective_from, created_at)
+            VALUES
+              (gen_random_uuid(), 'TERMS_OF_SERVICE', '1.0', 'tr', true, now(), now()),
+              (gen_random_uuid(), 'PRIVACY_POLICY', '1.0', 'tr', true, now(), now()),
+              (gen_random_uuid(), 'EXPLICIT_CONSENT', '1.0', 'tr', true, now(), now()),
+              (gen_random_uuid(), 'COMMERCIAL_MESSAGE', '1.0', 'tr', false, now(), now());
+        </sql>
+        <rollback>
+            <sql>DELETE FROM agreement_versions WHERE version = '1.0';</sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>
