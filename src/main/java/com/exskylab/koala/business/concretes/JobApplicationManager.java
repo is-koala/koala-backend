@@ -51,7 +51,7 @@ public class JobApplicationManager implements JobApplicationService {
         logger.info("Applying to job with id: {}", jobId);
         var job = jobService.getById(jobId);
 
-        User authenticatedUser = securityService.getAuthenticatedUserFromContext();
+        User authenticatedUser = securityService.getAuthenticatedUser();
         logger.info("Applying to job with id: {} for userId: {}", jobId, authenticatedUser.getId());
 
         if (job.getCreator().getId().equals(authenticatedUser.getId())) {
@@ -90,11 +90,11 @@ public class JobApplicationManager implements JobApplicationService {
         Job job = jobService.getById(jobId);
 
         if (job.getEmployerType().equals(JobEmployerType.COMPANY)) {
-            if (!companyContactService.isUserAContactOfCompany(job.getCompany().getId(), securityService.getAuthenticatedUserFromContext().getId())) {
+            if (!companyContactService.isUserAContactOfCompany(job.getCompany().getId(), securityService.getAuthenticatedUserId())) {
                 throw new IllegalArgumentException(JobApplicationMessages.USER_NOT_CONTACT_OF_COMPANY_TO_VIEW_APPLICATIONS);
             }
         } else if (job.getEmployerType().equals(JobEmployerType.INDIVIDUAL)) {
-            if (!job.getCreator().getId().equals(securityService.getAuthenticatedUserFromContext().getId())) {
+            if (!job.getCreator().getId().equals(securityService.getAuthenticatedUserId())) {
                 throw new ResourceNotFoundException(JobApplicationMessages.USER_NOT_CREATOR_OF_INDIVIDUAL_JOB_TO_VIEW_APPLICATIONS);
             }
         }
@@ -166,7 +166,7 @@ public class JobApplicationManager implements JobApplicationService {
     }
 
     private void assertCurrentUserIsEmployerOf(Job job) {
-        User authenticatedUser = securityService.getAuthenticatedUserFromContext();
+        User authenticatedUser = securityService.getAuthenticatedUser();
 
         if (job.getEmployerType() == JobEmployerType.COMPANY) {
             if (!companyContactService.isUserAContactOfCompany(job.getCompany().getId(), authenticatedUser.getId())) {

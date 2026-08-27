@@ -22,8 +22,6 @@ import com.exskylab.koala.entities.*;
 import jakarta.validation.ValidationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -109,7 +107,7 @@ public class UserManager implements UserService {
     @Transactional
         public UserUpdateResponseDto patchCurrentUser(UserMePatchRequestDto userMePatchRequestDto) {
         logger.info("Patching current user.");
-        User currentUser = securityService.getAuthenticatedUserFromContext();
+        User currentUser = securityService.getAuthenticatedUser();
 
         List<UserVerification> pendingVerifications = new ArrayList<>();
 
@@ -232,7 +230,7 @@ public class UserManager implements UserService {
     @Transactional
     public void updateCurrentUserPassword(UserMeChangePasswordPutRequestDto userMeChangePasswordPutRequestDto, UUID currentSessionId) {
         logger.info("Updating current user password.");
-        User currentUser = securityService.getAuthenticatedUserFromContext();
+        User currentUser = securityService.getAuthenticatedUser();
         logger.info("Updating password for user with ID: {}", currentUser.getId());
 
         if (userMeChangePasswordPutRequestDto.getConfirmNewPassword().equals(userMeChangePasswordPutRequestDto.getCurrentPassword())){
@@ -267,7 +265,7 @@ public class UserManager implements UserService {
     @Transactional
     public void updateProfilePicture(MultipartFile image) {
         logger.info("Updating profile picture for current user.");
-        var currentUser = securityService.getAuthenticatedUserFromContext();
+        var currentUser = securityService.getAuthenticatedUser();
         logger.info("Uploading new profile picture for user with ID: {}", currentUser.getId());
 
         Image savedProfilePicture = imageService.uploadImage(image);
@@ -302,7 +300,7 @@ public class UserManager implements UserService {
     @Transactional
     public void verificateIdentityofAuthenticatedUser(UsersMeIdentityVerificationRequestDto usersMeIdentityVerificationRequestDto) {
         logger.info("Verificating identity of authenticated user.");
-        User currentUser = securityService.getAuthenticatedUserFromContext();
+        User currentUser = securityService.getAuthenticatedUser();
         logger.info("Verificating identity for user with ID: {}", currentUser.getId());
 
         if (currentUser.isIdentityVerified()){
@@ -338,7 +336,7 @@ public class UserManager implements UserService {
     @Transactional(readOnly = true)
     public UserMeResponseDto getCurrentUserFromDatabaseDto() {
         logger.info("Getting current user DTO.");
-        var authenticatedUser = securityService.getAuthenticatedUserFromDatabase();
+        var authenticatedUser = securityService.getAuthenticatedUser();
         return userMapper.toUserMeResponseDto(authenticatedUser);
     }
 
@@ -346,7 +344,7 @@ public class UserManager implements UserService {
     @Transactional
     public AddressDto updateAddressForCurrentUser(CreateAddressRequestDto addressDto) {
         logger.info("Updating address for current user.");
-        var currentUser = securityService.getAuthenticatedUserFromContext();
+        var currentUser = securityService.getAuthenticatedUser();
         logger.info("Updating address for user with ID: {}", currentUser.getId());
 
         var address = addressService.createAddress(addressDto);
@@ -362,11 +360,6 @@ public class UserManager implements UserService {
         return addressMapper.toAddressDto(address);
     }
 
-    @Override
-    public UserDetails loadUserByUsername(String username) {
-        return userDao.findByEmail(username)
-                .orElseThrow(() -> new UsernameNotFoundException(UserMessages.NOT_FOUND_BY_EMAIL));
-    }
 
 
     private String capitalizeFirstLetter(String input) {

@@ -1,39 +1,41 @@
 package com.exskylab.koala.core.configs;
 
 import com.exskylab.koala.business.abstracts.SecurityService;
+import com.exskylab.koala.dataAccess.UserDao;
 import com.exskylab.koala.entities.User;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.domain.AuditorAware;
 
 import java.util.Optional;
+import java.util.UUID;
 
 @Configuration
 public class AuditorAwareImpl implements AuditorAware<User> {
 
-    private final SecurityService securityService;
-    private final Logger logger = LoggerFactory.getLogger(this.getClass());
+    private static final UUID SYSTEM_USER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
 
-    public AuditorAwareImpl(SecurityService securityService) {
+    private final SecurityService securityService;
+    private final UserDao userDao;
+
+    public AuditorAwareImpl(SecurityService securityService, UserDao userDao) {
         this.securityService = securityService;
+        this.userDao = userDao;
     }
 
     @Override
     public Optional<User> getCurrentAuditor() {
-        try{
-            User authenticatedUser = securityService.getAuthenticatedUserFromContext();
-            return Optional.of(authenticatedUser);
-        } catch (Exception e){
-            logger.info("No authenticated user found, using system user for cretatedBy or updatedBy. Exception: {}", e.getMessage());
-            return Optional.of(securityService.getSystemUser());
+        UUID auditorId;
+        try {
+            auditorId = securityService.getAuthenticatedUserId();
+        } catch (RuntimeException e) {
+            auditorId = SYSTEM_USER_ID;
         }
+        return Optional.of(userDao.getReferenceById(auditorId));
     }
 
-
     @Bean
-    public AuditorAware<User> auditorAware(){
-        return new AuditorAwareImpl(securityService);
+    public AuditorAware<User> auditorAware() {
+        return this;
     }
 }

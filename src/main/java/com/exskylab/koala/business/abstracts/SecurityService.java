@@ -1,11 +1,17 @@
 package com.exskylab.koala.business.abstracts;
 
+import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.entities.User;
 
-public interface SecurityService {
-    User getAuthenticatedUserFromContext();
+import java.util.UUID;
 
-    User getAuthenticatedUserFromDatabase();
+public interface SecurityService {
+
+    UserPrincipal getAuthenticatedPrincipal();
+
+    UUID getAuthenticatedUserId();
+
+    User getAuthenticatedUser();
 
     User getSystemUser();
 }

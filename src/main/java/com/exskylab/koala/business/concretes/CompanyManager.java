@@ -64,7 +64,7 @@ public class CompanyManager implements CompanyService {
         }
 
         logger.info("Adding new company with name: {}", createCompanyRequestDto.getName());
-        var user = securityService.getAuthenticatedUserFromContext();
+        var user = securityService.getAuthenticatedUser();
         logger.info("User with id: {} is adding a new company.", user.getId());
 
         if (!user.isIdentityVerified()){
@@ -140,7 +140,7 @@ public class CompanyManager implements CompanyService {
         }
 
 
-        var currentUser = securityService.getAuthenticatedUserFromContext();
+        var currentUser = securityService.getAuthenticatedUser();
 
 
         var company = companyDao.findById(companyId).orElseThrow(() -> {

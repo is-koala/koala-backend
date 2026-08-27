@@ -46,7 +46,7 @@ public class JobManager implements JobService {
     @Transactional
     public UsersMeJobsPostResponseDto createIndividualJob(UsersMeJobsPostRequestDto usersMeJobsPostRequestDto) {
         logger.info("Creating individual job...");
-        User authenticatedUser = securityService.getAuthenticatedUserFromDatabase();
+        User authenticatedUser = securityService.getAuthenticatedUser();
         logger.info("Creating individual job for userId: {}", authenticatedUser.getId());
 
         if (!authenticatedUser.isEmployer()){
@@ -115,7 +115,7 @@ public class JobManager implements JobService {
     @Transactional
     public CompaniesCompanyIdJobsPostResponseDto createCorporateJob(String companyId, CompaniesCompanyIdJobsPostRequestDto companiesCompanyIdJobsPostRequestDto) {
         logger.info("Creating corporate job...");
-        User authenticatedUser = securityService.getAuthenticatedUserFromDatabase();
+        User authenticatedUser = securityService.getAuthenticatedUser();
         logger.info("Creating corporate job for userId: {}", authenticatedUser.getId());
 
         JobType type;

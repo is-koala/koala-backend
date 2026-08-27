@@ -104,10 +104,12 @@ public class SessionAuthFilter extends OncePerRequestFilter {
             sessionService.save(session);
 
 
+            UserPrincipal principal = UserPrincipal.from(user);
+
             UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                    user,
+                    principal,
                     null,
-                    user.getAuthorities()
+                    principal.getAuthorities()
             );
 
             authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));

@@ -90,7 +90,7 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
         CompanyContactInvitation invitation = companyContactInvitationDao.findById(invitationId)
                 .orElseThrow(() -> new CompanyContactInvitationNotFoundException(CompanyContactInvitationMessages.COMPANY_CONTACT_INVITATION_NOT_FOUND));
 
-        var currentUser = securityService.getAuthenticatedUserFromContext();
+        var currentUser = securityService.getAuthenticatedUser();
 
         if (!invitation.getInvitedUser().getId().equals(currentUser.getId())){
             throw new UserNotAssociatedWithInvitationException(CompanyContactInvitationMessages.USER_NOT_ASSOCIATED_WITH_INVITATION);
@@ -159,7 +159,7 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
     @Override
     public List<CompanyContactInvitationDto> getCompanyContactInvitationsByCompanyIdDto(UUID companyId) {
         logger.info("Getting company contact invitations for company with id: {}", companyId);
-        var currentUser = securityService.getAuthenticatedUserFromContext();
+        var currentUser = securityService.getAuthenticatedUser();
 
         var isAdmin = companyContactService.isUserAdminOfCompany(companyId, currentUser.getId());
 

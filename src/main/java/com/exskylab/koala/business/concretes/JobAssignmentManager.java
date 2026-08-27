@@ -73,7 +73,7 @@ public class JobAssignmentManager implements JobAssignmentService {
             throw new AssignmentAlreadyAnsweredException(JobAssignmentMessages.ALREADY_ANSWERED);
         }
 
-        var authenticatedUserFromContext = securityService.getAuthenticatedUserFromContext();
+        var authenticatedUserFromContext = securityService.getAuthenticatedUser();
 
         if (!assignment.getWorker().getId().equals(authenticatedUserFromContext.getId())) {
             throw new UserNotWorkerForAssignmentException(JobAssignmentMessages.NOT_WORKER_FOR_ASSIGNMENT);
@@ -114,7 +114,7 @@ public class JobAssignmentManager implements JobAssignmentService {
             throw new IllegalStateException(JobAssignmentMessages.ASSIGNMENT_NOT_READY_FOR_PAYMENT);
         }
 
-        var currentUser = securityService.getAuthenticatedUserFromDatabase();
+        var currentUser = securityService.getAuthenticatedUser();
         var worker = assignment.getWorker();
         var job = assignment.getJob();
         var creator = job.getCreator();
