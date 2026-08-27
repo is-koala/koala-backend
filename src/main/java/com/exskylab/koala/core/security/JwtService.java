@@ -48,6 +48,25 @@ public class JwtService {
        return UUID.fromString(claims.getSubject());
     }
 
+    public String generatePasswordResetToken(UUID userId) {
+        return Jwts.builder()
+                .subject(userId.toString())
+                .issuer("iskoala.com")
+                .audience().add("password-reset")
+                .and().issuedAt(new Date(System.currentTimeMillis()))
+                .expiration(new Date(System.currentTimeMillis() + PASSWORD_RESET_EXPIRATION_MS))
+                .signWith(getSignKey(), Jwts.SIG.HS256)
+                .compact();
+    }
+
+    public UUID extractPasswordResetUserId(String token) {
+        Claims claims = extractAllClaims(token);
+        if (!Set.of("password-reset").equals(claims.getAudience())) {
+            throw new IllegalArgumentException("{invalid.token}");
+        }
+        return UUID.fromString(claims.getSubject());
+    }
+
     public String extractSubject(String token) {
         return extractClaim(token, Claims::getSubject);
     }

@@ -125,6 +125,22 @@ public class AuthController {
 
 
 
+    @PostMapping("/forgot-password")
+    public ResponseEntity<SuccessResult> forgotPassword(@RequestBody @Valid ForgotPasswordDto forgotPasswordDto){
+        authService.requestPasswordReset(forgotPasswordDto);
+
+        return ResponseEntity.status(HttpStatus.OK).body(
+                new SuccessResult(AuthMessages.PASSWORD_RESET_REQUESTED, HttpStatus.OK));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<SuccessResult> resetPassword(@RequestBody @Valid ResetPasswordDto resetPasswordDto){
+        authService.resetPassword(resetPasswordDto);
+
+        return ResponseEntity.status(HttpStatus.OK).body(
+                new SuccessResult(AuthMessages.PASSWORD_RESET_COMPLETED, HttpStatus.OK));
+    }
+
     private String getClientIpAddress(HttpServletRequest request) {
         String remoteAddr = "";
         if(request != null){

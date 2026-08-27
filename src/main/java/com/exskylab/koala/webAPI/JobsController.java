@@ -7,7 +7,17 @@ import com.exskylab.koala.core.dtos.jobApplication.request.JobsJobIdApplications
 import com.exskylab.koala.core.dtos.jobApplication.response.JobsJobIdApplicationsGetResponseDto;
 import com.exskylab.koala.core.dtos.jobApplication.response.JobsJobIdApplicationsPostResponseDto;
 import com.exskylab.koala.core.mappers.JobApplicationMapper;
+import com.exskylab.koala.core.constants.JobMessages;
+import com.exskylab.koala.core.dtos.common.PageDto;
+import com.exskylab.koala.core.dtos.job.request.JobSearchCriteria;
+import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
+import com.exskylab.koala.core.mappers.JobMapper;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
+import com.exskylab.koala.core.utilities.results.SuccessResult;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
+
+import java.util.UUID;
 import jakarta.validation.Valid;
 import com.exskylab.koala.entities.JobApplication;
 import org.springframework.http.HttpStatus;
@@ -23,15 +33,39 @@ public class JobsController {
     private final JobService jobService;
     private final JobApplicationService jobApplicationService;
     private final JobApplicationMapper jobApplicationMapper;
+    private final JobMapper jobMapper;
 
 
-    public JobsController(JobService jobService, JobApplicationService jobApplicationService, JobApplicationMapper jobApplicationMapper) {
+    public JobsController(JobService jobService, JobApplicationService jobApplicationService, JobApplicationMapper jobApplicationMapper, JobMapper jobMapper) {
         this.jobService = jobService;
         this.jobApplicationService = jobApplicationService;
         this.jobApplicationMapper = jobApplicationMapper;
+        this.jobMapper = jobMapper;
     }
 
 
+
+    @GetMapping
+    public ResponseEntity<SuccessDataResult<PageDto<JobSummaryDto>>> searchJobs(
+            JobSearchCriteria criteria,
+            @PageableDefault(size = 20) Pageable pageable) {
+
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                jobService.search(criteria, pageable), JobMessages.JOBS_LISTED, HttpStatus.OK));
+    }
+
+    @GetMapping("/{jobId}")
+    public ResponseEntity<SuccessDataResult<JobSummaryDto>> getJob(@PathVariable UUID jobId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                jobMapper.toJobSummaryDto(jobService.getDetailedById(jobId)),
+                JobMessages.JOB_RETRIEVED, HttpStatus.OK));
+    }
+
+    @PostMapping("/{jobId}/close")
+    public ResponseEntity<SuccessResult> closeJob(@PathVariable UUID jobId) {
+        jobService.closeJob(jobId);
+        return ResponseEntity.ok(new SuccessResult(JobMessages.JOB_CLOSED, HttpStatus.OK));
+    }
 
     @PostMapping("/{jobId}/applications")
     public ResponseEntity<SuccessDataResult<JobsJobIdApplicationsPostResponseDto>> applyToJob(@PathVariable String jobId, @RequestBody @Valid JobsJobIdApplicationsPostRequestDto jobsJobIdApplicationsPostResponseDto){

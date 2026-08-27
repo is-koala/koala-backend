@@ -3,7 +3,12 @@ package com.exskylab.koala.webAPI;
 import com.exskylab.koala.business.abstracts.JobService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.UserService;
+import com.exskylab.koala.core.constants.JobMessages;
 import com.exskylab.koala.core.constants.UserMessages;
+import com.exskylab.koala.core.dtos.common.PageDto;
+import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import com.exskylab.koala.core.dtos.address.request.CreateAddressRequestDto;
 import com.exskylab.koala.core.dtos.address.response.AddressDto;
 import com.exskylab.koala.core.dtos.job.request.UsersMeJobsPostRequestDto;
@@ -132,6 +137,14 @@ public class UserController {
                         HttpStatus.OK));
     }
 
+
+    @GetMapping("/me/jobs")
+    public ResponseEntity<SuccessDataResult<PageDto<JobSummaryDto>>> myJobs(
+            @PageableDefault(size = 20) Pageable pageable) {
+
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                jobService.getJobsOfCurrentUser(pageable), JobMessages.JOBS_LISTED, HttpStatus.OK));
+    }
 
     @PostMapping("/me/jobs")
     public ResponseEntity<SuccessDataResult<UsersMeJobsPostResponseDto>> createJobForCurrentUser(@RequestBody @Valid UsersMeJobsPostRequestDto usersMeJobsPostRequestDto){

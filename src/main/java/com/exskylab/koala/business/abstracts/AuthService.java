@@ -20,4 +20,8 @@ public interface AuthService {
 
     void logout(UUID sessionId);
 
+    void requestPasswordReset(ForgotPasswordDto forgotPasswordDto);
+
+    void resetPassword(ResetPasswordDto resetPasswordDto);
+
 }

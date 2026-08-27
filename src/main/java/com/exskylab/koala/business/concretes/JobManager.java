@@ -6,7 +6,14 @@ import com.exskylab.koala.core.dtos.job.request.CompaniesCompanyIdJobsPostReques
 import com.exskylab.koala.core.dtos.job.request.UsersMeJobsPostRequestDto;
 import com.exskylab.koala.core.dtos.job.response.CompaniesCompanyIdJobsPostResponseDto;
 import com.exskylab.koala.core.dtos.job.response.UsersMeJobsPostResponseDto;
+import com.exskylab.koala.core.dtos.common.PageDto;
+import com.exskylab.koala.core.dtos.job.request.JobSearchCriteria;
+import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
+import com.exskylab.koala.core.helpers.PageableSanitizer;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import com.exskylab.koala.core.exceptions.UserIsNotEmployerException;
 import com.exskylab.koala.core.mappers.JobMapper;
 import com.exskylab.koala.dataAccess.JobDao;
@@ -16,7 +23,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class JobManager implements JobService {
@@ -32,14 +44,19 @@ public class JobManager implements JobService {
 
     private final AddressService addressService;
     private final JobMapper jobMapper;
+    private final PageableSanitizer pageableSanitizer;
+    private final CompanyContactService companyContactService;
 
-    public JobManager(JobDao jobDao, SecurityService securityService, JobCategoryService jobCategoryService, AddressService addressService, CompanyService companyService, JobMapper jobMapper) {
+    public JobManager(JobDao jobDao, SecurityService securityService, JobCategoryService jobCategoryService, AddressService addressService, CompanyService companyService, JobMapper jobMapper,
+                      PageableSanitizer pageableSanitizer, CompanyContactService companyContactService) {
         this.jobDao = jobDao;
         this.securityService = securityService;
         this.jobCategoryService = jobCategoryService;
         this.addressService = addressService;
         this.companyService = companyService;
         this.jobMapper = jobMapper;
+        this.pageableSanitizer = pageableSanitizer;
+        this.companyContactService = companyContactService;
     }
 
     @Override
@@ -200,5 +217,88 @@ public class JobManager implements JobService {
     public boolean existsById(String jobId) {
         logger.info("Checking existence of job with id: {}", jobId);
         return jobDao.existsById(UUID.fromString(jobId));
+    }
+
+    private static final Set<String> SORTABLE_FIELDS =
+            Set.of("createdAt", "salary", "startDateTime", "title");
+
+    private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
+
+    @Override
+    @Transactional(readOnly = true)
+    public Job getDetailedById(UUID jobId) {
+        return jobDao.findWithDetailsById(jobId)
+                .orElseThrow(() -> new ResourceNotFoundException(JobMessages.JOB_NOT_FOUND));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageDto<JobSummaryDto> search(JobSearchCriteria criteria, Pageable requested) {
+        pageableSanitizer.rejectUnknownSort(requested, SORTABLE_FIELDS);
+        Pageable pageable = pageableSanitizer.sanitize(requested, SORTABLE_FIELDS, DEFAULT_SORT);
+
+        Page<UUID> ids = jobDao.searchIds(
+                JobStatus.OPEN,
+                blankToNull(criteria.getQuery()),
+                criteria.getCategoryId(),
+                criteria.getCityId(),
+                criteria.getDistrictId(),
+                criteria.getType(),
+                criteria.getSalaryType(),
+                criteria.getEmployerType(),
+                criteria.getMinSalary(),
+                criteria.getMaxSalary(),
+                criteria.getInsuranceRequired(),
+                criteria.getExperienceRequired(),
+                pageable);
+
+        return PageDto.of(ids, jobMapper.toJobSummaryDtoList(inIdOrder(ids.getContent())));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageDto<JobSummaryDto> getJobsOfCurrentUser(Pageable requested) {
+        pageableSanitizer.rejectUnknownSort(requested, SORTABLE_FIELDS);
+        Pageable pageable = pageableSanitizer.sanitize(requested, SORTABLE_FIELDS, DEFAULT_SORT);
+
+        Page<Job> jobs = jobDao.findAllByCreatorId(securityService.getAuthenticatedUserId(), pageable);
+        return PageDto.of(jobs, jobMapper::toJobSummaryDto);
+    }
+
+    @Override
+    @Transactional
+    public void closeJob(UUID jobId) {
+        Job job = jobDao.findById(jobId)
+                .orElseThrow(() -> new ResourceNotFoundException(JobMessages.JOB_NOT_FOUND));
+
+        UUID currentUserId = securityService.getAuthenticatedUserId();
+        boolean isOwner = job.getCreator() != null && job.getCreator().getId().equals(currentUserId);
+        boolean isCompanyContact = job.getCompany() != null
+                && companyContactService.isUserAContactOfCompany(job.getCompany().getId(), currentUserId);
+
+        if (!isOwner && !isCompanyContact) {
+            throw new ResourceNotFoundException(JobMessages.JOB_NOT_FOUND);
+        }
+
+        if (job.getStatus() != JobStatus.OPEN) {
+            throw new IllegalStateException(JobMessages.JOB_NOT_OPEN);
+        }
+
+        job.setStatus(JobStatus.CLOSED);
+        jobDao.save(job);
+        logger.info("Job {} closed by user {}", jobId, currentUserId);
+    }
+
+    private List<Job> inIdOrder(List<UUID> ids) {
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, Job> loaded = jobDao.findAllByIdIn(ids).stream()
+                .collect(Collectors.toMap(Job::getId, job -> job));
+        return ids.stream().map(loaded::get).filter(Objects::nonNull).toList();
+    }
+
+    private String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 }

@@ -311,6 +311,50 @@ public class AuthManager implements AuthService {
         logger.info("Session ID: {} logged out successfully", sessionId);
     }
 
+    @Override
+    @Transactional
+    public void requestPasswordReset(ForgotPasswordDto forgotPasswordDto) {
+        logger.info("Password reset requested.");
+
+        User user;
+        try {
+            user = userService.getByEmail(forgotPasswordDto.getEmail());
+        } catch (RuntimeException e) {
+            logger.info("Password reset requested for an unknown address. Responding without disclosing it.");
+            return;
+        }
+
+        String resetToken = jwtService.generatePasswordResetToken(user.getId());
+        String resetLink = appProperties.frontendUrl() + "/reset-password?token=" + resetToken;
+
+        SendEmailDto sendEmailDto = new SendEmailDto();
+        sendEmailDto.setRecipient(user);
+        sendEmailDto.setCategory(NotificationCategory.ACCOUNT_SECURITY);
+        sendEmailDto.setDestinationEmail(user.getEmail());
+        sendEmailDto.setSubject("Koala parola sıfırlama");
+        sendEmailDto.setTemplateName("registration-verification-template");
+        sendEmailDto.setTemplateParameters(Map.of(
+                "firstName", user.getFirstName() == null ? "" : user.getFirstName(),
+                "lastName", user.getLastName() == null ? "" : user.getLastName(),
+                "verificationLink", resetLink));
+
+        notificationService.sendEmail(sendEmailDto, DispatchPriority.CRITICAL, true);
+        logger.info("Password reset mail queued for user id: {}", user.getId());
+    }
+
+    @Override
+    @Transactional
+    public void resetPassword(ResetPasswordDto resetPasswordDto) {
+        UUID userId = jwtService.extractPasswordResetUserId(resetPasswordDto.getResetToken());
+
+        User user = userService.getById(userId);
+        user.setPassword(passwordEncoder.encode(resetPasswordDto.getNewPassword()));
+        userService.save(user);
+
+        sessionService.invalidateActiveSessionsForUserIdExcludingSessionId(userId, null);
+        logger.info("Password reset completed for user id: {}, all sessions invalidated.", userId);
+    }
+
     private void sendWelcomeEmail(User savedUser) {
         logger.debug("Sending welcome email to user with ID: {}", savedUser.getId());
 

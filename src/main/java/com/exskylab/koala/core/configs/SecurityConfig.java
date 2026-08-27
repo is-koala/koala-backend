@@ -43,6 +43,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST,"/auth/complete-registration").permitAll()
                         .requestMatchers(HttpMethod.POST,"/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST,"/auth/refresh-token").permitAll()
+                        .requestMatchers(HttpMethod.POST,"/auth/forgot-password").permitAll()
+                        .requestMatchers(HttpMethod.POST,"/auth/reset-password").permitAll()
                         .requestMatchers(HttpMethod.POST,"/auth/logout").authenticated()
 
                         //companycontactinvitation endpoints
@@ -75,7 +77,14 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/user-verifications/{id}").hasAnyRole("USER", "ADMIN")
 
 
+                        //reference data (public)
+                        .requestMatchers(HttpMethod.GET, "/reference/**").permitAll()
+
                         //job endpoints
+                        .requestMatchers(HttpMethod.GET, "/jobs").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/jobs/{jobId}").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/jobs/{jobId}/close").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/users/me/jobs").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/jobs/{jobId}/applications").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/jobs/{jobId}/applications").hasAnyRole("USER", "ADMIN")
 

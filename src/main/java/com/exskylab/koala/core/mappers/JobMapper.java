@@ -1,12 +1,15 @@
 package com.exskylab.koala.core.mappers;
 
 import com.exskylab.koala.core.dtos.job.response.CompaniesCompanyIdJobsPostResponseDto;
+import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
 import com.exskylab.koala.core.dtos.job.response.ShortJobDto;
 import com.exskylab.koala.core.dtos.job.response.UsersMeJobsPostResponseDto;
 import com.exskylab.koala.entities.Job;
 import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+
+import java.util.List;
 
 @Mapper(componentModel = "spring",
         uses = {UserMapper.class, JobCategoryMapper.class, AddressMapper.class, CompanyMapper.class},
@@ -18,4 +21,11 @@ public interface JobMapper {
     CompaniesCompanyIdJobsPostResponseDto toCompaniesCompanyIdJobsPostResponseDto(Job job);
 
     ShortJobDto toShortJobDto(Job job);
+
+    @Mapping(target = "cityName", source = "address.city.name")
+    @Mapping(target = "districtName", source = "address.district.name")
+    @Mapping(target = "companyName", source = "company.name")
+    JobSummaryDto toJobSummaryDto(Job job);
+
+    List<JobSummaryDto> toJobSummaryDtoList(List<Job> jobs);
 }
