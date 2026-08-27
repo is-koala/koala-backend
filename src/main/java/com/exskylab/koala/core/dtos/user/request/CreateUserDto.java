@@ -1,4 +1,4 @@
-package com.exskylab.koala.core.dtos.user;
+package com.exskylab.koala.core.dtos.user.request;
 
 import com.exskylab.koala.entities.Gender;
 import jakarta.validation.constraints.Email;

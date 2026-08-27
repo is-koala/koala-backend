@@ -20,7 +20,7 @@ import java.time.LocalDateTime;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class UsersMeJobsPostRequestDto {
+public class CreateIndividualJobDto {
 
     @UUID(message = JobMessages.CATEGORY_UUID_ID_INVALID)
     private String categoryId;

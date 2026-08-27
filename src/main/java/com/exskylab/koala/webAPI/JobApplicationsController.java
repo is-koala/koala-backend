@@ -2,8 +2,8 @@ package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.business.abstracts.JobApplicationService;
 import com.exskylab.koala.core.constants.JobApplicationMessages;
-import com.exskylab.koala.core.dtos.jobApplication.request.JobApplicationsApplicationIdPatchRequestDto;
-import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationsApplicationIdPatchResponseDto;
+import com.exskylab.koala.core.dtos.jobApplication.request.AnswerApplicationDto;
+import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationDetailDto;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -22,13 +22,13 @@ public class JobApplicationsController {
     }
 
 
-    @PatchMapping("/{applicationId}")
-    public ResponseEntity<SuccessDataResult<JobApplicationsApplicationIdPatchResponseDto>> respondToApplication(@PathVariable String applicationId,
-                                                                                                                @RequestBody @Valid JobApplicationsApplicationIdPatchRequestDto jobApplicationsApplicationIdPatchRequestDto){
+    @PostMapping("/{applicationId}/respond")
+    public ResponseEntity<SuccessDataResult<JobApplicationDetailDto>> respondToApplication(@PathVariable String applicationId,
+                                                                                                                @RequestBody @Valid AnswerApplicationDto jobApplicationsApplicationIdPatchRequestDto){
 
-        JobApplicationsApplicationIdPatchResponseDto dto = jobApplicationService.respondToApplication(applicationId, jobApplicationsApplicationIdPatchRequestDto);
+        JobApplicationDetailDto dto = jobApplicationService.respondToApplication(applicationId, jobApplicationsApplicationIdPatchRequestDto);
 
-        return ResponseEntity.status(HttpStatus.OK).body(new SuccessDataResult<JobApplicationsApplicationIdPatchResponseDto>(
+        return ResponseEntity.status(HttpStatus.OK).body(new SuccessDataResult<JobApplicationDetailDto>(
                 dto,
                 JobApplicationMessages.JOB_APPLICATION_RESPONDED_SUCCESS,
                 HttpStatus.OK

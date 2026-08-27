@@ -2,11 +2,11 @@ package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.*;
 import com.exskylab.koala.core.constants.JobApplicationMessages;
-import com.exskylab.koala.core.dtos.jobApplication.request.JobApplicationsApplicationIdPatchRequestDto;
-import com.exskylab.koala.core.dtos.jobApplication.request.JobsJobIdApplicationsPostRequestDto;
-import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationsApplicationIdPatchResponseDto;
-import com.exskylab.koala.core.dtos.jobApplication.response.JobsJobIdApplicationsGetResponseDto;
-import com.exskylab.koala.core.dtos.jobApplication.response.JobsJobIdApplicationsPostResponseDto;
+import com.exskylab.koala.core.dtos.jobApplication.request.AnswerApplicationDto;
+import com.exskylab.koala.core.dtos.jobApplication.request.CreateJobApplicationDto;
+import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationDetailDto;
+import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicantDto;
+import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.UserNotAssociatedWithCompanyException;
 import com.exskylab.koala.core.mappers.JobApplicationMapper;
@@ -58,7 +58,7 @@ public class JobApplicationManager implements JobApplicationService {
 
     @Override
     @Transactional
-    public JobsJobIdApplicationsPostResponseDto applyToJob(String jobId, JobsJobIdApplicationsPostRequestDto jobsJobIdApplicationsPostRequestDto) {
+    public JobApplicationDto applyToJob(String jobId, CreateJobApplicationDto jobsJobIdApplicationsPostRequestDto) {
         logger.info("Applying to job with id: {}", jobId);
         var job = jobService.getById(jobId);
 
@@ -96,7 +96,7 @@ public class JobApplicationManager implements JobApplicationService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<JobsJobIdApplicationsGetResponseDto> getJobApplicationsByIdJobId(String jobId) {
+    public List<JobApplicantDto> getJobApplicationsByIdJobId(String jobId) {
         logger.debug("Fetching job applications for job id: {}", jobId);
         Job job = jobService.getById(jobId);
 
@@ -117,7 +117,7 @@ public class JobApplicationManager implements JobApplicationService {
 
     @Override
     @Transactional
-    public JobApplicationsApplicationIdPatchResponseDto respondToApplication(String applicationId, JobApplicationsApplicationIdPatchRequestDto jobApplicationsApplicationIdPatchRequestDto) {
+    public JobApplicationDetailDto respondToApplication(String applicationId, AnswerApplicationDto jobApplicationsApplicationIdPatchRequestDto) {
         logger.info("Responding to application with id: {}", applicationId);
 
 

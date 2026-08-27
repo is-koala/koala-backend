@@ -3,9 +3,9 @@ package com.exskylab.koala.webAPI;
 import com.exskylab.koala.business.abstracts.JobApplicationService;
 import com.exskylab.koala.business.abstracts.JobService;
 import com.exskylab.koala.core.constants.JobApplicationMessages;
-import com.exskylab.koala.core.dtos.jobApplication.request.JobsJobIdApplicationsPostRequestDto;
-import com.exskylab.koala.core.dtos.jobApplication.response.JobsJobIdApplicationsGetResponseDto;
-import com.exskylab.koala.core.dtos.jobApplication.response.JobsJobIdApplicationsPostResponseDto;
+import com.exskylab.koala.core.dtos.jobApplication.request.CreateJobApplicationDto;
+import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicantDto;
+import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationDto;
 import com.exskylab.koala.core.mappers.JobApplicationMapper;
 import com.exskylab.koala.core.constants.JobMessages;
 import com.exskylab.koala.core.dtos.common.PageDto;
@@ -69,12 +69,12 @@ public class JobsController {
     }
 
     @PostMapping("/{jobId}/applications")
-    public ResponseEntity<SuccessDataResult<JobsJobIdApplicationsPostResponseDto>> applyToJob(@PathVariable String jobId, @RequestBody @Valid JobsJobIdApplicationsPostRequestDto jobsJobIdApplicationsPostResponseDto){
+    public ResponseEntity<SuccessDataResult<JobApplicationDto>> applyToJob(@PathVariable String jobId, @RequestBody @Valid CreateJobApplicationDto jobsJobIdApplicationsPostResponseDto){
 
-        JobsJobIdApplicationsPostResponseDto jobApplicationsDto = jobApplicationService.applyToJob(jobId, jobsJobIdApplicationsPostResponseDto);
+        JobApplicationDto jobApplicationsDto = jobApplicationService.applyToJob(jobId, jobsJobIdApplicationsPostResponseDto);
 
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(new SuccessDataResult<JobsJobIdApplicationsPostResponseDto>(
+        return ResponseEntity.status(HttpStatus.CREATED).body(new SuccessDataResult<JobApplicationDto>(
                 jobApplicationsDto,
                 JobApplicationMessages.JOB_APPLICATION_CREATED_SUCCESS,
                 HttpStatus.CREATED
@@ -84,11 +84,11 @@ public class JobsController {
 
 
     @GetMapping("/{jobId}/applications")
-    public ResponseEntity<SuccessDataResult<List<JobsJobIdApplicationsGetResponseDto>>> getJobApplicationById(@PathVariable String jobId){
+    public ResponseEntity<SuccessDataResult<List<JobApplicantDto>>> getJobApplicationById(@PathVariable String jobId){
 
-        List<JobsJobIdApplicationsGetResponseDto> jobApplicationsDto = jobApplicationService.getJobApplicationsByIdJobId(jobId);
+        List<JobApplicantDto> jobApplicationsDto = jobApplicationService.getJobApplicationsByIdJobId(jobId);
 
-        return ResponseEntity.ok(new SuccessDataResult<List<JobsJobIdApplicationsGetResponseDto>>(
+        return ResponseEntity.ok(new SuccessDataResult<List<JobApplicantDto>>(
                 jobApplicationsDto,
                 JobApplicationMessages.JOB_APPLICATIONS_RETRIEVED_SUCCESS,
                 HttpStatus.OK

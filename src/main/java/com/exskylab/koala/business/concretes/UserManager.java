@@ -6,10 +6,10 @@ import com.exskylab.koala.business.abstracts.*;
 import com.exskylab.koala.core.constants.UserMessages;
 import com.exskylab.koala.core.dtos.address.request.CreateAddressRequestDto;
 import com.exskylab.koala.core.dtos.address.response.AddressDto;
-import com.exskylab.koala.core.dtos.user.UpdateUserDto;
-import com.exskylab.koala.core.dtos.user.request.UserMeChangePasswordPutRequestDto;
-import com.exskylab.koala.core.dtos.user.request.UserMePatchRequestDto;
-import com.exskylab.koala.core.dtos.user.request.UsersMeIdentityVerificationRequestDto;
+import com.exskylab.koala.core.dtos.user.request.UpdateUserDto;
+import com.exskylab.koala.core.dtos.user.request.ChangePasswordDto;
+import com.exskylab.koala.core.dtos.user.request.UpdateProfileDto;
+import com.exskylab.koala.core.dtos.user.request.VerifyIdentityDto;
 import com.exskylab.koala.core.dtos.user.response.UserMeResponseDto;
 import com.exskylab.koala.core.dtos.user.response.UserUpdateResponseDto;
 import com.exskylab.koala.core.exceptions.UserNotFoundException;
@@ -119,7 +119,7 @@ public class UserManager implements UserService {
 
     @Override
     @Transactional
-        public UserUpdateResponseDto patchCurrentUser(UserMePatchRequestDto userMePatchRequestDto) {
+        public UserUpdateResponseDto patchCurrentUser(UpdateProfileDto userMePatchRequestDto) {
         logger.info("Patching current user.");
         User currentUser = securityService.getAuthenticatedUser();
 
@@ -250,7 +250,7 @@ public class UserManager implements UserService {
 
     @Override
     @Transactional
-    public void updateCurrentUserPassword(UserMeChangePasswordPutRequestDto userMeChangePasswordPutRequestDto, UUID currentSessionId) {
+    public void updateCurrentUserPassword(ChangePasswordDto userMeChangePasswordPutRequestDto, UUID currentSessionId) {
         logger.info("Updating current user password.");
         User currentUser = securityService.getAuthenticatedUser();
         logger.info("Updating password for user with ID: {}", currentUser.getId());
@@ -320,7 +320,7 @@ public class UserManager implements UserService {
 
     @Override
     @Transactional
-    public void verificateIdentityofAuthenticatedUser(UsersMeIdentityVerificationRequestDto usersMeIdentityVerificationRequestDto) {
+    public void verificateIdentityofAuthenticatedUser(VerifyIdentityDto usersMeIdentityVerificationRequestDto) {
         logger.info("Verificating identity of authenticated user.");
         User currentUser = securityService.getAuthenticatedUser();
         logger.info("Verificating identity for user with ID: {}", currentUser.getId());

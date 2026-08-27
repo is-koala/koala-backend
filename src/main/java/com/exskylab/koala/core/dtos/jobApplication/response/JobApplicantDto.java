@@ -1,7 +1,5 @@
 package com.exskylab.koala.core.dtos.jobApplication.response;
 
-import com.exskylab.koala.core.dtos.job.response.ShortJobDto;
-import com.exskylab.koala.core.dtos.jobAssignment.response.ShortJobAssignmentDto;
 import com.exskylab.koala.core.dtos.user.response.SafeUserDto;
 import com.exskylab.koala.entities.ApplicationStatus;
 import lombok.AllArgsConstructor;
@@ -16,7 +14,7 @@ import java.util.UUID;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class JobApplicationsApplicationIdPatchResponseDto {
+public class JobApplicantDto {
 
     private UUID id;
 
@@ -26,11 +24,6 @@ public class JobApplicationsApplicationIdPatchResponseDto {
 
     private String notes;
 
-    private ShortJobDto job;
-
     private SafeUserDto applicant;
-
-    private ShortJobAssignmentDto assignment;
-
 
 }

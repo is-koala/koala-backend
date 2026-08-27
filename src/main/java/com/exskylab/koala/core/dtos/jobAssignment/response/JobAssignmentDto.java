@@ -16,7 +16,7 @@ import java.util.UUID;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class JobAssignmentsAssignmentIdStatusPatchResponseDto {
+public class JobAssignmentDto {
 
     private UUID id;
 

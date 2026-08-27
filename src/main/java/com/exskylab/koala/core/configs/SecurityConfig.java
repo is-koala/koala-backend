@@ -48,8 +48,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST,"/auth/logout").authenticated()
 
                         //companycontactinvitation endpoints
-                        .requestMatchers(HttpMethod.POST,"/company-contact-invitations/{invitationId}").hasAnyRole("USER", "ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/company-contact-invitations/{invitationId}").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST,"/contact-invitations/{invitationId}").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/contact-invitations/{invitationId}").hasAnyRole("USER", "ADMIN")
 
                         //company endpoints
                         .requestMatchers(HttpMethod.POST,"/companies").hasAnyRole("USER", "ADMIN")
@@ -69,14 +69,14 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE,"/images/{imageId}").hasAnyRole("USER", "ADMIN")
 
                         //notification endpoints
-                        .requestMatchers(HttpMethod.GET,"/notifications/track/**").permitAll()
+                        .requestMatchers(HttpMethod.GET,"/notification-tracking/**").permitAll()
 
                         //user endpoints
                         .requestMatchers(HttpMethod.GET, "/users/me").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/users/me").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/users/me/password").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/users/me/profile-picture").hasAnyRole("USER", "ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/users/me/identity-verification").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/users/me/identity-verification").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/users/me/jobs").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/users/me/address").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/users/me/applications").hasAnyRole("USER", "ADMIN")
@@ -97,7 +97,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/users/me/educations/{educationId}").hasAnyRole("USER", "ADMIN")
 
                         //verification endpoints
-                        .requestMatchers(HttpMethod.POST, "/user-verifications/{id}").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/verifications/{verificationId}/confirm").hasAnyRole("USER", "ADMIN")
 
 
                         //legal endpoints
@@ -119,26 +119,24 @@ public class SecurityConfig {
 
 
                         //job-application endpoints
-                        .requestMatchers(HttpMethod.PATCH, "/job-applications/{applicationId}").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/job-applications/{applicationId}/respond").hasAnyRole("USER", "ADMIN")
 
 
 
                         //job-assignment endpoints
-                        .requestMatchers(HttpMethod.PATCH, "/job-assignments/{assignmentId}/status").hasAnyRole("USER", "ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/job-assignments/{assignmentId}/payment-session/initiate").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/job-assignments/{assignmentId}/respond").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/job-assignments/{assignmentId}/payment-session").hasAnyRole("USER", "ADMIN")
 
 
                         //payment endpoints
                         .requestMatchers(HttpMethod.POST, "/payments/callback").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/payments/job-assignments/{assignmentId}").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/job-assignments/{assignmentId}/payments").hasAnyRole("USER", "ADMIN")
 
                         //payout endpoints
-                        .requestMatchers(HttpMethod.GET, "/payouts/me").hasAnyRole("USER", "ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/payouts/job-assignments/{assignmentId}/release").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/payouts/job-assignments/{assignmentId}/refund").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/users/me/payouts").hasAnyRole("USER", "ADMIN")
 
                         //messaging endpoints
-                        .requestMatchers("/conversations/**").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers("/conversations/**", "/jobs/{jobId}/conversation").hasAnyRole("USER", "ADMIN")
                         .requestMatchers("/users/me/blocks/**").hasAnyRole("USER", "ADMIN")
 
                         //assignment operation endpoints
@@ -152,22 +150,18 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/job-assignments/{assignmentId}/work-sessions").hasAnyRole("USER", "ADMIN")
 
                         //dispute administration endpoints
-                        .requestMatchers(HttpMethod.GET, "/disputes/pending").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/disputes/{disputeId}/resolve").hasRole("ADMIN")
 
                         //report endpoints
                         .requestMatchers(HttpMethod.POST, "/reports").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/reports/me").hasAnyRole("USER", "ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/reports").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/reports/{reportId}/review").hasRole("ADMIN")
 
                         //badge endpoints
                         .requestMatchers(HttpMethod.GET, "/users/{userId}/badges").permitAll()
 
                         //review endpoints
-                        .requestMatchers(HttpMethod.POST, "/reviews/job-assignments/{assignmentId}").hasAnyRole("USER", "ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/reviews/users/{userId}").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/reviews/users/{userId}/summary").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/job-assignments/{assignmentId}/reviews").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/users/{userId}/reviews").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/users/{userId}/rating-summary").permitAll()
 
                         //actuator
                         .requestMatchers("/actuator/health/**").permitAll()

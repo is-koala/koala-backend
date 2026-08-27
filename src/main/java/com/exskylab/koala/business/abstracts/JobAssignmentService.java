@@ -1,8 +1,8 @@
 package com.exskylab.koala.business.abstracts;
 
-import com.exskylab.koala.core.dtos.jobAssignment.request.JobAssignmentsAssignmentIdStatusPatchRequestDto;
-import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto;
-import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentsAssignmentIdStatusPatchResponseDto;
+import com.exskylab.koala.core.dtos.jobAssignment.request.AnswerAssignmentDto;
+import com.exskylab.koala.core.dtos.jobAssignment.response.PaymentSessionDto;
+import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentDto;
 import com.exskylab.koala.entities.JobAssignment;
 import jakarta.validation.Valid;
 
@@ -16,9 +16,9 @@ import org.springframework.data.domain.Pageable;
 public interface JobAssignmentService {
     JobAssignment save(JobAssignment jobAssignment);
 
-    JobAssignmentsAssignmentIdStatusPatchResponseDto answerToAssignment(UUID assignmentId, JobAssignmentsAssignmentIdStatusPatchRequestDto jobAssignmentsAssignmentIdStatusPatchRequestDto);
+    JobAssignmentDto answerToAssignment(UUID assignmentId, AnswerAssignmentDto jobAssignmentsAssignmentIdStatusPatchRequestDto);
 
-    JobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto initiatePaymentSession(UUID assignmentId, String clientIpAddress);
+    PaymentSessionDto initiatePaymentSession(UUID assignmentId, String clientIpAddress);
 
     Page<JobAssignment> getMyAssignments(boolean asEmployer, Pageable pageable);
 

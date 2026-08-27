@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/payouts")
+@RequestMapping
 public class PayoutsController {
 
     private final PayoutService payoutService;
@@ -31,7 +31,7 @@ public class PayoutsController {
         this.securityService = securityService;
     }
 
-    @GetMapping("/me")
+    @GetMapping("/users/me/payouts")
     public ResponseEntity<SuccessDataResult<List<PayoutDto>>> myPayouts() {
         List<PayoutDto> payouts = payoutMapper.toPayoutDtoList(
                 payoutService.getPayoutsForWorker(securityService.getAuthenticatedUserId()));
@@ -40,7 +40,7 @@ public class PayoutsController {
                 payouts, PayoutMessages.LISTED, HttpStatus.OK));
     }
 
-    @PostMapping("/job-assignments/{assignmentId}/release")
+    @PostMapping("/admin/job-assignments/{assignmentId}/release")
     public ResponseEntity<SuccessDataResult<PayoutDto>> release(@PathVariable UUID assignmentId) {
         PayoutDto payout = payoutMapper.toPayoutDto(payoutService.releaseToWorker(assignmentId));
 
@@ -48,7 +48,7 @@ public class PayoutsController {
                 payout, PayoutMessages.RELEASED, HttpStatus.OK));
     }
 
-    @PostMapping("/job-assignments/{assignmentId}/refund")
+    @PostMapping("/admin/job-assignments/{assignmentId}/refund")
     public ResponseEntity<SuccessResult> refund(@PathVariable UUID assignmentId,
                                                 @RequestBody @Valid RefundRequestDto request) {
         payoutService.refundEmployer(assignmentId, request.getAmount(), request.getReason());

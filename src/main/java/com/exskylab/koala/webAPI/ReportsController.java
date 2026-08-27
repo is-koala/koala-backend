@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/reports")
+@RequestMapping
 public class ReportsController {
 
     private final ReportService reportService;
@@ -30,7 +30,7 @@ public class ReportsController {
         this.reportMapper = reportMapper;
     }
 
-    @PostMapping
+    @PostMapping("/reports")
     public ResponseEntity<SuccessDataResult<ReportDto>> create(@RequestBody @Valid CreateReportDto request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(new SuccessDataResult<>(
                 reportMapper.toReportDto(reportService.createReport(
@@ -39,7 +39,7 @@ public class ReportsController {
                 ReportMessages.CREATED, HttpStatus.CREATED));
     }
 
-    @GetMapping("/me")
+    @GetMapping("/reports/me")
     public ResponseEntity<SuccessDataResult<PageDto<ReportDto>>> mine(
             @PageableDefault(size = 20) Pageable pageable) {
 
@@ -49,7 +49,7 @@ public class ReportsController {
                 ReportMessages.LISTED, HttpStatus.OK));
     }
 
-    @GetMapping
+    @GetMapping("/admin/reports")
     public ResponseEntity<SuccessDataResult<PageDto<ReportDto>>> byStatus(
             @RequestParam ReportStatus status, @PageableDefault(size = 20) Pageable pageable) {
 
@@ -59,7 +59,7 @@ public class ReportsController {
                 ReportMessages.LISTED, HttpStatus.OK));
     }
 
-    @PostMapping("/{reportId}/review")
+    @PostMapping("/admin/reports/{reportId}/review")
     public ResponseEntity<SuccessDataResult<ReportDto>> review(
             @PathVariable UUID reportId, @RequestBody @Valid ReviewReportDto request) {
 

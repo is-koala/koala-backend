@@ -11,7 +11,7 @@ import lombok.Setter;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class JobAssignmentsAssignmentIdStatusPatchRequestDto {
+public class AnswerAssignmentDto {
     @NotNull(message = AuthMessages.ANSWER_NOT_NULL)
     private Boolean accepted;
 }

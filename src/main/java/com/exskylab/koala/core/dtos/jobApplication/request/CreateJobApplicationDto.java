@@ -10,7 +10,7 @@ import lombok.Setter;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class JobsJobIdApplicationsPostRequestDto {
+public class CreateJobApplicationDto {
 
     @Size(max = 2000)
     private String notes;

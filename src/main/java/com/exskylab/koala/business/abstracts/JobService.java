@@ -1,9 +1,9 @@
 package com.exskylab.koala.business.abstracts;
 
-import com.exskylab.koala.core.dtos.job.request.CompaniesCompanyIdJobsPostRequestDto;
-import com.exskylab.koala.core.dtos.job.request.UsersMeJobsPostRequestDto;
-import com.exskylab.koala.core.dtos.job.response.CompaniesCompanyIdJobsPostResponseDto;
-import com.exskylab.koala.core.dtos.job.response.UsersMeJobsPostResponseDto;
+import com.exskylab.koala.core.dtos.job.request.CreateCompanyJobDto;
+import com.exskylab.koala.core.dtos.job.request.CreateIndividualJobDto;
+import com.exskylab.koala.core.dtos.job.response.CompanyJobDto;
+import com.exskylab.koala.core.dtos.job.response.IndividualJobDto;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.job.request.JobSearchCriteria;
 import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
@@ -13,9 +13,9 @@ import org.springframework.data.domain.Pageable;
 import java.util.UUID;
 
 public interface JobService {
-    UsersMeJobsPostResponseDto createIndividualJob(UsersMeJobsPostRequestDto usersMeJobsPostRequestDto);
+    IndividualJobDto createIndividualJob(CreateIndividualJobDto usersMeJobsPostRequestDto);
 
-    CompaniesCompanyIdJobsPostResponseDto createCorporateJob(String companyId, CompaniesCompanyIdJobsPostRequestDto companiesCompanyIdJobsPostRequestDto);
+    CompanyJobDto createCorporateJob(String companyId, CreateCompanyJobDto companiesCompanyIdJobsPostRequestDto);
 
     Job getById(String jobId);
 

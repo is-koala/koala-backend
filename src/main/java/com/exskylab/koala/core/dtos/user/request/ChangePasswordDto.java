@@ -12,7 +12,7 @@ import lombok.Setter;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class UserMeChangePasswordPutRequestDto {
+public class ChangePasswordDto {
 
     @NotBlank(message = UserMessages.CURRENT_PASSWORD_NOT_BLANK)
     private String currentPassword;

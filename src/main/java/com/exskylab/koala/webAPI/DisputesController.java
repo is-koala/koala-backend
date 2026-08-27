@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/disputes")
+@RequestMapping("/admin/disputes")
 public class DisputesController {
 
     private final DisputeService disputeService;
@@ -28,7 +28,7 @@ public class DisputesController {
         this.disputeMapper = disputeMapper;
     }
 
-    @GetMapping("/pending")
+    @GetMapping
     public ResponseEntity<SuccessDataResult<PageDto<DisputeDto>>> pending(
             @PageableDefault(size = 20) Pageable pageable) {
 

@@ -1,8 +1,8 @@
 package com.exskylab.koala.core.mappers;
 
-import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationsApplicationIdPatchResponseDto;
-import com.exskylab.koala.core.dtos.jobApplication.response.JobsJobIdApplicationsGetResponseDto;
-import com.exskylab.koala.core.dtos.jobApplication.response.JobsJobIdApplicationsPostResponseDto;
+import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationDetailDto;
+import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicantDto;
+import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationDto;
 import com.exskylab.koala.core.dtos.jobApplication.response.MyApplicationDto;
 import com.exskylab.koala.entities.JobApplication;
 import org.mapstruct.InjectionStrategy;
@@ -17,16 +17,16 @@ import java.util.List;
 public interface JobApplicationMapper {
 
     @Mapping(target = "applicant", source = "user")
-    JobsJobIdApplicationsPostResponseDto toJobsJobIdApplicationsPostResponseDto(JobApplication jobApplication);
+    JobApplicationDto toJobsJobIdApplicationsPostResponseDto(JobApplication jobApplication);
 
     @Mapping(target = "applicant", source = "user")
-    JobsJobIdApplicationsGetResponseDto toJobsJobIdApplicationsGetResponseDto(JobApplication jobApplication);
+    JobApplicantDto toJobsJobIdApplicationsGetResponseDto(JobApplication jobApplication);
 
-    List<JobsJobIdApplicationsGetResponseDto> toJobsJobIdApplicationsGetResponseDtoList(
+    List<JobApplicantDto> toJobsJobIdApplicationsGetResponseDtoList(
             List<JobApplication> jobApplications);
 
     @Mapping(target = "applicant", source = "user")
-    JobApplicationsApplicationIdPatchResponseDto toJobApplicationsApplicationIdPatchResponseDto(
+    JobApplicationDetailDto toJobApplicationsApplicationIdPatchResponseDto(
             JobApplication jobApplication);
 
     @Mapping(target = "assignmentId", source = "assignment.id")

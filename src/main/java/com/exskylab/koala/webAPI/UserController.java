@@ -11,11 +11,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import com.exskylab.koala.core.dtos.address.request.CreateAddressRequestDto;
 import com.exskylab.koala.core.dtos.address.response.AddressDto;
-import com.exskylab.koala.core.dtos.job.request.UsersMeJobsPostRequestDto;
-import com.exskylab.koala.core.dtos.job.response.UsersMeJobsPostResponseDto;
-import com.exskylab.koala.core.dtos.user.request.UserMeChangePasswordPutRequestDto;
-import com.exskylab.koala.core.dtos.user.request.UserMePatchRequestDto;
-import com.exskylab.koala.core.dtos.user.request.UsersMeIdentityVerificationRequestDto;
+import com.exskylab.koala.core.dtos.job.request.CreateIndividualJobDto;
+import com.exskylab.koala.core.dtos.job.response.IndividualJobDto;
+import com.exskylab.koala.core.dtos.user.request.ChangePasswordDto;
+import com.exskylab.koala.core.dtos.user.request.UpdateProfileDto;
+import com.exskylab.koala.core.dtos.user.request.VerifyIdentityDto;
 import com.exskylab.koala.core.dtos.user.response.UserMeResponseDto;
 import com.exskylab.koala.core.dtos.user.response.UserUpdateResponseDto;
 import com.exskylab.koala.core.helpers.BearerTokenExtractor;
@@ -74,7 +74,7 @@ public class UserController {
 
 
     @PatchMapping("/me")
-    public ResponseEntity<SuccessDataResult<UserUpdateResponseDto>> patchCurrentUser(@RequestBody @Valid UserMePatchRequestDto userMePatchRequestDto){
+    public ResponseEntity<SuccessDataResult<UserUpdateResponseDto>> patchCurrentUser(@RequestBody @Valid UpdateProfileDto userMePatchRequestDto){
 
         UserUpdateResponseDto patchedUser = userService.patchCurrentUser(userMePatchRequestDto);
 
@@ -87,7 +87,7 @@ public class UserController {
 
 
     @PutMapping("/me/password")
-    public ResponseEntity<SuccessResult> updateCurrentUserPassword(@RequestBody @Valid UserMeChangePasswordPutRequestDto userMeChangePasswordPutRequestDto,
+    public ResponseEntity<SuccessResult> updateCurrentUserPassword(@RequestBody @Valid ChangePasswordDto userMeChangePasswordPutRequestDto,
                                                                    HttpServletRequest request){
         UUID currentSessionId = jwtService.extractSessionId(BearerTokenExtractor.extract(request));
 
@@ -114,8 +114,8 @@ public class UserController {
                         HttpStatus.OK));
     }
 
-    @PutMapping("/me/identity-verification")
-    public ResponseEntity<SuccessResult> verifyIdentity(@RequestBody @Valid UsersMeIdentityVerificationRequestDto usersMeIdentityVerificationRequestDto){
+    @PostMapping("/me/identity-verification")
+    public ResponseEntity<SuccessResult> verifyIdentity(@RequestBody @Valid VerifyIdentityDto usersMeIdentityVerificationRequestDto){
 
         userService.verificateIdentityofAuthenticatedUser(usersMeIdentityVerificationRequestDto);
 
@@ -147,12 +147,12 @@ public class UserController {
     }
 
     @PostMapping("/me/jobs")
-    public ResponseEntity<SuccessDataResult<UsersMeJobsPostResponseDto>> createJobForCurrentUser(@RequestBody @Valid UsersMeJobsPostRequestDto usersMeJobsPostRequestDto){
+    public ResponseEntity<SuccessDataResult<IndividualJobDto>> createJobForCurrentUser(@RequestBody @Valid CreateIndividualJobDto usersMeJobsPostRequestDto){
 
-        UsersMeJobsPostResponseDto createdJob = jobService.createIndividualJob(usersMeJobsPostRequestDto);
+        IndividualJobDto createdJob = jobService.createIndividualJob(usersMeJobsPostRequestDto);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(
-                new SuccessDataResult<UsersMeJobsPostResponseDto>(
+                new SuccessDataResult<IndividualJobDto>(
                         createdJob,
                         UserMessages.JOB_CREATED_SUCCESSFULLY,
                         HttpStatus.CREATED

@@ -3,10 +3,10 @@ package com.exskylab.koala.business.abstracts;
 
 import com.exskylab.koala.core.dtos.address.request.CreateAddressRequestDto;
 import com.exskylab.koala.core.dtos.address.response.AddressDto;
-import com.exskylab.koala.core.dtos.user.UpdateUserDto;
-import com.exskylab.koala.core.dtos.user.request.UserMeChangePasswordPutRequestDto;
-import com.exskylab.koala.core.dtos.user.request.UserMePatchRequestDto;
-import com.exskylab.koala.core.dtos.user.request.UsersMeIdentityVerificationRequestDto;
+import com.exskylab.koala.core.dtos.user.request.UpdateUserDto;
+import com.exskylab.koala.core.dtos.user.request.ChangePasswordDto;
+import com.exskylab.koala.core.dtos.user.request.UpdateProfileDto;
+import com.exskylab.koala.core.dtos.user.request.VerifyIdentityDto;
 import com.exskylab.koala.core.dtos.user.response.UserMeResponseDto;
 import com.exskylab.koala.core.dtos.user.response.UserUpdateResponseDto;
 import com.exskylab.koala.entities.Address;
@@ -36,9 +36,9 @@ public interface UserService {
 
 
 
-    UserUpdateResponseDto patchCurrentUser(UserMePatchRequestDto userMePatchRequestDto);
+    UserUpdateResponseDto patchCurrentUser(UpdateProfileDto userMePatchRequestDto);
 
-    void updateCurrentUserPassword(UserMeChangePasswordPutRequestDto userMeChangePasswordPutRequestDto, UUID currentSessionId);
+    void updateCurrentUserPassword(ChangePasswordDto userMeChangePasswordPutRequestDto, UUID currentSessionId);
 
     void updateProfilePicture(MultipartFile image);
 
@@ -47,7 +47,7 @@ public interface UserService {
     void updateEmailVerification(User user, String newEmail);
 
 
-    void verificateIdentityofAuthenticatedUser(UsersMeIdentityVerificationRequestDto usersMeIdentityVerificationRequestDto);
+    void verificateIdentityofAuthenticatedUser(VerifyIdentityDto usersMeIdentityVerificationRequestDto);
 
     UserMeResponseDto getCurrentUserFromDatabaseDto();
 

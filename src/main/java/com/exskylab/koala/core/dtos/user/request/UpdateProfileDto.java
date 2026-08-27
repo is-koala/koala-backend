@@ -15,7 +15,7 @@ import java.time.LocalDate;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class UserMePatchRequestDto {
+public class UpdateProfileDto {
 
     //if user is verified by id number, they cannot change their first name
     private String firstName;

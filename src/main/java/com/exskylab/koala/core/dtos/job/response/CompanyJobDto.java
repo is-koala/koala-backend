@@ -1,7 +1,7 @@
 package com.exskylab.koala.core.dtos.job.response;
 
-
 import com.exskylab.koala.core.dtos.address.response.AddressDto;
+import com.exskylab.koala.core.dtos.company.response.OnlyCompanyDto;
 import com.exskylab.koala.core.dtos.jobCategory.response.JobCategoryDto;
 import com.exskylab.koala.core.dtos.user.response.SafeUserDto;
 import com.exskylab.koala.entities.JobEmployerType;
@@ -22,9 +22,11 @@ import java.util.UUID;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class UsersMeJobsPostResponseDto {
+public class CompanyJobDto {
 
     private UUID id;
+
+    private OnlyCompanyDto company;
 
     private SafeUserDto creator;
 

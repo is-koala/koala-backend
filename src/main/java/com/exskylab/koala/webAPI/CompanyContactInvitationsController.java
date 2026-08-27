@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/company-contact-invitations")
+@RequestMapping("/contact-invitations")
 public class CompanyContactInvitationsController {
 
     private final CompanyContactInvitationService companyContactInvitationService;

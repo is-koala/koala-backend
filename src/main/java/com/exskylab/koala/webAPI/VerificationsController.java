@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/user-verifications")
+@RequestMapping("/verifications")
 public class VerificationsController {
 
 
@@ -23,8 +23,8 @@ public class VerificationsController {
     }
 
 
-    @PostMapping("/{id}")
-    public ResponseEntity<SuccessResult> verify(@PathVariable UUID id, @RequestBody @Valid VerificationRequestDto verificationRequestDto){
+    @PostMapping("/{verificationId}/confirm")
+    public ResponseEntity<SuccessResult> verify(@PathVariable("verificationId") UUID id, @RequestBody @Valid VerificationRequestDto verificationRequestDto){
 
         userVerificationService.verify(id, verificationRequestDto);
 

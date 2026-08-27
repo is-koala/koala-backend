@@ -5,9 +5,9 @@ import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.constants.JobAssignmentMessages;
-import com.exskylab.koala.core.dtos.jobAssignment.request.JobAssignmentsAssignmentIdStatusPatchRequestDto;
-import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto;
-import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentsAssignmentIdStatusPatchResponseDto;
+import com.exskylab.koala.core.dtos.jobAssignment.request.AnswerAssignmentDto;
+import com.exskylab.koala.core.dtos.jobAssignment.response.PaymentSessionDto;
+import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentDto;
 import com.exskylab.koala.core.exceptions.AssignmentAlreadyAnsweredException;
 import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.business.abstracts.PaymentService;
@@ -105,7 +105,7 @@ public class JobAssignmentManager implements JobAssignmentService {
 
     @Override
     @Transactional
-    public JobAssignmentsAssignmentIdStatusPatchResponseDto answerToAssignment(UUID assignmentId, JobAssignmentsAssignmentIdStatusPatchRequestDto jobAssignmentsAssignmentIdStatusPatchRequestDto) {
+    public JobAssignmentDto answerToAssignment(UUID assignmentId, AnswerAssignmentDto jobAssignmentsAssignmentIdStatusPatchRequestDto) {
         logger.info("Answering to job assignment from");
         var assignment = jobAssignmentDao.findWithDetailsForPaymentById(assignmentId).orElseThrow(() -> {
             logger.info("Assignment with id {} not found", assignmentId);
@@ -145,7 +145,7 @@ public class JobAssignmentManager implements JobAssignmentService {
 
     @Transactional
     @Override
-    public JobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto initiatePaymentSession(UUID assignmentId, String clientIpAddress) {
+    public PaymentSessionDto initiatePaymentSession(UUID assignmentId, String clientIpAddress) {
         logger.info("Initiating job assignment with id {}", assignmentId);
         var assignment = jobAssignmentDao.findById(assignmentId).orElseThrow(() -> {
             logger.info("Assignment with id {} not found", assignmentId);

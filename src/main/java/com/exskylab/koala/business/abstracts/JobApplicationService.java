@@ -1,10 +1,10 @@
 package com.exskylab.koala.business.abstracts;
 
-import com.exskylab.koala.core.dtos.jobApplication.request.JobApplicationsApplicationIdPatchRequestDto;
-import com.exskylab.koala.core.dtos.jobApplication.request.JobsJobIdApplicationsPostRequestDto;
-import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationsApplicationIdPatchResponseDto;
-import com.exskylab.koala.core.dtos.jobApplication.response.JobsJobIdApplicationsGetResponseDto;
-import com.exskylab.koala.core.dtos.jobApplication.response.JobsJobIdApplicationsPostResponseDto;
+import com.exskylab.koala.core.dtos.jobApplication.request.AnswerApplicationDto;
+import com.exskylab.koala.core.dtos.jobApplication.request.CreateJobApplicationDto;
+import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationDetailDto;
+import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicantDto;
+import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationDto;
 import com.exskylab.koala.entities.JobApplication;
 
 import java.util.List;
@@ -16,11 +16,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 public interface JobApplicationService {
-    JobsJobIdApplicationsPostResponseDto applyToJob(String jobId, JobsJobIdApplicationsPostRequestDto jobsJobIdApplicationsPostRequestDto);
+    JobApplicationDto applyToJob(String jobId, CreateJobApplicationDto jobsJobIdApplicationsPostRequestDto);
 
-    List<JobsJobIdApplicationsGetResponseDto> getJobApplicationsByIdJobId(String jobId);
+    List<JobApplicantDto> getJobApplicationsByIdJobId(String jobId);
 
-    JobApplicationsApplicationIdPatchResponseDto respondToApplication(String applicationId, JobApplicationsApplicationIdPatchRequestDto jobApplicationsApplicationIdPatchRequestDto);
+    JobApplicationDetailDto respondToApplication(String applicationId, AnswerApplicationDto jobApplicationsApplicationIdPatchRequestDto);
 
     Page<JobApplication> getMyApplications(ApplicationStatus status, Pageable pageable);
 }

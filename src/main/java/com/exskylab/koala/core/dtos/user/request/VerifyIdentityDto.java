@@ -16,7 +16,7 @@ import java.time.LocalDate;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class UsersMeIdentityVerificationRequestDto {
+public class VerifyIdentityDto {
 
     @NotBlank(message = UserMessages.FIRST_NAME_CANNOT_BE_BLANK)
     private String firstName;

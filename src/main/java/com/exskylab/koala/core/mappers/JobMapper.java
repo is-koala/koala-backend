@@ -1,10 +1,10 @@
 package com.exskylab.koala.core.mappers;
 
-import com.exskylab.koala.core.dtos.job.response.CompaniesCompanyIdJobsPostResponseDto;
+import com.exskylab.koala.core.dtos.job.response.CompanyJobDto;
 import com.exskylab.koala.core.dtos.job.response.JobDetailDto;
 import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
 import com.exskylab.koala.core.dtos.job.response.ShortJobDto;
-import com.exskylab.koala.core.dtos.job.response.UsersMeJobsPostResponseDto;
+import com.exskylab.koala.core.dtos.job.response.IndividualJobDto;
 import com.exskylab.koala.entities.Job;
 import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
@@ -17,9 +17,9 @@ import java.util.List;
         injectionStrategy = InjectionStrategy.CONSTRUCTOR)
 public interface JobMapper {
 
-    UsersMeJobsPostResponseDto toUsersMeJobsPostResponseDto(Job job);
+    IndividualJobDto toUsersMeJobsPostResponseDto(Job job);
 
-    CompaniesCompanyIdJobsPostResponseDto toCompaniesCompanyIdJobsPostResponseDto(Job job);
+    CompanyJobDto toCompaniesCompanyIdJobsPostResponseDto(Job job);
 
     ShortJobDto toShortJobDto(Job job);
 

@@ -8,7 +8,7 @@ import java.util.Base64;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/notifications")
+@RequestMapping("/notification-tracking")
 public class NotificationController {
 
     private final NotificationService notificationService;
@@ -21,7 +21,7 @@ public class NotificationController {
     }
 
 
-    @GetMapping("/track/{id}.png")
+    @GetMapping("/{id}.png")
     public ResponseEntity<byte[]> trackNotification(@PathVariable UUID id){
         notificationService.setAsOpened(id);
         CacheControl cacheControl = CacheControl.noCache().mustRevalidate();

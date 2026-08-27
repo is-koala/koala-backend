@@ -9,9 +9,9 @@ import com.exskylab.koala.core.dtos.company.request.UpdateCompanyRequestDto;
 import com.exskylab.koala.core.dtos.company.response.CompanyDto;
 import com.exskylab.koala.core.dtos.companyContact.request.InviteContactToCompanyDto;
 import com.exskylab.koala.core.dtos.companyContactInvitation.response.CompanyContactInvitationDto;
-import com.exskylab.koala.core.dtos.job.request.CompaniesCompanyIdJobsPostRequestDto;
-import com.exskylab.koala.core.dtos.job.response.CompaniesCompanyIdJobsPostResponseDto;
-import com.exskylab.koala.core.dtos.companyContact.response.CompanyContactWithoutCompanyDto;
+import com.exskylab.koala.core.dtos.job.request.CreateCompanyJobDto;
+import com.exskylab.koala.core.dtos.job.response.CompanyJobDto;
+import com.exskylab.koala.core.dtos.companyContact.response.CompanyContactDto;
 import com.exskylab.koala.core.mappers.CompanyContactInvitationMapper;
 import com.exskylab.koala.core.mappers.CompanyContactMapper;
 import com.exskylab.koala.core.mappers.CompanyMapper;
@@ -92,12 +92,12 @@ public class CompanyController {
 
 
     @PostMapping("/{companyId}/jobs")
-    public ResponseEntity<SuccessDataResult<CompaniesCompanyIdJobsPostResponseDto>> createJobForCompany(@PathVariable String companyId,
-                                                                                                        @RequestBody @Valid CompaniesCompanyIdJobsPostRequestDto companiesCompanyIdJobsPostRequestDto){
-        CompaniesCompanyIdJobsPostResponseDto response = jobService.createCorporateJob(companyId, companiesCompanyIdJobsPostRequestDto);
+    public ResponseEntity<SuccessDataResult<CompanyJobDto>> createJobForCompany(@PathVariable String companyId,
+                                                                                                        @RequestBody @Valid CreateCompanyJobDto companiesCompanyIdJobsPostRequestDto){
+        CompanyJobDto response = jobService.createCorporateJob(companyId, companiesCompanyIdJobsPostRequestDto);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(
-                new SuccessDataResult<CompaniesCompanyIdJobsPostResponseDto>(response,
+                new SuccessDataResult<CompanyJobDto>(response,
                         CompanyMessages.JOB_CREATED_SUCCESS,
                         HttpStatus.CREATED
                 ));
@@ -120,7 +120,7 @@ public class CompanyController {
     }
 
     @GetMapping("/{companyId}/contacts")
-    public ResponseEntity<SuccessDataResult<List<CompanyContactWithoutCompanyDto>>> contacts(
+    public ResponseEntity<SuccessDataResult<List<CompanyContactDto>>> contacts(
             @PathVariable UUID companyId) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(

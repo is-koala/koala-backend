@@ -13,7 +13,7 @@ import java.util.UUID;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class CompanyContactWithoutCompanyDto {
+public class CompanyContactDto {
 
     private UUID id;
 

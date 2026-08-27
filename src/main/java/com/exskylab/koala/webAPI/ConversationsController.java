@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/conversations")
+@RequestMapping
 public class ConversationsController {
 
     private final MessagingService messagingService;
@@ -31,7 +31,7 @@ public class ConversationsController {
         this.messagingMapper = messagingMapper;
     }
 
-    @GetMapping
+    @GetMapping("/conversations")
     public ResponseEntity<SuccessDataResult<PageDto<ConversationDto>>> myConversations(
             @PageableDefault(size = 20) Pageable pageable) {
 
@@ -48,7 +48,7 @@ public class ConversationsController {
                 MessagingMessages.CONVERSATIONS_LISTED, HttpStatus.OK));
     }
 
-    @PostMapping("/jobs/{jobId}")
+    @PostMapping("/jobs/{jobId}/conversation")
     public ResponseEntity<SuccessDataResult<ConversationDto>> openConversation(
             @PathVariable UUID jobId, @RequestParam(required = false) UUID workerId) {
 
@@ -57,7 +57,7 @@ public class ConversationsController {
                 MessagingMessages.CONVERSATIONS_LISTED, HttpStatus.OK));
     }
 
-    @GetMapping("/{conversationId}/messages")
+    @GetMapping("/conversations/{conversationId}/messages")
     public ResponseEntity<SuccessDataResult<PageDto<MessageDto>>> messages(
             @PathVariable UUID conversationId, @PageableDefault(size = 30) Pageable pageable) {
 
@@ -67,7 +67,7 @@ public class ConversationsController {
                 MessagingMessages.MESSAGES_LISTED, HttpStatus.OK));
     }
 
-    @PostMapping("/{conversationId}/messages")
+    @PostMapping("/conversations/{conversationId}/messages")
     public ResponseEntity<SuccessDataResult<MessageDto>> send(
             @PathVariable UUID conversationId, @RequestBody @Valid SendMessageDto request) {
 
@@ -76,7 +76,7 @@ public class ConversationsController {
                 MessagingMessages.MESSAGE_SENT, HttpStatus.CREATED));
     }
 
-    @PostMapping("/{conversationId}/read")
+    @PostMapping("/conversations/{conversationId}/read")
     public ResponseEntity<SuccessResult> markRead(@PathVariable UUID conversationId) {
         messagingService.markRead(conversationId);
         return ResponseEntity.ok(new SuccessResult(MessagingMessages.CONVERSATION_READ, HttpStatus.OK));

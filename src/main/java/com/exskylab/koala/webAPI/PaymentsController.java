@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/payments")
+@RequestMapping
 public class PaymentsController {
 
     private final Logger logger = LoggerFactory.getLogger(PaymentsController.class);
@@ -37,7 +37,7 @@ public class PaymentsController {
         this.appProperties = appProperties;
     }
 
-    @PostMapping("/callback")
+    @PostMapping("/payments/callback")
     public RedirectView handleProviderCallback(@RequestParam("token") String token) {
         logger.info("Payment callback received.");
 
@@ -52,7 +52,7 @@ public class PaymentsController {
         return new RedirectView(target);
     }
 
-    @GetMapping("/job-assignments/{assignmentId}")
+    @GetMapping("/job-assignments/{assignmentId}/payments")
     public ResponseEntity<SuccessDataResult<List<PaymentAttemptDto>>> listAttempts(
             @PathVariable UUID assignmentId) {
 

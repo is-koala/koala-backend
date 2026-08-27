@@ -11,7 +11,7 @@ import lombok.Setter;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class JobApplicationsApplicationIdPatchRequestDto {
+public class AnswerApplicationDto {
 
 
     @NotBlank(message = JobApplicationMessages.STATUS_NOT_BLANK)

@@ -2,9 +2,9 @@ package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.core.constants.JobAssignmentMessages;
-import com.exskylab.koala.core.dtos.jobAssignment.request.JobAssignmentsAssignmentIdStatusPatchRequestDto;
-import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto;
-import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentsAssignmentIdStatusPatchResponseDto;
+import com.exskylab.koala.core.dtos.jobAssignment.request.AnswerAssignmentDto;
+import com.exskylab.koala.core.dtos.jobAssignment.response.PaymentSessionDto;
+import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentDto;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.PaymentSessionResponseDto;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import jakarta.servlet.http.HttpServletRequest;
@@ -30,11 +30,11 @@ public class JobAssignmentsController {
 
 
 
-    @PatchMapping("/{assignmentId}/status")
-    public ResponseEntity<SuccessDataResult<JobAssignmentsAssignmentIdStatusPatchResponseDto>> answerToAssignment(@PathVariable UUID assignmentId,
-            @RequestBody @Valid JobAssignmentsAssignmentIdStatusPatchRequestDto jobAssignmentsAssignmentIdStatusPatchRequestDto){
+    @PostMapping("/{assignmentId}/respond")
+    public ResponseEntity<SuccessDataResult<JobAssignmentDto>> answerToAssignment(@PathVariable UUID assignmentId,
+            @RequestBody @Valid AnswerAssignmentDto jobAssignmentsAssignmentIdStatusPatchRequestDto){
 
-        JobAssignmentsAssignmentIdStatusPatchResponseDto response = jobAssignmentService.answerToAssignment(assignmentId, jobAssignmentsAssignmentIdStatusPatchRequestDto);
+        JobAssignmentDto response = jobAssignmentService.answerToAssignment(assignmentId, jobAssignmentsAssignmentIdStatusPatchRequestDto);
 
         return ResponseEntity.status(HttpStatus.OK)
                 .body(
@@ -47,9 +47,9 @@ public class JobAssignmentsController {
     }
 
 
-    @PostMapping("/{assignmentId}/payment-session/initiate")
-    public ResponseEntity<SuccessDataResult<JobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto>> initiatePaymentSession(@PathVariable UUID assignmentId, HttpServletRequest request){
-        JobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto dto = jobAssignmentService.initiatePaymentSession(assignmentId, getClientIpAddress(request));
+    @PostMapping("/{assignmentId}/payment-session")
+    public ResponseEntity<SuccessDataResult<PaymentSessionDto>> initiatePaymentSession(@PathVariable UUID assignmentId, HttpServletRequest request){
+        PaymentSessionDto dto = jobAssignmentService.initiatePaymentSession(assignmentId, getClientIpAddress(request));
 
         return ResponseEntity.status(HttpStatus.OK)
                 .body(new SuccessDataResult<>(

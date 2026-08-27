@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/reviews")
+@RequestMapping
 public class ReviewsController {
 
     private final ReviewService reviewService;
@@ -29,7 +29,7 @@ public class ReviewsController {
         this.reviewMapper = reviewMapper;
     }
 
-    @PostMapping("/job-assignments/{assignmentId}")
+    @PostMapping("/job-assignments/{assignmentId}/reviews")
     public ResponseEntity<SuccessDataResult<ReviewDto>> leaveReview(
             @PathVariable UUID assignmentId, @RequestBody @Valid CreateReviewDto request) {
 
@@ -39,7 +39,7 @@ public class ReviewsController {
                 ReviewMessages.CREATED, HttpStatus.CREATED));
     }
 
-    @GetMapping("/users/{userId}")
+    @GetMapping("/users/{userId}/reviews")
     public ResponseEntity<SuccessDataResult<PageDto<ReviewDto>>> reviewsAbout(
             @PathVariable UUID userId, @PageableDefault(size = 20) Pageable pageable) {
 
@@ -49,7 +49,7 @@ public class ReviewsController {
                 ReviewMessages.LISTED, HttpStatus.OK));
     }
 
-    @GetMapping("/users/{userId}/summary")
+    @GetMapping("/users/{userId}/rating-summary")
     public ResponseEntity<SuccessDataResult<RatingSummaryDto>> summary(@PathVariable UUID userId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
                 reviewService.getSummaryFor(userId).map(reviewMapper::toRatingSummaryDto).orElse(null),
