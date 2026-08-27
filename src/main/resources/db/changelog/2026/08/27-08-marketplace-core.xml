@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-08-27-16-conversations" author="koala">
+        <createTable tableName="conversations">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="job_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="employer_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="worker_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="last_message_at" type="TIMESTAMPTZ"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
+            <column name="deleted_by_id" type="UUID"/>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="conversations" baseColumnNames="job_id"
+                                 constraintName="fk_conversations_job"
+                                 referencedTableName="jobs" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="conversations" baseColumnNames="employer_id"
+                                 constraintName="fk_conversations_employer"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="conversations" baseColumnNames="worker_id"
+                                 constraintName="fk_conversations_worker"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <sql>
+            CREATE UNIQUE INDEX uk_conversations_job_worker_active
+                ON conversations (job_id, worker_id) WHERE is_deleted = false;
+        </sql>
+    </changeSet>
+
+    <changeSet id="2026-08-27-17-messages" author="koala">
+        <createTable tableName="messages">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="conversation_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="sender_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="body" type="VARCHAR(4000)"><constraints nullable="false"/></column>
+            <column name="sent_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="read_at" type="TIMESTAMPTZ"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
+            <column name="deleted_by_id" type="UUID"/>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="messages" baseColumnNames="conversation_id"
+                                 constraintName="fk_messages_conversation"
+                                 referencedTableName="conversations" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="messages" baseColumnNames="sender_id"
+                                 constraintName="fk_messages_sender"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <createIndex tableName="messages" indexName="idx_messages_conversation_sent">
+            <column name="conversation_id"/>
+            <column name="sent_at"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="2026-08-27-18-user-blocks" author="koala">
+        <createTable tableName="user_blocks">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="blocker_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="blocked_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="reason" type="VARCHAR(512)"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
+            <column name="deleted_by_id" type="UUID"/>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="user_blocks" baseColumnNames="blocker_id"
+                                 constraintName="fk_user_blocks_blocker"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="user_blocks" baseColumnNames="blocked_id"
+                                 constraintName="fk_user_blocks_blocked"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <sql>
+            CREATE UNIQUE INDEX uk_user_blocks_pair_active
+                ON user_blocks (blocker_id, blocked_id) WHERE is_deleted = false;
+        </sql>
+    </changeSet>
+
+    <changeSet id="2026-08-27-19-reviews" author="koala">
+        <createTable tableName="reviews">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="job_assignment_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="author_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="subject_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="rating" type="INT"><constraints nullable="false"/></column>
+            <column name="comment" type="VARCHAR(2000)"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
+            <column name="deleted_by_id" type="UUID"/>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="reviews" baseColumnNames="job_assignment_id"
+                                 constraintName="fk_reviews_assignment"
+                                 referencedTableName="job_assignments" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="reviews" baseColumnNames="author_id"
+                                 constraintName="fk_reviews_author"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="reviews" baseColumnNames="subject_id"
+                                 constraintName="fk_reviews_subject"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <sql>
+            ALTER TABLE reviews ADD CONSTRAINT ck_reviews_rating CHECK (rating BETWEEN 1 AND 5);
+            CREATE UNIQUE INDEX uk_reviews_assignment_author_active
+                ON reviews (job_assignment_id, author_id) WHERE is_deleted = false;
+        </sql>
+    </changeSet>
+
+    <changeSet id="2026-08-27-20-rating-summaries" author="koala">
+        <createTable tableName="rating_summaries">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="user_id" type="UUID">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uk_rating_summaries_user"/>
+            </column>
+            <column name="review_count" type="INT" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="rating_sum" type="BIGINT" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="average_rating" type="NUMERIC(3, 2)"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
+            <column name="deleted_by_id" type="UUID"/>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="rating_summaries" baseColumnNames="user_id"
+                                 constraintName="fk_rating_summaries_user"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+    </changeSet>
+
+</databaseChangeLog>

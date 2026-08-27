@@ -1,6 +1,7 @@
 package com.exskylab.koala.core.dtos.auth.request;
 
 import com.exskylab.koala.core.constants.AuthMessages;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -24,6 +25,8 @@ public class AuthStartRegistrationDto {
     @Email(message = AuthMessages.INVALID_EMAIL)
     private String email;
 
-    private boolean isEmployer;
+    @NotNull(message = AuthMessages.EMPLOYER_FLAG_NOT_NULL)
+    @JsonProperty("isEmployer")
+    private Boolean isEmployer;
 
 }

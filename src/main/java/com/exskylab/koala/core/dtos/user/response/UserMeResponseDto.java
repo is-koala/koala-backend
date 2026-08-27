@@ -1,5 +1,7 @@
 package com.exskylab.koala.core.dtos.user.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import com.exskylab.koala.core.dtos.address.response.AddressDto;
 import com.exskylab.koala.core.dtos.company.response.CompanyMembershipDto;
 import com.exskylab.koala.entities.Role;
@@ -47,6 +49,7 @@ public class UserMeResponseDto {
 
     private AddressDto address;
 
+    @JsonProperty("isEmployer")
     private boolean employer;
 
     private boolean emailVerified;

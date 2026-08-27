@@ -43,7 +43,7 @@ public class PendingRegistrationManager implements PendingRegistrationService {
         pendingRegistration.setEmail(authStartRegistrationDto.getEmail());
         pendingRegistration.setFirstName(authStartRegistrationDto.getFirstName());
         pendingRegistration.setLastName(authStartRegistrationDto.getLastName());
-        pendingRegistration.setEmployer(authStartRegistrationDto.isEmployer());
+        pendingRegistration.setEmployer(Boolean.TRUE.equals(authStartRegistrationDto.getIsEmployer()));
         pendingRegistration.setExpiresAt(Instant.now().plus(1, ChronoUnit.HOURS));
         pendingRegistration.setToken(UUID.randomUUID());
         return pendingRegistrationDao.save(pendingRegistration);

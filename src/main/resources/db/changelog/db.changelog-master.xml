@@ -27,4 +27,5 @@
     <include file="db/changelog/2026/08/27-05-device-client-id.xml"/>
     <include file="db/changelog/2026/08/27-06-legal.xml"/>
     <include file="db/changelog/2026/08/27-07-soft-delete.xml"/>
+    <include file="db/changelog/2026/08/27-08-marketplace-core.xml"/>
 </databaseChangeLog>

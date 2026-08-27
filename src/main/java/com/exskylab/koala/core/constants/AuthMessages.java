@@ -7,6 +7,7 @@ public class AuthMessages {
     public static final String INVALID_EMAIL = "{user.email.invalid}";
     public static final String PASSWORD_RESET_REQUESTED = "{auth.password.reset.requested}";
     public static final String PASSWORD_RESET_COMPLETED = "{auth.password.reset.completed}";
+    public static final String EMPLOYER_FLAG_NOT_NULL = "{auth.employer.flag.not.null}";
     public static final String TOO_MANY_REQUESTS = "{auth.too.many.requests}";
     public static final String START_REGISTRATION_SUCCESS = "{auth.start.registration.success}";
     public static final String NOT_VALID_AUTHORIZATION_HEADER = "{auth.not.valid.authorization.header}";
