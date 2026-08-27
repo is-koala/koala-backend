@@ -9,7 +9,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Getter
@@ -22,7 +22,7 @@ public class JobApplicationsApplicationIdPatchResponseDto {
 
     private ApplicationStatus status;
 
-    private LocalDateTime applicationDateTime;
+    private Instant applicationDateTime;
 
     private String notes;
 

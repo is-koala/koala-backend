@@ -6,7 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -37,10 +37,10 @@ public class Device extends BaseEntity{
     private String pushToken;
 
     @Column(name = "first_seen_at")
-    private LocalDateTime firstSeenAt;
+    private Instant firstSeenAt;
 
     @Column(name = "last_seen_at")
-    private LocalDateTime lastSeenAt;
+    private Instant lastSeenAt;
 
     @OneToMany(mappedBy = "device", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Session> sessions;

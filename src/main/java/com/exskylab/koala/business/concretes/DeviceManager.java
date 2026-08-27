@@ -12,7 +12,7 @@ import nl.basjes.parse.useragent.UserAgent;
 import nl.basjes.parse.useragent.UserAgentAnalyzer;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -64,7 +64,7 @@ public class DeviceManager implements DeviceService {
 
 
         if (existingDevice.isPresent()){
-            existingDevice.get().setLastSeenAt(LocalDateTime.now());
+            existingDevice.get().setLastSeenAt(Instant.now());
             return deviceDao.save(existingDevice.get());
         }else {
             Device newDevice = new Device();
@@ -72,8 +72,8 @@ public class DeviceManager implements DeviceService {
             newDevice.setName(finalDeviceName);
             newDevice.setType(deviceType);
             newDevice.setPushToken(null);
-            newDevice.setFirstSeenAt(LocalDateTime.now());
-            newDevice.setLastSeenAt(LocalDateTime.now());
+            newDevice.setFirstSeenAt(Instant.now());
+            newDevice.setLastSeenAt(Instant.now());
 
             return deviceDao.save(newDevice);
         }

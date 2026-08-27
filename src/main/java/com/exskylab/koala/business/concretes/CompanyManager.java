@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.core.helpers.LogMasks;
 import com.exskylab.koala.business.abstracts.*;
 import com.exskylab.koala.core.constants.CompanyMessages;
 import com.exskylab.koala.core.dtos.company.request.CreateCompanyRequestDto;
@@ -184,7 +185,7 @@ public class CompanyManager implements CompanyService {
 
     @Override
     public Company getCompanyById(UUID companyId) {
-        logger.info("Getting company with id: {}", companyId);
+        logger.debug("Getting company with id: {}", companyId);
 
         return companyDao.findById(companyId).orElseThrow(() -> {
             logger.error("Company with id: {} not found.", companyId);
@@ -206,7 +207,7 @@ public class CompanyManager implements CompanyService {
         ));
         sendEmailDto.setCategory(NotificationCategory.ACCOUNT_SECURITY);
         notificationService.sendEmail(sendEmailDto, DispatchPriority.NORMAL, true);
-        logger.info("Company created email sent to: {}", sendEmailDto.getDestinationEmail());
+        logger.info("Company created email queued for {}", LogMasks.email(sendEmailDto.getDestinationEmail()));
 
         var sendEmailDtoToContact = new SendEmailDto();
         sendEmailDtoToContact.setDestinationEmail(contact.getUser().getEmail());
@@ -223,7 +224,7 @@ public class CompanyManager implements CompanyService {
         ));
         sendEmailDtoToContact.setCategory(NotificationCategory.ACCOUNT_SECURITY);
         notificationService.sendEmail(sendEmailDtoToContact, DispatchPriority.NORMAL, true);
-        logger.info("Company created email sent to contact: {}", sendEmailDtoToContact.getDestinationEmail());
+        logger.info("Company created email queued for contact {}", LogMasks.email(sendEmailDtoToContact.getDestinationEmail()));
 
         logger.info("Company created emails sent successfully for company with id: {}", savedCompany.getId());
     }

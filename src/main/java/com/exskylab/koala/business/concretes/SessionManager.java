@@ -17,7 +17,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.UUID;
 
@@ -59,9 +60,9 @@ public class SessionManager implements SessionService {
         session.setDevice(device);
         session.setIpAddress(ipAddress);
         session.setRefreshTokenHash(hashedRefreshToken);
-        session.setRefreshExpiresAt(LocalDateTime.now().plusDays(sessionProperties.getRefreshValidityDays()));
+        session.setRefreshExpiresAt(Instant.now().plus(sessionProperties.getRefreshValidityDays(), ChronoUnit.DAYS));
         session.setActive(true);
-        session.setLastAccessedAt(LocalDateTime.now());
+        session.setLastAccessedAt(Instant.now());
 
         Session savedSession = sessionDao.save(session);
 

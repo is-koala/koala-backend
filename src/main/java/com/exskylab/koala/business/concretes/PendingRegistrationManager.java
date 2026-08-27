@@ -10,7 +10,8 @@ import com.exskylab.koala.entities.PendingRegistration;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 @Service
@@ -43,7 +44,7 @@ public class PendingRegistrationManager implements PendingRegistrationService {
         pendingRegistration.setFirstName(authStartRegistrationDto.getFirstName());
         pendingRegistration.setLastName(authStartRegistrationDto.getLastName());
         pendingRegistration.setEmployer(authStartRegistrationDto.isEmployer());
-        pendingRegistration.setExpiresAt(LocalDateTime.now().plusHours(1));
+        pendingRegistration.setExpiresAt(Instant.now().plus(1, ChronoUnit.HOURS));
         pendingRegistration.setToken(UUID.randomUUID());
         return pendingRegistrationDao.save(pendingRegistration);
     }

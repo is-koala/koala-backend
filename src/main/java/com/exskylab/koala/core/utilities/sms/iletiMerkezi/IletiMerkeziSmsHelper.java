@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.utilities.sms.iletiMerkezi;
 
+import com.exskylab.koala.core.helpers.LogMasks;
 import com.exskylab.koala.core.constants.SmsMessages;
 import com.exskylab.koala.core.exceptions.SmsSendException;
 import com.exskylab.koala.core.properties.IletiMerkeziProperties;
@@ -29,7 +30,7 @@ public class IletiMerkeziSmsHelper implements SmsService {
 
     @Override
     public String sendSms(String[] phoneNumbers, String messageText, boolean isIys) {
-        logger.info("Sending sms to: {}", phoneNumbers);
+        logger.info("Sending sms to: {}", LogMasks.phones(phoneNumbers));
         String apiUrl = "https://api.iletimerkezi.com/v1/send-sms/json";
         Authentication authentication = new Authentication(properties.getApiKey(), properties.getApiHash());
         Recipients recipients = new Recipients(phoneNumbers);
@@ -55,14 +56,14 @@ public class IletiMerkeziSmsHelper implements SmsService {
             IletiMerkeziSendSmsResponse response = restTemplate.postForObject(apiUrl, entity, IletiMerkeziSendSmsResponse.class);
 
            if (response != null && response.getStatus().getCode().equals("200")){
-               logger.info("Sms sent successfully to: {} Order ID: {}", phoneNumbers, response.getOrder().getId());
+               logger.info("Sms sent successfully to: {} Order ID: {}", LogMasks.phones(phoneNumbers), response.getOrder().getId());
                return response.getOrder().getId();
            }else {
-                logger.error("Failed to send sms to: {}. Response: {}", phoneNumbers, response != null ? response.getStatus().getMessage() : "No response");
+                logger.error("Failed to send sms to: {}. Response: {}", LogMasks.phones(phoneNumbers), response != null ? response.getStatus().getMessage() : "No response");
                throw new SmsSendException(SmsMessages.SMS_SEND_FAILED);
            }
         }catch (Exception e){
-            logger.error("Error occurred while sending sms to: {}. Error: {}", phoneNumbers, e.getMessage());
+            logger.error("Error occurred while sending sms to: {}. Error: {}", LogMasks.phones(phoneNumbers), e.getMessage());
             throw new SmsSendException(SmsMessages.SMS_SEND_FAILED);
         }
     }

@@ -188,7 +188,7 @@ public class JobManager implements JobService {
 
     @Override
     public Job getById(String jobId) {
-        logger.info("Getting job with id: {}", jobId);
+        logger.debug("Getting job with id: {}", jobId);
 
         return jobDao.findById(UUID.fromString(jobId)).orElseThrow(() -> {
             logger.error("Job with id: {} not found.", jobId);

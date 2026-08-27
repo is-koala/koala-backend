@@ -6,7 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Getter
@@ -19,6 +19,6 @@ public class ShortJobAssignmentDto {
 
     private AssignmentStatus status;
 
-    private LocalDateTime assignmentDateTime;
+    private Instant assignmentDateTime;
 
 }

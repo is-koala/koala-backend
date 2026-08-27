@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.core.helpers.LogMasks;
 import com.exskylab.koala.business.abstracts.DeviceService;
 import com.exskylab.koala.business.abstracts.NotificationService;
 import com.exskylab.koala.business.abstracts.SecurityService;
@@ -56,7 +57,7 @@ public class NotificationManager implements NotificationService {
             recipientInfo = "external address";
         }
 
-        logger.info("Sending email notification to {} destinationEmail: {}", recipientInfo, sendEmailDto.getDestinationEmail());
+        logger.info("Sending email notification to {} destinationEmail: {}", recipientInfo, LogMasks.email(sendEmailDto.getDestinationEmail()));
 
 
         User sender;
@@ -125,7 +126,7 @@ public class NotificationManager implements NotificationService {
     @Override
     @Transactional
     public Notification sendSms(SendSmsDto sendSmsDto, DispatchPriority dispatchPriority, boolean isSystemSms) {
-        logger.info("Sending SMS notification to userId: {} destinationPhoneNumber: {}", sendSmsDto.getRecipient().getId(), sendSmsDto.getDestinationPhoneNumber());
+        logger.info("Sending SMS notification to userId: {} destinationPhoneNumber: {}", sendSmsDto.getRecipient().getId(), LogMasks.phone(sendSmsDto.getDestinationPhoneNumber()));
 
         User sender;
         if (isSystemSms) {
@@ -278,7 +279,7 @@ public class NotificationManager implements NotificationService {
 
     @Override
     public Notification getById(UUID id) {
-        logger.info("Fetching notification by ID: {}", id);
+        logger.debug("Fetching notification by ID: {}", id);
         return notificationDao.findById(id)
                 .orElseThrow(() -> new NotificationNotFoundException(NotificationMessages.NOTIFICATION_NOT_FOUND_WITH_ID));
     }

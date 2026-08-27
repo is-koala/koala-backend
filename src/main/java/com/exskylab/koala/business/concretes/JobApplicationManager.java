@@ -17,7 +17,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -73,7 +73,7 @@ public class JobApplicationManager implements JobApplicationService {
         jobApplication.setUser(authenticatedUser);
         jobApplication.setNotes(jobsJobIdApplicationsPostRequestDto.getNotes());
         jobApplication.setStatus(ApplicationStatus.APPLIED);
-        jobApplication.setApplicationDateTime(LocalDateTime.now());
+        jobApplication.setApplicationDateTime(Instant.now());
         jobApplication.setAssignment(null);
 
         JobApplication savedJobApplication = jobApplicationDao.save(jobApplication);
@@ -86,7 +86,7 @@ public class JobApplicationManager implements JobApplicationService {
     @Override
     @Transactional(readOnly = true)
     public List<JobsJobIdApplicationsGetResponseDto> getJobApplicationsByIdJobId(String jobId) {
-        logger.info("Fetching job applications for job id: {}", jobId);
+        logger.debug("Fetching job applications for job id: {}", jobId);
         Job job = jobService.getById(jobId);
 
         if (job.getEmployerType().equals(JobEmployerType.COMPANY)) {
@@ -133,7 +133,7 @@ public class JobApplicationManager implements JobApplicationService {
 
 
         jobApplication.setStatus(status);
-        jobApplication.setAnsweredDateTime(LocalDateTime.now());
+        jobApplication.setAnsweredDateTime(Instant.now());
         JobAssignment assignmentToReturn = null;
 
         if (status.equals(ApplicationStatus.ACCEPTED)){

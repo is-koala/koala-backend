@@ -4,7 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Data
 @NoArgsConstructor
@@ -12,5 +12,5 @@ import java.time.LocalDateTime;
 public class TokenResponseDto {
     private String token;
     private String refreshToken;
-    private LocalDateTime refreshExpiresAt;
+    private Instant refreshExpiresAt;
 }

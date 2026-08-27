@@ -6,14 +6,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 public class Result {
     private boolean success;
     private String message;
     private HttpStatus httpStatus;
     private String path;
-    private LocalDateTime timeStamp = LocalDateTime.now();
+    private Instant timeStamp = Instant.now();
     private String correlationId;
 
     public boolean isSuccess() {
@@ -36,7 +36,7 @@ public class Result {
         return path;
     }
 
-    public LocalDateTime getTimeStamp(){
+    public Instant getTimeStamp(){
         return timeStamp;
     }
 

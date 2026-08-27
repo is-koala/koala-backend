@@ -14,7 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -51,7 +51,7 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
         invitation.setInvitedUser(userToInvite);
         invitation.setRole(role);
         invitation.setStatus(CompanyContactInvitationStatus.PENDING);
-        invitation.setInvitedAt(LocalDateTime.now());
+        invitation.setInvitedAt(Instant.now());
         invitation.setAnsweredAt(null);
         CompanyContactInvitation savedInvitation = companyContactInvitationDao.save(invitation);
 
@@ -80,7 +80,7 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
 
     @Override
     public List<CompanyContactInvitation> getInvitationsByCompanyId(UUID companyId) {
-        logger.info("Getting invitations for company with id: {}", companyId);
+        logger.debug("Getting invitations for company with id: {}", companyId);
         return companyContactInvitationDao.findByCompanyId(companyId);
     }
 
@@ -103,7 +103,7 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
 
         invitation.setStatus(accepted ? CompanyContactInvitationStatus.ACCEPTED : CompanyContactInvitationStatus.REJECTED);
 
-        invitation.setAnsweredAt(LocalDateTime.now());
+        invitation.setAnsweredAt(Instant.now());
 
         invitation = companyContactInvitationDao.save(invitation);
 
@@ -149,7 +149,7 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
 
     @Override
     public GetCompanyContactInvitationDto getInvitationById(UUID invitationId) {
-        logger.info("Getting invitation with id: {}", invitationId);
+        logger.debug("Getting invitation with id: {}", invitationId);
         var entity = companyContactInvitationDao.findById(invitationId)
                 .orElseThrow(() -> new CompanyContactInvitationNotFoundException(CompanyContactInvitationMessages.COMPANY_CONTACT_INVITATION_NOT_FOUND));
 
@@ -158,7 +158,7 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
 
     @Override
     public List<CompanyContactInvitationDto> getCompanyContactInvitationsByCompanyIdDto(UUID companyId) {
-        logger.info("Getting company contact invitations for company with id: {}", companyId);
+        logger.debug("Getting company contact invitations for company with id: {}", companyId);
         var currentUser = securityService.getAuthenticatedUser();
 
         var isAdmin = companyContactService.isUserAdminOfCompany(companyId, currentUser.getId());

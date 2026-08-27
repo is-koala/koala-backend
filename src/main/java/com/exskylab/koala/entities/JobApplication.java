@@ -6,7 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Getter
@@ -31,7 +31,7 @@ public class JobApplication extends BaseEntity{
     private Job job;
 
     @Column(name = "application_date_time")
-    private LocalDateTime applicationDateTime;
+    private Instant applicationDateTime;
 
     @Enumerated(EnumType.STRING)
     private ApplicationStatus status;
@@ -43,7 +43,7 @@ public class JobApplication extends BaseEntity{
     private String rejectionReason;
 
     @Column(name = "answered_date_time")
-    private LocalDateTime answeredDateTime;
+    private Instant answeredDateTime;
 
     @OneToOne(mappedBy = "application", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private JobAssignment assignment;

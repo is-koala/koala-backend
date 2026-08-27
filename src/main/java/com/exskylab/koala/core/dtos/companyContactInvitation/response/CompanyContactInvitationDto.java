@@ -8,7 +8,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Getter
@@ -27,8 +27,8 @@ public class CompanyContactInvitationDto {
 
     private CompanyContactInvitationStatus status;
 
-    private LocalDateTime invitedAt;
+    private Instant invitedAt;
 
-    private LocalDateTime answeredAt;
+    private Instant answeredAt;
 
 }

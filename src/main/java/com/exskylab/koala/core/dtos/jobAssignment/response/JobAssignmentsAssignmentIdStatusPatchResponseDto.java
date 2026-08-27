@@ -9,7 +9,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Getter
@@ -20,7 +20,7 @@ public class JobAssignmentsAssignmentIdStatusPatchResponseDto {
 
     private UUID id;
 
-    private LocalDateTime assignmentDateTime;
+    private Instant assignmentDateTime;
 
     private AssignmentStatus status;
 

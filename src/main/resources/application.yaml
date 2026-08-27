@@ -85,6 +85,13 @@ logging:
   level:
     com.exskylab.koala: ${APP_LOG_LEVEL:INFO}
     org.springframework.security: ${SECURITY_LOG_LEVEL:INFO}
+    http.access: ${ACCESS_LOG_LEVEL:INFO}
+  structured:
+    ecs:
+      service:
+        name: ${SERVICE_NAME:koala}
+        version: ${SERVICE_VERSION:}
+        environment: ${SERVICE_ENVIRONMENT:}
 
 springdoc:
   swagger-ui:
@@ -106,6 +113,11 @@ jwt:
     expiration-ms: ${JWT_PASSWORD_SET_EXPIRATION_MS:600000}
   password-reset:
     expiration-ms: ${JWT_PASSWORD_RESET_EXPIRATION_MS:900000}
+
+rate-limit:
+  enabled: ${RATE_LIMIT_ENABLED:true}
+  max-attempts: ${RATE_LIMIT_MAX_ATTEMPTS:10}
+  window: ${RATE_LIMIT_WINDOW:1m}
 
 commission:
   rate: ${COMMISSION_RATE:0.075}

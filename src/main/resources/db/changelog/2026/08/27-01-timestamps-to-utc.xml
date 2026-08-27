@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <property name="local.zone" value="Europe/Istanbul"/>
+
+    <changeSet id="2026-08-27-01-timestamps-to-timestamptz" author="koala">
+        <sql splitStatements="false">
+            DO $$
+            DECLARE
+                target RECORD;
+            BEGIN
+                FOR target IN
+                    SELECT c.table_name, c.column_name
+                    FROM information_schema.columns c
+                    JOIN information_schema.tables t
+                      ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+                    WHERE c.table_schema = 'public'
+                      AND t.table_type = 'BASE TABLE'
+                      AND c.data_type = 'timestamp without time zone'
+                      AND NOT (c.table_name = 'jobs' AND c.column_name IN ('start_date_time', 'end_date_time'))
+                      AND c.table_name NOT IN ('databasechangelog', 'databasechangeloglock')
+                LOOP
+                    EXECUTE format(
+                        'ALTER TABLE public.%I ALTER COLUMN %I TYPE timestamptz USING %I AT TIME ZONE ''${local.zone}''',
+                        target.table_name, target.column_name, target.column_name);
+                END LOOP;
+            END $$;
+        </sql>
+        <rollback>
+            <sql splitStatements="false">
+                DO $$
+                DECLARE
+                    target RECORD;
+                BEGIN
+                    FOR target IN
+                        SELECT c.table_name, c.column_name
+                        FROM information_schema.columns c
+                        JOIN information_schema.tables t
+                          ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+                        WHERE c.table_schema = 'public'
+                          AND t.table_type = 'BASE TABLE'
+                          AND c.data_type = 'timestamp with time zone'
+                          AND c.table_name NOT IN ('databasechangelog', 'databasechangeloglock')
+                    LOOP
+                        EXECUTE format(
+                            'ALTER TABLE public.%I ALTER COLUMN %I TYPE timestamp USING %I AT TIME ZONE ''${local.zone}''',
+                            target.table_name, target.column_name, target.column_name);
+                    END LOOP;
+                END $$;
+            </sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

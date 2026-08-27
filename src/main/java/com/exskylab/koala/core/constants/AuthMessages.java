@@ -5,6 +5,7 @@ public class AuthMessages {
     public static final String LAST_NAME_NOT_NULL = "{user.last.name.not.null}";
     public static final String EMAIL_NOT_NULL = "{user.email.not.null}";
     public static final String INVALID_EMAIL = "{user.email.invalid}";
+    public static final String TOO_MANY_REQUESTS = "{auth.too.many.requests}";
     public static final String START_REGISTRATION_SUCCESS = "{auth.start.registration.success}";
     public static final String NOT_VALID_AUTHORIZATION_HEADER = "{auth.not.valid.authorization.header}";
     public static final String ANSWER_NOT_NULL = "{auth.answer.not.null}";

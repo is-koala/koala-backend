@@ -17,7 +17,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Service
@@ -63,7 +63,7 @@ public class UserVerificationManager implements UserVerificationService {
                 throw new IllegalArgumentException(UserVerificationMessages.INVALID_TOKEN);
             }
 
-            if (phoneVerification.getExpiresAt().isBefore(LocalDateTime.now())) {
+            if (phoneVerification.getExpiresAt().isBefore(Instant.now())) {
                 logger.error("Token for PhoneVerification ID: {} has expired", verificationId);
                 throw new IllegalArgumentException(UserVerificationMessages.TOKEN_EXPIRED);
             }
@@ -75,7 +75,7 @@ public class UserVerificationManager implements UserVerificationService {
                 throw new IllegalArgumentException(UserVerificationMessages.INVALID_TOKEN);
             }
 
-            if (emailVerification.getExpiresAt().isBefore(LocalDateTime.now())) {
+            if (emailVerification.getExpiresAt().isBefore(Instant.now())) {
                 logger.error("Token for EmailVerification ID: {} has expired", verificationId);
                 throw new IllegalArgumentException(UserVerificationMessages.TOKEN_EXPIRED);
             }
@@ -83,13 +83,13 @@ public class UserVerificationManager implements UserVerificationService {
 
         userVerification.setVerified(true);
         userVerification.setVerifiedBy(currentUser);
-        userVerification.setVerifiedAt(LocalDateTime.now());
+        userVerification.setVerifiedAt(Instant.now());
         var savedVerification = userVerificationDao.save(userVerification);
         if (userVerification instanceof PhoneVerification phoneVerification) {
             logger.info("Updating user phone number to: {}", phoneVerification.getNewPhoneNumber());
             userService.updatePhoneVerification(currentUser, phoneVerification.getNewPhoneNumber());
         }else if (userVerification instanceof EmailVerification emailVerification){
-            logger.info("Updating user email to: {}", emailVerification.getNewEmail());
+            logger.info("Applying verified email change for user id: {}", emailVerification.getUser().getId());
             userService.updateEmailVerification(currentUser, emailVerification.getNewEmail());
         }
 

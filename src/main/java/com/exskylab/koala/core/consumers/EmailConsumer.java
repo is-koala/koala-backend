@@ -18,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.thymeleaf.context.Context;
 import org.thymeleaf.spring6.SpringTemplateEngine;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Service
 public class EmailConsumer {
@@ -54,7 +54,7 @@ public class EmailConsumer {
         }
 
         notification.setStatus(NotificationStatus.PROCESSING);
-        notification.setProcessedAt(LocalDateTime.now());
+        notification.setProcessedAt(Instant.now());
         notificationService.save(notification);
 
         try{
@@ -67,7 +67,7 @@ public class EmailConsumer {
             sendHtmlEmail(emailTaskDto.to(), emailTaskDto.subject(), htmlBody);
 
             notification.setStatus(NotificationStatus.SENT);
-            notification.setSentAt(LocalDateTime.now());
+            notification.setSentAt(Instant.now());
             logger.info("Email task sent for id: {}", emailTaskDto.id());
         }catch (Exception e){
             logger.error("Email task could not be sent for id: {}, Error: {}", emailTaskDto.id(), e.getMessage());

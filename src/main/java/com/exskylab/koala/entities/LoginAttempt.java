@@ -6,7 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
@@ -42,6 +42,6 @@ public class LoginAttempt extends BaseEntity{
     private String deviceName;
 
     @Column(name = "time_stamp")
-    private LocalDateTime timeStamp = LocalDateTime.now();
+    private Instant timeStamp = Instant.now();
 
 }

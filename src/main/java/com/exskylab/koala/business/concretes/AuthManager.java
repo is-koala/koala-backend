@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.core.helpers.LogMasks;
 
 import com.exskylab.koala.business.abstracts.*;
 import com.exskylab.koala.core.properties.AppProperties;
@@ -19,7 +20,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -113,14 +115,14 @@ public class AuthManager implements AuthService {
 
         PendingRegistration pendingRegistration = pendingRegistrationService.getByToken(authVerifyRegistrationTokenDto.getRegistrationToken());
 
-        if (pendingRegistration.getExpiresAt().isBefore(LocalDateTime.now())){
+        if (pendingRegistration.getExpiresAt().isBefore(Instant.now())){
             pendingRegistrationService.deleteById(pendingRegistration.getId());
-            logger.warn("Registration token for email: {} has expired", pendingRegistration.getEmail());
+            logger.warn("Registration token expired for pending registration id: {}", pendingRegistration.getId());
             throw new TokenExpiredException(AuthMessages.REGISTRATION_TOKEN_EXPIRED);
         }
 
         String passwordSetToken = jwtService.generatePasswordSetToken(pendingRegistration.getId());
-        logger.info("Token verified successfully for email: {}", pendingRegistration.getEmail());
+        logger.info("Token verified successfully for pending registration id: {}", pendingRegistration.getId());
 
         return new AuthSetPasswordDto(passwordSetToken, pendingRegistration.isEmployer());
     }
@@ -133,7 +135,7 @@ public class AuthManager implements AuthService {
 
         PendingRegistration pendingRegistration = pendingRegistrationService.getById(pendingRegistrationId);
 
-        logger.info("Completing registration for email: {}", pendingRegistration.getEmail());
+        logger.info("Completing registration for pending registration id: {}", pendingRegistration.getId());
 
 
         User newUser = new User();
@@ -186,7 +188,7 @@ public class AuthManager implements AuthService {
 
     @Override
     public TokenResponseDto login(AuthLoginDto authLoginDto, String ipAddress, String userAgent) {
-        logger.info("Logging in user with email: {}", authLoginDto.getEmail());
+        logger.info("Login attempt for {}", LogMasks.email(authLoginDto.getEmail()));
 
         var user = userService.getByEmail(authLoginDto.getEmail());
 
@@ -247,7 +249,7 @@ public class AuthManager implements AuthService {
             throw new RefreshTokenMismatchException(AuthMessages.REFRESH_TOKEN_AND_SESSION_MISMATCH);
         }
 
-        LocalDateTime now = LocalDateTime.now();
+        Instant now = Instant.now();
 
         if (session.getRefreshExpiresAt().isBefore(now)){
             logger.error("Refresh token has expired for session ID: {}", sessionId);
@@ -276,11 +278,11 @@ public class AuthManager implements AuthService {
         }
 
 
-        LocalDateTime currentRefreshExpiresAt = session.getRefreshExpiresAt();
+        Instant currentRefreshExpiresAt = session.getRefreshExpiresAt();
 
 
-        if (currentRefreshExpiresAt.isBefore(now.plusDays(sessionProperties.getRefreshSlidingWindowDays()))){
-            session.setRefreshExpiresAt(now.plusDays(sessionProperties.getRefreshValidityDays()));
+        if (currentRefreshExpiresAt.isBefore(now.plus(sessionProperties.getRefreshSlidingWindowDays(), ChronoUnit.DAYS))){
+            session.setRefreshExpiresAt(now.plus(sessionProperties.getRefreshValidityDays(), ChronoUnit.DAYS));
             logger.info("Refresh token expiry extended for session ID: {}", sessionId);
         }
 
@@ -303,7 +305,7 @@ public class AuthManager implements AuthService {
             throw new SessionNotFoundException(AuthMessages.SESSION_NOT_FOUND_OR_INACTIVE);
         }
         session.setActive(false);
-        session.getDevice().setLastSeenAt(LocalDateTime.now());
+        session.getDevice().setLastSeenAt(Instant.now());
 
         sessionService.save(session);
         logger.info("Session ID: {} logged out successfully", sessionId);

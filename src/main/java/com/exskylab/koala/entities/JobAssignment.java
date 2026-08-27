@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Getter
@@ -42,13 +42,13 @@ public class JobAssignment extends BaseEntity{
     private PaymentStatus paymentStatus;
 
     @Column(name = "assignment_date_time")
-    private LocalDateTime assignmentDateTime;
+    private Instant assignmentDateTime;
 
     @Column(name = "expected_completion_date_time")
-    private LocalDateTime expectedCompletionDateTime;
+    private Instant expectedCompletionDateTime;
 
     @Column(name = "actual_completion_date_time")
-    private LocalDateTime actualCompletionDateTime;
+    private Instant actualCompletionDateTime;
 
     @Column(name = "work_hours")
     private int workHours;

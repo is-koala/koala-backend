@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -33,7 +33,7 @@ public abstract class UserVerification extends BaseEntity{
     private User user;
 
     @Column(name = "verified_at")
-    private LocalDateTime verifiedAt;
+    private Instant verifiedAt;
 
     @OneToMany(mappedBy = "userVerification", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<VerificationDocument> verificationDocuments;

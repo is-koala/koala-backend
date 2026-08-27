@@ -34,43 +34,43 @@ public class LocationManager implements LocationService {
 
     @Override
     public List<Country> getAllCountries() {
-        logger.info("Getting all countries");
+        logger.debug("Getting all countries");
         return countryDao.findCountriesByOrderByNameAsc();
     }
 
     @Override
     public Country getCountryById(UUID id) {
-        logger.info("Getting country with id: {}", id);
+        logger.debug("Getting country with id: {}", id);
         return countryDao.findById(id).orElseThrow(() -> new ResourceNotFoundException(LocationMessages.COUNTRY_NOT_FOUND_BY_ID));
     }
 
     @Override
     public List<City> getCitiesByCountryId(UUID countryId) {
-        logger.info("Getting cities for country with id: {}", countryId);
+        logger.debug("Getting cities for country with id: {}", countryId);
         return cityDao.findCitiesByCountryIdOrderByNameAsc(countryId);
     }
 
     @Override
     public City getCityById(UUID id) {
-        logger.info("Getting city with id: {}", id);
+        logger.debug("Getting city with id: {}", id);
         return cityDao.findById(id).orElseThrow(() -> new ResourceNotFoundException(LocationMessages.CITY_NOT_FOUND_BY_ID));
     }
 
     @Override
     public List<District> getDistrictsByCityId(UUID cityId) {
-        logger.info("Getting districts for city with id: {}", cityId);
+        logger.debug("Getting districts for city with id: {}", cityId);
         return districtDao.findDistrictsByCityIdOrderByNameAsc(cityId);
     }
 
     @Override
     public District getDistrictById(UUID id) {
-        logger.info("Getting district with id: {}", id);
+        logger.debug("Getting district with id: {}", id);
         return districtDao.findById(id).orElseThrow(() -> new ResourceNotFoundException(LocationMessages.DISTRICT_NOT_FOUND_BY_ID));
     }
 
     @Override
     public Country findCountryByCodeAndName(String countryCode, String countryName) {
-        logger.info("Finding country by code: {} and name: {}", countryCode, countryName);
+        logger.debug("Finding country by code: {} and name: {}", countryCode, countryName);
         return countryDao.findByCodeAndNameAllIgnoreCase(countryCode, countryName)
                 .orElseThrow(() -> new ResourceNotFoundException(LocationMessages.COUNTRY_NOT_FOUND_BY_CODE_AND_NAME));
 
@@ -78,14 +78,14 @@ public class LocationManager implements LocationService {
 
     @Override
     public City findCityByNameAndCountry(String cityName, Country country) {
-        logger.info("Finding city by name: {} and country id: {}", cityName, country.getId());
+        logger.debug("Finding city by name: {} and country id: {}", cityName, country.getId());
         return cityDao.findByNameAndCountryAllIgnoreCase(cityName, country)
                 .orElseThrow(() -> new ResourceNotFoundException(LocationMessages.CITY_NOT_FOUND_BY_NAME_AND_COUNTRY));
     }
 
     @Override
     public District findDistrictByNameAndCity(String districtName, City city) {
-        logger.info("Finding district by name: {} and city id: {}", districtName, city.getId());
+        logger.debug("Finding district by name: {} and city id: {}", districtName, city.getId());
         return districtDao.findByNameAndCityAllIgnoreCase(districtName, city)
                 .orElseThrow(() -> new ResourceNotFoundException(LocationMessages.DISTRICT_NOT_FOUND_BY_NAME_AND_CITY));
     }

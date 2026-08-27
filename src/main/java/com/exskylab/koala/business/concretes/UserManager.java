@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.core.helpers.LogMasks;
 
 import com.exskylab.koala.business.abstracts.*;
 import com.exskylab.koala.core.constants.UserMessages;
@@ -173,11 +174,11 @@ public class UserManager implements UserService {
                 if (existsByEmail(userMePatchRequestDto.getEmail())) {
                     throw new ValidationException(UserMessages.EMAIL_ALREADY_EXISTS);
                 }
-                logger.info("Updating email to: {}, from {}", userMePatchRequestDto.getEmail(), currentUser.getEmail());
+                logger.info("Email change requested for user id: {}", currentUser.getId());
                 var emailVerification = emailVerificationService.startEmailVerification(userMePatchRequestDto.getEmail(), currentUser);
                 pendingVerifications.add(emailVerification);
 
-                logger.info("Email verification email sent to: {}", userMePatchRequestDto.getEmail());
+                logger.info("Email verification mail queued for {}", LogMasks.email(userMePatchRequestDto.getEmail()));
 
             } else {
                 logger.info("Email is the same as the current user's email. No need to update.");
@@ -185,7 +186,7 @@ public class UserManager implements UserService {
         }
 
             if (userMePatchRequestDto.getIban() !=null){
-                logger.info("Updating iban to: {}, from {}", userMePatchRequestDto.getIban(), currentUser.getIban());
+                logger.info("IBAN updated for user id: {}", currentUser.getId());
 
                 boolean isValidIban = IbanValidator.isValid(userMePatchRequestDto.getIban());
 
@@ -335,7 +336,7 @@ public class UserManager implements UserService {
     @Override
     @Transactional(readOnly = true)
     public UserMeResponseDto getCurrentUserFromDatabaseDto() {
-        logger.info("Getting current user DTO.");
+        logger.debug("Getting current user DTO.");
         var authenticatedUser = securityService.getAuthenticatedUser();
         return userMapper.toUserMeResponseDto(authenticatedUser);
     }

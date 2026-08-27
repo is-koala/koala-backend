@@ -6,7 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Getter
@@ -42,9 +42,9 @@ public class CompanyContactInvitation extends BaseEntity{
     private CompanyContactInvitationStatus status;
 
     @Column(name = "invited_at")
-    private LocalDateTime invitedAt;
+    private Instant invitedAt;
 
     @Column(name = "answered_at")
-    private LocalDateTime answeredAt;
+    private Instant answeredAt;
 
 }

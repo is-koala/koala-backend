@@ -7,7 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
@@ -32,7 +32,7 @@ public class Session extends BaseEntity{
     private String refreshTokenHash;
 
     @Column(name = "refresh_expires_at")
-    private LocalDateTime refreshExpiresAt;
+    private Instant refreshExpiresAt;
 
     @Column(name = "ip_address", length = 45)
     private String ipAddress;
@@ -41,7 +41,7 @@ public class Session extends BaseEntity{
     private String location;
 
     @Column(name = "last_accessed_at")
-    private LocalDateTime lastAccessedAt;
+    private Instant lastAccessedAt;
 
     @Column(name = "is_active")
     private boolean isActive = true;

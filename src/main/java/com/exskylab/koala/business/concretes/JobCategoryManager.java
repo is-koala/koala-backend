@@ -26,7 +26,7 @@ public class JobCategoryManager implements JobCategoryService {
 
     @Override
     public JobCategory getJobCategoryById(UUID categoryId) {
-        logger.info("Getting job category with id: {}", categoryId);
+        logger.debug("Getting job category with id: {}", categoryId);
         return jobCategoryDao.findById(categoryId).orElseThrow(() -> {
             logger.error("Job category with id: {} not found", categoryId);
             return new ResourceNotFoundException(JobCategoryMessages.JOB_CATEGORY_NOT_FOUND_BY_ID);
