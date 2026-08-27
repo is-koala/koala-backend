@@ -9,7 +9,10 @@ import com.exskylab.koala.core.dtos.jobAssignment.request.JobAssignmentsAssignme
 import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentsAssignmentIdStatusPatchResponseDto;
 import com.exskylab.koala.core.exceptions.AssignmentAlreadyAnsweredException;
+import com.exskylab.koala.business.abstracts.PaymentService;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
+import com.exskylab.koala.core.helpers.PaymentStateMachine;
+import com.exskylab.koala.core.properties.AppProperties;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.UserNotWorkerForAssignmentException;
 import com.exskylab.koala.core.mappers.JobAssignmentMapper;
@@ -37,10 +40,14 @@ public class JobAssignmentManager implements JobAssignmentService {
     private final CompanyContactService companyContactService;
     private final UserService userService;
     private final CommissionCalculator commissionCalculator;
+    private final PaymentService paymentService;
+    private final PaymentStateMachine paymentStateMachine;
+    private final AppProperties appProperties;
 
 
     public JobAssignmentManager(JobAssignmentDao jobAssignmentDao, SecurityService securityService, JobAssignmentMapper jobAssignmentMapper, IyzicoPaymentService iyzicoPaymentService, CompanyContactService companyContactService, UserService userService,
-                               CommissionCalculator commissionCalculator) {
+                               CommissionCalculator commissionCalculator, PaymentService paymentService,
+                               PaymentStateMachine paymentStateMachine, AppProperties appProperties) {
         this.jobAssignmentDao = jobAssignmentDao;
         this.securityService = securityService;
         this.jobAssignmentMapper = jobAssignmentMapper;
@@ -48,6 +55,9 @@ public class JobAssignmentManager implements JobAssignmentService {
         this.companyContactService = companyContactService;
         this.userService = userService;
         this.commissionCalculator = commissionCalculator;
+        this.paymentService = paymentService;
+        this.paymentStateMachine = paymentStateMachine;
+        this.appProperties = appProperties;
     }
 
 
@@ -109,7 +119,7 @@ public class JobAssignmentManager implements JobAssignmentService {
         logger.info("Job assignment with id {} found", assignmentId);
 
 
-        if (assignment.getStatus() != AssignmentStatus.CONFIRMED || assignment.getPaymentStatus() != PaymentStatus.PENDING_COLLECTION){
+        if (!paymentStateMachine.canInitiate(assignment)){
             logger.warn("Assignment with ID: {} is not in a state to initiate payment. Status: {}, PaymentStatus: {}", assignment.getId(), assignment.getStatus(), assignment.getPaymentStatus());
             throw new IllegalStateException(JobAssignmentMessages.ASSIGNMENT_NOT_READY_FOR_PAYMENT);
         }
@@ -153,21 +163,17 @@ public class JobAssignmentManager implements JobAssignmentService {
 
 
         CommissionCalculator.Breakdown breakdown = commissionCalculator.calculate(job.getSalary());
-
-        assignment.setWorkerPayout(breakdown.workerPayout());
-        assignment.setCommissionAmount(breakdown.commission());
-        assignment.setCommissionRate(breakdown.rate());
-        assignment.setTotalCharged(breakdown.totalCharged());
+        Payment payment = paymentService.startAttempt(assignment, breakdown);
 
         PaymentSessionRequestDto iyzicoRequest = new PaymentSessionRequestDto();
 
-        iyzicoRequest.setConversationId(assignmentId.toString());
+        iyzicoRequest.setConversationId(payment.getConversationId());
         iyzicoRequest.setPrice(breakdown.totalCharged().doubleValue());
         iyzicoRequest.setPaidPrice(breakdown.totalCharged().doubleValue());
         iyzicoRequest.setCurrency("TRY");
-        iyzicoRequest.setBasketId(assignmentId.toString());
+        iyzicoRequest.setBasketId(assignment.getId().toString());
         iyzicoRequest.setPaymentGroup("PRODUCT");
-        iyzicoRequest.setCallbackUrl("https://iskoala.com/payment/callback"); // will implement
+        iyzicoRequest.setCallbackUrl(appProperties.apiUrl() + "/payments/callback");
 
         fillBuyerAndAddressInfo(iyzicoRequest, job, clientIpAddress, currentUser);
 
@@ -180,9 +186,9 @@ public class JobAssignmentManager implements JobAssignmentService {
         iyzicoRequest.setBasketItems(List.of(basketItem));
 
         PaymentSessionResponseDto paymentSession = iyzicoPaymentService.initiateCheckoutFormPayment(iyzicoRequest);
+        paymentService.attachProviderToken(payment, paymentSession.getToken());
 
-        jobAssignmentDao.save(assignment);
-        logger.info("Payment session initiated and saved for job assignment with id {}", assignmentId);
+        logger.info("Payment session initiated for job assignment with id {} and payment {}", assignmentId, payment.getId());
         return jobAssignmentMapper.tojobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto(paymentSession);
 
     }

@@ -21,4 +21,5 @@
     <include file="db/changelog/2025/10/01-01-changelog.xml"/>
     <include file="db/changelog/2026/08/26-01-money-to-numeric.xml"/>
     <include file="db/changelog/2026/08/27-01-timestamps-to-utc.xml"/>
+    <include file="db/changelog/2026/08/27-02-payments.xml"/>
 </databaseChangeLog>

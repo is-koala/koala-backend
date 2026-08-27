@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-08-27-02-create-payments" author="koala">
+        <createTable tableName="payments">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="job_assignment_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="conversation_id" type="VARCHAR(64)">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uk_payments_conversation_id"/>
+            </column>
+            <column name="provider_token" type="VARCHAR(512)"/>
+            <column name="status" type="VARCHAR(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="currency" type="VARCHAR(3)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="worker_payout" type="NUMERIC(19, 2)"/>
+            <column name="commission_amount" type="NUMERIC(19, 2)"/>
+            <column name="commission_rate" type="NUMERIC(6, 4)"/>
+            <column name="total_charged" type="NUMERIC(19, 2)"/>
+            <column name="provider_payment_id" type="VARCHAR(128)"/>
+            <column name="provider_transaction_id" type="VARCHAR(128)"/>
+            <column name="failure_reason" type="VARCHAR(512)"/>
+            <column name="completed_at" type="TIMESTAMPTZ"/>
+            <column name="created_at" type="TIMESTAMPTZ">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+        </createTable>
+
+        <addForeignKeyConstraint baseTableName="payments" baseColumnNames="job_assignment_id"
+                                 constraintName="fk_payments_job_assignment"
+                                 referencedTableName="job_assignments" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="payments" baseColumnNames="created_by_id"
+                                 constraintName="fk_payments_created_by"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="payments" baseColumnNames="updated_by_id"
+                                 constraintName="fk_payments_updated_by"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+
+        <createIndex tableName="payments" indexName="idx_payments_job_assignment">
+            <column name="job_assignment_id"/>
+        </createIndex>
+        <createIndex tableName="payments" indexName="idx_payments_provider_token">
+            <column name="provider_token"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

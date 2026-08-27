@@ -90,6 +90,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/job-assignments/{assignmentId}/payment-session/initiate").hasAnyRole("USER", "ADMIN")
 
 
+                        //payment endpoints
+                        .requestMatchers(HttpMethod.POST, "/payments/callback").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/payments/job-assignments/{assignmentId}").hasAnyRole("USER", "ADMIN")
+
                         //actuator
                         .requestMatchers("/actuator/health/**").permitAll()
                         .requestMatchers("/actuator/**").hasRole("ADMIN")

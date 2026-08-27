@@ -19,6 +19,8 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.InsufficientAuthenticationException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -98,6 +100,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Result> handleJwt(JwtException ex) {
         logger.warn("Gecersiz JWT: {}", ex.getMessage());
         return build(HttpStatus.UNAUTHORIZED, "{jwt.invalid}", "JWT_INVALID", null);
+    }
+
+    @ExceptionHandler({MissingServletRequestParameterException.class, MethodArgumentTypeMismatchException.class})
+    public ResponseEntity<Result> handleBadRequestParameter(Exception ex) {
+        logger.warn("Gecersiz istek parametresi: {}", ex.getMessage());
+        return build(HttpStatus.BAD_REQUEST, "{request.parameter.invalid}", "INVALID_REQUEST_PARAMETER", null);
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
