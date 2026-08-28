@@ -28,4 +28,6 @@ public class JobApplicantDto {
 
     private String cvUrl;
 
+    private String jobTitle;
+
 }

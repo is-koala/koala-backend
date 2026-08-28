@@ -22,6 +22,10 @@ import java.util.UUID;
 
 public interface CompanyService {
 
+    CompanyDto updateLogo(UUID companyId, MultipartFile logo);
+
+    CompanyDto removeLogo(UUID companyId);
+
     void followCompany(UUID companyId);
 
     void unfollowCompany(UUID companyId);

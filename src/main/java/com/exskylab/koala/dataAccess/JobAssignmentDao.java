@@ -40,6 +40,8 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
 
     long countByWorkerIdAndStatus(UUID workerId, AssignmentStatus status);
 
+    boolean existsByJobIdAndStatusIn(UUID jobId, java.util.Collection<AssignmentStatus> statuses);
+
     long countByJobCreatorIdAndStatus(UUID creatorId, AssignmentStatus status);
 
     @Query("""

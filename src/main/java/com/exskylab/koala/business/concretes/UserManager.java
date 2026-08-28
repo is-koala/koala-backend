@@ -96,7 +96,7 @@ public class UserManager implements UserService {
         this.badgeService = badgeService;
         this.badgeMapper = badgeMapper;
             this.pageableSanitizer = pageableSanitizer;
-    }
+        }
 
     @Override
     public User getByEmail(String email) {

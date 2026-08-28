@@ -37,6 +37,8 @@ public interface JobAssignmentService {
 
     long countCompletedForEmployer(UUID employerId);
 
+    boolean hasLiveAssignmentForJob(UUID jobId);
+
     boolean hasMoneyInEscrowFor(UUID workerId);
 
     boolean hasActiveWorkFor(UUID workerId);

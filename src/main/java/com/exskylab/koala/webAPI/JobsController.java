@@ -110,6 +110,21 @@ public class JobsController {
         return ResponseEntity.ok(new SuccessResult(JobMessages.JOB_CLOSED, HttpStatus.OK));
     }
 
+    @Operation(summary = "İlanı iptal et",
+            description = "İlanı CANCELLED durumuna çeker ve başvuranlara bildirim gönderir. Kapatmadan farkı: kapatma yalnızca yeni başvuruyu durdurur, iptal ilanı geçersiz kılar. Devam eden bir iş ataması varsa iptal edilemez; o durumda atamanın kendi iptal akışı kullanılır. Kayıt silinmez, başvuru geçmişi korunur.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "İlan iptal edildi"),
+            @ApiResponse(responseCode = "404", description = "İlan bulunamadı ya da yetki yok",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "İlan zaten iptal edilmiş ya da devam eden atama var",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @PostMapping("/{jobId}/cancel")
+    public ResponseEntity<SuccessResult> cancelJob(@PathVariable UUID jobId) {
+        jobService.cancelJob(jobId);
+        return ResponseEntity.ok(new SuccessResult(JobMessages.JOB_CANCELLED, HttpStatus.OK));
+    }
+
     @SecurityRequirements
     @Operation(summary = "İlan galerisi",
             description = "Sıra numarasına göre döner, kapak görseli cover bayrağıyla işaretlidir.")

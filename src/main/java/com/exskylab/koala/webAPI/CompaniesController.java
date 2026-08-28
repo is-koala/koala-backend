@@ -194,6 +194,36 @@ public class CompaniesController {
                 CompanyMessages.CONTACTS_LISTED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Şirket logosunu değiştir",
+            description = "Yalnızca şirketin ADMIN yetkilisi değiştirebilir. Görsel metadata temizlenerek depoya yazılır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Logo güncellendi"),
+            @ApiResponse(responseCode = "404", description = "Şirket bulunamadı ya da yetki yok",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "400", description = "Dosya boş, çok büyük ya da desteklenmeyen türde",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @PutMapping(value = "/{companyId}/logo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<SuccessDataResult<CompanyDto>> updateCompanyLogo(
+            @PathVariable UUID companyId, @RequestPart("logo") MultipartFile logo) {
+
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                companyService.updateLogo(companyId, logo), CompanyMessages.LOGO_UPDATED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "Şirket logosunu kaldır",
+            description = "Logo bağlantısı düşürülür; depodaki nesne silinmez.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Logo kaldırıldı"),
+            @ApiResponse(responseCode = "404", description = "Şirket bulunamadı ya da yetki yok",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @DeleteMapping("/{companyId}/logo")
+    public ResponseEntity<SuccessDataResult<CompanyDto>> removeCompanyLogo(@PathVariable UUID companyId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                companyService.removeLogo(companyId), CompanyMessages.LOGO_REMOVED, HttpStatus.OK));
+    }
+
     @Operation(summary = "Şirketi takip et",
             description = "İdempotanttır, ikinci istek yeni kayıt açmaz. Takip edilen şirket ilan açtığında bildirim gider.")
     @ApiResponses({

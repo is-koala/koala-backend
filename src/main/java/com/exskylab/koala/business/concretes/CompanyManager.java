@@ -353,6 +353,32 @@ public class CompanyManager implements CompanyService {
 
     @Override
     @Transactional
+    public CompanyDto updateLogo(UUID companyId, MultipartFile logo) {
+        requireCompanyAdmin(companyId);
+        Company company = getCompanyById(companyId);
+
+        company.setLogo(imageService.uploadImage(logo));
+        companyDao.save(company);
+
+        log.info("Logo updated for company {}", companyId);
+        return getCompanyDetail(companyId);
+    }
+
+    @Override
+    @Transactional
+    public CompanyDto removeLogo(UUID companyId) {
+        requireCompanyAdmin(companyId);
+        Company company = getCompanyById(companyId);
+
+        company.setLogo(null);
+        companyDao.save(company);
+
+        log.info("Logo removed from company {}", companyId);
+        return getCompanyDetail(companyId);
+    }
+
+    @Override
+    @Transactional
     public void followCompany(UUID companyId) {
         companyFollowService.follow(getCompanyById(companyId), securityService.getAuthenticatedUserId());
     }

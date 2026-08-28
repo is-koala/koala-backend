@@ -40,6 +40,8 @@ public class JobSummaryDto {
 
     private String coverImageUrl;
 
+    private long applicationCount;
+
     private Double latitude;
 
     private Double longitude;

@@ -17,6 +17,7 @@ public interface CompanyMapper {
     @Mapping(target = "companyContacts", source = "contacts")
     @Mapping(target = "followerCount", ignore = true)
     @Mapping(target = "following", ignore = true)
+    @Mapping(target = "approved", source = "approved")
     CompanyDto toCompanyDto(Company company);
 
     @Mapping(target = "logoUrl", source = "logo", qualifiedByName = "imageToPublicUrl")

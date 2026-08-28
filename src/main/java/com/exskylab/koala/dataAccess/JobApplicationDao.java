@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -19,6 +20,16 @@ public interface JobApplicationDao extends JpaRepository<JobApplication, UUID> {
     boolean existsByJobIdAndUserId(UUID jobId, UUID userId);
 
     boolean existsByUserIdAndJobCreatorId(UUID userId, UUID creatorId);
+
+    @Query("select a.job.id as jobId, count(a) as total from JobApplication a "
+            + "where a.job.id in :jobIds group by a.job.id")
+    List<JobApplicationCount> countByJobIds(@Param("jobIds") Collection<UUID> jobIds);
+
+    interface JobApplicationCount {
+        UUID getJobId();
+
+        long getTotal();
+    }
 
     @Query("select distinct a.job.company.id from JobApplication a "
             + "where a.user.id = :workerId and a.job.company is not null")

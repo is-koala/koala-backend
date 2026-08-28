@@ -39,6 +39,8 @@ public interface JobService {
 
     void closeJob(UUID jobId);
 
+    void cancelJob(UUID jobId);
+
     boolean existsById(UUID jobId);
 
     long countJobsCreatedBy(UUID userId);

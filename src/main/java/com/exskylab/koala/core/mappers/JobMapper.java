@@ -30,6 +30,7 @@ public interface JobMapper {
     @Mapping(target = "latitude", source = "address.latitude")
     @Mapping(target = "longitude", source = "address.longitude")
     @Mapping(target = "coverImageUrl", ignore = true)
+    @Mapping(target = "applicationCount", ignore = true)
     JobSummaryDto toJobSummaryDto(Job job);
 
     JobDetailDto toJobDetailDto(Job job);

@@ -1,6 +1,8 @@
 package com.exskylab.koala.core.constants;
 
 public class CompanyMessages {
+    public static final String LOGO_UPDATED = "{company.logo.updated}";
+    public static final String LOGO_REMOVED = "{company.logo.removed}";
     public static final String COMPANY_FOLLOWED = "{company.followed}";
     public static final String COMPANY_UNFOLLOWED = "{company.unfollowed}";
     public static final String FOLLOWED_COMPANIES_LISTED = "{company.followed.listed}";

@@ -29,8 +29,10 @@ import com.exskylab.koala.core.dtos.user.request.VerifyIdentityDto;
 import com.exskylab.koala.core.dtos.user.response.UserMeResponseDto;
 import com.exskylab.koala.core.dtos.user.response.UserUpdateResponseDto;
 import com.exskylab.koala.core.helpers.BearerTokenExtractor;
+import com.exskylab.koala.business.abstracts.PublicProfileService;
 import com.exskylab.koala.business.abstracts.StatisticsService;
 import com.exskylab.koala.core.dtos.statistics.response.EmployerStatsDto;
+import com.exskylab.koala.core.dtos.user.response.PublicProfileDto;
 import com.exskylab.koala.core.mappers.JobMapper;
 import com.exskylab.koala.core.mappers.UserMapper;
 import com.exskylab.koala.core.security.JwtService;
@@ -63,15 +65,31 @@ public class UsersController {
     private final JobService jobService;
     private final JobMapper jobMapper;
     private final StatisticsService statisticsService;
+    private final PublicProfileService publicProfileService;
 
     public UsersController(UserService userService, JwtService jwtService, SecurityService securityService, JobService jobService, JobMapper jobMapper,
-                           StatisticsService statisticsService) {
+                           StatisticsService statisticsService, PublicProfileService publicProfileService) {
         this.userService = userService;
         this.jwtService = jwtService;
         this.securityService = securityService;
         this.jobService = jobService;
         this.jobMapper = jobMapper;
         this.statisticsService = statisticsService;
+        this.publicProfileService = publicProfileService;
+    }
+
+    @Operation(summary = "Kullanıcının profili",
+            description = "Ad, soyad, fotoğraf, meslek, hakkında ve il/ilçe. Tam adres hiçbir zaman dönmez. **cvUrl yalnızca** profil sahibinin kendisine ya da o kişinin başvurduğu bir ilanın işverenine döner, diğerlerinde null kalır. Uç giriş yapmış kullanıcılara açıktır, anonime değil.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Profil döndürüldü"),
+            @ApiResponse(responseCode = "404", description = "Kullanıcı bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @GetMapping("/{userId}")
+    public ResponseEntity<SuccessDataResult<PublicProfileDto>> publicProfile(@PathVariable UUID userId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                publicProfileService.getPublicProfile(userId),
+                UserMessages.USER_RETRIEVED_SUCCESSFULLY, HttpStatus.OK));
     }
 
     @SecurityRequirements

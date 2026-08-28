@@ -50,6 +50,10 @@ import java.util.UUID;
 @Slf4j
 public class JobAssignmentManager implements JobAssignmentService {
 
+    private static final java.util.Set<AssignmentStatus> LIVE_ASSIGNMENT_STATUSES =
+            java.util.EnumSet.of(AssignmentStatus.PENDING_CONFIRMATION, AssignmentStatus.CONFIRMED,
+                    AssignmentStatus.IN_PROGRESS);
+
     private static final java.util.Set<String> MY_ASSIGNMENTS_SORTABLE =
             java.util.Set.of("assignmentDateTime", "actualCompletionDateTime", "status");
 
@@ -426,6 +430,12 @@ public class JobAssignmentManager implements JobAssignmentService {
     @Transactional(readOnly = true)
     public long countCompletedForWorker(UUID workerId) {
         return jobAssignmentDao.countByWorkerIdAndStatus(workerId, AssignmentStatus.COMPLETED);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasLiveAssignmentForJob(UUID jobId) {
+        return jobAssignmentDao.existsByJobIdAndStatusIn(jobId, LIVE_ASSIGNMENT_STATUSES);
     }
 
     @Override

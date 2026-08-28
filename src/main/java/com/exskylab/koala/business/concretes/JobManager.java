@@ -22,6 +22,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.mappers.JobMapper;
+import com.exskylab.koala.core.dtos.notification.request.SendPushToUserDto;
+import com.exskylab.koala.core.helpers.MessageResolver;
+import com.exskylab.koala.dataAccess.JobApplicationDao;
 import com.exskylab.koala.dataAccess.JobDao;
 import com.exskylab.koala.entities.*;
 import com.exskylab.koala.core.exceptions.ValidationException;
@@ -54,11 +57,17 @@ public class JobManager implements JobService {
     private final JobAlertService jobAlertService;
     private final GalleryService galleryService;
     private final CompanyFollowService companyFollowService;
+    private final JobApplicationDao jobApplicationDao;
+    private final JobAssignmentService jobAssignmentService;
+    private final NotificationService notificationService;
+    private final MessageResolver messageResolver;
 
     public JobManager(JobDao jobDao, SecurityService securityService, JobCategoryService jobCategoryService, AddressService addressService, CompanyService companyService, JobMapper jobMapper,
                       PageableSanitizer pageableSanitizer, CompanyContactService companyContactService,
                       JobAlertService jobAlertService, GalleryService galleryService,
-                      CompanyFollowService companyFollowService) {
+                      CompanyFollowService companyFollowService, JobApplicationDao jobApplicationDao,
+                      JobAssignmentService jobAssignmentService, NotificationService notificationService,
+                      MessageResolver messageResolver) {
         this.jobDao = jobDao;
         this.securityService = securityService;
         this.jobCategoryService = jobCategoryService;
@@ -70,6 +79,10 @@ public class JobManager implements JobService {
         this.jobAlertService = jobAlertService;
         this.galleryService = galleryService;
         this.companyFollowService = companyFollowService;
+        this.jobApplicationDao = jobApplicationDao;
+        this.jobAssignmentService = jobAssignmentService;
+        this.notificationService = notificationService;
+        this.messageResolver = messageResolver;
     }
 
     @Override
@@ -273,7 +286,7 @@ public class JobManager implements JobService {
                 criteria.getMaxLongitude(),
                 pageable);
 
-        return withCovers(PageDto.of(ids, jobMapper.toJobSummaryDtoList(inIdOrder(ids.getContent()))));
+        return enrich(PageDto.of(ids, jobMapper.toJobSummaryDtoList(inIdOrder(ids.getContent()))));
     }
 
     @Override
@@ -283,7 +296,7 @@ public class JobManager implements JobService {
         Pageable pageable = pageableSanitizer.sanitize(requested, SORTABLE_FIELDS, DEFAULT_SORT);
 
         Page<Job> jobs = jobDao.findAllByCreatorId(securityService.getAuthenticatedUserId(), pageable);
-        return withCovers(PageDto.of(jobs, jobMapper::toJobSummaryDto));
+        return enrich(PageDto.of(jobs, jobMapper::toJobSummaryDto));
     }
 
     @Override
@@ -311,6 +324,43 @@ public class JobManager implements JobService {
     @Transactional
     public List<GalleryImageDto> removeJobImage(UUID jobId, UUID imageId) {
         return galleryService.removeJobImage(requireJobEditor(jobId), imageId);
+    }
+
+    @Override
+    @Transactional
+    public void cancelJob(UUID jobId) {
+        Job job = requireJobEditor(jobId);
+
+        if (job.getStatus() == JobStatus.CANCELLED || job.getStatus() == JobStatus.COMPLETED) {
+            throw new ConflictException(JobMessages.JOB_NOT_CANCELLABLE);
+        }
+
+        if (jobAssignmentService.hasLiveAssignmentForJob(jobId)) {
+            throw new ConflictException(JobMessages.JOB_HAS_LIVE_ASSIGNMENT);
+        }
+
+        job.setStatus(JobStatus.CANCELLED);
+        jobDao.save(job);
+
+        log.info("Job {} cancelled by user {}", jobId, securityService.getAuthenticatedUserId());
+        notifyApplicantsOfCancellation(job);
+    }
+
+    private void notifyApplicantsOfCancellation(Job job) {
+        for (JobApplication application : jobApplicationDao.findAllByJobId(job.getId())) {
+            try {
+                SendPushToUserDto push = new SendPushToUserDto();
+                push.setRecipient(application.getUser());
+                push.setTitle(job.getTitle());
+                push.setBody(messageResolver.resolve(JobMessages.JOB_CANCELLED_NOTICE));
+                push.setCategory(NotificationCategory.JOB_ALERTS);
+
+                notificationService.sendPushToUser(push, DispatchPriority.NORMAL, true);
+            } catch (Exception exception) {
+                log.warn("Applicant {} could not be notified about cancelled job {}: {}",
+                        application.getUser().getId(), job.getId(), exception.getMessage());
+            }
+        }
     }
 
     @Override
@@ -348,8 +398,20 @@ public class JobManager implements JobService {
         log.info("Job {} closed by user {}", jobId, securityService.getAuthenticatedUserId());
     }
 
-    private PageDto<JobSummaryDto> withCovers(PageDto<JobSummaryDto> page) {
-        galleryService.fillJobCovers(page.content());
+    private PageDto<JobSummaryDto> enrich(PageDto<JobSummaryDto> page) {
+        List<JobSummaryDto> content = page.content();
+        if (content.isEmpty()) {
+            return page;
+        }
+
+        galleryService.fillJobCovers(content);
+
+        List<UUID> ids = content.stream().map(JobSummaryDto::getId).toList();
+        Map<UUID, Long> counts = jobApplicationDao.countByJobIds(ids).stream()
+                .collect(Collectors.toMap(JobApplicationDao.JobApplicationCount::getJobId,
+                        JobApplicationDao.JobApplicationCount::getTotal));
+
+        content.forEach(job -> job.setApplicationCount(counts.getOrDefault(job.getId(), 0L)));
         return page;
     }
 

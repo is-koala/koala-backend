@@ -46,4 +46,6 @@ public class CompanyDto {
 
     private boolean following;
 
+    private boolean approved;
+
 }
