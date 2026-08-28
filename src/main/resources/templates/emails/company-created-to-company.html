@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="tr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Koala</title>
+</head>
+<body th:replace="~{emails/layout :: page(~{::content})}">
+<div th:fragment="content">
+    <h1 style='font-family: "DM Sans", sans-serif; font-size: 28px; font-weight: 600; color: #282828; margin: 0 0 20px 0;'><span th:text="${companyName}">[Şirket]</span><br>başvurun alındı</h1>
+    <p style='font-family: "DM Sans", sans-serif; font-size: 18px; font-weight: 400; color: #4D4D4D; line-height: 1.5; margin: 0 0 20px 0;'>Şirket oluşturma talebin bize ulaştı. Ekibimiz bilgileri inceledikten sonra şirketin onaylanacak ve ilan yayınlamaya başlayabileceksin.</p>
+    <p style='font-family: "DM Sans", sans-serif; font-size: 15px; color: #4D4D4D; line-height: 1.5; margin: 0;'>Bu bildirim <span th:text="${companyEmail}">[E-posta]</span> adresine gönderildi.<br>Şirket numarası: <span th:text="${companyId}">-</span></p>
+</div>
+</body>
+</html>

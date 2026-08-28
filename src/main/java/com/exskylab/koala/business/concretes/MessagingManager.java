@@ -138,12 +138,13 @@ public class MessagingManager implements MessagingService {
     @Override
     @Transactional
     public int markRead(UUID conversationId) {
-        loadParticipating(conversationId);
+        Conversation conversation = loadParticipating(conversationId);
         UUID readerId = securityService.getAuthenticatedUserId();
 
         int marked = messageDao.markConversationRead(conversationId, readerId, Instant.now());
         if (marked > 0) {
-            realtimePublisher.conversationRead(conversationId, readerId);
+            realtimePublisher.conversationRead(conversationId, readerId,
+                    List.of(conversation.getEmployer().getId(), conversation.getWorker().getId()));
         }
         return marked;
     }

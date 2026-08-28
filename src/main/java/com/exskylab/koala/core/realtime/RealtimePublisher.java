@@ -37,8 +37,11 @@ public class RealtimePublisher {
         publish(CONVERSATION_TOPIC + conversationId, RealtimeEventDto.typing(conversationId, userId));
     }
 
-    public void conversationRead(UUID conversationId, UUID readerId) {
-        publish(CONVERSATION_TOPIC + conversationId, RealtimeEventDto.read(conversationId, readerId));
+    public void conversationRead(UUID conversationId, UUID readerId, Collection<UUID> participantIds) {
+        RealtimeEventDto event = RealtimeEventDto.read(conversationId, readerId);
+
+        publish(CONVERSATION_TOPIC + conversationId, event);
+        participantIds.forEach(participantId -> publishToUser(participantId, USER_MESSAGE_QUEUE, event));
     }
 
     public void presenceChanged(UUID userId, boolean online) {

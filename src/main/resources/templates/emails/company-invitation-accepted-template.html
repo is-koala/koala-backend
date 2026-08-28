@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="tr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Koala</title>
+</head>
+<body th:replace="~{emails/layout :: page(~{::content})}">
+<div th:fragment="content">
+    <h1 style='font-family: "DM Sans", sans-serif; font-size: 28px; font-weight: 600; color: #282828; margin: 0 0 20px 0;'>Merhaba <span th:text="${firstName}">[İsim]</span>!<br>Davetini kabul ettin</h1>
+    <p style='font-family: "DM Sans", sans-serif; font-size: 18px; font-weight: 400; color: #4D4D4D; line-height: 1.5; margin: 0 0 20px 0;'>Artık <span th:text="${companyName}" style="font-weight: 600;">[Şirket]</span> şirketinde <span th:text="${role}" style="font-weight: 600;">[Rol]</span> olarak görünüyorsun.</p>
+    <p style='font-family: "DM Sans", sans-serif; font-size: 15px; color: #4D4D4D; line-height: 1.5; margin: 0;'>Şirket adına ilan açmak için uygulamadaki şirket bölümünü kullanabilirsin.</p>
+</div>
+</body>
+</html>

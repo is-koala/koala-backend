@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="tr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Koala</title>
+</head>
+<body th:replace="~{emails/layout :: page(~{::content})}">
+<div th:fragment="content">
+    <h1 style='font-family: "DM Sans", sans-serif; font-size: 28px; font-weight: 600; color: #282828; margin: 0 0 20px 0;'>Merhaba <span th:text="${firstName}">[İsim]</span>!<br>Yeni e-posta adresini doğrula</h1>
+    <p style='font-family: "DM Sans", sans-serif; font-size: 18px; font-weight: 400; color: #4D4D4D; line-height: 1.5; margin: 0 0 20px 0;'>Hesabının e-posta adresini <span th:text="${email}" style="font-weight: 600;">[E-posta]</span> olarak değiştirmek istedin. Aşağıdaki kodu uygulamaya girerek doğrulamayı tamamlayabilirsin.</p>
+    <div style='font-family: "Manrope", sans-serif; display: inline-block; background-color: #F15757; color: #ffffff; font-weight: 700; font-size: 26px; letter-spacing: 6px; padding: 14px 28px; border-radius: 8px; margin: 0 0 20px 0;' th:text="${verificationCode}">------</div>
+    <p style='font-family: "DM Sans", sans-serif; font-size: 15px; color: #4D4D4D; line-height: 1.5; margin: 0;'>Bu değişikliği sen istemediysen bu e-postayı yok sayabilirsin; adresin değişmez.</p>
+</div>
+</body>
+</html>

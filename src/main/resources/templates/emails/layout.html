@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="tr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Koala</title>
+</head>
+<body th:fragment="page(content)" style="margin: 0; padding: 0; background-color: #2a2a2a;">
+<center>
+    <table class="email-container" border="0" cellpadding="0" cellspacing="0" width="680" style="max-width: 680px; margin: 0 auto; background-image: url('https://cdn.iskoala.com/images/f7fad770-0fe3-4590-8c02-a9666288c697-koala-mail-background.png'); background-size: cover; background-position: center; border-radius: 24px;">
+        <tr>
+            <td align="center" style="padding: 20px;">
+                <table class="content-table" border="0" cellpadding="0" cellspacing="0" width="100%">
+
+                    <tr>
+                        <td style="padding: 20px 12px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="left" width="50%">
+                                        <img src="https://cdn.iskoala.com/images/b70a6f9c-6508-48f2-be47-154b6a39f917-koala-mail-logo.png" alt="Koala Logo" height="70" style="height: 70px; width: auto; display: block;">
+                                    </td>
+                                    <td align="right" width="50%">
+                                        <img src="https://cdn.iskoala.com/images/4568fb67-479d-48f2-9920-4ad69db9a446-koala-mail-text.png" alt="KOALA" height="45" style="height: 45px; width: auto; display: block;">
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td style="padding: 0 20px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #ffffff; border-radius: 24px; text-align: center;">
+                                <tr>
+                                    <td style="padding: 40px 20px;">
+                                        <div th:replace="${content}">-</div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td style="padding: 20px;">
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #ffffff; border-radius: 24px; text-align: center;">
+                                <tr>
+                                    <td style="padding: 40px 20px;">
+                                        <p style='font-family: "DM Sans", sans-serif; font-size: 18px; color: #4D4D4D; margin: 0 0 20px 0;'>Herhangi bir sorun yaşarsan bize ulaşmaktan çekinme!</p>
+                                        <a href="mailto:info@iskoala.com" style='font-family: "DM Sans", sans-serif; font-size: 14px; color: #4D4D4D; text-decoration: underline; font-weight: 600; margin: 0 10px;'>info@iskoala.com</a>
+                                        <a href="https://www.iskoala.com/faq" target="_blank" style='font-family: "DM Sans", sans-serif; font-size: 14px; color: #4D4D4D; text-decoration: underline; font-weight: 600; margin: 0 10px;'>iskoala.com/faq</a>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td style="padding: 40px 32px; text-align: center;">
+                            <div style='font-family: "DM Sans", sans-serif; font-size: 14px; color: #1F1F1F; line-height: 1.5; margin: 0 0 20px 0;'>
+                                YTÜ Teknopark Davutpaşa Kampüsü<br> İstanbul, Türkiye
+                            </div>
+                        </td>
+                    </tr>
+
+                </table>
+            </td>
+        </tr>
+    </table>
+</center>
+<img th:if="${trackingUrl != null}" th:src="${trackingUrl}" width="1" height="1" border="0" alt="" style="position:absolute; visibility:hidden; display:block;"/>
+</body>
+</html>

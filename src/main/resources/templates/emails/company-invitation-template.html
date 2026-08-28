@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="tr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Koala</title>
+</head>
+<body th:replace="~{emails/layout :: page(~{::content})}">
+<div th:fragment="content">
+    <h1 style='font-family: "DM Sans", sans-serif; font-size: 28px; font-weight: 600; color: #282828; margin: 0 0 20px 0;'>Merhaba <span th:text="${firstName}">[İsim]</span>!<br>Bir şirkete davet edildin</h1>
+    <p style='font-family: "DM Sans", sans-serif; font-size: 18px; font-weight: 400; color: #4D4D4D; line-height: 1.5; margin: 0 0 20px 0;'><span th:text="${invitedByFirstName} + ' ' + ${invitedByLastName}" style="font-weight: 600;">[Davet eden]</span>, seni <span th:text="${companyName}" style="font-weight: 600;">[Şirket]</span> şirketine <span th:text="${role}" style="font-weight: 600;">[Rol]</span> olarak davet etti.</p>
+    <p style='font-family: "DM Sans", sans-serif; font-size: 18px; font-weight: 400; color: #4D4D4D; line-height: 1.5; margin: 0 0 20px 0;'>Daveti Koala uygulamasındaki bildirimler bölümünden kabul edebilir ya da reddedebilirsin.</p>
+    <p style='font-family: "DM Sans", sans-serif; font-size: 15px; color: #4D4D4D; line-height: 1.5; margin: 0;'>Bu daveti beklemiyorduysan reddedebilirsin; hesabında hiçbir değişiklik olmaz.</p>
+</div>
+</body>
+</html>

@@ -55,7 +55,7 @@ public class EmailConsumer {
         notificationService.save(notification);
 
         try{
-            String trackingUrl = appProperties.apiUrl() + "/api/notifications/track/" + emailTaskDto.id()+".png";
+            String trackingUrl = appProperties.apiUrl() + "/notification-tracking/" + emailTaskDto.id() + ".png";
             Context context = new Context();
             context.setVariables(emailTaskDto.templateParameters());
             context.setVariable("trackingUrl", trackingUrl);
