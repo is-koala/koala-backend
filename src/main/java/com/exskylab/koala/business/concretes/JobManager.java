@@ -1,5 +1,8 @@
 package com.exskylab.koala.business.concretes;
 
+import java.util.Locale;
+import lombok.extern.slf4j.Slf4j;
+import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.*;
 import com.exskylab.koala.core.constants.JobMessages;
 import com.exskylab.koala.core.dtos.job.request.CreateCompanyJobDto;
@@ -7,20 +10,18 @@ import com.exskylab.koala.core.dtos.job.request.CreateIndividualJobDto;
 import com.exskylab.koala.core.dtos.job.response.CompanyJobDto;
 import com.exskylab.koala.core.dtos.job.response.IndividualJobDto;
 import com.exskylab.koala.core.dtos.common.PageDto;
-import com.exskylab.koala.core.dtos.job.request.JobSearchCriteria;
+import com.exskylab.koala.core.dtos.job.request.JobSearchCriteriaDto;
 import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import com.exskylab.koala.core.exceptions.UserIsNotEmployerException;
+import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.mappers.JobMapper;
 import com.exskylab.koala.dataAccess.JobDao;
 import com.exskylab.koala.entities.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import jakarta.validation.ValidationException;
+import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.business.abstracts.JobAlertService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,11 +34,10 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 public class JobManager implements JobService {
 
     private final JobDao jobDao;
-
-    private final Logger logger = LoggerFactory.getLogger(JobManager.class);
     private final CompanyService companyService;
 
     private final SecurityService securityService;
@@ -67,40 +67,40 @@ public class JobManager implements JobService {
     @Override
     @Transactional
     public IndividualJobDto createIndividualJob(CreateIndividualJobDto usersMeJobsPostRequestDto) {
-        logger.info("Creating individual job...");
+        log.debug("Creating individual job");
         User authenticatedUser = securityService.getAuthenticatedUser();
-        logger.info("Creating individual job for userId: {}", authenticatedUser.getId());
+        log.info("Creating individual job for userId: {}", authenticatedUser.getId());
 
         if (!authenticatedUser.isEmployer()){
-            logger.error("User with id: {} is not an employer. Cannot create job.", authenticatedUser.getId());
-            throw new UserIsNotEmployerException(JobMessages.USER_IS_NOT_EMPLOYER);
+            log.error("User with id: {} is not an employer. Cannot create job.", authenticatedUser.getId());
+            throw new ForbiddenException(JobMessages.USER_IS_NOT_EMPLOYER);
         }
 
         JobType type;
         try {
-            type = JobType.valueOf(usersMeJobsPostRequestDto.getType().toUpperCase());
+            type = JobType.valueOf(usersMeJobsPostRequestDto.getType().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            logger.error("Invalid job type: {}", usersMeJobsPostRequestDto.getType());
-            throw new IllegalArgumentException(JobMessages.INVALID_JOB_TYPE);
+            log.error("Invalid job type: {}", usersMeJobsPostRequestDto.getType());
+            throw new ValidationException(JobMessages.INVALID_JOB_TYPE);
         }
 
         SalaryType salaryType;
         try {
-            salaryType = SalaryType.valueOf(usersMeJobsPostRequestDto.getSalaryType().toUpperCase());
+            salaryType = SalaryType.valueOf(usersMeJobsPostRequestDto.getSalaryType().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            logger.error("Invalid salary type: {}", usersMeJobsPostRequestDto.getSalaryType());
-            throw new IllegalArgumentException(JobMessages.INVALID_SALARY_TYPE);
+            log.error("Invalid salary type: {}", usersMeJobsPostRequestDto.getSalaryType());
+            throw new ValidationException(JobMessages.INVALID_SALARY_TYPE);
         }
 
         var jobCategory = jobCategoryService.getJobCategoryById(UUID.fromString(usersMeJobsPostRequestDto.getCategoryId()));
 
         if (jobCategory.isRequiresInsurance()){
-            logger.error("Job category with id: {} requires insurance. Cannot create individual job.", jobCategory.getId());
-            throw new IllegalArgumentException(JobMessages.INDIVIDUAL_JOB_CANNOT_REQUIRE_INSURANCE);
+            log.error("Job category with id: {} requires insurance. Cannot create individual job.", jobCategory.getId());
+            throw new ValidationException(JobMessages.INDIVIDUAL_JOB_CANNOT_REQUIRE_INSURANCE);
         }
 
         Address address = addressService.createAddress(usersMeJobsPostRequestDto.getAddress());
-        logger.info("Created address for job with id: {}", address.getId());
+        log.info("Created address for job with id: {}", address.getId());
 
 
         Job job = new Job();
@@ -120,7 +120,6 @@ public class JobManager implements JobService {
         job.setEndDateTime(usersMeJobsPostRequestDto.getEndDateTime());
         job.setSalaryType(salaryType);
         job.setSalary(usersMeJobsPostRequestDto.getSalary());
-        assertAgeRange(usersMeJobsPostRequestDto.getMinAge(), usersMeJobsPostRequestDto.getMaxAge());
         job.setMinAge(usersMeJobsPostRequestDto.getMinAge());
         job.setMaxAge(usersMeJobsPostRequestDto.getMaxAge());
         job.setExperienceRequired(usersMeJobsPostRequestDto.getExperienceRequired());
@@ -129,7 +128,7 @@ public class JobManager implements JobService {
 
         Job savedJob = jobDao.save(job);
         jobAlertService.notifyMatching(savedJob);
-        logger.info("Saved individual job with id: {}", savedJob.getId());
+        log.info("Saved individual job with id: {}", savedJob.getId());
 
         return jobMapper.toUsersMeJobsPostResponseDto(savedJob);
 
@@ -137,45 +136,45 @@ public class JobManager implements JobService {
 
     @Override
     @Transactional
-    public CompanyJobDto createCorporateJob(String companyId, CreateCompanyJobDto companiesCompanyIdJobsPostRequestDto) {
-        logger.info("Creating corporate job...");
+    public CompanyJobDto createCorporateJob(UUID companyId, CreateCompanyJobDto companiesCompanyIdJobsPostRequestDto) {
+        log.debug("Creating corporate job");
         User authenticatedUser = securityService.getAuthenticatedUser();
-        logger.info("Creating corporate job for userId: {}", authenticatedUser.getId());
+        log.info("Creating corporate job for userId: {}", authenticatedUser.getId());
 
         JobType type;
         try {
-            type = JobType.valueOf(companiesCompanyIdJobsPostRequestDto.getType().toUpperCase());
+            type = JobType.valueOf(companiesCompanyIdJobsPostRequestDto.getType().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            logger.error("Invalid job type: {}", companiesCompanyIdJobsPostRequestDto.getType());
-            throw new IllegalArgumentException(JobMessages.INVALID_JOB_TYPE);
+            log.error("Invalid job type: {}", companiesCompanyIdJobsPostRequestDto.getType());
+            throw new ValidationException(JobMessages.INVALID_JOB_TYPE);
         }
 
 
         SalaryType salaryType;
         try {
-            salaryType = SalaryType.valueOf(companiesCompanyIdJobsPostRequestDto.getSalaryType().toUpperCase());
+            salaryType = SalaryType.valueOf(companiesCompanyIdJobsPostRequestDto.getSalaryType().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            logger.error("Invalid salary type: {}", companiesCompanyIdJobsPostRequestDto.getSalaryType());
-            throw new IllegalArgumentException(JobMessages.INVALID_SALARY_TYPE);
+            log.error("Invalid salary type: {}", companiesCompanyIdJobsPostRequestDto.getSalaryType());
+            throw new ValidationException(JobMessages.INVALID_SALARY_TYPE);
         }
 
         var jobCategory = jobCategoryService.getJobCategoryById(UUID.fromString(companiesCompanyIdJobsPostRequestDto.getCategoryId()));
 
         if (jobCategory.isRequiresInsurance() && !Boolean.TRUE.equals(companiesCompanyIdJobsPostRequestDto.getInsuranceRequired())){
-            logger.error("Job category with id: {} requires insurance but insuranceRequired is false. Cannot create job.", jobCategory.getId());
-            throw new IllegalArgumentException(JobMessages.JOB_CATEGORY_REQUIRES_INSURANCE);
+            log.error("Job category with id: {} requires insurance but insuranceRequired is false. Cannot create job.", jobCategory.getId());
+            throw new ValidationException(JobMessages.JOB_CATEGORY_REQUIRES_INSURANCE);
         }
 
         Address address = addressService.createAddress(companiesCompanyIdJobsPostRequestDto.getAddress());
-        logger.info("Created address for job with id: {}", address.getId());
+        log.info("Created address for job with id: {}", address.getId());
 
-        Company company = companyService.getCompanyById(UUID.fromString(companyId));
+        Company company = companyService.getCompanyById(companyId);
 
         boolean isUserContactOfCompany = company.getContacts().stream()
                 .anyMatch(contact -> contact.getUser().getId().equals(authenticatedUser.getId()));
         if (!isUserContactOfCompany){
-            logger.error("User with id: {} is not a contact of company with id: {}. Cannot create job.", authenticatedUser.getId(), company.getId());
-            throw new IllegalArgumentException(JobMessages.USER_IS_NOT_A_CONTACT_OF_COMPANY);
+            log.error("User with id: {} is not a contact of company with id: {}. Cannot create job.", authenticatedUser.getId(), company.getId());
+            throw new ValidationException(JobMessages.USER_IS_NOT_A_CONTACT_OF_COMPANY);
         }
 
         Job job = new Job();
@@ -195,7 +194,6 @@ public class JobManager implements JobService {
         job.setEndDateTime(companiesCompanyIdJobsPostRequestDto.getEndDateTime());
         job.setSalaryType(salaryType);
         job.setSalary(companiesCompanyIdJobsPostRequestDto.getSalary());
-        assertAgeRange(companiesCompanyIdJobsPostRequestDto.getMinAge(), companiesCompanyIdJobsPostRequestDto.getMaxAge());
         job.setMinAge(companiesCompanyIdJobsPostRequestDto.getMinAge());
         job.setMaxAge(companiesCompanyIdJobsPostRequestDto.getMaxAge());
         job.setExperienceRequired(companiesCompanyIdJobsPostRequestDto.getExperienceRequired());
@@ -205,7 +203,7 @@ public class JobManager implements JobService {
 
         Job savedJob = jobDao.save(job);
         jobAlertService.notifyMatching(savedJob);
-        logger.info("Saved corporate job with id: {}", savedJob.getId());
+        log.info("Saved corporate job with id: {}", savedJob.getId());
 
 
         return jobMapper.toCompaniesCompanyIdJobsPostResponseDto(savedJob);
@@ -213,19 +211,19 @@ public class JobManager implements JobService {
     }
 
     @Override
-    public Job getById(String jobId) {
-        logger.debug("Getting job with id: {}", jobId);
+    public Job getById(UUID jobId) {
+        log.debug("Getting job with id: {}", jobId);
 
-        return jobDao.findById(UUID.fromString(jobId)).orElseThrow(() -> {
-            logger.error("Job with id: {} not found.", jobId);
+        return jobDao.findById(jobId).orElseThrow(() -> {
+            log.error("Job with id: {} not found.", jobId);
             return new ResourceNotFoundException(JobMessages.JOB_NOT_FOUND);
         });
     }
 
     @Override
-    public boolean existsById(String jobId) {
-        logger.info("Checking existence of job with id: {}", jobId);
-        return jobDao.existsById(UUID.fromString(jobId));
+    public boolean existsById(UUID jobId) {
+        log.debug("Checking existence of job {}", jobId);
+        return jobDao.existsById(jobId);
     }
 
     private static final Set<String> SORTABLE_FIELDS =
@@ -242,7 +240,7 @@ public class JobManager implements JobService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageDto<JobSummaryDto> search(JobSearchCriteria criteria, Pageable requested) {
+    public PageDto<JobSummaryDto> search(JobSearchCriteriaDto criteria, Pageable requested) {
         pageableSanitizer.rejectUnknownSort(requested, SORTABLE_FIELDS);
         Pageable pageable = pageableSanitizer.sanitize(requested, SORTABLE_FIELDS, DEFAULT_SORT);
 
@@ -294,12 +292,12 @@ public class JobManager implements JobService {
         }
 
         if (job.getStatus() != JobStatus.OPEN) {
-            throw new IllegalStateException(JobMessages.JOB_NOT_OPEN);
+            throw new ConflictException(JobMessages.JOB_NOT_OPEN);
         }
 
         job.setStatus(JobStatus.CLOSED);
         jobDao.save(job);
-        logger.info("Job {} closed by user {}", jobId, currentUserId);
+        log.info("Job {} closed by user {}", jobId, currentUserId);
     }
 
     private List<Job> inIdOrder(List<UUID> ids) {
@@ -315,9 +313,4 @@ public class JobManager implements JobService {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
-    private void assertAgeRange(Integer minAge, Integer maxAge) {
-        if (maxAge < minAge) {
-            throw new ValidationException(JobMessages.MAXIMUM_AGE_BELOW_MINIMUM);
-        }
-    }
 }

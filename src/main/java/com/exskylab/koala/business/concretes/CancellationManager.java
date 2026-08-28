@@ -1,5 +1,8 @@
 package com.exskylab.koala.business.concretes;
 
+import lombok.extern.slf4j.Slf4j;
+import com.exskylab.koala.core.exceptions.ValidationException;
+import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.CancellationService;
 import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.business.abstracts.SecurityService;
@@ -8,11 +11,9 @@ import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.core.helpers.CancellationPolicy;
 import com.exskylab.koala.dataAccess.CancellationDao;
-import com.exskylab.koala.dataAccess.JobAssignmentDao;
-import com.exskylab.koala.dataAccess.UserDao;
 import com.exskylab.koala.entities.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.exskylab.koala.business.abstracts.JobAssignmentService;
+import com.exskylab.koala.business.abstracts.UserService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,28 +25,27 @@ import java.util.Set;
 import java.util.UUID;
 
 @Service
+@Slf4j
 public class CancellationManager implements CancellationService {
 
     private static final Set<AssignmentStatus> CANCELLABLE =
             EnumSet.of(AssignmentStatus.PENDING_CONFIRMATION, AssignmentStatus.CONFIRMED, AssignmentStatus.IN_PROGRESS);
 
-    private final Logger logger = LoggerFactory.getLogger(CancellationManager.class);
-
     private final CancellationDao cancellationDao;
-    private final JobAssignmentDao jobAssignmentDao;
-    private final UserDao userDao;
+    private final JobAssignmentService jobAssignmentService;
+    private final UserService userService;
     private final SecurityService securityService;
     private final AssignmentParticipants participants;
     private final CancellationPolicy policy;
     private final PayoutService payoutService;
 
-    public CancellationManager(CancellationDao cancellationDao, JobAssignmentDao jobAssignmentDao,
-                               UserDao userDao, SecurityService securityService,
+    public CancellationManager(CancellationDao cancellationDao, JobAssignmentService jobAssignmentService,
+                               UserService userService, SecurityService securityService,
                                AssignmentParticipants participants, CancellationPolicy policy,
                                PayoutService payoutService) {
         this.cancellationDao = cancellationDao;
-        this.jobAssignmentDao = jobAssignmentDao;
-        this.userDao = userDao;
+        this.jobAssignmentService = jobAssignmentService;
+        this.userService = userService;
         this.securityService = securityService;
         this.participants = participants;
         this.policy = policy;
@@ -55,23 +55,18 @@ public class CancellationManager implements CancellationService {
     @Override
     @Transactional
     public Cancellation cancelAssignment(UUID jobAssignmentId, String reason) {
-        if (reason == null || reason.isBlank()) {
-            throw new IllegalArgumentException(CancellationMessages.REASON_REQUIRED);
-        }
-
-        JobAssignment assignment = jobAssignmentDao.findWithDetailsForPaymentById(jobAssignmentId)
-                .orElseThrow(() -> new ResourceNotFoundException(CancellationMessages.ASSIGNMENT_NOT_FOUND));
+        JobAssignment assignment = jobAssignmentService.getDetailedById(jobAssignmentId);
 
         UUID actorId = securityService.getAuthenticatedUserId();
         CancellationParty party = participants.partyOf(assignment, actorId)
                 .orElseThrow(() -> new ResourceNotFoundException(CancellationMessages.NOT_A_PARTICIPANT));
 
         if (!CANCELLABLE.contains(assignment.getStatus())) {
-            throw new IllegalStateException(CancellationMessages.NOT_CANCELLABLE);
+            throw new ConflictException(CancellationMessages.NOT_CANCELLABLE);
         }
 
         if (cancellationDao.existsByJobAssignmentId(jobAssignmentId)) {
-            throw new IllegalStateException(CancellationMessages.ALREADY_CANCELLED);
+            throw new ConflictException(CancellationMessages.ALREADY_CANCELLED);
         }
 
         Duration notice = policy.noticeBefore(assignment.getJob().getStartDateTime(), Instant.now());
@@ -81,7 +76,7 @@ public class CancellationManager implements CancellationService {
 
         Cancellation cancellation = new Cancellation();
         cancellation.setJobAssignment(assignment);
-        cancellation.setCancelledBy(userDao.getReferenceById(actorId));
+        cancellation.setCancelledBy(userService.getReference(actorId));
         cancellation.setCancelledByParty(party);
         cancellation.setReason(reason);
         cancellation.setNoticeMinutes(notice.toMinutes());
@@ -91,7 +86,7 @@ public class CancellationManager implements CancellationService {
         cancellation.setCancelledAt(Instant.now());
 
         assignment.setStatus(AssignmentStatus.CANCELLED);
-        jobAssignmentDao.save(assignment);
+        jobAssignmentService.save(assignment);
 
         Cancellation saved = cancellationDao.save(cancellation);
 
@@ -99,7 +94,7 @@ public class CancellationManager implements CancellationService {
             payoutService.refundEmployer(jobAssignmentId, outcome.refundAmount(), reason);
         }
 
-        logger.info("Assignment {} cancelled by {} ({}), notice {} min, fee {}, refund {}",
+        log.info("Assignment {} cancelled by {} ({}), notice {} min, fee {}, refund {}",
                 jobAssignmentId, actorId, party, notice.toMinutes(),
                 outcome.feeAmount(), outcome.refundAmount());
         return saved;
@@ -108,8 +103,7 @@ public class CancellationManager implements CancellationService {
     @Override
     @Transactional(readOnly = true)
     public Optional<Cancellation> getForAssignment(UUID jobAssignmentId) {
-        JobAssignment assignment = jobAssignmentDao.findWithDetailsForPaymentById(jobAssignmentId)
-                .orElseThrow(() -> new ResourceNotFoundException(CancellationMessages.ASSIGNMENT_NOT_FOUND));
+        JobAssignment assignment = jobAssignmentService.getDetailedById(jobAssignmentId);
 
         if (!participants.isParticipant(assignment, securityService.getAuthenticatedUserId())) {
             throw new ResourceNotFoundException(CancellationMessages.NOT_A_PARTICIPANT);

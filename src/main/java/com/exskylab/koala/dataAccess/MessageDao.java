@@ -18,7 +18,7 @@ import java.util.UUID;
 @Repository
 public interface MessageDao extends JpaRepository<Message, UUID> {
 
-    @EntityGraph(attributePaths = {"sender"})
+    @EntityGraph(attributePaths = {"sender", "sender.profilePicture"})
     Page<Message> findAllByConversationIdOrderBySentAtDesc(UUID conversationId, Pageable pageable);
 
     @Modifying

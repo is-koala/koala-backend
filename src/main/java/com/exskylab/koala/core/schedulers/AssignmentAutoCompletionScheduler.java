@@ -1,9 +1,9 @@
 package com.exskylab.koala.core.schedulers;
 
+import lombok.extern.slf4j.Slf4j;
+import com.exskylab.koala.business.abstracts.DisputeService;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.core.properties.AutoCompletionProperties;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -11,16 +11,18 @@ import java.util.List;
 import java.util.UUID;
 
 @Component
+@Slf4j
 public class AssignmentAutoCompletionScheduler {
 
-    private final Logger logger = LoggerFactory.getLogger(AssignmentAutoCompletionScheduler.class);
-
     private final JobAssignmentService jobAssignmentService;
+    private final DisputeService disputeService;
     private final AutoCompletionProperties properties;
 
     public AssignmentAutoCompletionScheduler(JobAssignmentService jobAssignmentService,
+                                             DisputeService disputeService,
                                              AutoCompletionProperties properties) {
         this.jobAssignmentService = jobAssignmentService;
+        this.disputeService = disputeService;
         this.properties = properties;
     }
 
@@ -38,14 +40,19 @@ public class AssignmentAutoCompletionScheduler {
         int completed = 0;
         for (UUID assignmentId : due) {
             try {
+                if (disputeService.hasActiveDispute(assignmentId)) {
+                    log.info("Assignment {} has an open dispute, auto completion skipped.", assignmentId);
+                    continue;
+                }
+
                 if (jobAssignmentService.autoCompleteAssignment(assignmentId)) {
                     completed++;
                 }
             } catch (Exception e) {
-                logger.error("Auto completion failed for assignment {}: {}", assignmentId, e.getMessage());
+                log.error("Auto completion failed for assignment {}: {}", assignmentId, e.getMessage());
             }
         }
 
-        logger.info("Auto completion run finished: {} of {} candidates completed.", completed, due.size());
+        log.info("Auto completion run finished: {} of {} candidates completed.", completed, due.size());
     }
 }

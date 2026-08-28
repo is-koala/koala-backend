@@ -27,4 +27,12 @@ public interface JobAssignmentService {
     List<UUID> findAutoCompletableAssignmentIds();
 
     boolean autoCompleteAssignment(UUID assignmentId);
+
+    JobAssignment getDetailedById(UUID assignmentId);
+
+    long countCompletedForWorker(UUID workerId);
+
+    boolean hasMoneyInEscrowFor(UUID workerId);
+
+    boolean hasActiveWorkFor(UUID workerId);
 }

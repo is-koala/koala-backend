@@ -32,4 +32,6 @@ public interface MessagingService {
     Map<UUID, Long> unreadCounts(Collection<UUID> conversationIds);
 
     void assertParticipant(UUID conversationId, UUID userId);
+
+    Message getMessageById(UUID messageId);
 }

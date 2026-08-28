@@ -3,7 +3,7 @@ package com.exskylab.koala.core.helpers;
 import com.exskylab.koala.core.constants.StorageMessages;
 import com.exskylab.koala.core.properties.UploadProperties;
 import com.exskylab.koala.core.utilities.storage.FolderType;
-import jakarta.validation.ValidationException;
+import com.exskylab.koala.core.exceptions.ValidationException;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 

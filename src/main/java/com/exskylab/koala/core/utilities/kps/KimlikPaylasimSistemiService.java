@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.utilities.kps;
 
+import java.util.Locale;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -11,6 +12,8 @@ import java.time.LocalDate;
 
 @Service
 public class KimlikPaylasimSistemiService {
+
+    private static final Locale TURKISH = Locale.of("tr", "TR");
 
 
     private final RestTemplate restTemplate;
@@ -35,8 +38,8 @@ public class KimlikPaylasimSistemiService {
                 + "<soap:Body>"
                 + "<KisiVeCuzdanDogrula xmlns=\"http://tckimlik.nvi.gov.tr/WS\">"
                 + "<TCKimlikNo>" + tcNumber + "</TCKimlikNo>"
-                + "<Ad>" + name.toUpperCase() + "</Ad>"
-                + "<Soyad>" + surname.toUpperCase() + "</Soyad>"
+                + "<Ad>" + name.toUpperCase(TURKISH) + "</Ad>"
+                + "<Soyad>" + surname.toUpperCase(TURKISH) + "</Soyad>"
                 + "<SoyadYok>false</SoyadYok>"
                 + "<DogumGun>" + birthDay + "</DogumGun>"
                 + "<DogumGunYok>false</DogumGunYok>"

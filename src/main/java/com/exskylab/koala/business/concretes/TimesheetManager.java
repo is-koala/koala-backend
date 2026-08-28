@@ -1,17 +1,17 @@
 package com.exskylab.koala.business.concretes;
 
+import lombok.extern.slf4j.Slf4j;
+import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.TimesheetService;
 import com.exskylab.koala.core.constants.TimesheetMessages;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
-import com.exskylab.koala.dataAccess.JobAssignmentDao;
 import com.exskylab.koala.dataAccess.WorkSessionDao;
 import com.exskylab.koala.entities.AssignmentStatus;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.WorkSession;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,22 +25,21 @@ import java.util.Set;
 import java.util.UUID;
 
 @Service
+@Slf4j
 public class TimesheetManager implements TimesheetService {
 
     private static final Set<AssignmentStatus> OPEN_FOR_WORK =
             EnumSet.of(AssignmentStatus.CONFIRMED, AssignmentStatus.IN_PROGRESS);
 
-    private final Logger logger = LoggerFactory.getLogger(TimesheetManager.class);
-
     private final WorkSessionDao workSessionDao;
-    private final JobAssignmentDao jobAssignmentDao;
+    private final JobAssignmentService jobAssignmentService;
     private final SecurityService securityService;
     private final AssignmentParticipants participants;
 
-    public TimesheetManager(WorkSessionDao workSessionDao, JobAssignmentDao jobAssignmentDao,
+    public TimesheetManager(WorkSessionDao workSessionDao, JobAssignmentService jobAssignmentService,
                             SecurityService securityService, AssignmentParticipants participants) {
         this.workSessionDao = workSessionDao;
-        this.jobAssignmentDao = jobAssignmentDao;
+        this.jobAssignmentService = jobAssignmentService;
         this.securityService = securityService;
         this.participants = participants;
     }
@@ -51,11 +50,11 @@ public class TimesheetManager implements TimesheetService {
         JobAssignment assignment = requireWorker(jobAssignmentId);
 
         if (!OPEN_FOR_WORK.contains(assignment.getStatus())) {
-            throw new IllegalStateException(TimesheetMessages.ASSIGNMENT_NOT_ACTIVE);
+            throw new ConflictException(TimesheetMessages.ASSIGNMENT_NOT_ACTIVE);
         }
 
         if (workSessionDao.findByJobAssignmentIdAndCheckOutAtIsNull(jobAssignmentId).isPresent()) {
-            throw new IllegalStateException(TimesheetMessages.ALREADY_CHECKED_IN);
+            throw new ConflictException(TimesheetMessages.ALREADY_CHECKED_IN);
         }
 
         WorkSession session = new WorkSession();
@@ -66,11 +65,11 @@ public class TimesheetManager implements TimesheetService {
 
         if (assignment.getStatus() != AssignmentStatus.IN_PROGRESS) {
             assignment.setStatus(AssignmentStatus.IN_PROGRESS);
-            jobAssignmentDao.save(assignment);
+            jobAssignmentService.save(assignment);
         }
 
         WorkSession saved = workSessionDao.save(session);
-        logger.info("Work session {} opened on assignment {}", saved.getId(), jobAssignmentId);
+        log.info("Work session {} opened on assignment {}", saved.getId(), jobAssignmentId);
         return saved;
     }
 
@@ -80,7 +79,7 @@ public class TimesheetManager implements TimesheetService {
         requireWorker(jobAssignmentId);
 
         WorkSession session = workSessionDao.findByJobAssignmentIdAndCheckOutAtIsNull(jobAssignmentId)
-                .orElseThrow(() -> new IllegalStateException(TimesheetMessages.NOT_CHECKED_IN));
+                .orElseThrow(() -> new ConflictException(TimesheetMessages.NOT_CHECKED_IN));
 
         Instant now = Instant.now();
         session.setCheckOutAt(now);
@@ -91,7 +90,7 @@ public class TimesheetManager implements TimesheetService {
         WorkSession saved = workSessionDao.save(session);
         recalculateWorkHours(jobAssignmentId);
 
-        logger.info("Work session {} closed on assignment {} after {} minutes",
+        log.info("Work session {} closed on assignment {} after {} minutes",
                 saved.getId(), jobAssignmentId, saved.getMinutes());
         return saved;
     }
@@ -99,8 +98,7 @@ public class TimesheetManager implements TimesheetService {
     @Override
     @Transactional(readOnly = true)
     public List<WorkSession> getSessions(UUID jobAssignmentId) {
-        JobAssignment assignment = jobAssignmentDao.findWithDetailsForPaymentById(jobAssignmentId)
-                .orElseThrow(() -> new ResourceNotFoundException(TimesheetMessages.ASSIGNMENT_NOT_FOUND));
+        JobAssignment assignment = jobAssignmentService.getDetailedById(jobAssignmentId);
 
         if (!participants.isParticipant(assignment, securityService.getAuthenticatedUserId())) {
             throw new ResourceNotFoundException(TimesheetMessages.NOT_A_PARTICIPANT);
@@ -110,8 +108,7 @@ public class TimesheetManager implements TimesheetService {
     }
 
     private JobAssignment requireWorker(UUID jobAssignmentId) {
-        JobAssignment assignment = jobAssignmentDao.findWithDetailsForPaymentById(jobAssignmentId)
-                .orElseThrow(() -> new ResourceNotFoundException(TimesheetMessages.ASSIGNMENT_NOT_FOUND));
+        JobAssignment assignment = jobAssignmentService.getDetailedById(jobAssignmentId);
 
         if (!assignment.getWorker().getId().equals(securityService.getAuthenticatedUserId())) {
             throw new ResourceNotFoundException(TimesheetMessages.NOT_THE_WORKER);
@@ -126,12 +123,11 @@ public class TimesheetManager implements TimesheetService {
                 .mapToInt(Integer::intValue)
                 .sum();
 
-        JobAssignment assignment = jobAssignmentDao.findById(jobAssignmentId)
-                .orElseThrow(() -> new ResourceNotFoundException(TimesheetMessages.ASSIGNMENT_NOT_FOUND));
+        JobAssignment assignment = jobAssignmentService.getDetailedById(jobAssignmentId);
 
         assignment.setWorkHours(BigDecimal.valueOf(totalMinutes)
                 .divide(BigDecimal.valueOf(60), 0, RoundingMode.HALF_UP)
                 .intValue());
-        jobAssignmentDao.save(assignment);
+        jobAssignmentService.save(assignment);
     }
 }

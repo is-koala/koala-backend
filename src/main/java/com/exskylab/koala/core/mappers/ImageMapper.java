@@ -2,6 +2,7 @@ package com.exskylab.koala.core.mappers;
 
 import com.exskylab.koala.core.dtos.images.response.UploadImageResponseDto;
 import com.exskylab.koala.entities.Image;
+import com.exskylab.koala.core.helpers.MediaUrlResolver;
 import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;

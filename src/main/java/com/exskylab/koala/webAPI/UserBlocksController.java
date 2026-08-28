@@ -7,6 +7,10 @@ import com.exskylab.koala.core.utilities.results.SuccessResult;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import com.exskylab.koala.core.dtos.messaging.response.UserBlockDto;
+import com.exskylab.koala.core.mappers.MessagingMapper;
+import com.exskylab.koala.core.utilities.results.SuccessDataResult;
+import java.util.List;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -16,9 +20,11 @@ import java.util.UUID;
 public class UserBlocksController {
 
     private final MessagingService messagingService;
+    private final MessagingMapper messagingMapper;
 
-    public UserBlocksController(MessagingService messagingService) {
+    public UserBlocksController(MessagingService messagingService, MessagingMapper messagingMapper) {
         this.messagingService = messagingService;
+        this.messagingMapper = messagingMapper;
     }
 
     @PostMapping("/{userId}")
@@ -32,5 +38,12 @@ public class UserBlocksController {
     public ResponseEntity<SuccessResult> unblock(@PathVariable UUID userId) {
         messagingService.unblock(userId);
         return ResponseEntity.ok(new SuccessResult(MessagingMessages.USER_UNBLOCKED, HttpStatus.OK));
+    }
+
+    @GetMapping
+    public ResponseEntity<SuccessDataResult<List<UserBlockDto>>> myBlocks() {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                messagingMapper.toUserBlockDtoList(messagingService.getMyBlocks()),
+                MessagingMessages.BLOCKS_LISTED, HttpStatus.OK));
     }
 }

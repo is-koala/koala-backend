@@ -11,7 +11,7 @@ import java.util.UUID;
 @Repository
 public interface UserBadgeDao extends JpaRepository<UserBadge, UUID> {
 
-    @EntityGraph(attributePaths = {"badge"})
+    @EntityGraph(attributePaths = {"badge", "badge.icon"})
     List<UserBadge> findAllByUserIdOrderByBadgeSortOrderAsc(UUID userId);
 
     boolean existsByUserIdAndBadgeId(UUID userId, UUID badgeId);

@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.security;
 
+import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.entities.User;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
@@ -63,7 +64,7 @@ public class JwtService {
     public UUID extractPasswordResetUserId(String token) {
         Claims claims = extractAllClaims(token);
         if (!Set.of("password-reset").equals(claims.getAudience())) {
-            throw new IllegalArgumentException("{invalid.token}");
+            throw new ValidationException("{invalid.token}");
         }
         return UUID.fromString(claims.getSubject());
     }

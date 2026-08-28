@@ -4,6 +4,7 @@ import com.exskylab.koala.core.constants.ReportMessages;
 import com.exskylab.koala.entities.ReportReason;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.AssertTrue;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -28,4 +29,9 @@ public class CreateReportDto {
 
     @Size(max = 2000)
     private String description;
+
+    @AssertTrue(message = ReportMessages.TARGET_REQUIRED)
+    public boolean isPointingAtSomething() {
+        return reportedUserId != null || jobId != null || messageId != null;
+    }
 }

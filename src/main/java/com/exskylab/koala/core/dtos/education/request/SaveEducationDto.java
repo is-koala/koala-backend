@@ -5,6 +5,7 @@ import com.exskylab.koala.entities.GradeType;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.AssertTrue;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -39,4 +40,9 @@ public class SaveEducationDto {
     private LocalDate startDate;
 
     private LocalDate endDate;
+
+    @AssertTrue(message = EducationMessages.END_BEFORE_START)
+    public boolean isEndAfterStart() {
+        return endDate == null || startDate == null || !endDate.isBefore(startDate);
+    }
 }

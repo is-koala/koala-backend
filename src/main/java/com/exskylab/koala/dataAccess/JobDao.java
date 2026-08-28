@@ -69,7 +69,9 @@ public interface JobDao extends JpaRepository<Job, UUID> {
             "address.city", "address.district", "address.city.country"})
     Optional<Job> findWithDetailsById(UUID id);
 
+    @EntityGraph(attributePaths = {"category", "company", "address", "address.city", "address.district"})
     Page<Job> findAllByCreatorId(UUID creatorId, Pageable pageable);
 
+    @EntityGraph(attributePaths = {"category", "company", "address", "address.city", "address.district"})
     Page<Job> findAllByCompanyId(UUID companyId, Pageable pageable);
 }

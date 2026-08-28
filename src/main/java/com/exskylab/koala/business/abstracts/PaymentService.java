@@ -16,4 +16,6 @@ public interface PaymentService {
     Payment completeFromCallback(String providerToken);
 
     List<Payment> getAttemptsForAssignment(UUID jobAssignmentId);
+
+    Payment getSettledPaymentFor(UUID jobAssignmentId);
 }

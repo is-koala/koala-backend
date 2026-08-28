@@ -1,4 +1,4 @@
-package com.exskylab.koala.core.dtos.realtime.response;
+package com.exskylab.koala.entities;
 
 public enum RealtimeEventType {
     MESSAGE,

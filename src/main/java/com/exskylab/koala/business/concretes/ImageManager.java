@@ -1,19 +1,18 @@
 package com.exskylab.koala.business.concretes;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.ImageService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.utilities.storage.FolderType;
 import com.exskylab.koala.core.constants.ImageMessages;
 import com.exskylab.koala.core.dtos.images.response.UploadImageResponseDto;
-import com.exskylab.koala.core.exceptions.ImageUploadError;
+import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.mappers.ImageMapper;
 import com.exskylab.koala.core.utilities.storage.StorageService;
 import com.exskylab.koala.dataAccess.ImageDao;
 import com.exskylab.koala.entities.Image;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.entities.User;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import com.exskylab.koala.core.helpers.UploadValidator;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -25,12 +24,12 @@ import java.io.IOException;
 import java.util.UUID;
 
 @Service
+@Slf4j
 public class ImageManager implements ImageService {
 
     private final ImageDao imageDao;
     private final StorageService storageService;
     private final SecurityService securityService;
-    private final static Logger logger = LoggerFactory.getLogger(ImageManager.class);
     private final ImageMapper imageMapper;
     private final UploadValidator uploadValidator;
 
@@ -47,7 +46,7 @@ public class ImageManager implements ImageService {
 
     @Override
     public Image uploadImage(MultipartFile image) {
-        logger.info("Uploading image file: {}", image.getOriginalFilename());
+        log.info("Uploading image file: {}", image.getOriginalFilename());
         uploadValidator.validate(image, FolderType.IMAGE,
                 ImageMessages.IMAGE_EMPTY_ERROR, ImageMessages.IMAGE_SIZE_ERROR);
 
@@ -68,11 +67,11 @@ public class ImageManager implements ImageService {
             newImage.setFileSize((long) cleanImageBytes.length);
 
             var savedImage = imageDao.save(newImage);
-            logger.info("Image uploaded successfully: {}", savedImage.getFileName());
+            log.info("Image uploaded successfully: {}", savedImage.getFileName());
             return savedImage;
         } catch (Exception e) {
-            logger.error("Image upload failed fileName: {}, errorMessage: {}", image.getOriginalFilename(), e.getMessage());
-            throw new ImageUploadError(ImageMessages.IMAGE_UPLOAD_ERROR);
+            log.error("Image upload failed fileName: {}, errorMessage: {}", image.getOriginalFilename(), e.getMessage());
+            throw new ValidationException(ImageMessages.IMAGE_UPLOAD_ERROR);
         }
     }
 
@@ -83,22 +82,22 @@ public class ImageManager implements ImageService {
 
     @Override
     public void deleteImage(UUID imageId) {
-        logger.info("Deleting image with ID: {}", imageId);
+        log.info("Deleting image with ID: {}", imageId);
         var image = imageDao.findById(imageId);
 
         if(image.isEmpty()){
-            logger.error("Image deletion failed: Image with ID {} not found.", imageId);
-            throw new ImageUploadError(ImageMessages.IMAGE_NOT_FOUND_ERROR);
+            log.error("Image deletion failed: Image with ID {} not found.", imageId);
+            throw new ValidationException(ImageMessages.IMAGE_NOT_FOUND_ERROR);
         }
 
         User user = securityService.getAuthenticatedUser();
         if (!image.get().getCreatedBy().getId().equals(user.getId()) && !user.getAuthorities().contains(Role.ROLE_ADMIN)) {
-            logger.error("Image deletion failed: User {} does not have permission to delete image with ID {}. Image creator ID: {}", user.getId(), imageId, image.get().getCreatedBy().getId());
-            throw new ImageUploadError(ImageMessages.IMAGE_PERMISSION_ERROR);
+            log.error("Image deletion failed: User {} does not have permission to delete image with ID {}. Image creator ID: {}", user.getId(), imageId, image.get().getCreatedBy().getId());
+            throw new ValidationException(ImageMessages.IMAGE_PERMISSION_ERROR);
         }
 
         imageDao.deleteById(imageId);
-        logger.info("Image with ID {} soft deleted by userID {}", imageId, user.getId());
+        log.info("Image with ID {} soft deleted by userID {}", imageId, user.getId());
     }
 
 

@@ -1,5 +1,7 @@
 package com.exskylab.koala.business.concretes;
 
+import lombok.extern.slf4j.Slf4j;
+import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.business.abstracts.CompanyContactService;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.SecurityService;
@@ -8,21 +10,19 @@ import com.exskylab.koala.core.constants.JobAssignmentMessages;
 import com.exskylab.koala.core.dtos.jobAssignment.request.AnswerAssignmentDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.PaymentSessionDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentDto;
-import com.exskylab.koala.core.exceptions.AssignmentAlreadyAnsweredException;
+import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.business.abstracts.PaymentService;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
 import com.exskylab.koala.core.properties.AppProperties;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
-import com.exskylab.koala.core.exceptions.UserNotWorkerForAssignmentException;
+import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.mappers.JobAssignmentMapper;
 import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.*;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
 import com.exskylab.koala.entities.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -33,7 +33,6 @@ import com.exskylab.koala.entities.CancellationParty;
 import java.time.Instant;
 import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.core.properties.AutoCompletionProperties;
-import com.exskylab.koala.dataAccess.DisputeDao;
 import org.springframework.data.domain.PageRequest;
 import java.time.LocalDateTime;
 import com.exskylab.koala.business.abstracts.SettingsService;
@@ -45,6 +44,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
+@Slf4j
 public class JobAssignmentManager implements JobAssignmentService {
 
     private static final java.util.Set<String> MY_ASSIGNMENTS_SORTABLE =
@@ -52,8 +52,6 @@ public class JobAssignmentManager implements JobAssignmentService {
 
 
     private final JobAssignmentDao jobAssignmentDao;
-
-    private final Logger logger = LoggerFactory.getLogger(JobAssignmentManager.class);
     private final SecurityService securityService;
     private final JobAssignmentMapper jobAssignmentMapper;
     private final IyzicoPaymentService iyzicoPaymentService;
@@ -67,7 +65,6 @@ public class JobAssignmentManager implements JobAssignmentService {
     private final PageableSanitizer pageableSanitizer;
     private final AssignmentParticipants participants;
     private final BadgeService badgeService;
-    private final DisputeDao disputeDao;
     private final PayoutService payoutService;
     private final AutoCompletionProperties autoCompletionProperties;
     private final SettingsService settingsService;
@@ -78,7 +75,7 @@ public class JobAssignmentManager implements JobAssignmentService {
                                PaymentStateMachine paymentStateMachine, AppProperties appProperties,
                                BankAccountService bankAccountService, PageableSanitizer pageableSanitizer,
                                AssignmentParticipants participants, BadgeService badgeService,
-                               DisputeDao disputeDao, PayoutService payoutService,
+                               PayoutService payoutService,
                                AutoCompletionProperties autoCompletionProperties,
                                SettingsService settingsService) {
         this.jobAssignmentDao = jobAssignmentDao;
@@ -95,7 +92,6 @@ public class JobAssignmentManager implements JobAssignmentService {
         this.pageableSanitizer = pageableSanitizer;
         this.participants = participants;
         this.badgeService = badgeService;
-        this.disputeDao = disputeDao;
         this.payoutService = payoutService;
         this.autoCompletionProperties = autoCompletionProperties;
         this.settingsService = settingsService;
@@ -104,44 +100,44 @@ public class JobAssignmentManager implements JobAssignmentService {
 
     @Override
     public JobAssignment save(JobAssignment jobAssignment) {
-        logger.info("Creating job assignment from application...");
+        log.debug("Creating job assignment from application");
         return jobAssignmentDao.save(jobAssignment);
     }
 
     @Override
     @Transactional
     public JobAssignmentDto answerToAssignment(UUID assignmentId, AnswerAssignmentDto jobAssignmentsAssignmentIdStatusPatchRequestDto) {
-        logger.info("Answering to job assignment from");
+        log.info("Answering to job assignment from");
         var assignment = jobAssignmentDao.findWithDetailsForPaymentById(assignmentId).orElseThrow(() -> {
-            logger.info("Assignment with id {} not found", assignmentId);
+            log.info("Assignment with id {} not found", assignmentId);
             return new ResourceNotFoundException(JobAssignmentMessages.NOT_FOUND);
         });
 
-        logger.info("Job assignment with id {} found", assignmentId);
+        log.info("Job assignment with id {} found", assignmentId);
 
         if (assignment.getStatus() != AssignmentStatus.PENDING_CONFIRMATION){
-            logger.warn("Assignment with ID: {} is already answered.", assignment.getId());
-            throw new AssignmentAlreadyAnsweredException(JobAssignmentMessages.ALREADY_ANSWERED);
+            log.warn("Assignment with ID: {} is already answered.", assignment.getId());
+            throw new ConflictException(JobAssignmentMessages.ALREADY_ANSWERED);
         }
 
         var authenticatedUserFromContext = securityService.getAuthenticatedUser();
 
         if (!assignment.getWorker().getId().equals(authenticatedUserFromContext.getId())) {
-            throw new UserNotWorkerForAssignmentException(JobAssignmentMessages.NOT_WORKER_FOR_ASSIGNMENT);
+            throw new ForbiddenException(JobAssignmentMessages.NOT_WORKER_FOR_ASSIGNMENT);
         }
 
         if (Boolean.TRUE.equals(jobAssignmentsAssignmentIdStatusPatchRequestDto.getAccepted())){
             assignment.setStatus(AssignmentStatus.CONFIRMED);
             assignment.setPaymentStatus(PaymentStatus.PENDING_COLLECTION);
-            logger.info("Job assignment with id {} has been accepted", assignmentId);
+            log.info("Job assignment with id {} has been accepted", assignmentId);
         }else{
             assignment.setStatus(AssignmentStatus.REJECTED);
-            logger.info("Job assignment with id {} has been rejected", assignmentId);
+            log.info("Job assignment with id {} has been rejected", assignmentId);
         }
 
         assignment = jobAssignmentDao.save(assignment);
 
-        logger.info("Job assignment with id {} has been saved", assignmentId);
+        log.info("Job assignment with id {} has been saved", assignmentId);
 
         return jobAssignmentMapper.toJobAssignmentsAssignmentIdStatusPatchResponseDto(assignment);
 
@@ -151,18 +147,18 @@ public class JobAssignmentManager implements JobAssignmentService {
     @Transactional
     @Override
     public PaymentSessionDto initiatePaymentSession(UUID assignmentId, String clientIpAddress) {
-        logger.info("Initiating job assignment with id {}", assignmentId);
+        log.info("Initiating job assignment with id {}", assignmentId);
         var assignment = jobAssignmentDao.findById(assignmentId).orElseThrow(() -> {
-            logger.info("Assignment with id {} not found", assignmentId);
+            log.info("Assignment with id {} not found", assignmentId);
             return new ResourceNotFoundException(JobAssignmentMessages.NOT_FOUND);
         });
 
-        logger.info("Job assignment with id {} found", assignmentId);
+        log.info("Job assignment with id {} found", assignmentId);
 
 
         if (!paymentStateMachine.canInitiate(assignment)){
-            logger.warn("Assignment with ID: {} is not in a state to initiate payment. Status: {}, PaymentStatus: {}", assignment.getId(), assignment.getStatus(), assignment.getPaymentStatus());
-            throw new IllegalStateException(JobAssignmentMessages.ASSIGNMENT_NOT_READY_FOR_PAYMENT);
+            log.warn("Assignment with ID: {} is not in a state to initiate payment. Status: {}, PaymentStatus: {}", assignment.getId(), assignment.getStatus(), assignment.getPaymentStatus());
+            throw new ConflictException(JobAssignmentMessages.ASSIGNMENT_NOT_READY_FOR_PAYMENT);
         }
 
         var currentUser = securityService.getAuthenticatedUser();
@@ -173,33 +169,33 @@ public class JobAssignmentManager implements JobAssignmentService {
         switch (job.getEmployerType()){
             case INDIVIDUAL -> {
                if (!currentUser.getId().equals(creator.getId())) {
-                     logger.warn("User with id {} is not the creator of the job with id {}", currentUser.getId(), job.getId());
-                     throw new UserNotWorkerForAssignmentException(JobAssignmentMessages.NOT_CREATOR_OF_JOB);
+                     log.warn("User with id {} is not the creator of the job with id {}", currentUser.getId(), job.getId());
+                     throw new ForbiddenException(JobAssignmentMessages.NOT_CREATOR_OF_JOB);
                }
                break;
             }
             case COMPANY -> {
                 boolean isContact = companyContactService.isUserAContactOfCompany(job.getCompany().getId(), currentUser.getId());
                 if (!isContact) {
-                    logger.warn("User with id {} is not a contact of the company with id {}", currentUser.getId(), job.getCompany().getId());
-                    throw new UserNotWorkerForAssignmentException(JobAssignmentMessages.USER_IS_NOT_A_CONTACT_OF_COMPANY);
+                    log.warn("User with id {} is not a contact of the company with id {}", currentUser.getId(), job.getCompany().getId());
+                    throw new ForbiddenException(JobAssignmentMessages.USER_IS_NOT_A_CONTACT_OF_COMPANY);
                 }
             }
             default -> {
-                logger.error("Unknown employer type for job with id {}", job.getId());
+                log.error("Unknown employer type for job with id {}", job.getId());
                 throw new IllegalArgumentException("Unknown employer type");
             }
         }
 
         if (worker.getIyzicoSubmerchantKey() == null || worker.getIyzicoSubmerchantKey().isBlank()){
-            logger.info("Worker {} does not have an iyzico submerchant key. Creating one...", worker.getId());
+            log.info("Worker {} does not have an iyzico submerchant key. Creating one...", worker.getId());
 
             SubMerchantCreateRequestDto merchantDto = createSubMerchantDtoForWorker(worker);
             SubMerchantCreateResponseDto response = iyzicoPaymentService.createSubMerchant(merchantDto);
 
             worker.setIyzicoSubmerchantKey(response.getSubMerchantKey());
             userService.save(worker);
-            logger.info("Worker {} has been created with iyzico submerchant key.}", worker.getId());
+            log.info("Worker {} has been created with iyzico submerchant key.}", worker.getId());
         }
 
 
@@ -229,7 +225,7 @@ public class JobAssignmentManager implements JobAssignmentService {
         PaymentSessionResponseDto paymentSession = iyzicoPaymentService.initiateCheckoutFormPayment(iyzicoRequest);
         paymentService.attachProviderToken(payment, paymentSession.getToken());
 
-        logger.info("Payment session initiated for job assignment with id {} and payment {}", assignmentId, payment.getId());
+        log.info("Payment session initiated for job assignment with id {} and payment {}", assignmentId, payment.getId());
         return jobAssignmentMapper.tojobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto(paymentSession);
 
     }
@@ -247,7 +243,7 @@ public class JobAssignmentManager implements JobAssignmentService {
             shippingAddress.setZipCode(job.getAddress().getPostalCode());
             shippingAddress.setContactName(currentUser.getFirstName() + " " + currentUser.getLastName());
         }else{
-            throw new IllegalArgumentException(JobAssignmentMessages.ADDRESS_NOT_PROVIDED_FOR_JOB);
+            throw new ValidationException(JobAssignmentMessages.ADDRESS_NOT_PROVIDED_FOR_JOB);
         }
 
 
@@ -270,7 +266,7 @@ public class JobAssignmentManager implements JobAssignmentService {
                 buyer.setCity(billingAddress.getCity());
                 buyer.setCountry(billingAddress.getCountry());
             }else {
-                throw new IllegalArgumentException(JobAssignmentMessages.ADDRESS_NOT_PROVIDED_FOR_EMPLOYER);
+                throw new ValidationException(JobAssignmentMessages.ADDRESS_NOT_PROVIDED_FOR_EMPLOYER);
             }
         }else {
             User individualEmployer = job.getCreator();
@@ -293,7 +289,7 @@ public class JobAssignmentManager implements JobAssignmentService {
                 buyer.setCountry(billingAddress.getCountry());
 
             }else {
-                throw new IllegalArgumentException(JobAssignmentMessages.ADDRESS_NOT_PROVIDED_FOR_EMPLOYER);
+                throw new ValidationException(JobAssignmentMessages.ADDRESS_NOT_PROVIDED_FOR_EMPLOYER);
             }
         }
 
@@ -313,15 +309,15 @@ public class JobAssignmentManager implements JobAssignmentService {
         if (worker.getAddress() != null) {
             merchantDto.setAddress(worker.getAddress().getAddressLine()+", "+ worker.getAddress().getCity().getName()+", "+worker.getAddress().getCountry().getName()+ ", "+ worker.getAddress().getPostalCode());
         }else {
-            throw new IllegalArgumentException(JobAssignmentMessages.ADDRESS_NOT_PROVIDED_FOR_WORKER);
+            throw new ValidationException(JobAssignmentMessages.ADDRESS_NOT_PROVIDED_FOR_WORKER);
         }
         merchantDto.setIban(bankAccountService.findPrimaryIban(worker.getId())
-                .orElseThrow(() -> new IllegalArgumentException(JobAssignmentMessages.IBAN_NOT_PROVIDED_FOR_WORKER)));
+                .orElseThrow(() -> new ValidationException(JobAssignmentMessages.IBAN_NOT_PROVIDED_FOR_WORKER)));
         merchantDto.setSubMerchantType(SubMerchantType.PERSONAL);
         if (worker.isIdentityVerified()){
             merchantDto.setIdentityNumber(worker.getTcIdentityNumber());
         }else {
-            throw new IllegalArgumentException(JobAssignmentMessages.WORKER_IDENTITY_NOT_VERIFIED);
+            throw new ValidationException(JobAssignmentMessages.WORKER_IDENTITY_NOT_VERIFIED);
         }
         merchantDto.setContactName(worker.getFirstName());
         merchantDto.setContactSurname(worker.getLastName());
@@ -354,12 +350,12 @@ public class JobAssignmentManager implements JobAssignmentService {
 
         if (assignment.getStatus() != AssignmentStatus.CONFIRMED
                 && assignment.getStatus() != AssignmentStatus.IN_PROGRESS) {
-            throw new IllegalStateException(JobAssignmentMessages.NOT_COMPLETABLE);
+            throw new ConflictException(JobAssignmentMessages.NOT_COMPLETABLE);
         }
 
         JobAssignment saved = markCompleted(assignment);
 
-        logger.info("Assignment {} marked completed by employer {}", assignmentId,
+        log.info("Assignment {} marked completed by employer {}", assignmentId,
                 securityService.getAuthenticatedUserId());
         return saved;
     }
@@ -393,15 +389,10 @@ public class JobAssignmentManager implements JobAssignmentService {
             return false;
         }
 
-        if (disputeDao.existsByJobAssignmentIdAndStatusIn(assignmentId, DisputeManager.ACTIVE)) {
-            logger.info("Assignment {} has an open dispute, auto completion skipped.", assignmentId);
-            return false;
-        }
-
         markCompleted(assignment);
         payoutService.releaseToWorker(assignmentId);
 
-        logger.info("Assignment {} auto completed after the grace period and escrow released.", assignmentId);
+        log.info("Assignment {} auto completed after the grace period and escrow released.", assignmentId);
         return true;
     }
 
@@ -412,5 +403,31 @@ public class JobAssignmentManager implements JobAssignmentService {
         JobAssignment saved = jobAssignmentDao.save(assignment);
         badgeService.evaluate(assignment.getWorker().getId());
         return saved;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public JobAssignment getDetailedById(UUID assignmentId) {
+        return jobAssignmentDao.findWithDetailsForPaymentById(assignmentId)
+                .orElseThrow(() -> new ResourceNotFoundException(JobAssignmentMessages.NOT_FOUND));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countCompletedForWorker(UUID workerId) {
+        return jobAssignmentDao.countByWorkerIdAndStatus(workerId, AssignmentStatus.COMPLETED);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasMoneyInEscrowFor(UUID workerId) {
+        return jobAssignmentDao.existsByWorkerIdAndPaymentStatus(workerId, PaymentStatus.HELD_IN_ESCROW);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasActiveWorkFor(UUID workerId) {
+        return jobAssignmentDao.existsByWorkerIdAndStatusIn(workerId,
+                List.of(AssignmentStatus.CONFIRMED, AssignmentStatus.IN_PROGRESS));
     }
 }

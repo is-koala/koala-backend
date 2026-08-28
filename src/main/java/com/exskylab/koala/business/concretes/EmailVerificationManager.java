@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.helpers.LogMasks;
 import com.exskylab.koala.business.abstracts.EmailVerificationService;
 import com.exskylab.koala.business.abstracts.NotificationService;
@@ -9,8 +10,6 @@ import com.exskylab.koala.entities.DispatchPriority;
 import com.exskylab.koala.entities.EmailVerification;
 import com.exskylab.koala.entities.NotificationCategory;
 import com.exskylab.koala.entities.User;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,13 +18,12 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
 @Service
+@Slf4j
 public class EmailVerificationManager implements EmailVerificationService {
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final EmailVerificationDao emailVerificationDao;
-
-    private final Logger logger = LoggerFactory.getLogger(EmailVerificationManager.class);
     private final NotificationService notificationService;
 
 
@@ -37,11 +35,11 @@ public class EmailVerificationManager implements EmailVerificationService {
     @Override
     @Transactional
     public EmailVerification startEmailVerification(String newEmail, User user) {
-        logger.info("Starting email verification for user with id: {}", user.getId());
+        log.debug("Starting email verification for user {}", user.getId());
 
         if (existsByNewEmailAndNotVerified(newEmail)) {
             emailVerificationDao.deleteByNewEmail(newEmail);
-            logger.debug("Deleted existing unverified email verification.");
+            log.debug("Deleted existing unverified email verification.");
         }
 
         EmailVerification emailVerification = new EmailVerification();
@@ -54,7 +52,7 @@ public class EmailVerificationManager implements EmailVerificationService {
         emailVerification.setExpiresAt(Instant.now().plus(15, ChronoUnit.MINUTES));
         emailVerification = emailVerificationDao.save(emailVerification);
 
-        logger.info("Email verification started successfully for user with id: {}", user.getId());
+        log.info("Email verification started successfully for user with id: {}", user.getId());
 
         SendEmailDto newEmailDto = new SendEmailDto();
         newEmailDto.setRecipient(user);
@@ -72,7 +70,7 @@ public class EmailVerificationManager implements EmailVerificationService {
 
         notificationService.sendEmail(newEmailDto, DispatchPriority.CRITICAL, true);
 
-        logger.info("Email verification mail queued for {}", LogMasks.email(newEmail));
+        log.info("Email verification mail queued for {}", LogMasks.email(newEmail));
         return emailVerification;
     }
 

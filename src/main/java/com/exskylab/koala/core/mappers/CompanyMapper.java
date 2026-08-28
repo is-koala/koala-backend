@@ -3,6 +3,7 @@ package com.exskylab.koala.core.mappers;
 import com.exskylab.koala.core.dtos.company.response.CompanyDto;
 import com.exskylab.koala.core.dtos.company.response.OnlyCompanyDto;
 import com.exskylab.koala.entities.Company;
+import com.exskylab.koala.core.helpers.MediaUrlResolver;
 import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;

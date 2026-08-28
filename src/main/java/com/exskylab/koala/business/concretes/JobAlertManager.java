@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.JobAlertService;
 import com.exskylab.koala.business.abstracts.NotificationService;
 import com.exskylab.koala.business.abstracts.SecurityService;
@@ -9,11 +10,9 @@ import com.exskylab.koala.core.dtos.notification.request.SendPushToUserDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.properties.JobAlertProperties;
 import com.exskylab.koala.dataAccess.JobAlertDao;
-import com.exskylab.koala.dataAccess.JobCategoryDao;
 import com.exskylab.koala.entities.*;
-import jakarta.validation.ValidationException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.exskylab.koala.core.exceptions.ValidationException;
+import com.exskylab.koala.business.abstracts.JobCategoryService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,21 +22,20 @@ import java.util.Objects;
 import java.util.UUID;
 
 @Service
+@Slf4j
 public class JobAlertManager implements JobAlertService {
 
-    private final Logger logger = LoggerFactory.getLogger(JobAlertManager.class);
-
     private final JobAlertDao jobAlertDao;
-    private final JobCategoryDao jobCategoryDao;
+    private final JobCategoryService jobCategoryService;
     private final NotificationService notificationService;
     private final SecurityService securityService;
     private final JobAlertProperties properties;
 
-    public JobAlertManager(JobAlertDao jobAlertDao, JobCategoryDao jobCategoryDao,
+    public JobAlertManager(JobAlertDao jobAlertDao, JobCategoryService jobCategoryService,
                            NotificationService notificationService, SecurityService securityService,
                            JobAlertProperties properties) {
         this.jobAlertDao = jobAlertDao;
-        this.jobCategoryDao = jobCategoryDao;
+        this.jobCategoryService = jobCategoryService;
         this.notificationService = notificationService;
         this.securityService = securityService;
         this.properties = properties;
@@ -64,7 +62,7 @@ public class JobAlertManager implements JobAlertService {
         apply(alert, request);
 
         JobAlert saved = jobAlertDao.save(alert);
-        logger.info("Job alert {} created for user {}", saved.getId(), currentUser.getId());
+        log.info("Job alert {} created for user {}", saved.getId(), currentUser.getId());
         return saved;
     }
 
@@ -75,7 +73,7 @@ public class JobAlertManager implements JobAlertService {
         apply(alert, request);
 
         JobAlert saved = jobAlertDao.save(alert);
-        logger.info("Job alert {} updated", alertId);
+        log.info("Job alert {} updated", alertId);
         return saved;
     }
 
@@ -83,7 +81,7 @@ public class JobAlertManager implements JobAlertService {
     @Transactional
     public void deleteAlert(UUID alertId) {
         jobAlertDao.delete(requireOwned(alertId));
-        logger.info("Job alert {} deleted", alertId);
+        log.info("Job alert {} deleted", alertId);
     }
 
     @Override
@@ -118,7 +116,7 @@ public class JobAlertManager implements JobAlertService {
                 alert.setLastNotifiedAt(Instant.now());
                 jobAlertDao.save(alert);
             } catch (Exception e) {
-                logger.warn("Job alert {} could not be delivered: {}", alert.getId(), e.getMessage());
+                log.warn("Job alert {} could not be delivered: {}", alert.getId(), e.getMessage());
             }
         }
     }
@@ -165,15 +163,6 @@ public class JobAlertManager implements JobAlertService {
     }
 
     private void apply(JobAlert alert, SaveJobAlertDto request) {
-        boolean hasCriteria = request.getCategoryId() != null
-                || request.getCityName() != null
-                || request.getMinSalary() != null
-                || request.getType() != null;
-
-        if (!hasCriteria) {
-            throw new ValidationException(JobAlertMessages.CRITERIA_REQUIRED);
-        }
-
         alert.setAlertName(request.getAlertName());
         alert.setCityName(request.getCityName());
         alert.setDistrictName(request.getDistrictName());
@@ -185,8 +174,7 @@ public class JobAlertManager implements JobAlertService {
         }
 
         alert.setCategory(request.getCategoryId() == null ? null
-                : jobCategoryDao.findById(request.getCategoryId())
-                        .orElseThrow(() -> new ResourceNotFoundException(JobAlertMessages.CATEGORY_NOT_FOUND)));
+                : jobCategoryService.getById(request.getCategoryId()));
 
         Objects.requireNonNull(alert.getAlertName());
     }

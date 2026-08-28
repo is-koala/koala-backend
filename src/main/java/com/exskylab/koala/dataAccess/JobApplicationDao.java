@@ -16,6 +16,7 @@ public interface JobApplicationDao extends JpaRepository<JobApplication, UUID> {
 
     boolean existsByJobIdAndUserId(UUID jobId, UUID userId);
 
+    @EntityGraph(attributePaths = {"user", "user.profilePicture", "assignment"})
     List<JobApplication> findAllByJobId(UUID jobId);
 
     @EntityGraph(attributePaths = {"job", "job.category", "job.address", "job.company", "assignment"})

@@ -54,4 +54,6 @@ public interface UserService {
     AddressDto updateAddressForCurrentUser(@Valid CreateAddressRequestDto addressDto);
 
     Page<User> search(String query, Pageable pageable);
+
+    User getReference(UUID id);
 }

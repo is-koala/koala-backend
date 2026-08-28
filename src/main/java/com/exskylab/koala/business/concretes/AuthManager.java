@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.helpers.LogMasks;
 
 import com.exskylab.koala.business.abstracts.*;
@@ -11,12 +12,10 @@ import com.exskylab.koala.core.dtos.auth.request.*;
 import com.exskylab.koala.core.dtos.auth.response.AuthSetPasswordDto;
 import com.exskylab.koala.core.dtos.auth.response.TokenResponseDto;
 import com.exskylab.koala.core.dtos.notification.request.SendEmailDto;
-import com.exskylab.koala.core.dtos.session.response.CreatedSessionInfo;
+import com.exskylab.koala.core.dtos.session.response.CreatedSessionDto;
 import com.exskylab.koala.core.exceptions.*;
 import com.exskylab.koala.core.security.JwtService;
 import com.exskylab.koala.entities.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +28,7 @@ import java.util.UUID;
 
 
 @Service
+@Slf4j
 public class AuthManager implements AuthService {
 
     private final AppProperties appProperties;
@@ -43,8 +43,6 @@ public class AuthManager implements AuthService {
     private final SecurityService securityService;
     private final SessionProperties sessionProperties;
     private final LegalService legalService;
-
-    private Logger logger = LoggerFactory.getLogger(AuthManager.class);
 
     public AuthManager(UserService userService,
                        PendingRegistrationService pendingRegistrationService,
@@ -75,22 +73,22 @@ public class AuthManager implements AuthService {
     @Override
     @Transactional
     public void startRegistration(AuthStartRegistrationDto authStartRegistrationDto) {
-        logger.info("Starting registration.");
+        log.debug("Starting registration");
 
         if (userService.existsByEmail(authStartRegistrationDto.getEmail())){
-            logger.info("Registration requested for an address that already has an account. Responding without disclosing it.");
+            log.info("Registration requested for an address that already has an account. Responding without disclosing it.");
             return;
         }
 
         pendingRegistrationService.findByEmail(authStartRegistrationDto.getEmail())
                 .ifPresent(existing -> {
-                    logger.info("Replacing the existing pending registration so the verification mail can be resent.");
+                    log.info("Replacing the existing pending registration so the verification mail can be resent.");
                     pendingRegistrationService.deleteById(existing.getId());
                 });
 
         PendingRegistration pendingRegistration =
                 pendingRegistrationService.createPendingRegistration(authStartRegistrationDto);
-        logger.info("Pending registration created with id: {}", pendingRegistration.getId());
+        log.info("Pending registration created with id: {}", pendingRegistration.getId());
 
         String verificationLink = appProperties.frontendUrl()+ "/complete-registration?token=" + pendingRegistration.getToken();
 
@@ -108,25 +106,25 @@ public class AuthManager implements AuthService {
         sendEmailDto.setSubject("Koala kayıt işlemi için e-posta doğrulaması");
 
         notificationService.sendEmail(sendEmailDto, DispatchPriority.CRITICAL, true);
-        logger.info("Verification email queued for pending registration id: {}", pendingRegistration.getId());
+        log.info("Verification email queued for pending registration id: {}", pendingRegistration.getId());
 
-        logger.info("Registration process started successfully for pending registration id: {}", pendingRegistration.getId());
+        log.info("Registration process started successfully for pending registration id: {}", pendingRegistration.getId());
     }
 
     @Override
     public AuthSetPasswordDto verifyRegistrationToken(AuthVerifyRegistrationTokenDto authVerifyRegistrationTokenDto) {
-        logger.info("Verifying registration token for id: {}", authVerifyRegistrationTokenDto.getRegistrationToken());
+        log.debug("Verifying registration token for id: {}", authVerifyRegistrationTokenDto.getRegistrationToken());
 
         PendingRegistration pendingRegistration = pendingRegistrationService.getByToken(authVerifyRegistrationTokenDto.getRegistrationToken());
 
         if (pendingRegistration.getExpiresAt().isBefore(Instant.now())){
             pendingRegistrationService.deleteById(pendingRegistration.getId());
-            logger.warn("Registration token expired for pending registration id: {}", pendingRegistration.getId());
-            throw new TokenExpiredException(AuthMessages.REGISTRATION_TOKEN_EXPIRED);
+            log.warn("Registration token expired for pending registration id: {}", pendingRegistration.getId());
+            throw new UnauthorizedException(AuthMessages.REGISTRATION_TOKEN_EXPIRED);
         }
 
         String passwordSetToken = jwtService.generatePasswordSetToken(pendingRegistration.getId());
-        logger.info("Token verified successfully for pending registration id: {}", pendingRegistration.getId());
+        log.info("Token verified successfully for pending registration id: {}", pendingRegistration.getId());
 
         return new AuthSetPasswordDto(passwordSetToken, pendingRegistration.isEmployer());
     }
@@ -141,7 +139,7 @@ public class AuthManager implements AuthService {
 
         PendingRegistration pendingRegistration = pendingRegistrationService.getById(pendingRegistrationId);
 
-        logger.info("Completing registration for pending registration id: {}", pendingRegistration.getId());
+        log.info("Completing registration for pending registration id: {}", pendingRegistration.getId());
 
 
         User newUser = new User();
@@ -159,7 +157,7 @@ public class AuthManager implements AuthService {
 
         User savedUser = userService.save(newUser);
 
-        logger.info("User created successfully with ID: {}", savedUser.getId());
+        log.info("User created successfully with ID: {}", savedUser.getId());
 
         legalService.recordConsents(savedUser, authCompleteRegistrationDto.getConsents(), client);
 
@@ -168,10 +166,10 @@ public class AuthManager implements AuthService {
         Device device = deviceService.findOrCreateDevice(
                 savedUser, client.ipAddress(), client.userAgent(), client.deviceId());
 
-        logger.info("Device created or found for user ID: {}", savedUser.getId());
+        log.info("Device created or found for user ID: {}", savedUser.getId());
 
-        CreatedSessionInfo createdSessionInfo = sessionService.createSession(device, client.ipAddress());
-        logger.info("Session created for user ID: {}, session ID: {}", savedUser.getId(), createdSessionInfo.session().getId());
+        CreatedSessionDto createdSessionInfo = sessionService.createSession(device, client.ipAddress());
+        log.info("Session created for user ID: {}, session ID: {}", savedUser.getId(), createdSessionInfo.session().getId());
 
         LoginAttempt attempt = new LoginAttempt();
         attempt.setUser(savedUser);
@@ -193,7 +191,7 @@ public class AuthManager implements AuthService {
 
     @Override
     public TokenResponseDto login(AuthLoginDto authLoginDto, ClientContext client) {
-        logger.info("Login attempt for {}", LogMasks.email(authLoginDto.getEmail()));
+        log.info("Login attempt for {}", LogMasks.email(authLoginDto.getEmail()));
 
         var user = userService.getByEmail(authLoginDto.getEmail());
 
@@ -208,17 +206,17 @@ public class AuthManager implements AuthService {
             loginAttempt.setUser(user);
             loginAttemptService.save(loginAttempt);
 
-            throw new EmailOrPasswordMismatchException(AuthMessages.EMAIL_OR_PASSWORD_MISMATCH);
+            throw new UnauthorizedException(AuthMessages.EMAIL_OR_PASSWORD_MISMATCH);
         }
 
         Device device = deviceService.findOrCreateDevice(
                 user, client.ipAddress(), client.userAgent(), client.deviceId());
 
-        logger.info("Device found or created for user ID: {}", user.getId());
+        log.info("Device found or created for user ID: {}", user.getId());
 
         // Invalidate all active sessions for the device
         sessionService.invalidateActiveSessionsForDevice(device.getId());
-        logger.info("Invalidated all active sessions for device ID: {}", device.getId());
+        log.info("Invalidated all active sessions for device ID: {}", device.getId());
 
 
         LoginAttempt loginAttempt = new LoginAttempt();
@@ -229,10 +227,10 @@ public class AuthManager implements AuthService {
         loginAttempt.setDeviceName(device.getName());
         loginAttemptService.save(loginAttempt);
 
-        CreatedSessionInfo createdSessionInfo = sessionService.createSession(device, client.ipAddress());
+        CreatedSessionDto createdSessionInfo = sessionService.createSession(device, client.ipAddress());
 
 
-        logger.info("Session created for user ID: {}, session ID: {}", user.getId(), createdSessionInfo.session().getId());
+        log.info("Session created for user ID: {}, session ID: {}", user.getId(), createdSessionInfo.session().getId());
         return new TokenResponseDto(
                 createdSessionInfo.originalToken(),
                 createdSessionInfo.originalRefreshToken(),
@@ -243,21 +241,21 @@ public class AuthManager implements AuthService {
 
     @Override
     public TokenResponseDto refreshToken(RefreshTokenDto refreshTokenDto, UUID sessionId, ClientContext client) {
-        logger.info("Refreshing token for session ID: {}", sessionId);
+        log.info("Refreshing token for session ID: {}", sessionId);
         var session = sessionService.findActiveSessionById(sessionId);
 
         if (!passwordEncoder.matches(refreshTokenDto.getRefreshToken(), session.getRefreshTokenHash())){
-            logger.error("Refresh token does not match for session ID: {}", sessionId);
-            throw new RefreshTokenMismatchException(AuthMessages.REFRESH_TOKEN_AND_SESSION_MISMATCH);
+            log.error("Refresh token does not match for session ID: {}", sessionId);
+            throw new UnauthorizedException(AuthMessages.REFRESH_TOKEN_AND_SESSION_MISMATCH);
         }
 
         Instant now = Instant.now();
 
         if (session.getRefreshExpiresAt().isBefore(now)){
-            logger.error("Refresh token has expired for session ID: {}", sessionId);
+            log.error("Refresh token has expired for session ID: {}", sessionId);
             session.setActive(false);
             sessionService.save(session);
-            throw new TokenExpiredException(AuthMessages.REFRESH_TOKEN_EXPIRED);
+            throw new UnauthorizedException(AuthMessages.REFRESH_TOKEN_EXPIRED);
         }
 
         Device currentDevice = deviceService.findDevice(
@@ -267,8 +265,8 @@ public class AuthManager implements AuthService {
             session.setActive(false);
             session.setLastAccessedAt(now);
             sessionService.save(session);
-            logger.error("SECURITY ALERT: Session ID: {} is not associated with the current device. Session has been deactivated.", sessionId);
-            throw new DeviceDoesntMatchException(AuthMessages.SESSION_NOT_MATCHING_CURRENT_DEVICE);
+            log.error("SECURITY ALERT: Session ID: {} is not associated with the current device. Session has been deactivated.", sessionId);
+            throw new UnauthorizedException(AuthMessages.SESSION_NOT_MATCHING_CURRENT_DEVICE);
         }
 
 
@@ -277,7 +275,7 @@ public class AuthManager implements AuthService {
 
         if (currentRefreshExpiresAt.isBefore(now.plus(sessionProperties.getRefreshSlidingWindowDays(), ChronoUnit.DAYS))){
             session.setRefreshExpiresAt(now.plus(sessionProperties.getRefreshValidityDays(), ChronoUnit.DAYS));
-            logger.info("Refresh token expiry extended for session ID: {}", sessionId);
+            log.info("Refresh token expiry extended for session ID: {}", sessionId);
         }
 
         session.setLastAccessedAt(now);
@@ -286,35 +284,35 @@ public class AuthManager implements AuthService {
         sessionService.save(session);
 
         String newAccessToken = jwtService.generateAccessToken(session.getDevice().getUser(), session.getId());
-        logger.info("Access token refreshed successfully for session ID: {}", sessionId);
+        log.info("Access token refreshed successfully for session ID: {}", sessionId);
         return new TokenResponseDto(newAccessToken, refreshTokenDto.getRefreshToken(), session.getRefreshExpiresAt());
     }
 
     @Override
     public void logout(UUID sessionId) {
-        logger.info("Logging out session ID: {}", sessionId);
+        log.info("Logging out session ID: {}", sessionId);
         var session = sessionService.findActiveSessionById(sessionId);
         if (session == null) {
-            logger.warn("Session with ID: {} not found or already inactive", sessionId);
-            throw new SessionNotFoundException(AuthMessages.SESSION_NOT_FOUND_OR_INACTIVE);
+            log.warn("Session with ID: {} not found or already inactive", sessionId);
+            throw new ResourceNotFoundException(AuthMessages.SESSION_NOT_FOUND_OR_INACTIVE);
         }
         session.setActive(false);
         session.getDevice().setLastSeenAt(Instant.now());
 
         sessionService.save(session);
-        logger.info("Session ID: {} logged out successfully", sessionId);
+        log.info("Session ID: {} logged out successfully", sessionId);
     }
 
     @Override
     @Transactional
     public void requestPasswordReset(ForgotPasswordDto forgotPasswordDto) {
-        logger.info("Password reset requested.");
+        log.info("Password reset requested.");
 
         User user;
         try {
             user = userService.getByEmail(forgotPasswordDto.getEmail());
         } catch (RuntimeException e) {
-            logger.info("Password reset requested for an unknown address. Responding without disclosing it.");
+            log.info("Password reset requested for an unknown address. Responding without disclosing it.");
             return;
         }
 
@@ -333,7 +331,7 @@ public class AuthManager implements AuthService {
                 "verificationLink", resetLink));
 
         notificationService.sendEmail(sendEmailDto, DispatchPriority.CRITICAL, true);
-        logger.info("Password reset mail queued for user id: {}", user.getId());
+        log.info("Password reset mail queued for user id: {}", user.getId());
     }
 
     @Override
@@ -346,11 +344,11 @@ public class AuthManager implements AuthService {
         userService.save(user);
 
         sessionService.invalidateActiveSessionsForUserIdExcludingSessionId(userId, null);
-        logger.info("Password reset completed for user id: {}, all sessions invalidated.", userId);
+        log.info("Password reset completed for user id: {}, all sessions invalidated.", userId);
     }
 
     private void sendWelcomeEmail(User savedUser) {
-        logger.debug("Sending welcome email to user with ID: {}", savedUser.getId());
+        log.debug("Sending welcome email to user with ID: {}", savedUser.getId());
 
             SendEmailDto sendEmailDto = new SendEmailDto();
             sendEmailDto.setRecipient(savedUser);

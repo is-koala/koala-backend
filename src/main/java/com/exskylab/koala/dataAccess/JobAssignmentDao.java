@@ -32,10 +32,10 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
 
     boolean existsByWorkerIdAndStatusIn(UUID workerId, java.util.List<AssignmentStatus> statuses);
 
-    @EntityGraph(attributePaths = {"job", "job.category", "job.address", "job.company", "worker"})
+    @EntityGraph(attributePaths = {"job", "job.category", "job.address", "job.company", "worker", "worker.profilePicture"})
     Page<JobAssignment> findAllByWorkerId(UUID workerId, Pageable pageable);
 
-    @EntityGraph(attributePaths = {"job", "job.category", "job.address", "job.company", "worker"})
+    @EntityGraph(attributePaths = {"job", "job.category", "job.address", "job.company", "worker", "worker.profilePicture"})
     Page<JobAssignment> findAllByJobCreatorId(UUID creatorId, Pageable pageable);
 
     long countByWorkerIdAndStatus(UUID workerId, AssignmentStatus status);

@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.helpers;
 
+import com.exskylab.koala.core.exceptions.ValidationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -43,7 +44,7 @@ public class PageableSanitizer {
                 .toList();
 
         if (!unknown.isEmpty()) {
-            throw new IllegalArgumentException("{page.sort.field.not.allowed}");
+            throw new ValidationException("{page.sort.field.not.allowed}");
         }
     }
 }

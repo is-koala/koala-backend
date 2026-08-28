@@ -4,6 +4,7 @@ import com.exskylab.koala.core.dtos.badge.response.BadgeAdminDto;
 import com.exskylab.koala.core.dtos.badge.response.BadgeDto;
 import com.exskylab.koala.entities.Badge;
 import com.exskylab.koala.entities.UserBadge;
+import com.exskylab.koala.core.helpers.MediaUrlResolver;
 import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;

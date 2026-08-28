@@ -1,21 +1,20 @@
 package com.exskylab.koala.core.utilities.mail;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.constants.EmailMessages;
-import com.exskylab.koala.core.exceptions.EmailSendException;
+import com.exskylab.koala.core.exceptions.ExternalServiceException;
 import jakarta.mail.internet.MimeMessage;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
+import com.exskylab.koala.core.helpers.LogMasks;
 import org.springframework.stereotype.Service;
 
 @Service
+@Slf4j
 public class JavaMailSenderManager implements EmailService {
 
     private final JavaMailSender javaMailsender;
-
-    private static final Logger logger = LoggerFactory.getLogger(JavaMailSenderManager.class);
 
     public JavaMailSenderManager(JavaMailSender javaMailsender) {
         this.javaMailsender = javaMailsender;
@@ -39,8 +38,8 @@ public class JavaMailSenderManager implements EmailService {
             javaMailsender.send(mimeMessage);
             return true;
         }catch (Exception e){
-            logger.error("E-posta gönderimi başarısız oldu: {} - Hata: {}", to, e.getMessage(), e);
-            throw new EmailSendException(EmailMessages.EMAIL_SEND_FAILED);
+            log.error("Mail delivery failed for {}: {}", LogMasks.email(to), e.getMessage(), e);
+            throw new ExternalServiceException(EmailMessages.EMAIL_SEND_FAILED);
         }
 
 

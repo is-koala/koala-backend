@@ -14,6 +14,6 @@ public interface ReviewDao extends JpaRepository<Review, UUID> {
 
     boolean existsByJobAssignmentIdAndAuthorId(UUID jobAssignmentId, UUID authorId);
 
-    @EntityGraph(attributePaths = {"author"})
+    @EntityGraph(attributePaths = {"author", "author.profilePicture"})
     Page<Review> findAllBySubjectIdOrderByCreatedAtDesc(UUID subjectId, Pageable pageable);
 }

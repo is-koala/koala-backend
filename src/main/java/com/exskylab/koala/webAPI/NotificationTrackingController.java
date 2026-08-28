@@ -9,14 +9,14 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/notification-tracking")
-public class NotificationController {
+public class NotificationTrackingController {
 
     private final NotificationService notificationService;
 
     private static final byte[] TRACKING_PIXEL_BYTES = Base64.getDecoder()
             .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=");
 
-    public NotificationController(NotificationService notificationService) {
+    public NotificationTrackingController(NotificationService notificationService) {
         this.notificationService = notificationService;
     }
 

@@ -1,14 +1,13 @@
 package com.exskylab.koala.business.concretes;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.core.constants.UserMessages;
 import com.exskylab.koala.core.helpers.IbanValidator;
 import com.exskylab.koala.dataAccess.BankAccountDao;
 import com.exskylab.koala.entities.BankAccount;
 import com.exskylab.koala.entities.User;
-import jakarta.validation.ValidationException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.exskylab.koala.core.exceptions.ValidationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,9 +15,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Service
+@Slf4j
 public class BankAccountManager implements BankAccountService {
-
-    private final Logger logger = LoggerFactory.getLogger(BankAccountManager.class);
 
     private final BankAccountDao bankAccountDao;
 
@@ -49,7 +47,7 @@ public class BankAccountManager implements BankAccountService {
         account.setAccountHolderName((user.getFirstName() + " " + user.getLastName()).trim());
 
         BankAccount saved = bankAccountDao.save(account);
-        logger.info("Primary bank account saved for user id: {}", user.getId());
+        log.info("Primary bank account saved for user id: {}", user.getId());
         return saved;
     }
 

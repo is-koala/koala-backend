@@ -4,6 +4,7 @@ import com.exskylab.koala.core.constants.AvailabilityMessages;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.AssertTrue;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -38,5 +39,12 @@ public class SaveAvailabilityDto {
 
         @NotNull(message = AvailabilityMessages.TIME_REQUIRED)
         private LocalTime endTime;
+    }
+
+    @AssertTrue(message = AvailabilityMessages.END_BEFORE_START)
+    public boolean isEveryslotWellOrdered() {
+        return slots == null || slots.stream().allMatch(slot ->
+                slot.getStartTime() == null || slot.getEndTime() == null
+                        || slot.getStartTime().isBefore(slot.getEndTime()));
     }
 }

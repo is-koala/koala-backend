@@ -1,5 +1,7 @@
 package com.exskylab.koala.business.concretes;
 
+import lombok.extern.slf4j.Slf4j;
+import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.LegalService;
 import com.exskylab.koala.core.constants.LegalMessages;
 import com.exskylab.koala.core.dtos.legal.request.ConsentDecisionDto;
@@ -8,11 +10,9 @@ import com.exskylab.koala.core.helpers.ClientContext;
 import com.exskylab.koala.dataAccess.AccountDeletionRequestDao;
 import com.exskylab.koala.dataAccess.AgreementVersionDao;
 import com.exskylab.koala.dataAccess.ConsentRecordDao;
-import com.exskylab.koala.dataAccess.JobAssignmentDao;
 import com.exskylab.koala.entities.*;
-import jakarta.validation.ValidationException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.exskylab.koala.core.exceptions.ValidationException;
+import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,22 +26,21 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 public class LegalManager implements LegalService {
-
-    private final Logger logger = LoggerFactory.getLogger(LegalManager.class);
 
     private final AgreementVersionDao agreementVersionDao;
     private final ConsentRecordDao consentRecordDao;
     private final AccountDeletionRequestDao accountDeletionRequestDao;
-    private final JobAssignmentDao jobAssignmentDao;
+    private final JobAssignmentService jobAssignmentService;
 
     public LegalManager(AgreementVersionDao agreementVersionDao, ConsentRecordDao consentRecordDao,
                         AccountDeletionRequestDao accountDeletionRequestDao,
-                        JobAssignmentDao jobAssignmentDao) {
+                        JobAssignmentService jobAssignmentService) {
         this.agreementVersionDao = agreementVersionDao;
         this.consentRecordDao = consentRecordDao;
         this.accountDeletionRequestDao = accountDeletionRequestDao;
-        this.jobAssignmentDao = jobAssignmentDao;
+        this.jobAssignmentService = jobAssignmentService;
     }
 
     @Override
@@ -70,7 +69,7 @@ public class LegalManager implements LegalService {
                 .toList();
 
         if (!missing.isEmpty()) {
-            logger.warn("Registration blocked, mandatory consents missing: {}",
+            log.warn("Registration blocked, mandatory consents missing: {}",
                     missing.stream().map(AgreementVersion::getType).toList());
             throw new ValidationException(LegalMessages.MANDATORY_CONSENT_MISSING);
         }
@@ -106,7 +105,7 @@ public class LegalManager implements LegalService {
         }
 
         List<ConsentRecord> saved = consentRecordDao.saveAll(records);
-        logger.info("Recorded {} consent decisions for user id: {}", saved.size(), user.getId());
+        log.info("Recorded {} consent decisions for user id: {}", saved.size(), user.getId());
         return saved;
     }
 
@@ -122,7 +121,7 @@ public class LegalManager implements LegalService {
         accountDeletionRequestDao
                 .findFirstByUserIdAndStatusOrderByRequestedAtDesc(user.getId(), AccountDeletionStatus.REQUESTED)
                 .ifPresent(existing -> {
-                    throw new IllegalStateException(LegalMessages.DELETION_ALREADY_REQUESTED);
+                    throw new ConflictException(LegalMessages.DELETION_ALREADY_REQUESTED);
                 });
 
         assertNoOpenObligations(user.getId());
@@ -134,23 +133,21 @@ public class LegalManager implements LegalService {
         request.setRequestedAt(Instant.now());
 
         AccountDeletionRequest saved = accountDeletionRequestDao.save(request);
-        logger.info("Account deletion requested for user id: {}", user.getId());
+        log.info("Account deletion requested for user id: {}", user.getId());
         return saved;
     }
 
     private void assertNoOpenObligations(UUID userId) {
-        boolean hasEscrowedMoney = jobAssignmentDao.existsByWorkerIdAndPaymentStatus(
-                userId, PaymentStatus.HELD_IN_ESCROW);
+        boolean hasEscrowedMoney = jobAssignmentService.hasMoneyInEscrowFor(userId);
 
         if (hasEscrowedMoney) {
-            throw new IllegalStateException(LegalMessages.DELETION_BLOCKED_BY_ESCROW);
+            throw new ConflictException(LegalMessages.DELETION_BLOCKED_BY_ESCROW);
         }
 
-        boolean hasActiveWork = jobAssignmentDao.existsByWorkerIdAndStatusIn(
-                userId, List.of(AssignmentStatus.CONFIRMED, AssignmentStatus.IN_PROGRESS));
+        boolean hasActiveWork = jobAssignmentService.hasActiveWorkFor(userId);
 
         if (hasActiveWork) {
-            throw new IllegalStateException(LegalMessages.DELETION_BLOCKED_BY_ACTIVE_WORK);
+            throw new ConflictException(LegalMessages.DELETION_BLOCKED_BY_ACTIVE_WORK);
         }
     }
 

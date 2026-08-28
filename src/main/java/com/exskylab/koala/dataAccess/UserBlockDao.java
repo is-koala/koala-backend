@@ -16,6 +16,6 @@ public interface UserBlockDao extends JpaRepository<UserBlock, UUID> {
 
     boolean existsByBlockerIdAndBlockedId(UUID blockerId, UUID blockedId);
 
-    @EntityGraph(attributePaths = {"blocked"})
+    @EntityGraph(attributePaths = {"blocked", "blocked.profilePicture"})
     List<UserBlock> findAllByBlockerId(UUID blockerId);
 }

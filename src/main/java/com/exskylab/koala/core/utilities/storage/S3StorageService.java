@@ -1,10 +1,9 @@
 package com.exskylab.koala.core.utilities.storage;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.constants.StorageMessages;
-import com.exskylab.koala.core.exceptions.ImageUploadError;
+import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.properties.StorageProperties;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.core.sync.RequestBody;
@@ -19,9 +18,8 @@ import java.time.Duration;
 
 @Service
 @ConditionalOnProperty(name = "storage.type", havingValue = "s3")
+@Slf4j
 public class S3StorageService implements StorageService {
-
-    private final Logger logger = LoggerFactory.getLogger(S3StorageService.class);
 
     private final S3Client s3Client;
     private final S3Presigner s3Presigner;
@@ -45,11 +43,11 @@ public class S3StorageService implements StorageService {
                     .contentDisposition(FileDispositions.inline(originalFileName))
                     .build(), RequestBody.fromBytes(fileBytes));
         } catch (RuntimeException e) {
-            logger.error("S3 upload failed for {}: {}", key, e.getMessage());
-            throw new ImageUploadError(StorageMessages.UPLOAD_FAILED);
+            log.error("S3 upload failed for {}: {}", key, e.getMessage());
+            throw new ValidationException(StorageMessages.UPLOAD_FAILED);
         }
 
-        logger.info("Uploaded to S3: {}", key);
+        log.info("Uploaded to S3: {}", key);
         return key;
     }
 
@@ -61,11 +59,11 @@ public class S3StorageService implements StorageService {
                     .key(key)
                     .build());
         } catch (RuntimeException e) {
-            logger.error("S3 delete failed for {}: {}", key, e.getMessage());
-            throw new ImageUploadError(StorageMessages.DELETE_FAILED);
+            log.error("S3 delete failed for {}: {}", key, e.getMessage());
+            throw new ValidationException(StorageMessages.DELETE_FAILED);
         }
 
-        logger.info("Deleted from S3: {}", key);
+        log.info("Deleted from S3: {}", key);
     }
 
     @Override

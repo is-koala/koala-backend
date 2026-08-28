@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import java.util.Locale;
 import com.exskylab.koala.business.abstracts.DeviceService;
 import com.exskylab.koala.core.helpers.DeviceIdentity;
 import com.exskylab.koala.dataAccess.DeviceDao;
@@ -144,7 +145,7 @@ public class DeviceManager implements DeviceService {
             return DeviceType.UNKNOWN;
         }
 
-        String osLower = operatingSystem.toLowerCase();
+        String osLower = operatingSystem.toLowerCase(Locale.ROOT);
 
         if (osLower.contains("ios")){
             return DeviceType.IOS;
@@ -154,7 +155,7 @@ public class DeviceManager implements DeviceService {
             return DeviceType.ANDROID;
         }
 
-        if (agentName != null && List.of("chrome", "firefox", "safari", "edge").stream().anyMatch(agentName.toLowerCase()::contains)) {
+        if (agentName != null && List.of("chrome", "firefox", "safari", "edge").stream().anyMatch(agentName.toLowerCase(Locale.ROOT)::contains)) {
             return DeviceType.WEB_BROWSER;
         }
 

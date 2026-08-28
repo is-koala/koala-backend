@@ -1,15 +1,15 @@
 package com.exskylab.koala.core.exceptions;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.helpers.MessageResolver;
+import com.exskylab.koala.core.utilities.results.ErrorCategory;
 import com.exskylab.koala.core.utilities.results.ErrorResult;
 import com.exskylab.koala.core.utilities.results.FieldError;
 import com.exskylab.koala.core.utilities.results.Result;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.security.SignatureException;
-import jakarta.validation.ValidationException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.exskylab.koala.core.exceptions.ValidationException;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -29,9 +29,8 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 import java.util.List;
 
 @ControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
-
-    private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private final MessageResolver messageResolver;
 
@@ -43,11 +42,11 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Result> handleKoalaException(KoalaException ex) {
         HttpStatus status = ex.getHttpStatus();
         if (status.is5xxServerError()) {
-            logger.error("Koala hatasi: {}", ex.getErrorCode(), ex);
+            log.error("Koala hatasi: {}", ex.getErrorCode(), ex);
         } else {
-            logger.warn("Koala hatasi: {} - {}", ex.getErrorCode(), ex.getMessage());
+            log.warn("Koala hatasi: {} - {}", ex.getErrorCode(), ex.getMessage());
         }
-        return build(status, ex.getMessage(), ex.getErrorCode(), null);
+        return build(status, ex.getMessage(), ex.getErrorCode(), categoryOf(status), null);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -56,77 +55,91 @@ public class GlobalExceptionHandler {
                 .map(error -> new FieldError(error.getField(), messageResolver.resolve(error.getDefaultMessage())))
                 .toList();
 
-        return build(HttpStatus.BAD_REQUEST, "{validation.failed}", "VALIDATION_FAILED", details);
+        return build(HttpStatus.BAD_REQUEST, "{validation.failed}", null, ErrorCategory.VALIDATION_FAILED, details);
     }
 
     @ExceptionHandler(ValidationException.class)
     public ResponseEntity<Result> handleValidationException(ValidationException ex) {
-        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), "VALIDATION_FAILED", null);
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), ex.getErrorCode(), ErrorCategory.VALIDATION_FAILED, null);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Result> handleHttpMessageNotReadable(HttpMessageNotReadableException ex) {
-        logger.warn("Govdesi okunamayan istek: {}", ex.getMostSpecificCause().getMessage());
-        return build(HttpStatus.BAD_REQUEST, "{request.body.unreadable}", "MALFORMED_REQUEST_BODY", null);
+        log.warn("Govdesi okunamayan istek: {}", ex.getMostSpecificCause().getMessage());
+        return build(HttpStatus.BAD_REQUEST, "{request.body.unreadable}", null, ErrorCategory.REQUEST_MALFORMED, null);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Result> handleIllegalArgument(IllegalArgumentException ex) {
-        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), "INVALID_ARGUMENT", null);
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), null, ErrorCategory.VALIDATION_FAILED, null);
     }
 
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<Result> handleIllegalState(IllegalStateException ex) {
-        return build(HttpStatus.CONFLICT, ex.getMessage(), "INVALID_STATE", null);
+        return build(HttpStatus.CONFLICT, ex.getMessage(), null, ErrorCategory.BUSINESS_RULE_VIOLATION, null);
     }
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<Result> handleAccessDenied(AccessDeniedException ex) {
-        return build(HttpStatus.FORBIDDEN, "{access.denied}", "ACCESS_DENIED", null);
+        return build(HttpStatus.FORBIDDEN, "{access.denied}", null, ErrorCategory.ACCESS_DENIED, null);
     }
 
     @ExceptionHandler({AuthenticationException.class, BadCredentialsException.class,
             InsufficientAuthenticationException.class})
     public ResponseEntity<Result> handleAuthentication(AuthenticationException ex) {
-        return build(HttpStatus.UNAUTHORIZED, "{authentication.required}", "AUTHENTICATION_REQUIRED", null);
+        return build(HttpStatus.UNAUTHORIZED, "{authentication.required}", null, ErrorCategory.AUTHENTICATION_REQUIRED, null);
     }
 
     @ExceptionHandler(ExpiredJwtException.class)
     public ResponseEntity<Result> handleExpiredJwt(ExpiredJwtException ex) {
-        return build(HttpStatus.UNAUTHORIZED, "{jwt.expired}", "JWT_EXPIRED", null);
+        return build(HttpStatus.UNAUTHORIZED, "{jwt.expired}", null, ErrorCategory.TOKEN_EXPIRED, null);
     }
 
     @ExceptionHandler({SignatureException.class, JwtException.class})
     public ResponseEntity<Result> handleJwt(JwtException ex) {
-        logger.warn("Gecersiz JWT: {}", ex.getMessage());
-        return build(HttpStatus.UNAUTHORIZED, "{jwt.invalid}", "JWT_INVALID", null);
+        log.warn("Gecersiz JWT: {}", ex.getMessage());
+        return build(HttpStatus.UNAUTHORIZED, "{jwt.invalid}", null, ErrorCategory.INVALID_CREDENTIALS, null);
     }
 
     @ExceptionHandler({MissingServletRequestParameterException.class, MethodArgumentTypeMismatchException.class})
     public ResponseEntity<Result> handleBadRequestParameter(Exception ex) {
-        logger.warn("Gecersiz istek parametresi: {}", ex.getMessage());
-        return build(HttpStatus.BAD_REQUEST, "{request.parameter.invalid}", "INVALID_REQUEST_PARAMETER", null);
+        log.warn("Gecersiz istek parametresi: {}", ex.getMessage());
+        return build(HttpStatus.BAD_REQUEST, "{request.parameter.invalid}", null, ErrorCategory.PARAMETER_MISSING, null);
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<Result> handleNoResourceFound(NoResourceFoundException ex) {
-        return build(HttpStatus.NOT_FOUND, "{endpoint.not.found}", "ENDPOINT_NOT_FOUND", null);
+        return build(HttpStatus.NOT_FOUND, "{endpoint.not.found}", null, ErrorCategory.ENDPOINT_NOT_FOUND, null);
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<Result> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
-        return build(HttpStatus.METHOD_NOT_ALLOWED, "{method.not.allowed}", "METHOD_NOT_ALLOWED", null);
+        return build(HttpStatus.METHOD_NOT_ALLOWED, "{method.not.allowed}", null, ErrorCategory.METHOD_NOT_ALLOWED, null);
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Result> handleUnexpected(Exception ex) {
-        logger.error("Beklenmeyen hata [correlationId={}]", MDC.get("correlationId"), ex);
-        return build(HttpStatus.INTERNAL_SERVER_ERROR, "{unexpected.error}", "INTERNAL_ERROR", null);
+        log.error("Beklenmeyen hata [correlationId={}]", MDC.get("correlationId"), ex);
+        return build(HttpStatus.INTERNAL_SERVER_ERROR, "{unexpected.error}", null, ErrorCategory.UNEXPECTED, null);
     }
 
     private ResponseEntity<Result> build(HttpStatus status, String message, String errorCode,
-                                         List<FieldError> details) {
+                                         ErrorCategory category, List<FieldError> details) {
         return ResponseEntity.status(status)
-                .body(new ErrorResult(messageResolver.resolve(message), status, errorCode, details));
+                .body(new ErrorResult(messageResolver.resolve(message), status, errorCode, category)
+                        .withDetails(details));
+    }
+
+    private static ErrorCategory categoryOf(HttpStatus status) {
+        return switch (status) {
+            case NOT_FOUND -> ErrorCategory.RESOURCE_NOT_FOUND;
+            case FORBIDDEN -> ErrorCategory.ACCESS_DENIED;
+            case UNAUTHORIZED -> ErrorCategory.AUTHENTICATION_REQUIRED;
+            case CONFLICT -> ErrorCategory.DATA_CONFLICT;
+            case BAD_REQUEST -> ErrorCategory.VALIDATION_FAILED;
+            case TOO_MANY_REQUESTS -> ErrorCategory.RATE_LIMITED;
+            case BAD_GATEWAY, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT -> ErrorCategory.UPSTREAM_FAILED;
+            default -> ErrorCategory.UNEXPECTED;
+        };
     }
 }

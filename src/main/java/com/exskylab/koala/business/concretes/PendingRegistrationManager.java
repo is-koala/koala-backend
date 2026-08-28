@@ -3,7 +3,7 @@ package com.exskylab.koala.business.concretes;
 import com.exskylab.koala.business.abstracts.PendingRegistrationService;
 import com.exskylab.koala.core.constants.PendingRegistrationMessages;
 import com.exskylab.koala.core.dtos.auth.request.AuthStartRegistrationDto;
-import com.exskylab.koala.core.exceptions.PendingRegistrationNotFoundException;
+import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.dataAccess.PendingRegistrationDao;
 import com.exskylab.koala.entities.PendingRegistration;
 
@@ -26,13 +26,13 @@ public class PendingRegistrationManager implements PendingRegistrationService {
     @Override
     public PendingRegistration getByEmail(String email) {
         return pendingRegistrationDao.findByEmail(email)
-                .orElseThrow(() -> new PendingRegistrationNotFoundException(PendingRegistrationMessages.PENDING_REGISTRATION_NOT_FOUND_BY_EMAIL));
+                .orElseThrow(() -> new ResourceNotFoundException(PendingRegistrationMessages.PENDING_REGISTRATION_NOT_FOUND_BY_EMAIL));
     }
 
     @Override
     public void deleteById(UUID id) {
         if (!pendingRegistrationDao.existsById(id)) {
-            throw new PendingRegistrationNotFoundException(PendingRegistrationMessages.PENDING_REGISTRATION_NOT_FOUND_BY_ID);
+            throw new ResourceNotFoundException(PendingRegistrationMessages.PENDING_REGISTRATION_NOT_FOUND_BY_ID);
         }
         pendingRegistrationDao.deleteById(id);
     }
@@ -52,13 +52,13 @@ public class PendingRegistrationManager implements PendingRegistrationService {
     @Override
     public PendingRegistration getByToken(UUID registrationToken) {
         return pendingRegistrationDao.findByToken(registrationToken)
-                .orElseThrow(() -> new PendingRegistrationNotFoundException(PendingRegistrationMessages.PENDING_REGISTRATION_NOT_FOUND_BY_TOKEN));
+                .orElseThrow(() -> new ResourceNotFoundException(PendingRegistrationMessages.PENDING_REGISTRATION_NOT_FOUND_BY_TOKEN));
     }
 
     @Override
     public PendingRegistration getById(UUID pendingRegistrationId) {
         return pendingRegistrationDao.findById(pendingRegistrationId)
-                .orElseThrow(() -> new PendingRegistrationNotFoundException(PendingRegistrationMessages.PENDING_REGISTRATION_NOT_FOUND_BY_ID));
+                .orElseThrow(() -> new ResourceNotFoundException(PendingRegistrationMessages.PENDING_REGISTRATION_NOT_FOUND_BY_ID));
     }
 
 

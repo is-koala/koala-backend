@@ -1,18 +1,17 @@
 package com.exskylab.koala.business.concretes;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.CompanyContactService;
 import com.exskylab.koala.business.abstracts.JobTemplateService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.JobTemplateMessages;
 import com.exskylab.koala.core.dtos.jobTemplate.request.CreateJobTemplateDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
-import com.exskylab.koala.dataAccess.JobDao;
 import com.exskylab.koala.dataAccess.JobTemplateDao;
 import com.exskylab.koala.entities.Job;
 import com.exskylab.koala.entities.JobTemplate;
 import com.exskylab.koala.entities.User;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.exskylab.koala.business.abstracts.JobService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,19 +19,18 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
+@Slf4j
 public class JobTemplateManager implements JobTemplateService {
 
-    private final Logger logger = LoggerFactory.getLogger(JobTemplateManager.class);
-
     private final JobTemplateDao jobTemplateDao;
-    private final JobDao jobDao;
+    private final JobService jobService;
     private final CompanyContactService companyContactService;
     private final SecurityService securityService;
 
-    public JobTemplateManager(JobTemplateDao jobTemplateDao, JobDao jobDao,
+    public JobTemplateManager(JobTemplateDao jobTemplateDao, JobService jobService,
                               CompanyContactService companyContactService, SecurityService securityService) {
         this.jobTemplateDao = jobTemplateDao;
-        this.jobDao = jobDao;
+        this.jobService = jobService;
         this.companyContactService = companyContactService;
         this.securityService = securityService;
     }
@@ -46,8 +44,7 @@ public class JobTemplateManager implements JobTemplateService {
     @Override
     @Transactional
     public JobTemplate createFromJob(CreateJobTemplateDto request) {
-        Job job = jobDao.findById(request.getJobId())
-                .orElseThrow(() -> new ResourceNotFoundException(JobTemplateMessages.JOB_NOT_FOUND));
+        Job job = jobService.getById(request.getJobId());
 
         User owner = securityService.getAuthenticatedUser();
         assertCanCopy(job, owner.getId());
@@ -72,7 +69,7 @@ public class JobTemplateManager implements JobTemplateService {
         template.setInsuranceRequired(job.isInsuranceRequired());
 
         JobTemplate saved = jobTemplateDao.save(template);
-        logger.info("Job template {} created from job {}", saved.getId(), job.getId());
+        log.info("Job template {} created from job {}", saved.getId(), job.getId());
         return saved;
     }
 
@@ -92,7 +89,7 @@ public class JobTemplateManager implements JobTemplateService {
     @Transactional
     public void deleteTemplate(UUID templateId) {
         jobTemplateDao.delete(getMyTemplate(templateId));
-        logger.info("Job template {} deleted", templateId);
+        log.info("Job template {} deleted", templateId);
     }
 
     private void assertCanCopy(Job job, UUID userId) {

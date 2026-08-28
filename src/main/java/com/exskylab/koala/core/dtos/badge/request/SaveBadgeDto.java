@@ -5,6 +5,7 @@ import com.exskylab.koala.entities.BadgeFamily;
 import com.exskylab.koala.entities.BadgeRuleType;
 import com.exskylab.koala.entities.BadgeTier;
 import jakarta.validation.constraints.*;
+import jakarta.validation.constraints.AssertTrue;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -52,4 +53,15 @@ public class SaveBadgeDto {
     private Integer minReviewCount;
 
     private Boolean active;
+
+    @AssertTrue(message = BadgeMessages.MIN_COUNT_REQUIRED)
+    public boolean isCountThresholdPresentWhenTheRuleNeedsIt() {
+        return ruleType != BadgeRuleType.COMPLETED_ASSIGNMENTS || (minCount != null && minCount >= 1);
+    }
+
+    @AssertTrue(message = BadgeMessages.RATING_THRESHOLD_REQUIRED)
+    public boolean isRatingThresholdCompleteWhenTheRuleNeedsIt() {
+        return ruleType != BadgeRuleType.AVERAGE_RATING_WITH_MINIMUM_REVIEWS
+                || (minAverageRating != null && minReviewCount != null && minReviewCount >= 1);
+    }
 }

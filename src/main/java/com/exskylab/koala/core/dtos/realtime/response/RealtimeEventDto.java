@@ -1,6 +1,7 @@
 package com.exskylab.koala.core.dtos.realtime.response;
 
 import com.exskylab.koala.core.dtos.messaging.response.MessageDto;
+import com.exskylab.koala.entities.RealtimeEventType;
 
 import java.time.Instant;
 import java.util.UUID;

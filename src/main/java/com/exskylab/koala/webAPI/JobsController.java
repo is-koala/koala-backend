@@ -9,7 +9,7 @@ import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationDto;
 import com.exskylab.koala.core.mappers.JobApplicationMapper;
 import com.exskylab.koala.core.constants.JobMessages;
 import com.exskylab.koala.core.dtos.common.PageDto;
-import com.exskylab.koala.core.dtos.job.request.JobSearchCriteria;
+import com.exskylab.koala.core.dtos.job.request.JobSearchCriteriaDto;
 import com.exskylab.koala.core.dtos.job.response.JobDetailDto;
 import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
 import com.exskylab.koala.core.mappers.JobMapper;
@@ -48,7 +48,7 @@ public class JobsController {
 
     @GetMapping
     public ResponseEntity<SuccessDataResult<PageDto<JobSummaryDto>>> searchJobs(
-            JobSearchCriteria criteria,
+            JobSearchCriteriaDto criteria,
             @PageableDefault(size = 20) Pageable pageable) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
@@ -69,7 +69,7 @@ public class JobsController {
     }
 
     @PostMapping("/{jobId}/applications")
-    public ResponseEntity<SuccessDataResult<JobApplicationDto>> applyToJob(@PathVariable String jobId, @RequestBody @Valid CreateJobApplicationDto jobsJobIdApplicationsPostResponseDto){
+    public ResponseEntity<SuccessDataResult<JobApplicationDto>> applyToJob(@PathVariable UUID jobId, @RequestBody @Valid CreateJobApplicationDto jobsJobIdApplicationsPostResponseDto){
 
         JobApplicationDto jobApplicationsDto = jobApplicationService.applyToJob(jobId, jobsJobIdApplicationsPostResponseDto);
 
@@ -84,7 +84,7 @@ public class JobsController {
 
 
     @GetMapping("/{jobId}/applications")
-    public ResponseEntity<SuccessDataResult<List<JobApplicantDto>>> getJobApplicationById(@PathVariable String jobId){
+    public ResponseEntity<SuccessDataResult<List<JobApplicantDto>>> getJobApplicationById(@PathVariable UUID jobId){
 
         List<JobApplicantDto> jobApplicationsDto = jobApplicationService.getJobApplicationsByIdJobId(jobId);
 

@@ -33,7 +33,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/companies")
-public class CompanyController {
+public class CompaniesController {
 
     private final CompanyService companyService;
     private final CompanyContactMapper companyContactMapper;
@@ -41,7 +41,7 @@ public class CompanyController {
     private final CompanyContactInvitationService companyContactInvitationService;
 
 
-    public CompanyController(CompanyService companyService, JobService jobService,
+    public CompaniesController(CompanyService companyService, JobService jobService,
                              CompanyContactInvitationService companyContactInvitationService,
                              CompanyContactMapper companyContactMapper) {
         this.companyService = companyService;
@@ -92,7 +92,7 @@ public class CompanyController {
 
 
     @PostMapping("/{companyId}/jobs")
-    public ResponseEntity<SuccessDataResult<CompanyJobDto>> createJobForCompany(@PathVariable String companyId,
+    public ResponseEntity<SuccessDataResult<CompanyJobDto>> createJobForCompany(@PathVariable UUID companyId,
                                                                                                         @RequestBody @Valid CreateCompanyJobDto companiesCompanyIdJobsPostRequestDto){
         CompanyJobDto response = jobService.createCorporateJob(companyId, companiesCompanyIdJobsPostRequestDto);
 

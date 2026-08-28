@@ -15,7 +15,7 @@ import java.util.UUID;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class JobSearchCriteria {
+public class JobSearchCriteriaDto {
 
     private String query;
     private UUID categoryId;

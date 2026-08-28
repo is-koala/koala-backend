@@ -3,6 +3,7 @@ package com.exskylab.koala.core.helpers;
 import com.exskylab.koala.entities.AssignmentStatus;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.PaymentStatus;
+import com.exskylab.koala.core.exceptions.ConflictException;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -43,7 +44,7 @@ public class PaymentStateMachine {
     public void transition(JobAssignment assignment, PaymentStatus to) {
         PaymentStatus from = assignment.getPaymentStatus();
         if (!canTransition(from, to)) {
-            throw new IllegalStateException("{payment.invalid.status.transition}");
+            throw new ConflictException("{payment.invalid.status.transition}");
         }
         assignment.setPaymentStatus(to);
     }

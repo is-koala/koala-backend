@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.AvailabilityService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.AvailabilityMessages;
@@ -11,9 +12,7 @@ import com.exskylab.koala.dataAccess.AvailabilitySlotDao;
 import com.exskylab.koala.entities.AvailabilityException;
 import com.exskylab.koala.entities.AvailabilitySlot;
 import com.exskylab.koala.entities.User;
-import jakarta.validation.ValidationException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.exskylab.koala.core.exceptions.ValidationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,9 +23,8 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
+@Slf4j
 public class AvailabilityManager implements AvailabilityService {
-
-    private final Logger logger = LoggerFactory.getLogger(AvailabilityManager.class);
 
     private final AvailabilitySlotDao slotDao;
     private final AvailabilityExceptionDao exceptionDao;
@@ -69,17 +67,13 @@ public class AvailabilityManager implements AvailabilityService {
             saved.add(slotDao.save(slot));
         }
 
-        logger.info("Availability replaced for user {} with {} slots", currentUser.getId(), saved.size());
+        log.info("Availability replaced for user {} with {} slots", currentUser.getId(), saved.size());
         return saved;
     }
 
     @Override
     @Transactional
     public AvailabilityException saveMyException(SaveAvailabilityExceptionDto request) {
-        if (request.getDate().isBefore(LocalDate.now())) {
-            throw new ValidationException(AvailabilityMessages.DATE_IN_PAST);
-        }
-
         User currentUser = securityService.getAuthenticatedUser();
 
         AvailabilityException exception = exceptionDao
@@ -95,7 +89,7 @@ public class AvailabilityManager implements AvailabilityService {
         exception.setNote(request.getNote());
 
         AvailabilityException saved = exceptionDao.save(exception);
-        logger.info("Availability exception on {} saved for user {}", saved.getDate(), currentUser.getId());
+        log.info("Availability exception on {} saved for user {}", saved.getDate(), currentUser.getId());
         return saved;
     }
 
@@ -110,16 +104,10 @@ public class AvailabilityManager implements AvailabilityService {
         }
 
         exceptionDao.delete(exception);
-        logger.info("Availability exception {} deleted", exceptionId);
+        log.info("Availability exception {} deleted", exceptionId);
     }
 
     private void assertSlotsAreSane(List<SaveAvailabilityDto.Slot> slots) {
-        for (SaveAvailabilityDto.Slot slot : slots) {
-            if (!slot.getStartTime().isBefore(slot.getEndTime())) {
-                throw new ValidationException(AvailabilityMessages.END_BEFORE_START);
-            }
-        }
-
         List<SaveAvailabilityDto.Slot> ordered = slots.stream()
                 .sorted(Comparator.comparing(SaveAvailabilityDto.Slot::getDayOfWeek)
                         .thenComparing(SaveAvailabilityDto.Slot::getStartTime))

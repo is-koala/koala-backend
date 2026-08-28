@@ -14,4 +14,12 @@ public interface CompanyContactService {
     boolean isUserAContactOfCompany(UUID companyId, UUID userId);
 
     boolean isUserAdminOfCompany(UUID companyId, UUID userId);
+
+    java.util.List<CompanyContact> getContactsOfCompany(UUID companyId);
+
+    java.util.Optional<CompanyContact> findContact(UUID companyId, UUID userId);
+
+    long countAdminsOfCompany(UUID companyId);
+
+    void removeContact(CompanyContact contact);
 }

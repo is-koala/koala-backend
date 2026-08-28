@@ -1,9 +1,8 @@
 package com.exskylab.koala.core.schedulers;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.SettlementService;
 import com.exskylab.koala.core.properties.SettlementRetryProperties;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -11,9 +10,8 @@ import java.util.List;
 import java.util.UUID;
 
 @Component
+@Slf4j
 public class SettlementRetryScheduler {
-
-    private final Logger logger = LoggerFactory.getLogger(SettlementRetryScheduler.class);
 
     private final SettlementService settlementService;
     private final SettlementRetryProperties properties;
@@ -42,10 +40,10 @@ public class SettlementRetryScheduler {
                     succeeded++;
                 }
             } catch (Exception e) {
-                logger.error("Settlement task {} could not be run: {}", taskId, e.getMessage());
+                log.error("Settlement task {} could not be run: {}", taskId, e.getMessage());
             }
         }
 
-        logger.info("Settlement retry run finished: {} of {} tasks succeeded.", succeeded, due.size());
+        log.info("Settlement retry run finished: {} of {} tasks succeeded.", succeeded, due.size());
     }
 }

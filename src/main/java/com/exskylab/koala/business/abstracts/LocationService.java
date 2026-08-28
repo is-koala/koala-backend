@@ -27,4 +27,5 @@ public interface LocationService {
 
     District findDistrictByNameAndCity(String districtName, City city);
 
+    Country findCountryByCode(String countryCode);
 }

@@ -9,4 +9,6 @@ public interface JobCategoryService {
     JobCategory getJobCategoryById(UUID categoryId);
 
     List<JobCategory> getAllCategories();
+
+    JobCategory getById(UUID categoryId);
 }

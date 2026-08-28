@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 
+import jakarta.validation.constraints.AssertTrue;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -72,5 +73,8 @@ public class CreateCompanyJobDto {
 
     private String dressCode;
 
-
+    @AssertTrue(message = JobMessages.MAXIMUM_AGE_BELOW_MINIMUM)
+    public boolean isAgeRangeOrdered() {
+        return minAge == null || maxAge == null || maxAge >= minAge;
+    }
 }

@@ -1,7 +1,7 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.SecurityService;
-import com.exskylab.koala.core.exceptions.UserNotFoundException;
+import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.dataAccess.UserDao;
 import com.exskylab.koala.entities.User;
@@ -29,7 +29,7 @@ public class SecurityManager implements SecurityService {
 
         if (authentication == null || !authentication.isAuthenticated()
                 || !(authentication.getPrincipal() instanceof UserPrincipal principal)) {
-            throw new UserNotFoundException("{user.not.authenticated}");
+            throw new ResourceNotFoundException("{user.not.authenticated}");
         }
 
         return principal;
@@ -44,13 +44,13 @@ public class SecurityManager implements SecurityService {
     @Transactional(readOnly = true)
     public User getAuthenticatedUser() {
         UUID userId = getAuthenticatedUserId();
-        return userDao.findById(userId).orElseThrow(() -> new UserNotFoundException("{user.not.found}"));
+        return userDao.findById(userId).orElseThrow(() -> new ResourceNotFoundException("{user.not.found}"));
     }
 
     @Override
     @Transactional(readOnly = true)
     public User getSystemUser() {
         return userDao.findById(SYSTEM_USER_ID)
-                .orElseThrow(() -> new UserNotFoundException("{system.user.not.found}"));
+                .orElseThrow(() -> new ResourceNotFoundException("{system.user.not.found}"));
     }
 }

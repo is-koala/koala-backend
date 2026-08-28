@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.consumers;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.NotificationService;
 import com.exskylab.koala.core.configs.RabbitMQConfig;
 import com.exskylab.koala.core.producers.notification.EmailTaskDto;
@@ -8,8 +9,6 @@ import com.exskylab.koala.entities.Notification;
 import com.exskylab.koala.entities.NotificationStatus;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -21,12 +20,10 @@ import org.thymeleaf.spring6.SpringTemplateEngine;
 import java.time.Instant;
 
 @Service
+@Slf4j
 public class EmailConsumer {
 
     private AppProperties appProperties;
-
-
-    private static final Logger logger = LoggerFactory.getLogger(EmailConsumer.class);
     private final NotificationService notificationService;
     private final JavaMailSender javaMailSender;
     private final SpringTemplateEngine templateEngine;
@@ -42,14 +39,14 @@ public class EmailConsumer {
     @RabbitListener(queues = RabbitMQConfig.EMAIL_QUEUE)
     @Transactional
     public void handleEmailTask(EmailTaskDto emailTaskDto){
-        logger.info("Handling email task for id: {}", emailTaskDto.id());
+        log.info("Handling email task for id: {}", emailTaskDto.id());
 
 
         Notification notification;
         try{
             notification = notificationService.getById(emailTaskDto.id());
         }catch (Exception e){
-            logger.error("Notification not found to send mail ID: {}. Aborting request.", emailTaskDto.id(), e.getMessage());
+            log.error("Notification not found to send mail ID: {}. Aborting request.", emailTaskDto.id(), e.getMessage());
             return;
         }
 
@@ -68,9 +65,9 @@ public class EmailConsumer {
 
             notification.setStatus(NotificationStatus.SENT);
             notification.setSentAt(Instant.now());
-            logger.info("Email task sent for id: {}", emailTaskDto.id());
+            log.info("Email task sent for id: {}", emailTaskDto.id());
         }catch (Exception e){
-            logger.error("Email task could not be sent for id: {}, Error: {}", emailTaskDto.id(), e.getMessage());
+            log.error("Email task could not be sent for id: {}, Error: {}", emailTaskDto.id(), e.getMessage());
             notification.setStatus(NotificationStatus.FAILED);
             notification.setFailureReason(e.getMessage().substring(0, Math.min(e.getMessage().length(), 255)));
         }finally {

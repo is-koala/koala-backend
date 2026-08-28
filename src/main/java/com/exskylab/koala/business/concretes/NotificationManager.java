@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.helpers.LogMasks;
 import com.exskylab.koala.business.abstracts.DeviceService;
 import com.exskylab.koala.business.abstracts.NotificationService;
@@ -15,8 +16,6 @@ import com.exskylab.koala.dataAccess.NotificationDao;
 import com.exskylab.koala.entities.*;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import java.time.Instant;
@@ -28,11 +27,11 @@ import java.util.Map;
 import java.util.UUID;
 
 @Service
+@Slf4j
 public class NotificationManager implements NotificationService {
 
     private final NotificationDao notificationDao;
     private final NotificationProducerService notificationProducerService;
-    private final Logger logger = LoggerFactory.getLogger(NotificationManager.class);
     private final ObjectMapper objectMapper;
     private final DeviceService deviceService;
     private final SecurityService securityService;
@@ -60,7 +59,7 @@ public class NotificationManager implements NotificationService {
             recipientInfo = "external address";
         }
 
-        logger.info("Sending email notification to {} destinationEmail: {}", recipientInfo, LogMasks.email(sendEmailDto.getDestinationEmail()));
+        log.info("Sending email notification to {} destinationEmail: {}", recipientInfo, LogMasks.email(sendEmailDto.getDestinationEmail()));
 
 
         User sender;
@@ -85,9 +84,9 @@ public class NotificationManager implements NotificationService {
             finalTemplateParameters = Map.of("htmlContent", sendEmailDto.getHtmlBody());
             finalSubject = sendEmailDto.getSubject();
         } else {
-            logger.error("Email notification could not be queued for {}. Cause: {}",
+            log.error("Email notification could not be queued for {}. Cause: {}",
                     recipientInfo, NotificationMessages.TEMPLATE_OR_SUBJECT_NOT_PROVIDED);
-            throw new NotificationDispatchException(NotificationMessages.TEMPLATE_OR_SUBJECT_NOT_PROVIDED);
+            throw new ExternalServiceException(NotificationMessages.TEMPLATE_OR_SUBJECT_NOT_PROVIDED);
         }
 
         Notification notification = new Notification();
@@ -102,8 +101,8 @@ public class NotificationManager implements NotificationService {
         try {
             notification.setTemplateParameters(objectMapper.writeValueAsString(finalTemplateParameters));
         } catch (JacksonException e) {
-            logger.error("Error while serializing template parameters for email with {} ErrorMessage: {}", recipientInfo, e.getMessage());
-            throw new TemplateParametersSerializationException("{parameters.could.not.serialize}");
+            log.error("Error while serializing template parameters for email with {} ErrorMessage: {}", recipientInfo, e.getMessage());
+            throw new ExternalServiceException("{parameters.could.not.serialize}");
         }
 
         var savedNotification = notificationDao.save(notification);
@@ -129,7 +128,7 @@ public class NotificationManager implements NotificationService {
     @Override
     @Transactional
     public Notification sendSms(SendSmsDto sendSmsDto, DispatchPriority dispatchPriority, boolean isSystemSms) {
-        logger.info("Sending SMS notification to userId: {} destinationPhoneNumber: {}", sendSmsDto.getRecipient().getId(), LogMasks.phone(sendSmsDto.getDestinationPhoneNumber()));
+        log.info("Sending SMS notification to userId: {} destinationPhoneNumber: {}", sendSmsDto.getRecipient().getId(), LogMasks.phone(sendSmsDto.getDestinationPhoneNumber()));
 
         User sender;
         if (isSystemSms) {
@@ -149,9 +148,9 @@ public class NotificationManager implements NotificationService {
             finalTemplateName = "raw-sms-template";
             finalTemplateParameters = Map.of("textContent", sendSmsDto.getMessageBody());
         } else {
-            logger.error("SMS notification could not be queued for userId: {}. Cause: {}",
+            log.error("SMS notification could not be queued for userId: {}. Cause: {}",
                     sendSmsDto.getRecipient().getId(), NotificationMessages.TEMPLATE_OR_MESSAGE_BODY_NOT_PROVIDED);
-            throw new NotificationDispatchException(NotificationMessages.TEMPLATE_OR_MESSAGE_BODY_NOT_PROVIDED);
+            throw new ExternalServiceException(NotificationMessages.TEMPLATE_OR_MESSAGE_BODY_NOT_PROVIDED);
         }
 
 
@@ -166,8 +165,8 @@ public class NotificationManager implements NotificationService {
         try {
             notification.setTemplateParameters(objectMapper.writeValueAsString(finalTemplateParameters));
         } catch (JacksonException e) {
-            logger.error("Error while serializing template parameters for email with userId: {} ErrorMessage: {}", sendSmsDto.getRecipient().getId(), e.getMessage());
-            throw new TemplateParametersSerializationException("{parameters.could.not.serialize}");
+            log.error("Error while serializing template parameters for email with userId: {} ErrorMessage: {}", sendSmsDto.getRecipient().getId(), e.getMessage());
+            throw new ExternalServiceException("{parameters.could.not.serialize}");
         }
 
         var savedNotification = notificationDao.save(notification);
@@ -192,11 +191,11 @@ public class NotificationManager implements NotificationService {
     @Override
     @Transactional
     public void sendPushToUser(SendPushToUserDto sendPushToUserDto, DispatchPriority dispatchPriority, boolean isSystemPush) {
-        logger.info("Dispatching push notification to userId: {} with title: {}",
+        log.info("Dispatching push notification to userId: {} with title: {}",
                 sendPushToUserDto.getRecipient().getId(), sendPushToUserDto.getTitle());
 
         if (sendPushToUserDto.getRecipient() == null) {
-            throw new ArgumentCannotBeNullException(NotificationMessages.USER_ID_CANNOT_BE_NULL);
+            throw new ValidationException(NotificationMessages.USER_ID_CANNOT_BE_NULL);
         }
 
         User sender = isSystemPush ? securityService.getSystemUser(): securityService.getAuthenticatedUser();
@@ -204,7 +203,7 @@ public class NotificationManager implements NotificationService {
 
         List<Device> usersDevices = deviceService.getDevicesByUserIdAndPushTokenNotNull(recipient.getId());
         if (usersDevices.isEmpty()) {
-            logger.warn("No devices found for userId: {}. Push notification wont be sent.", recipient.getId());
+            log.warn("No devices found for userId: {}. Push notification wont be sent.", recipient.getId());
             return;
         }
 
@@ -227,8 +226,8 @@ public class NotificationManager implements NotificationService {
             finalBody = sendPushToUserDto.getBody();
             finalDataPayload = sendPushToUserDto.getDataPayload() != null ? sendPushToUserDto.getDataPayload() : Map.of();
         }else {
-            logger.error("PushDTO is invalid. provide either template or direct content.");
-            throw new NotificationDispatchException(NotificationMessages.TEMPLATE_OR_CONTENT_NOT_PROVIDED);
+            log.error("PushDTO is invalid. provide either template or direct content.");
+            throw new ExternalServiceException(NotificationMessages.TEMPLATE_OR_CONTENT_NOT_PROVIDED);
         }
 
         for (Device device : usersDevices) {
@@ -245,8 +244,8 @@ public class NotificationManager implements NotificationService {
             try{
                 notification.setTemplateParameters(objectMapper.writeValueAsString(finalTemplateParameters));
             }catch (JacksonException e){
-                logger.error("Error while serializing template parameters for push notification with userId: {} ErrorMessage: {}", recipient.getId(), e.getMessage());
-                throw new TemplateParametersSerializationException("{parameters.could.not.serialize}");
+                log.error("Error while serializing template parameters for push notification with userId: {} ErrorMessage: {}", recipient.getId(), e.getMessage());
+                throw new ExternalServiceException("{parameters.could.not.serialize}");
             }
 
             var savedNotification = notificationDao.save(notification);
@@ -282,25 +281,25 @@ public class NotificationManager implements NotificationService {
 
     @Override
     public Notification getById(UUID id) {
-        logger.debug("Fetching notification by ID: {}", id);
+        log.debug("Fetching notification by ID: {}", id);
         return notificationDao.findById(id)
-                .orElseThrow(() -> new NotificationNotFoundException(NotificationMessages.NOTIFICATION_NOT_FOUND_WITH_ID));
+                .orElseThrow(() -> new ResourceNotFoundException(NotificationMessages.NOTIFICATION_NOT_FOUND_WITH_ID));
     }
 
     @Override
     public Notification save(Notification notification) {
-        logger.info("Saving notification with ID: {}", notification.getId());
+        log.info("Saving notification with ID: {}", notification.getId());
         return notificationDao.save(notification);
     }
 
     @Override
     public void setAsOpened(UUID id) {
         var notification = notificationDao.findById(id)
-                .orElseThrow(() -> new NotificationNotFoundException(NotificationMessages.NOTIFICATION_NOT_FOUND_WITH_ID));
-        logger.info("Setting notification with ID: {} as opened", id);
+                .orElseThrow(() -> new ResourceNotFoundException(NotificationMessages.NOTIFICATION_NOT_FOUND_WITH_ID));
+        log.info("Setting notification with ID: {} as opened", id);
         notification.setStatus(NotificationStatus.OPENED);
         notificationDao.save(notification);
-        logger.info("Notification with ID: {} set as opened", id);
+        log.info("Notification with ID: {} set as opened", id);
     }
 
 
@@ -308,34 +307,34 @@ public class NotificationManager implements NotificationService {
                                  UUID id) {
         try {
             dispatchAction.run();
-        } catch (TaskCannotBeSentException e) {
-            logger.warn("Dispatch to queue failed for notification id: {}, Priority: {}. Error: {}"
+        } catch (ExternalServiceException e) {
+            log.warn("Dispatch to queue failed for notification id: {}, Priority: {}. Error: {}"
                     , id, dispatchPriority, e.getMessage());
 
 
             if (dispatchPriority == DispatchPriority.CRITICAL) {
                 switch (channel) {
                     case EMAIL -> {
-                        logger.error("Critical email notification could not be queued for notification id: {}. " +
+                        log.error("Critical email notification could not be queued for notification id: {}. " +
                                 "The process will stop.", id);
-                        throw new NotificationDispatchException("{critical.email.dispatch.failed}");
+                        throw new ExternalServiceException("{critical.email.dispatch.failed}");
                     }
                     case SMS -> {
-                        logger.error("Critical SMS notification could not be queued for notification id: {}. " +
+                        log.error("Critical SMS notification could not be queued for notification id: {}. " +
                                 "The process will stop.", id);
-                        throw new NotificationDispatchException("{critical.sms.dispatch.failed}");
+                        throw new ExternalServiceException("{critical.sms.dispatch.failed}");
                     }
                     case PUSH -> {
-                        logger.error("Critical push notification could not be queued for notification id: {}. " +
+                        log.error("Critical push notification could not be queued for notification id: {}. " +
                                 "The process will stop.", id);
-                        throw new NotificationDispatchException("{critical.push.dispatch.failed}");
+                        throw new ExternalServiceException("{critical.push.dispatch.failed}");
                     }
-                    default -> throw new InvalidCategoryException("{invalid.notification.channel}");
+                    default -> throw new ValidationException("{invalid.notification.channel}");
                 }
 
             }
 
-            logger.error("Non-critical notification could not be queued for notification id: {}. " +
+            log.error("Non-critical notification could not be queued for notification id: {}. " +
                     "The process will continue. A cleanup job might handle this.", id);
 
         }
@@ -344,11 +343,11 @@ public class NotificationManager implements NotificationService {
 /*
     private Locale determineLocale(String requestedLanguage, User recipient){
         if (requestedLanguage != null && !requestedLanguage.isBlank()){
-            logger.debug("Users requested language for notification: {}", requestedLanguage);
+            log.debug("Users requested language for notification: {}", requestedLanguage);
             return Locale.forLanguageTag(requestedLanguage);
         }
 
-        logger.debug("No language specified for notification. Using default language for user: {}", recipient.get());
+        log.debug("No language specified for notification. Using default language for user: {}", recipient.get());
         return null;
     }
 

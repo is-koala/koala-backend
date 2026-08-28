@@ -5,6 +5,7 @@ import com.exskylab.koala.entities.JobType;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.AssertTrue;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -37,4 +38,9 @@ public class SaveJobAlertDto {
     private JobType type;
 
     private Boolean active;
+
+    @AssertTrue(message = JobAlertMessages.CRITERIA_REQUIRED)
+    public boolean hasAtLeastOneCriterion() {
+        return categoryId != null || cityName != null || minSalary != null || type != null;
+    }
 }

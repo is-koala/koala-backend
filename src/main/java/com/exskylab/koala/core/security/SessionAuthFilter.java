@@ -1,21 +1,19 @@
 package com.exskylab.koala.core.security;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.DeviceService;
 import com.exskylab.koala.business.abstracts.SessionService;
 import com.exskylab.koala.core.configs.RequestLoggingFilter;
 import com.exskylab.koala.core.constants.AuthMessages;
 import com.exskylab.koala.core.helpers.DeviceIdentity;
-import com.exskylab.koala.core.exceptions.DeviceDoesntMatchException;
-import com.exskylab.koala.core.exceptions.SessionDoesntMatch;
-import com.exskylab.koala.core.exceptions.SessionNotFoundException;
+import com.exskylab.koala.core.exceptions.UnauthorizedException;
+import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.entities.Device;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -33,6 +31,7 @@ import java.util.Set;
 import java.util.UUID;
 
 @Component
+@Slf4j
 public class SessionAuthFilter extends OncePerRequestFilter {
 
     private static final Set<String> SELF_AUTHENTICATING_PATHS = Set.of("/auth/refresh-token");
@@ -42,7 +41,6 @@ public class SessionAuthFilter extends OncePerRequestFilter {
 
     private final SessionService sessionService;
     private final JwtService jwtService;
-    private final Logger logger = LoggerFactory.getLogger(SessionAuthFilter.class);
     private final DeviceService deviceService;
 
     private final HandlerExceptionResolver exceptionResolver;
@@ -58,11 +56,11 @@ public class SessionAuthFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
-        logger.debug("Processing authentication for request: {}", request.getRequestURI());
+        log.debug("Processing authentication for request: {}", request.getRequestURI());
         final String authHeader = request.getHeader("Authorization");
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            logger.debug("No valid Authorization header found in request: {}", request.getRequestURI());
+            log.debug("No valid Authorization header found in request: {}", request.getRequestURI());
             filterChain.doFilter(request, response);
             return;
         }
@@ -70,7 +68,7 @@ public class SessionAuthFilter extends OncePerRequestFilter {
         final String sessionToken = authHeader.substring(7);
 
         if (SecurityContextHolder.getContext().getAuthentication() != null){
-            logger.debug("User is already authenticated. Skipping session authentication for request: {}", request.getRequestURI());
+            log.debug("User is already authenticated. Skipping session authentication for request: {}", request.getRequestURI());
             filterChain.doFilter(request, response);
             return;
         }
@@ -83,9 +81,9 @@ public class SessionAuthFilter extends OncePerRequestFilter {
             var user = session.getDevice().getUser();
 
             if (!session.getDevice().getUser().getId().equals(userId)){
-                logger.warn("Session ID: {} is not associated with user ID: {}.", sessionId, userId);
+                log.warn("Session ID: {} is not associated with user ID: {}.", sessionId, userId);
                 exceptionResolver.resolveException(request,response,null,
-                        new SessionDoesntMatch(AuthMessages.SESSION_NOT_MATCHING_USER));
+                        new UnauthorizedException(AuthMessages.SESSION_NOT_MATCHING_USER));
                 return;
             }
 
@@ -96,9 +94,9 @@ public class SessionAuthFilter extends OncePerRequestFilter {
                 session.setActive(false);
                 session.setLastAccessedAt(Instant.now());
                 sessionService.save(session);
-                logger.error("SECURITY ALERT: Session ID: {} is not associated with the current device. Session has been deactivated.", sessionId);
+                log.error("SECURITY ALERT: Session ID: {} is not associated with the current device. Session has been deactivated.", sessionId);
                 exceptionResolver.resolveException(request,response,null,
-                        new DeviceDoesntMatchException(AuthMessages.SESSION_NOT_MATCHING_CURRENT_DEVICE));
+                        new UnauthorizedException(AuthMessages.SESSION_NOT_MATCHING_CURRENT_DEVICE));
                 return;
             }
 
@@ -119,14 +117,14 @@ public class SessionAuthFilter extends OncePerRequestFilter {
 
             SecurityContextHolder.getContext().setAuthentication(authToken);
             request.setAttribute(RequestLoggingFilter.USER_ID_ATTRIBUTE, principal.id());
-            logger.debug("Authenticated user ID: {} with session ID: {}", userId, sessionId);
+            log.debug("Authenticated user ID: {} with session ID: {}", userId, sessionId);
 
-        }catch (JwtException | SessionNotFoundException | DeviceDoesntMatchException e){
-            logger.warn("Authentication failed for request {}: {}", request.getRequestURI(), e.getMessage());
+        }catch (JwtException | ResourceNotFoundException | UnauthorizedException e){
+            log.warn("Authentication failed for request {}: {}", request.getRequestURI(), e.getMessage());
             exceptionResolver.resolveException(request,response,null, e);
             return;
         }catch (Exception e){
-            logger.debug("Failed to authenticate session token: {}", e.getMessage());
+            log.debug("Failed to authenticate session token: {}", e.getMessage());
         }
 
         filterChain.doFilter(request, response);

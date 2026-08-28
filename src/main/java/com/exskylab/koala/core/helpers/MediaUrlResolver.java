@@ -1,6 +1,5 @@
-package com.exskylab.koala.core.mappers;
+package com.exskylab.koala.core.helpers;
 
-import com.exskylab.koala.core.helpers.StorageUrlResolver;
 import com.exskylab.koala.entities.Image;
 import com.exskylab.koala.entities.Media;
 import org.mapstruct.Named;

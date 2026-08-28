@@ -1,11 +1,10 @@
 package com.exskylab.koala.core.utilities.storage;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.constants.StorageMessages;
-import com.exskylab.koala.core.exceptions.ImageUploadError;
+import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.properties.AppProperties;
 import com.exskylab.koala.core.properties.StorageProperties;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
@@ -15,9 +14,8 @@ import java.nio.file.Path;
 
 @Service
 @ConditionalOnProperty(name = "storage.type", havingValue = "local", matchIfMissing = true)
+@Slf4j
 public class LocalStorageService implements StorageService {
-
-    private final Logger logger = LoggerFactory.getLogger(LocalStorageService.class);
 
     private final Path rootPath;
     private final AppProperties appProperties;
@@ -35,11 +33,11 @@ public class LocalStorageService implements StorageService {
             Path target = resolve(key);
             Files.createDirectories(target.getParent());
             Files.write(target, fileBytes);
-            logger.info("File stored locally: {}", target);
+            log.info("File stored locally: {}", target);
             return key;
         } catch (IOException e) {
-            logger.error("Local file store failed for {}: {}", key, e.getMessage());
-            throw new ImageUploadError(StorageMessages.UPLOAD_FAILED);
+            log.error("Local file store failed for {}: {}", key, e.getMessage());
+            throw new ValidationException(StorageMessages.UPLOAD_FAILED);
         }
     }
 
@@ -47,10 +45,10 @@ public class LocalStorageService implements StorageService {
     public void deleteFile(String key) {
         try {
             Files.deleteIfExists(resolve(key));
-            logger.info("Local file deleted: {}", key);
+            log.info("Local file deleted: {}", key);
         } catch (IOException e) {
-            logger.error("Local file delete failed for {}: {}", key, e.getMessage());
-            throw new ImageUploadError(StorageMessages.DELETE_FAILED);
+            log.error("Local file delete failed for {}: {}", key, e.getMessage());
+            throw new ValidationException(StorageMessages.DELETE_FAILED);
         }
     }
 

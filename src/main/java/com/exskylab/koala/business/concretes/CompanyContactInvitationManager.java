@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.*;
 import com.exskylab.koala.core.constants.CompanyContactInvitationMessages;
 import com.exskylab.koala.core.constants.CompanyMessages;
@@ -10,8 +11,6 @@ import com.exskylab.koala.core.exceptions.*;
 import com.exskylab.koala.core.mappers.CompanyContactInvitationMapper;
 import com.exskylab.koala.dataAccess.CompanyContactInvitationDao;
 import com.exskylab.koala.entities.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -20,6 +19,7 @@ import java.util.Map;
 import java.util.UUID;
 
 @Service
+@Slf4j
 public class CompanyContactInvitationManager implements CompanyContactInvitationService {
 
 
@@ -27,8 +27,6 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
     private final NotificationService notificationService;
     private final SecurityService securityService;
     private final CompanyContactService companyContactService;
-
-    private final Logger logger = LoggerFactory.getLogger(CompanyContactInvitationManager.class);
     private final CompanyContactInvitationMapper companyContactInvitationMapper;
 
     public CompanyContactInvitationManager(CompanyContactInvitationDao companyContactInvitationDao,
@@ -44,7 +42,7 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
 
     @Override
     public CompanyContactInvitation inviteUserToCompany(User invitedBy, User userToInvite, Company company, CompanyContactRole role) {
-        logger.info("Inviting user with id: {} to company with id: {}", userToInvite.getId(), company.getId());
+        log.info("Inviting user with id: {} to company with id: {}", userToInvite.getId(), company.getId());
         CompanyContactInvitation invitation = new CompanyContactInvitation();
         invitation.setCompany(company);
         invitation.setInvitedBy(invitedBy);
@@ -55,7 +53,7 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
         invitation.setAnsweredAt(null);
         CompanyContactInvitation savedInvitation = companyContactInvitationDao.save(invitation);
 
-        logger.info("Saved invitation with id: {}", savedInvitation.getId());
+        log.info("Saved invitation with id: {}", savedInvitation.getId());
 
         SendEmailDto sendEmailDto = new SendEmailDto();
         sendEmailDto.setRecipient(userToInvite);
@@ -71,7 +69,7 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
                 "invitedByLastName", invitedBy.getLastName(),
                 "role", role.name()
         ));
-        logger.info("Sending notification to user with id: {} about the invitation.", userToInvite.getId());
+        log.info("Sending notification to user with id: {} about the invitation.", userToInvite.getId());
 
         notificationService.sendEmail(sendEmailDto, DispatchPriority.CRITICAL, true);
 
@@ -80,25 +78,25 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
 
     @Override
     public List<CompanyContactInvitation> getInvitationsByCompanyId(UUID companyId) {
-        logger.debug("Getting invitations for company with id: {}", companyId);
+        log.debug("Getting invitations for company with id: {}", companyId);
         return companyContactInvitationDao.findByCompanyId(companyId);
     }
 
     @Override
     public GetCompanyContactInvitationDto answerToInvitation(UUID invitationId, boolean accepted) {
-        logger.info("Answering invitation with id: {} to accepted: {}", invitationId, accepted);
+        log.info("Answering invitation with id: {} to accepted: {}", invitationId, accepted);
         CompanyContactInvitation invitation = companyContactInvitationDao.findById(invitationId)
-                .orElseThrow(() -> new CompanyContactInvitationNotFoundException(CompanyContactInvitationMessages.COMPANY_CONTACT_INVITATION_NOT_FOUND));
+                .orElseThrow(() -> new ResourceNotFoundException(CompanyContactInvitationMessages.COMPANY_CONTACT_INVITATION_NOT_FOUND));
 
         var currentUser = securityService.getAuthenticatedUser();
 
         if (!invitation.getInvitedUser().getId().equals(currentUser.getId())){
-            throw new UserNotAssociatedWithInvitationException(CompanyContactInvitationMessages.USER_NOT_ASSOCIATED_WITH_INVITATION);
+            throw new ForbiddenException(CompanyContactInvitationMessages.USER_NOT_ASSOCIATED_WITH_INVITATION);
         }
 
         if (invitation.getStatus() != CompanyContactInvitationStatus.PENDING) {
-            logger.warn("Invitation with id: {} has already been answered.", invitationId);
-            throw new InvitationAlreadyAnsweredException(CompanyContactInvitationMessages.INVITATION_ALREADY_ANSWERED);
+            log.warn("Invitation with id: {} has already been answered.", invitationId);
+            throw new ConflictException(CompanyContactInvitationMessages.INVITATION_ALREADY_ANSWERED);
         }
 
         invitation.setStatus(accepted ? CompanyContactInvitationStatus.ACCEPTED : CompanyContactInvitationStatus.REJECTED);
@@ -108,11 +106,11 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
         invitation = companyContactInvitationDao.save(invitation);
 
         if (accepted){
-            logger.info("Invitation with id: {} accepted. Adding user to company contacts.", invitationId);
+            log.info("Invitation with id: {} accepted. Adding user to company contacts.", invitationId);
             companyContactService.addCompanyContact(invitation.getCompany(), invitation.getInvitedUser(), invitation.getRole());
         }
 
-        logger.info("Invitation with id: {} has been answered and saved.", invitationId);
+        log.info("Invitation with id: {} has been answered and saved.", invitationId);
 
         SendEmailDto invitedUsersEmailNotification = new SendEmailDto();
         invitedUsersEmailNotification.setRecipient(invitation.getInvitedUser());
@@ -143,34 +141,34 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
         ));
 
         notificationService.sendEmail(invitedByEmailNotification, DispatchPriority.NORMAL, true);
-        logger.info("Notifications about the answered invitation have been sent.");
+        log.info("Notifications about the answered invitation have been sent.");
         return companyContactInvitationMapper.toGetCompanyContactInvitationDto(invitation);
     }
 
     @Override
     public GetCompanyContactInvitationDto getInvitationById(UUID invitationId) {
-        logger.debug("Getting invitation with id: {}", invitationId);
+        log.debug("Getting invitation with id: {}", invitationId);
         var entity = companyContactInvitationDao.findById(invitationId)
-                .orElseThrow(() -> new CompanyContactInvitationNotFoundException(CompanyContactInvitationMessages.COMPANY_CONTACT_INVITATION_NOT_FOUND));
+                .orElseThrow(() -> new ResourceNotFoundException(CompanyContactInvitationMessages.COMPANY_CONTACT_INVITATION_NOT_FOUND));
 
         return companyContactInvitationMapper.toGetCompanyContactInvitationDto(entity);
     }
 
     @Override
     public List<CompanyContactInvitationDto> getCompanyContactInvitationsByCompanyIdDto(UUID companyId) {
-        logger.debug("Getting company contact invitations for company with id: {}", companyId);
+        log.debug("Getting company contact invitations for company with id: {}", companyId);
         var currentUser = securityService.getAuthenticatedUser();
 
         var isAdmin = companyContactService.isUserAdminOfCompany(companyId, currentUser.getId());
 
         if (!isAdmin){
-            logger.warn("User with id: {} is not a contact of company with id: {}, terminating request!", currentUser.getId(), companyId);
-            throw new UserNotAssociatedWithCompanyException(CompanyMessages.USER_NOT_ASSOCIATED_WITH_COMPANY);
+            log.warn("User with id: {} is not a contact of company with id: {}, terminating request!", currentUser.getId(), companyId);
+            throw new ForbiddenException(CompanyMessages.USER_NOT_ASSOCIATED_WITH_COMPANY);
         }
 
         var invitations = getInvitationsByCompanyId(companyId);
 
-        logger.info("Company contact invitations for company with id: {} retrieved successfully.", companyId);
+        log.info("Company contact invitations for company with id: {} retrieved successfully.", companyId);
 
         return companyContactInvitationMapper.toCompanyContactInvitationDtoList(invitations);
     }

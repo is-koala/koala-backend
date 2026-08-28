@@ -1,21 +1,24 @@
 package com.exskylab.koala.business.concretes;
 
+import lombok.extern.slf4j.Slf4j;
+import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.business.abstracts.CompanyContactService;
 import com.exskylab.koala.business.abstracts.MessagingService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.MessagingMessages;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
-import com.exskylab.koala.core.exceptions.UserNotAssociatedWithCompanyException;
+import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.dataAccess.*;
 import com.exskylab.koala.entities.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import com.exskylab.koala.core.mappers.MessagingMapper;
 import com.exskylab.koala.core.realtime.RealtimePublisher;
+import com.exskylab.koala.business.abstracts.JobApplicationService;
+import com.exskylab.koala.business.abstracts.JobService;
+import com.exskylab.koala.business.abstracts.UserService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,20 +31,19 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 public class MessagingManager implements MessagingService {
 
     private static final Set<String> SORTABLE = Set.of("createdAt", "lastMessageAt", "sentAt");
     private static final Sort CONVERSATION_SORT = Sort.by(Sort.Direction.DESC, "lastMessageAt");
     private static final Sort MESSAGE_SORT = Sort.by(Sort.Direction.DESC, "sentAt");
 
-    private final Logger logger = LoggerFactory.getLogger(MessagingManager.class);
-
     private final ConversationDao conversationDao;
     private final MessageDao messageDao;
     private final UserBlockDao userBlockDao;
-    private final JobDao jobDao;
-    private final JobApplicationDao jobApplicationDao;
-    private final UserDao userDao;
+    private final JobService jobService;
+    private final JobApplicationService jobApplicationService;
+    private final UserService userService;
     private final SecurityService securityService;
     private final CompanyContactService companyContactService;
     private final PageableSanitizer pageableSanitizer;
@@ -49,17 +51,17 @@ public class MessagingManager implements MessagingService {
     private final MessagingMapper messagingMapper;
 
     public MessagingManager(ConversationDao conversationDao, MessageDao messageDao,
-                            UserBlockDao userBlockDao, JobDao jobDao,
-                            JobApplicationDao jobApplicationDao, UserDao userDao,
+                            UserBlockDao userBlockDao, JobService jobService,
+                            JobApplicationService jobApplicationService, UserService userService,
                             SecurityService securityService, CompanyContactService companyContactService,
                             PageableSanitizer pageableSanitizer, RealtimePublisher realtimePublisher,
                             MessagingMapper messagingMapper) {
         this.conversationDao = conversationDao;
         this.messageDao = messageDao;
         this.userBlockDao = userBlockDao;
-        this.jobDao = jobDao;
-        this.jobApplicationDao = jobApplicationDao;
-        this.userDao = userDao;
+        this.jobService = jobService;
+        this.jobApplicationService = jobApplicationService;
+        this.userService = userService;
         this.securityService = securityService;
         this.companyContactService = companyContactService;
         this.pageableSanitizer = pageableSanitizer;
@@ -70,8 +72,7 @@ public class MessagingManager implements MessagingService {
     @Override
     @Transactional
     public Conversation openConversation(UUID jobId, UUID workerId) {
-        Job job = jobDao.findById(jobId)
-                .orElseThrow(() -> new ResourceNotFoundException(MessagingMessages.CONVERSATION_NOT_FOUND));
+        Job job = jobService.getById(jobId);
 
         UUID currentUserId = securityService.getAuthenticatedUserId();
         UUID resolvedWorkerId = workerId != null ? workerId : currentUserId;
@@ -85,8 +86,8 @@ public class MessagingManager implements MessagingService {
                     Conversation conversation = new Conversation();
                     conversation.setJob(job);
                     conversation.setEmployer(employerOf(job));
-                    conversation.setWorker(userDao.getReferenceById(resolvedWorkerId));
-                    logger.info("Conversation opened for job {} and worker {}", jobId, resolvedWorkerId);
+                    conversation.setWorker(userService.getReference(resolvedWorkerId));
+                    log.info("Conversation opened for job {} and worker {}", jobId, resolvedWorkerId);
                     return conversationDao.save(conversation);
                 });
     }
@@ -101,7 +102,7 @@ public class MessagingManager implements MessagingService {
 
         Message message = new Message();
         message.setConversation(conversation);
-        message.setSender(userDao.getReferenceById(senderId));
+        message.setSender(userService.getReference(senderId));
         message.setBody(body);
         message.setSentAt(Instant.now());
 
@@ -112,7 +113,7 @@ public class MessagingManager implements MessagingService {
 
         realtimePublisher.messageSent(conversationId, messagingMapper.toMessageDto(saved));
 
-        logger.info("Message {} sent in conversation {}", saved.getId(), conversationId);
+        log.info("Message {} sent in conversation {}", saved.getId(), conversationId);
         return saved;
     }
 
@@ -152,16 +153,16 @@ public class MessagingManager implements MessagingService {
         UUID blockerId = securityService.getAuthenticatedUserId();
 
         if (blockerId.equals(blockedUserId)) {
-            throw new IllegalArgumentException(MessagingMessages.CANNOT_BLOCK_SELF);
+            throw new ValidationException(MessagingMessages.CANNOT_BLOCK_SELF);
         }
 
         return userBlockDao.findByBlockerIdAndBlockedId(blockerId, blockedUserId)
                 .orElseGet(() -> {
                     UserBlock block = new UserBlock();
-                    block.setBlocker(userDao.getReferenceById(blockerId));
-                    block.setBlocked(userDao.getReferenceById(blockedUserId));
+                    block.setBlocker(userService.getReference(blockerId));
+                    block.setBlocked(userService.getReference(blockedUserId));
                     block.setReason(reason);
-                    logger.info("User {} blocked user {}", blockerId, blockedUserId);
+                    log.info("User {} blocked user {}", blockerId, blockedUserId);
                     return userBlockDao.save(block);
                 });
     }
@@ -202,15 +203,15 @@ public class MessagingManager implements MessagingService {
             throw new ResourceNotFoundException(MessagingMessages.NOT_A_PARTICIPANT);
         }
 
-        if (!jobApplicationDao.existsByJobIdAndUserId(job.getId(), workerId)) {
-            throw new UserNotAssociatedWithCompanyException(MessagingMessages.NO_RELATIONSHIP_WITH_JOB);
+        if (!jobApplicationService.hasApplied(job.getId(), workerId)) {
+            throw new ForbiddenException(MessagingMessages.NO_RELATIONSHIP_WITH_JOB);
         }
     }
 
     private void assertNotBlocked(UUID first, UUID second) {
         if (userBlockDao.existsByBlockerIdAndBlockedId(first, second)
                 || userBlockDao.existsByBlockerIdAndBlockedId(second, first)) {
-            throw new UserNotAssociatedWithCompanyException(MessagingMessages.BLOCKED);
+            throw new ForbiddenException(MessagingMessages.BLOCKED);
         }
     }
 
@@ -234,5 +235,12 @@ public class MessagingManager implements MessagingService {
         if (!conversation.hasParticipant(userId)) {
             throw new ResourceNotFoundException(MessagingMessages.CONVERSATION_NOT_FOUND);
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Message getMessageById(UUID messageId) {
+        return messageDao.findById(messageId)
+                .orElseThrow(() -> new ResourceNotFoundException(MessagingMessages.MESSAGE_NOT_FOUND));
     }
 }

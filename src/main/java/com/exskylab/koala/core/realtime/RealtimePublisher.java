@@ -1,22 +1,20 @@
 package com.exskylab.koala.core.realtime;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.dtos.messaging.response.MessageDto;
 import com.exskylab.koala.core.dtos.realtime.response.RealtimeEventDto;
 import com.exskylab.koala.core.properties.RealtimeProperties;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
 
 @Component
+@Slf4j
 public class RealtimePublisher {
 
     private static final String CONVERSATION_TOPIC = "/topic/conversations/";
     private static final String PRESENCE_TOPIC = "/topic/presence";
-
-    private final Logger logger = LoggerFactory.getLogger(RealtimePublisher.class);
 
     private final SimpMessagingTemplate messagingTemplate;
     private final RealtimeProperties properties;
@@ -50,7 +48,7 @@ public class RealtimePublisher {
         try {
             messagingTemplate.convertAndSend(destination, event);
         } catch (Exception e) {
-            logger.warn("Realtime publish to {} failed: {}", destination, e.getMessage());
+            log.warn("Realtime publish to {} failed: {}", destination, e.getMessage());
         }
     }
 }

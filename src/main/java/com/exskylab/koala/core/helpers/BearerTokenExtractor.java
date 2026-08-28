@@ -1,7 +1,7 @@
 package com.exskylab.koala.core.helpers;
 
 import com.exskylab.koala.core.constants.AuthMessages;
-import com.exskylab.koala.core.exceptions.NotValidAuthorizationHeaderException;
+import com.exskylab.koala.core.exceptions.UnauthorizedException;
 import jakarta.servlet.http.HttpServletRequest;
 
 public final class BearerTokenExtractor {
@@ -17,13 +17,13 @@ public final class BearerTokenExtractor {
 
     public static String extractHeader(String header) {
         if (header == null || !header.startsWith(PREFIX)) {
-            throw new NotValidAuthorizationHeaderException(AuthMessages.NOT_VALID_AUTHORIZATION_HEADER);
+            throw new UnauthorizedException(AuthMessages.NOT_VALID_AUTHORIZATION_HEADER);
         }
 
         String token = header.substring(PREFIX.length()).trim();
 
         if (token.isEmpty()) {
-            throw new NotValidAuthorizationHeaderException(AuthMessages.NOT_VALID_AUTHORIZATION_HEADER);
+            throw new UnauthorizedException(AuthMessages.NOT_VALID_AUTHORIZATION_HEADER);
         }
 
         return token;

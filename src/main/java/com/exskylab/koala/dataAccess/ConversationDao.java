@@ -17,10 +17,10 @@ public interface ConversationDao extends JpaRepository<Conversation, UUID> {
 
     Optional<Conversation> findByJobIdAndWorkerId(UUID jobId, UUID workerId);
 
-    @EntityGraph(attributePaths = {"job", "employer", "worker"})
+    @EntityGraph(attributePaths = {"job", "employer", "employer.profilePicture", "worker", "worker.profilePicture"})
     Optional<Conversation> findWithParticipantsById(UUID id);
 
-    @EntityGraph(attributePaths = {"job", "employer", "worker"})
+    @EntityGraph(attributePaths = {"job", "employer", "employer.profilePicture", "worker", "worker.profilePicture"})
     @Query("select c from Conversation c where c.employer.id = :userId or c.worker.id = :userId")
     Page<Conversation> findAllForParticipant(@Param("userId") UUID userId, Pageable pageable);
 }

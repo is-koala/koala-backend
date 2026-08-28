@@ -1,20 +1,18 @@
 package com.exskylab.koala.core.producers.user;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.configs.RabbitMQConfig;
 import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.entities.User;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 
 @Service
+@Slf4j
 public class UserProducerService {
 
     private final RabbitTemplate rabbitTemplate;
     private final BankAccountService bankAccountService;
-
-    private final Logger logger = LoggerFactory.getLogger(UserProducerService.class);
 
     public UserProducerService(RabbitTemplate rabbitTemplate, BankAccountService bankAccountService) {
         this.rabbitTemplate = rabbitTemplate;
@@ -23,7 +21,7 @@ public class UserProducerService {
 
 
     public void publishUserProfileUpdated(User updatedUser) {
-        logger.info("Publishing user profile updated event for user id: {}", updatedUser.getId());
+        log.info("Publishing user profile updated event for user id: {}", updatedUser.getId());
 
         UserUpdatedEventDto eventDto = convertToEventDto(updatedUser);
 
@@ -34,9 +32,9 @@ public class UserProducerService {
                     RabbitMQConfig.USER_PROFILE_UPDATED_ROUTING_KEY,
                     eventDto
             );
-            logger.info("User profile updated event sent for user id: {}", updatedUser.getId());
+            log.info("User profile updated event sent for user id: {}", updatedUser.getId());
         }catch (Exception e){
-            logger.error("User profile updated event could not be sent for user id: {}, Error: {}",
+            log.error("User profile updated event could not be sent for user id: {}, Error: {}",
                     updatedUser.getId(),
                     e.getMessage());
         }

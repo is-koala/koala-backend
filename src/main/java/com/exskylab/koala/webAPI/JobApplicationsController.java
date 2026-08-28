@@ -10,6 +10,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.UUID;
+
 @RestController
 @RequestMapping("/job-applications")
 public class JobApplicationsController {
@@ -23,7 +25,7 @@ public class JobApplicationsController {
 
 
     @PostMapping("/{applicationId}/respond")
-    public ResponseEntity<SuccessDataResult<JobApplicationDetailDto>> respondToApplication(@PathVariable String applicationId,
+    public ResponseEntity<SuccessDataResult<JobApplicationDetailDto>> respondToApplication(@PathVariable UUID applicationId,
                                                                                                                 @RequestBody @Valid AnswerApplicationDto jobApplicationsApplicationIdPatchRequestDto){
 
         JobApplicationDetailDto dto = jobApplicationService.respondToApplication(applicationId, jobApplicationsApplicationIdPatchRequestDto);

@@ -1,18 +1,16 @@
 package com.exskylab.koala.business.concretes;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.LoginAttemptService;
 import com.exskylab.koala.dataAccess.LoginAttemptDao;
 import com.exskylab.koala.entities.LoginAttempt;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
+@Slf4j
 public class LoginAttemptManager implements LoginAttemptService {
 
     private final LoginAttemptDao loginAttemptDao;
-
-    private final Logger logger = LoggerFactory.getLogger(LoginAttemptManager.class);
 
 
     public LoginAttemptManager(LoginAttemptDao loginAttemptDao) {
@@ -22,7 +20,7 @@ public class LoginAttemptManager implements LoginAttemptService {
     @Override
     public LoginAttempt save(LoginAttempt attempt) {
         var result = loginAttemptDao.save(attempt);
-        logger.info("Saved login attempt with id: {}", result.getId());
+        log.info("Saved login attempt with id: {}", result.getId());
         return result;
     }
 }

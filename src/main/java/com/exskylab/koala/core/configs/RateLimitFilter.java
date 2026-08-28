@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.configs;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.constants.AuthMessages;
 import com.exskylab.koala.core.exceptions.TooManyRequestsException;
 import com.exskylab.koala.core.helpers.RateLimiter;
@@ -7,8 +8,6 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -21,6 +20,7 @@ import java.util.Set;
 
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 20)
+@Slf4j
 public class RateLimitFilter extends OncePerRequestFilter {
 
     private static final Set<String> LIMITED_PATHS = Set.of(
@@ -30,8 +30,6 @@ public class RateLimitFilter extends OncePerRequestFilter {
             "/auth/complete-registration",
             "/auth/refresh-token",
             "/users/me/identity-verification");
-
-    private final Logger logger = LoggerFactory.getLogger(RateLimitFilter.class);
 
     private final RateLimiter rateLimiter;
     private final HandlerExceptionResolver exceptionResolver;
@@ -48,7 +46,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         String key = request.getMethod() + " " + request.getRequestURI() + " " + clientIp(request);
 
         if (!rateLimiter.tryAcquire(key)) {
-            logger.warn("Rate limit exceeded for {} {}", request.getMethod(), request.getRequestURI());
+            log.warn("Rate limit exceeded for {} {}", request.getMethod(), request.getRequestURI());
             exceptionResolver.resolveException(request, response, null,
                     new TooManyRequestsException(AuthMessages.TOO_MANY_REQUESTS));
             return;

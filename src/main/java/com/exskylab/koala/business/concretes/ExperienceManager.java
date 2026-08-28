@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.ExperienceService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.ExperienceMessages;
@@ -7,9 +8,7 @@ import com.exskylab.koala.core.dtos.experience.request.SaveExperienceDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.dataAccess.ExperienceDao;
 import com.exskylab.koala.entities.Experience;
-import jakarta.validation.ValidationException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.exskylab.koala.core.exceptions.ValidationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,9 +17,8 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
+@Slf4j
 public class ExperienceManager implements ExperienceService {
-
-    private final Logger logger = LoggerFactory.getLogger(ExperienceManager.class);
 
     private final ExperienceDao experienceDao;
     private final SecurityService securityService;
@@ -50,7 +48,7 @@ public class ExperienceManager implements ExperienceService {
         apply(experience, request);
 
         Experience saved = experienceDao.save(experience);
-        logger.info("Experience {} added for user {}", saved.getId(), experience.getUser().getId());
+        log.info("Experience {} added for user {}", saved.getId(), experience.getUser().getId());
         return saved;
     }
 
@@ -61,7 +59,7 @@ public class ExperienceManager implements ExperienceService {
         apply(experience, request);
 
         Experience saved = experienceDao.save(experience);
-        logger.info("Experience {} updated", experienceId);
+        log.info("Experience {} updated", experienceId);
         return saved;
     }
 
@@ -69,7 +67,7 @@ public class ExperienceManager implements ExperienceService {
     @Transactional
     public void deleteExperience(UUID experienceId) {
         experienceDao.delete(requireOwned(experienceId));
-        logger.info("Experience {} deleted", experienceId);
+        log.info("Experience {} deleted", experienceId);
     }
 
     private Experience requireOwned(UUID experienceId) {
@@ -86,10 +84,6 @@ public class ExperienceManager implements ExperienceService {
         if (request.getStartDate().isAfter(LocalDate.now())) {
             throw new ValidationException(ExperienceMessages.START_IN_FUTURE);
         }
-        if (request.getEndDate() != null && request.getEndDate().isBefore(request.getStartDate())) {
-            throw new ValidationException(ExperienceMessages.END_BEFORE_START);
-        }
-
         experience.setTitle(request.getTitle());
         experience.setCompanyName(request.getCompanyName());
         experience.setEmploymentType(request.getEmploymentType());

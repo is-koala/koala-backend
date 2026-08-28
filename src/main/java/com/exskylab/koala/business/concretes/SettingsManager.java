@@ -1,13 +1,12 @@
 package com.exskylab.koala.business.concretes;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.SettingsService;
 import com.exskylab.koala.core.constants.SettingKeys;
 import com.exskylab.koala.core.constants.SettingMessages;
 import com.exskylab.koala.dataAccess.AppSettingDao;
 import com.exskylab.koala.entities.AppSetting;
-import jakarta.validation.ValidationException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.exskylab.koala.core.exceptions.ValidationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,11 +18,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 public class SettingsManager implements SettingsService {
 
     private static final Set<String> KNOWN_KEYS = knownKeys();
-
-    private final Logger logger = LoggerFactory.getLogger(SettingsManager.class);
 
     private final AppSettingDao appSettingDao;
 
@@ -92,7 +90,7 @@ public class SettingsManager implements SettingsService {
         setting.setValue(value.trim());
         AppSetting saved = appSettingDao.save(setting);
 
-        logger.info("Setting {} changed to {}", key, saved.getValue());
+        log.info("Setting {} changed to {}", key, saved.getValue());
         return saved;
     }
 
@@ -100,7 +98,7 @@ public class SettingsManager implements SettingsService {
         try {
             return Integer.parseInt(value.trim());
         } catch (NumberFormatException e) {
-            logger.warn("Setting {} holds a non-numeric value '{}', falling back to {}", key, value, fallback);
+            log.warn("Setting {} holds a non-numeric value '{}', falling back to {}", key, value, fallback);
             return fallback;
         }
     }
@@ -109,7 +107,7 @@ public class SettingsManager implements SettingsService {
         try {
             return new BigDecimal(value.trim());
         } catch (NumberFormatException e) {
-            logger.warn("Setting {} holds a non-numeric value '{}', falling back to {}", key, value, fallback);
+            log.warn("Setting {} holds a non-numeric value '{}', falling back to {}", key, value, fallback);
             return fallback;
         }
     }

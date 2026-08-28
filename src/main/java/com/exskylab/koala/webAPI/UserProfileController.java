@@ -11,7 +11,7 @@ import com.exskylab.koala.core.dtos.education.response.EducationDto;
 import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
 import com.exskylab.koala.core.mappers.EducationMapper;
 import com.exskylab.koala.core.mappers.JobMapper;
-import com.exskylab.koala.core.mappers.MediaUrlResolver;
+import com.exskylab.koala.core.helpers.MediaUrlResolver;
 import com.exskylab.koala.core.utilities.results.Result;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.core.utilities.results.SuccessResult;

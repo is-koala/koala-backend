@@ -5,6 +5,7 @@ import com.exskylab.koala.core.dtos.user.response.SafeUserDto;
 import com.exskylab.koala.core.dtos.user.response.UserMeResponseDto;
 import com.exskylab.koala.entities.CompanyContact;
 import com.exskylab.koala.entities.User;
+import com.exskylab.koala.core.helpers.MediaUrlResolver;
 import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;

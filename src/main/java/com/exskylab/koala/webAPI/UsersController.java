@@ -42,7 +42,7 @@ import java.util.UUID;
 @Validated
 @RestController
 @RequestMapping("/users")
-public class UserController {
+public class UsersController {
 
     private final UserService userService;
     private final JwtService jwtService;
@@ -50,7 +50,7 @@ public class UserController {
     private final JobService jobService;
     private final JobMapper jobMapper;
 
-    public UserController(UserService userService, JwtService jwtService, SecurityService securityService, JobService jobService, JobMapper jobMapper) {
+    public UsersController(UserService userService, JwtService jwtService, SecurityService securityService, JobService jobService, JobMapper jobMapper) {
         this.userService = userService;
         this.jwtService = jwtService;
         this.securityService = securityService;

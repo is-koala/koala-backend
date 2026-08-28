@@ -2,8 +2,10 @@ package com.exskylab.koala.core.mappers;
 
 import com.exskylab.koala.core.dtos.messaging.response.ConversationDto;
 import com.exskylab.koala.core.dtos.messaging.response.MessageDto;
+import com.exskylab.koala.core.dtos.messaging.response.UserBlockDto;
 import com.exskylab.koala.entities.Conversation;
 import com.exskylab.koala.entities.Message;
+import com.exskylab.koala.entities.UserBlock;
 import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -23,4 +25,8 @@ public interface MessagingMapper {
     @Mapping(target = "jobTitle", source = "conversation.job.title")
     @Mapping(target = "unreadCount", source = "unreadCount")
     ConversationDto toConversationDto(Conversation conversation, long unreadCount);
+
+    UserBlockDto toUserBlockDto(UserBlock block);
+
+    List<UserBlockDto> toUserBlockDtoList(List<UserBlock> blocks);
 }

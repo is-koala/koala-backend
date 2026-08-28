@@ -1,20 +1,17 @@
 package com.exskylab.koala.business.concretes;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.SessionService;
 import com.exskylab.koala.core.constants.SessionMessages;
-import com.exskylab.koala.core.dtos.session.response.CreatedSessionInfo;
-import com.exskylab.koala.core.exceptions.SessionNotFoundException;
-import com.exskylab.koala.core.exceptions.UserNotFoundException;
+import com.exskylab.koala.core.dtos.session.response.CreatedSessionDto;
+import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.properties.SessionProperties;
 import com.exskylab.koala.core.security.JwtService;
 import com.exskylab.koala.dataAccess.SessionDao;
 import com.exskylab.koala.entities.Device;
 import com.exskylab.koala.entities.Session;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import com.exskylab.koala.core.constants.MyWorkMessages;
-import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import java.util.List;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import org.springframework.stereotype.Service;
@@ -27,6 +24,7 @@ import java.util.Base64;
 import java.util.UUID;
 
 @Service
+@Slf4j
 public class SessionManager implements SessionService {
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
@@ -36,7 +34,6 @@ public class SessionManager implements SessionService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final SessionProperties sessionProperties;
-    private Logger logger = LoggerFactory.getLogger(SessionManager.class);
 
     public SessionManager(SessionDao sessionDao, PasswordEncoder passwordEncoder, JwtService jwtService,
                           SessionProperties sessionProperties, SecurityService securityService) {
@@ -49,13 +46,13 @@ public class SessionManager implements SessionService {
 
     @Override
     @Transactional
-    public CreatedSessionInfo createSession(Device device, String ipAddress) {
-        logger.info("Creating session for device: {}", device.getId());
+    public CreatedSessionDto createSession(Device device, String ipAddress) {
+        log.info("Creating session for device: {}", device.getId());
 
         var user = device.getUser();
         if (user == null){
-            logger.error("Device with id: {} does not have an associated user.", device.getId());
-            throw new UserNotFoundException(SessionMessages.USER_NOT_FOUND_FOR_DEVICE);
+            log.error("Device with id: {} does not have an associated user.", device.getId());
+            throw new ResourceNotFoundException(SessionMessages.USER_NOT_FOUND_FOR_DEVICE);
         }
 
         String originalRefreshToken = generateSecureRandomToken();
@@ -74,26 +71,26 @@ public class SessionManager implements SessionService {
 
         String accessToken = jwtService.generateAccessToken(user, savedSession.getId());
 
-        return new CreatedSessionInfo(savedSession, accessToken, originalRefreshToken);
+        return new CreatedSessionDto(savedSession, accessToken, originalRefreshToken);
     }
 
 
     @Override
     public Session findActiveSessionById(UUID sessionId) {
         return sessionDao.findByIdAndIsActive(sessionId, true)
-                .orElseThrow(() -> new SessionNotFoundException(SessionMessages.SESSION_NOT_FOUND));
+                .orElseThrow(() -> new ResourceNotFoundException(SessionMessages.SESSION_NOT_FOUND));
     }
 
     @Override
     public Session save(Session session) {
-        logger.info("Saving session with id: {}", session.getId());
+        log.info("Saving session with id: {}", session.getId());
         return sessionDao.save(session);
     }
 
     @Override
     @Transactional
     public void invalidateActiveSessionsForDevice(UUID deviceId) {
-        logger.info("Invalidating active sessions for device with id: {}", deviceId);
+        log.info("Invalidating active sessions for device with id: {}", deviceId);
 
         var activeSessions = sessionDao.findAllByDeviceIdAndIsActive(deviceId, true);
 
@@ -103,13 +100,13 @@ public class SessionManager implements SessionService {
 
 
         sessionDao.saveAll(activeSessions);
-        logger.info("Invalidated {} active sessions for device with id: {}", activeSessions.size(), deviceId);
+        log.info("Invalidated {} active sessions for device with id: {}", activeSessions.size(), deviceId);
     }
 
     @Override
     @Transactional
     public void invalidateActiveSessionsForUserIdExcludingSessionId(UUID userId, UUID currentSessionId) {
-        logger.info("Invalidating active sessions for user with id: {}, currentSessionId: {}", userId, currentSessionId);
+        log.info("Invalidating active sessions for user with id: {}, currentSessionId: {}", userId, currentSessionId);
 
         var activeSessions = sessionDao.findAllByDevice_User_IdAndIsActive(userId, true);
 
@@ -119,10 +116,10 @@ public class SessionManager implements SessionService {
             }
             session.setActive(false);
             sessionDao.save(session);
-            logger.info("Invalidated session with id: {}", session.getId());
+            log.info("Invalidated session with id: {}", session.getId());
         }
 
-        logger.info("Invalidated {} active sessions for user with id: {}", activeSessions.size(), userId);
+        log.info("Invalidated {} active sessions for user with id: {}", activeSessions.size(), userId);
     }
 
     private String generateSecureRandomToken() {
@@ -149,7 +146,7 @@ public class SessionManager implements SessionService {
 
         session.setActive(false);
         sessionDao.save(session);
-        logger.info("Session {} revoked by its owner", sessionId);
+        log.info("Session {} revoked by its owner", sessionId);
     }
 
     @Override
@@ -165,7 +162,7 @@ public class SessionManager implements SessionService {
         others.forEach(session -> session.setActive(false));
         sessionDao.saveAll(others);
 
-        logger.info("{} other sessions revoked for user {}", others.size(), userId);
+        log.info("{} other sessions revoked for user {}", others.size(), userId);
         return others.size();
     }
 }

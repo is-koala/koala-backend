@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.helpers;
 
+import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.properties.CommissionProperties;
 import org.springframework.stereotype.Component;
 
@@ -19,7 +20,7 @@ public class CommissionCalculator {
 
     public Breakdown calculate(BigDecimal workerPayout) {
         if (workerPayout == null || workerPayout.signum() <= 0) {
-            throw new IllegalArgumentException("{job.salary.min.value}");
+            throw new ValidationException("{job.salary.min.value}");
         }
 
         BigDecimal rate = commissionProperties.getRate();

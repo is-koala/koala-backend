@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.SettlementService;
 import com.exskylab.koala.core.properties.IyzicoProperties;
 import com.exskylab.koala.core.properties.SettlementRetryProperties;
@@ -8,8 +9,6 @@ import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoApprovalRespo
 import com.exskylab.koala.dataAccess.PayoutDao;
 import com.exskylab.koala.dataAccess.SettlementTaskDao;
 import com.exskylab.koala.entities.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,9 +20,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Service
+@Slf4j
 public class SettlementManager implements SettlementService {
-
-    private final Logger logger = LoggerFactory.getLogger(SettlementManager.class);
 
     private final SettlementTaskDao settlementTaskDao;
     private final PayoutDao payoutDao;
@@ -47,20 +45,20 @@ public class SettlementManager implements SettlementService {
                                             SettlementOperation operation) {
 
         if (!iyzicoProperties.isSettlementEnabled()) {
-            logger.warn("Provider settlement is disabled, {} not queued for payment {}.", operation, payment.getId());
+            log.warn("Provider settlement is disabled, {} not queued for payment {}.", operation, payment.getId());
             return Optional.empty();
         }
 
         String transactionId = payment.getProviderTransactionId();
         if (transactionId == null || transactionId.isBlank()) {
-            logger.warn("Payment {} carries no provider transaction id, {} not queued.", payment.getId(), operation);
+            log.warn("Payment {} carries no provider transaction id, {} not queued.", payment.getId(), operation);
             return Optional.empty();
         }
 
         Optional<SettlementTask> existing =
                 settlementTaskDao.findByPaymentIdAndOperation(payment.getId(), operation);
         if (existing.isPresent()) {
-            logger.info("Settlement {} already queued for payment {}.", operation, payment.getId());
+            log.info("Settlement {} already queued for payment {}.", operation, payment.getId());
             return existing;
         }
 
@@ -74,7 +72,7 @@ public class SettlementManager implements SettlementService {
         task.setNextAttemptAt(Instant.now());
 
         SettlementTask saved = settlementTaskDao.save(task);
-        logger.info("Settlement task {} queued: {} for payment {}", saved.getId(), operation, payment.getId());
+        log.info("Settlement task {} queued: {} for payment {}", saved.getId(), operation, payment.getId());
         return Optional.of(saved);
     }
 
@@ -110,7 +108,7 @@ public class SettlementManager implements SettlementService {
                 markPayoutProcessing(task);
             }
 
-            logger.info("Settlement task {} succeeded on attempt {}", taskId, task.getAttempts());
+            log.info("Settlement task {} succeeded on attempt {}", taskId, task.getAttempts());
             return true;
 
         } catch (Exception e) {
@@ -118,11 +116,11 @@ public class SettlementManager implements SettlementService {
 
             if (task.getAttempts() >= retryProperties.getMaxAttempts()) {
                 task.setStatus(SettlementTaskStatus.FAILED);
-                logger.error("Settlement task {} gave up after {} attempts: {}",
+                log.error("Settlement task {} gave up after {} attempts: {}",
                         taskId, task.getAttempts(), e.getMessage());
             } else {
                 task.setNextAttemptAt(Instant.now().plus(backoffFor(task.getAttempts())));
-                logger.warn("Settlement task {} failed on attempt {}, next try at {}: {}",
+                log.warn("Settlement task {} failed on attempt {}, next try at {}: {}",
                         taskId, task.getAttempts(), task.getNextAttemptAt(), e.getMessage());
             }
 

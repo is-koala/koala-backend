@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.PaymentService;
 import com.exskylab.koala.core.constants.PaymentMessages;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
@@ -13,8 +14,7 @@ import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.Payment;
 import com.exskylab.koala.entities.PaymentAttemptStatus;
 import com.exskylab.koala.entities.PaymentStatus;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.exskylab.koala.core.constants.PayoutMessages;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,11 +23,10 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
+@Slf4j
 public class PaymentManager implements PaymentService {
 
     private static final String CURRENCY = "TRY";
-
-    private final Logger logger = LoggerFactory.getLogger(PaymentManager.class);
 
     private final PaymentDao paymentDao;
     private final IyzicoPaymentService iyzicoPaymentService;
@@ -54,7 +53,7 @@ public class PaymentManager implements PaymentService {
         payment.setTotalCharged(breakdown.totalCharged());
 
         Payment saved = paymentDao.save(payment);
-        logger.info("Payment attempt {} started for assignment {}", saved.getId(), jobAssignment.getId());
+        log.info("Payment attempt {} started for assignment {}", saved.getId(), jobAssignment.getId());
         return saved;
     }
 
@@ -72,7 +71,7 @@ public class PaymentManager implements PaymentService {
                 .orElseThrow(() -> new ResourceNotFoundException(PaymentMessages.NOT_FOUND));
 
         if (payment.getStatus() == PaymentAttemptStatus.SUCCEEDED) {
-            logger.info("Payment {} already settled, callback ignored.", payment.getId());
+            log.info("Payment {} already settled, callback ignored.", payment.getId());
             return payment;
         }
 
@@ -84,7 +83,7 @@ public class PaymentManager implements PaymentService {
             IyzicoPaymentResultResponseDto result = iyzicoPaymentService.retrieveCheckoutFormResult(request);
             return settle(payment, result);
         } catch (RuntimeException e) {
-            logger.warn("Payment {} could not be verified with the provider: {}", payment.getId(), e.getMessage());
+            log.warn("Payment {} could not be verified with the provider: {}", payment.getId(), e.getMessage());
             return fail(payment, e.getMessage());
         }
     }
@@ -110,7 +109,7 @@ public class PaymentManager implements PaymentService {
         assignment.setTotalCharged(payment.getTotalCharged());
         assignment.setFinalPayout(payment.getWorkerPayout());
 
-        logger.info("Payment {} settled for assignment {}", payment.getId(), assignment.getId());
+        log.info("Payment {} settled for assignment {}", payment.getId(), assignment.getId());
         return paymentDao.save(payment);
     }
 
@@ -126,5 +125,14 @@ public class PaymentManager implements PaymentService {
         }
 
         return paymentDao.save(payment);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Payment getSettledPaymentFor(UUID jobAssignmentId) {
+        return paymentDao.findAllByJobAssignmentIdOrderByCreatedAtDesc(jobAssignmentId).stream()
+                .filter(payment -> payment.getStatus() == PaymentAttemptStatus.SUCCEEDED)
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException(PayoutMessages.NO_SETTLED_PAYMENT));
     }
 }

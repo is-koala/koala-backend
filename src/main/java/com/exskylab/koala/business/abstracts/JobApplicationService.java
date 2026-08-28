@@ -15,12 +15,16 @@ import org.springframework.data.domain.Page;
 
 import org.springframework.data.domain.Pageable;
 
+import java.util.UUID;
+
 public interface JobApplicationService {
-    JobApplicationDto applyToJob(String jobId, CreateJobApplicationDto jobsJobIdApplicationsPostRequestDto);
+    JobApplicationDto applyToJob(UUID jobId, CreateJobApplicationDto jobsJobIdApplicationsPostRequestDto);
 
-    List<JobApplicantDto> getJobApplicationsByIdJobId(String jobId);
+    List<JobApplicantDto> getJobApplicationsByIdJobId(UUID jobId);
 
-    JobApplicationDetailDto respondToApplication(String applicationId, AnswerApplicationDto jobApplicationsApplicationIdPatchRequestDto);
+    JobApplicationDetailDto respondToApplication(UUID applicationId, AnswerApplicationDto jobApplicationsApplicationIdPatchRequestDto);
 
     Page<JobApplication> getMyApplications(ApplicationStatus status, Pageable pageable);
+
+    boolean hasApplied(UUID jobId, UUID userId);
 }

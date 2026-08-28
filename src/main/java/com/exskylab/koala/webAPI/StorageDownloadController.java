@@ -1,14 +1,13 @@
 package com.exskylab.koala.webAPI;
 
+import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.StorageMessages;
 import com.exskylab.koala.core.helpers.StorageUrlResolver;
 import com.exskylab.koala.core.utilities.storage.StorageKeys;
 import com.exskylab.koala.core.utilities.storage.StorageService;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.validation.ValidationException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.exskylab.koala.core.exceptions.ValidationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,11 +16,10 @@ import org.springframework.web.bind.annotation.RestController;
 import java.net.URI;
 
 @RestController
+@Slf4j
 public class StorageDownloadController {
 
     private static final String BASE_PATH = "/uploads/";
-
-    private final Logger logger = LoggerFactory.getLogger(StorageDownloadController.class);
 
     private final StorageService storageService;
     private final StorageUrlResolver storageUrlResolver;
@@ -37,7 +35,7 @@ public class StorageDownloadController {
     @GetMapping("/uploads/files/**")
     public ResponseEntity<Void> downloadPrivate(HttpServletRequest request) {
         String key = keyOf(request);
-        logger.info("Private download of {} by user {}", key, securityService.getAuthenticatedUserId());
+        log.info("Private download of {} by user {}", key, securityService.getAuthenticatedUserId());
         return redirect(storageService.temporaryUrl(key));
     }
 
