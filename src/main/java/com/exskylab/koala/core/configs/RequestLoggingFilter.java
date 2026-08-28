@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.configs;
 
+import com.exskylab.koala.core.helpers.ClientIpResolver;
 import lombok.extern.slf4j.Slf4j;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -30,9 +31,9 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
             int status = response.getStatus();
             Object userId = request.getAttribute(USER_ID_ATTRIBUTE);
 
-            String line = "{} {} -> {} ({} ms) user={}";
+            String line = "{} {} -> {} ({} ms) user={} ip={}";
             Object[] args = {request.getMethod(), request.getRequestURI(), status, durationMs,
-                    userId == null ? "anonymous" : userId};
+                    userId == null ? "anonymous" : userId, ClientIpResolver.resolve(request)};
 
             if (status >= 500) {
                 log.error(line, args);

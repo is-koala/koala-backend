@@ -11,6 +11,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import com.exskylab.koala.core.helpers.ClientIpResolver;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.servlet.HandlerExceptionResolver;
@@ -43,7 +44,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        String key = request.getMethod() + " " + request.getRequestURI() + " " + clientIp(request);
+        String key = request.getMethod() + " " + request.getRequestURI() + " " + ClientIpResolver.resolve(request);
 
         if (!rateLimiter.tryAcquire(key)) {
             log.warn("Rate limit exceeded for {} {}", request.getMethod(), request.getRequestURI());
@@ -60,12 +61,4 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return !LIMITED_PATHS.contains(request.getRequestURI());
     }
 
-    private String clientIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            int comma = forwarded.indexOf(',');
-            return (comma > 0 ? forwarded.substring(0, comma) : forwarded).trim();
-        }
-        return request.getRemoteAddr();
-    }
 }
