@@ -281,16 +281,6 @@ public class NotificationManager implements NotificationService {
     }
 
     @Override
-    public Notification sendPushToDevice(SendPushToDeviceDto sendPushToDeviceDto, DispatchPriority dispatchPriority, boolean isSystemPush) {
-        return null; //TODO: Implement this method
-    }
-
-    @Override
-    public void sendBulkPush(SendBulkPushDto sendBulkPushDto, DispatchPriority dispatchPriority, boolean isSystemPush) {
-            //TODO: Implement this method
-    }
-
-    @Override
     public Notification getById(UUID id) {
         log.debug("Fetching notification by ID: {}", id);
         return notificationDao.findById(id)

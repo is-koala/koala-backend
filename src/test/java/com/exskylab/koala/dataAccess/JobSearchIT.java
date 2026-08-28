@@ -19,6 +19,7 @@ class JobSearchIT extends AbstractIntegrationTest {
     void theSearchQueryPaginatesInTheDatabaseNotInMemory() {
         var page = assertDoesNotThrow(() -> jobDao.searchIds(
                 com.exskylab.koala.entities.JobStatus.OPEN,
+                java.time.LocalDateTime.now(),
                 null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null, null,
                 PageRequest.of(0, 5, Sort.by(Sort.Direction.DESC, "createdAt"))));
@@ -31,6 +32,7 @@ class JobSearchIT extends AbstractIntegrationTest {
     void everyFilterCombinationIsAValidQuery() {
         assertDoesNotThrow(() -> jobDao.searchIds(
                 com.exskylab.koala.entities.JobStatus.OPEN,
+                java.time.LocalDateTime.now(),
                 "garson",
                 java.util.UUID.randomUUID(),
                 java.util.UUID.randomUUID(),
@@ -50,6 +52,7 @@ class JobSearchIT extends AbstractIntegrationTest {
     void aBoundingBoxNarrowsTheSearchWithoutBreakingTheQuery() {
         assertDoesNotThrow(() -> jobDao.searchIds(
                 com.exskylab.koala.entities.JobStatus.OPEN,
+                java.time.LocalDateTime.now(),
                 null, null, null, null, null, null, null, null, null, null, null,
                 40.98, 41.10, 28.95, 29.15,
                 PageRequest.of(0, 20)));

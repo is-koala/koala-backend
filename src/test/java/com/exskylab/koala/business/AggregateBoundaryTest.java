@@ -57,7 +57,9 @@ class AggregateBoundaryTest {
             new Exemption("JobManager", "JobApplicationDao",
                     "salt okuma; JobApplicationManager JobService'e bağlı olduğu için ters yön döngü olurdu"),
             new Exemption("SettlementManager", "PayoutDao",
-                    "mutabakat görevi bir payout için var; PayoutManager SettlementService'e bağlı, ters yön döngü olurdu"));
+                    "mutabakat görevi bir payout için var; PayoutManager SettlementService'e bağlı, ters yön döngü olurdu"),
+            new Exemption("SettlementManager", "RefundDao",
+                    "sağlayıcı yanıtı iadeyi sonlandırır; PayoutManager SettlementService'e bağlı, ters yön döngü olurdu"));
 
     private static Set<String> ownDaosOf(String manager) {
         Set<String> owned = OWNED_BY.get(manager);

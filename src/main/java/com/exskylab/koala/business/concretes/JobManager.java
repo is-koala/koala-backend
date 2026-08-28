@@ -24,6 +24,7 @@ import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.mappers.JobMapper;
 import com.exskylab.koala.core.dtos.notification.request.SendPushToUserDto;
 import com.exskylab.koala.core.helpers.MessageResolver;
+import com.exskylab.koala.core.properties.JobSearchProperties;
 import com.exskylab.koala.dataAccess.JobApplicationDao;
 import com.exskylab.koala.dataAccess.JobDao;
 import com.exskylab.koala.entities.*;
@@ -61,13 +62,14 @@ public class JobManager implements JobService {
     private final JobAssignmentService jobAssignmentService;
     private final NotificationService notificationService;
     private final MessageResolver messageResolver;
+    private final JobSearchProperties searchProperties;
 
     public JobManager(JobDao jobDao, SecurityService securityService, JobCategoryService jobCategoryService, AddressService addressService, CompanyService companyService, JobMapper jobMapper,
                       PageableSanitizer pageableSanitizer, CompanyContactService companyContactService,
                       JobAlertService jobAlertService, GalleryService galleryService,
                       CompanyFollowService companyFollowService, JobApplicationDao jobApplicationDao,
                       JobAssignmentService jobAssignmentService, NotificationService notificationService,
-                      MessageResolver messageResolver) {
+                      MessageResolver messageResolver, JobSearchProperties searchProperties) {
         this.jobDao = jobDao;
         this.securityService = securityService;
         this.jobCategoryService = jobCategoryService;
@@ -83,6 +85,7 @@ public class JobManager implements JobService {
         this.jobAssignmentService = jobAssignmentService;
         this.notificationService = notificationService;
         this.messageResolver = messageResolver;
+        this.searchProperties = searchProperties;
     }
 
     @Override
@@ -269,6 +272,7 @@ public class JobManager implements JobService {
 
         Page<UUID> ids = jobDao.searchIds(
                 JobStatus.OPEN,
+                java.time.LocalDateTime.now(searchProperties.zone()),
                 blankToNull(criteria.getQuery()),
                 criteria.getCategoryId(),
                 criteria.getCityId(),

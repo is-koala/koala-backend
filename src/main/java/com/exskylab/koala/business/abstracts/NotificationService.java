@@ -17,9 +17,7 @@ public interface NotificationService {
 
     void sendPushToUser(SendPushToUserDto sendPushToUserDto, DispatchPriority dispatchPriority, boolean isSystemPush);
 
-    Notification sendPushToDevice(SendPushToDeviceDto sendPushToDeviceDto, DispatchPriority dispatchPriority, boolean isSystemPush);
 
-    void sendBulkPush(SendBulkPushDto sendBulkPushDto, DispatchPriority dispatchPriority, boolean isSystemPush);
 
     Notification getById(UUID id);
 

@@ -7,6 +7,10 @@ import com.exskylab.koala.core.properties.SettlementRetryProperties;
 import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoApprovalResponseDto;
 import com.exskylab.koala.dataAccess.PayoutDao;
+import com.exskylab.koala.dataAccess.RefundDao;
+import com.exskylab.koala.entities.Refund;
+import com.exskylab.koala.entities.RefundStatus;
+import java.util.Optional;
 import com.exskylab.koala.dataAccess.SettlementTaskDao;
 import com.exskylab.koala.entities.*;
 import org.springframework.data.domain.PageRequest;
@@ -25,15 +29,17 @@ public class SettlementManager implements SettlementService {
 
     private final SettlementTaskDao settlementTaskDao;
     private final PayoutDao payoutDao;
+    private final RefundDao refundDao;
     private final IyzicoPaymentService iyzicoPaymentService;
     private final IyzicoProperties iyzicoProperties;
     private final SettlementRetryProperties retryProperties;
 
-    public SettlementManager(SettlementTaskDao settlementTaskDao, PayoutDao payoutDao,
+    public SettlementManager(SettlementTaskDao settlementTaskDao, PayoutDao payoutDao, RefundDao refundDao,
                              IyzicoPaymentService iyzicoPaymentService, IyzicoProperties iyzicoProperties,
                              SettlementRetryProperties retryProperties) {
         this.settlementTaskDao = settlementTaskDao;
         this.payoutDao = payoutDao;
+        this.refundDao = refundDao;
         this.iyzicoPaymentService = iyzicoPaymentService;
         this.iyzicoProperties = iyzicoProperties;
         this.retryProperties = retryProperties;
@@ -106,6 +112,8 @@ public class SettlementManager implements SettlementService {
 
             if (task.getOperation() == SettlementOperation.APPROVE) {
                 markPayoutProcessing(task);
+            } else {
+                markRefundCompleted(task);
             }
 
             log.info("Settlement task {} succeeded on attempt {}", taskId, task.getAttempts());
@@ -116,6 +124,7 @@ public class SettlementManager implements SettlementService {
 
             if (task.getAttempts() >= retryProperties.getMaxAttempts()) {
                 task.setStatus(SettlementTaskStatus.FAILED);
+                markSettlementGivenUp(task);
                 log.error("Settlement task {} gave up after {} attempts: {}",
                         taskId, task.getAttempts(), e.getMessage());
             } else {
@@ -139,6 +148,46 @@ public class SettlementManager implements SettlementService {
             payout.setProviderReference(task.getProviderReference());
             payoutDao.save(payout);
         });
+    }
+
+    private void markRefundCompleted(SettlementTask task) {
+        latestRefund(task).ifPresent(refund -> {
+            refund.setStatus(RefundStatus.COMPLETED);
+            refund.setProviderRefundId(task.getProviderReference());
+            refund.setCompletedAt(Instant.now());
+            refundDao.save(refund);
+            log.info("Refund {} completed with provider reference {}",
+                    refund.getId(), task.getProviderReference());
+        });
+    }
+
+    private void markSettlementGivenUp(SettlementTask task) {
+        if (task.getOperation() == SettlementOperation.APPROVE) {
+            if (task.getJobAssignment() == null) {
+                return;
+            }
+
+            payoutDao.findByJobAssignmentId(task.getJobAssignment().getId()).ifPresent(payout -> {
+                payout.setStatus(PayoutStatus.FAILED);
+                payoutDao.save(payout);
+                log.error("Payout {} marked FAILED, settlement gave up", payout.getId());
+            });
+            return;
+        }
+
+        latestRefund(task).ifPresent(refund -> {
+            refund.setStatus(RefundStatus.FAILED);
+            refundDao.save(refund);
+            log.error("Refund {} marked FAILED, settlement gave up", refund.getId());
+        });
+    }
+
+    private Optional<Refund> latestRefund(SettlementTask task) {
+        if (task.getPayment() == null) {
+            return Optional.empty();
+        }
+        return refundDao.findAllByPaymentIdOrderByCreatedAtDesc(task.getPayment().getId())
+                .stream().findFirst();
     }
 
     Duration backoffFor(int attempts) {

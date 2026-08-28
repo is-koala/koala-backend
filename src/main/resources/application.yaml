@@ -133,6 +133,9 @@ rate-limit:
 commission:
   rate: ${COMMISSION_RATE:0.075}
 
+job-search:
+  zone-id: ${JOB_SEARCH_ZONE_ID:Europe/Istanbul}
+
 job-alert:
   enabled: ${JOB_ALERT_ENABLED:true}
   max-per-user: ${JOB_ALERT_MAX_PER_USER:10}

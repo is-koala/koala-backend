@@ -24,6 +24,7 @@ public interface JobDao extends JpaRepository<Job, UUID> {
     @Query("""
             select j.id from Job j
             where j.status = :status
+              and (j.endDateTime is null or j.endDateTime >= :activeAfter)
               and (cast(:query as string) is null
                    or lower(j.title) like lower(concat('%', cast(:query as string), '%'))
                    or lower(j.description) like lower(concat('%', cast(:query as string), '%'))
@@ -44,6 +45,7 @@ public interface JobDao extends JpaRepository<Job, UUID> {
               and (:maxLongitude is null or j.address.longitude <= :maxLongitude)
             """)
     Page<UUID> searchIds(@Param("status") JobStatus status,
+                         @Param("activeAfter") java.time.LocalDateTime activeAfter,
                          @Param("query") String query,
                          @Param("categoryId") UUID categoryId,
                          @Param("cityId") UUID cityId,

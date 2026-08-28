@@ -5,6 +5,11 @@ import com.exskylab.koala.core.properties.SettlementRetryProperties;
 import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoApprovalResponseDto;
 import com.exskylab.koala.dataAccess.PayoutDao;
+import com.exskylab.koala.dataAccess.RefundDao;
+import com.exskylab.koala.entities.Payout;
+import com.exskylab.koala.entities.PayoutStatus;
+import com.exskylab.koala.entities.Refund;
+import com.exskylab.koala.entities.RefundStatus;
 import com.exskylab.koala.dataAccess.SettlementTaskDao;
 import com.exskylab.koala.entities.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,6 +29,7 @@ class SettlementRetryTest {
 
     private SettlementTaskDao settlementTaskDao;
     private PayoutDao payoutDao;
+    private RefundDao refundDao;
     private IyzicoPaymentService iyzicoPaymentService;
     private IyzicoProperties iyzicoProperties;
     private SettlementRetryProperties retryProperties;
@@ -36,11 +42,13 @@ class SettlementRetryTest {
     void setUp() {
         settlementTaskDao = mock(SettlementTaskDao.class);
         payoutDao = mock(PayoutDao.class);
+        refundDao = mock(RefundDao.class);
+        when(refundDao.findAllByPaymentIdOrderByCreatedAtDesc(any())).thenReturn(java.util.List.of());
         iyzicoPaymentService = mock(IyzicoPaymentService.class);
         iyzicoProperties = new IyzicoProperties();
         retryProperties = new SettlementRetryProperties();
 
-        manager = new SettlementManager(settlementTaskDao, payoutDao, iyzicoPaymentService,
+        manager = new SettlementManager(settlementTaskDao, payoutDao, refundDao, iyzicoPaymentService,
                 iyzicoProperties, retryProperties);
 
         payment = new Payment();
@@ -67,6 +75,63 @@ class SettlementRetryTest {
         task.setNextAttemptAt(Instant.now());
         when(settlementTaskDao.findWithDetailsById(task.getId())).thenReturn(Optional.of(task));
         return task;
+    }
+
+    private Refund pendingRefund() {
+        Refund refund = new Refund();
+        refund.setId(UUID.randomUUID());
+        refund.setPayment(payment);
+        refund.setStatus(RefundStatus.PENDING);
+        when(refundDao.findAllByPaymentIdOrderByCreatedAtDesc(payment.getId()))
+                .thenReturn(java.util.List.of(refund));
+        return refund;
+    }
+
+    private Payout pendingPayout() {
+        Payout payout = new Payout();
+        payout.setId(UUID.randomUUID());
+        payout.setStatus(PayoutStatus.PENDING);
+        when(payoutDao.findByJobAssignmentId(assignment.getId())).thenReturn(Optional.of(payout));
+        return payout;
+    }
+
+    @Test
+    void aSuccessfulDisapprovalClosesTheRefundInsteadOfLeavingItPending() {
+        Refund refund = pendingRefund();
+        SettlementTask task = pendingTask(SettlementOperation.DISAPPROVE);
+
+        manager.runTask(task.getId());
+
+        assertEquals(RefundStatus.COMPLETED, refund.getStatus());
+        assertNotNull(refund.getCompletedAt());
+    }
+
+    @Test
+    void givingUpOnAnApprovalMarksThePayoutFailed() {
+        Payout payout = pendingPayout();
+        SettlementTask task = pendingTask(SettlementOperation.APPROVE);
+        task.setAttempts(retryProperties.getMaxAttempts());
+        when(iyzicoPaymentService.approvePaymentSettlement(any()))
+                .thenThrow(new IllegalStateException("saglayici hatasi"));
+
+        manager.runTask(task.getId());
+
+        assertEquals(SettlementTaskStatus.FAILED, task.getStatus());
+        assertEquals(PayoutStatus.FAILED, payout.getStatus());
+    }
+
+    @Test
+    void givingUpOnADisapprovalMarksTheRefundFailed() {
+        Refund refund = pendingRefund();
+        SettlementTask task = pendingTask(SettlementOperation.DISAPPROVE);
+        task.setAttempts(retryProperties.getMaxAttempts());
+        when(iyzicoPaymentService.disapprovePaymentSettlement(any()))
+                .thenThrow(new IllegalStateException("saglayici hatasi"));
+
+        manager.runTask(task.getId());
+
+        assertEquals(SettlementTaskStatus.FAILED, task.getStatus());
+        assertEquals(RefundStatus.FAILED, refund.getStatus());
     }
 
     @Test
