@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 import lombok.extern.slf4j.Slf4j;
+import com.exskylab.koala.business.abstracts.CvService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.StorageMessages;
 import com.exskylab.koala.core.utilities.storage.StorageKeys;
@@ -35,25 +36,30 @@ public class StorageDownloadController {
 
     private final StorageService storageService;
     private final SecurityService securityService;
+    private final CvService cvService;
 
-    public StorageDownloadController(StorageService storageService, SecurityService securityService) {
+    public StorageDownloadController(StorageService storageService, SecurityService securityService,
+                                     CvService cvService) {
         this.storageService = storageService;
         this.securityService = securityService;
+        this.cvService = cvService;
     }
 
     @Operation(summary = "Özel dosya indir",
-            description = "Özgeçmiş ve kimlik belgesi gibi nesneler. Kimlik doğrulaması ister, sonra kısa ömürlü imzalı adrese yönlendirir.")
+            description = "Özgeçmiş gibi özel nesneler. Kimlik doğrulaması ve **sahiplik kontrolü** ister; başkasının dosyası 404 döner. Sonra kısa ömürlü imzalı adrese yönlendirir.")
     @ApiResponses({
             @ApiResponse(responseCode = "302", description = "S3 kullanılıyorsa imzalı adrese yönlendirilir",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "400", description = "Tanınmayan depo öneki",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
-            @ApiResponse(responseCode = "404", description = "Dosya bulunamadı",
+            @ApiResponse(responseCode = "404", description = "Dosya bulunamadı ya da size ait değil",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @GetMapping("/uploads/files/**")
     public ResponseEntity<?> downloadPrivate(HttpServletRequest request) {
         String key = keyOf(request);
+        cvService.assertCanDownload(key);
+
         log.info("Private download of {} by user {}", key, securityService.getAuthenticatedUserId());
         return serve(key);
     }

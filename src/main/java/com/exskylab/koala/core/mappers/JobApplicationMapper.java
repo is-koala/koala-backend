@@ -4,6 +4,7 @@ import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationDetail
 import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicantDto;
 import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationDto;
 import com.exskylab.koala.core.dtos.jobApplication.response.MyApplicationDto;
+import com.exskylab.koala.core.helpers.MediaUrlResolver;
 import com.exskylab.koala.entities.JobApplication;
 import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
@@ -12,7 +13,7 @@ import org.mapstruct.Mapping;
 import java.util.List;
 
 @Mapper(componentModel = "spring",
-        uses = {UserMapper.class, JobMapper.class, JobAssignmentMapper.class},
+        uses = {UserMapper.class, JobMapper.class, JobAssignmentMapper.class, MediaUrlResolver.class},
         injectionStrategy = InjectionStrategy.CONSTRUCTOR)
 public interface JobApplicationMapper {
 
@@ -20,6 +21,7 @@ public interface JobApplicationMapper {
     JobApplicationDto toJobsJobIdApplicationsPostResponseDto(JobApplication jobApplication);
 
     @Mapping(target = "applicant", source = "user")
+    @Mapping(target = "cvUrl", source = "user.cv", qualifiedByName = "mediaToPublicUrl")
     JobApplicantDto toJobsJobIdApplicationsGetResponseDto(JobApplication jobApplication);
 
     List<JobApplicantDto> toJobsJobIdApplicationsGetResponseDtoList(

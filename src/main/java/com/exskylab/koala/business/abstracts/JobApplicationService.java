@@ -21,6 +21,8 @@ import org.springframework.data.domain.Pageable;
 import java.util.UUID;
 
 public interface JobApplicationService {
+
+    boolean hasApplicationForEmployer(UUID employerId, UUID workerId);
     JobApplicationDto applyToJob(UUID jobId, CreateJobApplicationDto jobsJobIdApplicationsPostRequestDto);
 
     List<JobApplicantDto> getJobApplicationsByIdJobId(UUID jobId);

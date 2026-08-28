@@ -6,6 +6,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -16,7 +18,13 @@ public interface JobApplicationDao extends JpaRepository<JobApplication, UUID> {
 
     boolean existsByJobIdAndUserId(UUID jobId, UUID userId);
 
-    @EntityGraph(attributePaths = {"user", "user.profilePicture", "assignment"})
+    boolean existsByUserIdAndJobCreatorId(UUID userId, UUID creatorId);
+
+    @Query("select distinct a.job.company.id from JobApplication a "
+            + "where a.user.id = :workerId and a.job.company is not null")
+    List<UUID> findCompanyIdsAppliedToBy(@Param("workerId") UUID workerId);
+
+    @EntityGraph(attributePaths = {"user", "user.profilePicture", "user.cv", "assignment"})
     List<JobApplication> findAllByJobId(UUID jobId);
 
     @EntityGraph(attributePaths = {"job", "job.category", "job.address", "job.company", "assignment"})

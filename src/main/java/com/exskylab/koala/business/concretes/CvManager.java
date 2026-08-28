@@ -10,7 +10,13 @@ import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.helpers.MediaUrlResolver;
 import com.exskylab.koala.core.utilities.storage.StorageService;
 import com.exskylab.koala.dataAccess.MediaDao;
+import com.exskylab.koala.business.abstracts.JobApplicationService;
+import com.exskylab.koala.core.constants.StorageMessages;
+import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.entities.File;
+import com.exskylab.koala.entities.Media;
+import com.exskylab.koala.entities.Role;
+import com.exskylab.koala.entities.User;
 import com.exskylab.koala.entities.User;
 import com.exskylab.koala.core.helpers.UploadValidator;
 import com.exskylab.koala.business.abstracts.UserService;
@@ -32,16 +38,40 @@ public class CvManager implements CvService {
     private final SecurityService securityService;
     private final UploadValidator uploadValidator;
     private final MediaUrlResolver mediaUrlResolver;
+    private final JobApplicationService jobApplicationService;
 
     public CvManager(MediaDao mediaDao, UserService userService, StorageService storageService,
                      SecurityService securityService, MediaUrlResolver mediaUrlResolver,
-                     UploadValidator uploadValidator) {
+                     UploadValidator uploadValidator, JobApplicationService jobApplicationService) {
         this.mediaDao = mediaDao;
         this.userService = userService;
         this.storageService = storageService;
         this.securityService = securityService;
         this.mediaUrlResolver = mediaUrlResolver;
         this.uploadValidator = uploadValidator;
+        this.jobApplicationService = jobApplicationService;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public void assertCanDownload(String storageKey) {
+        Media media = mediaDao.findByFileUrl(storageKey)
+                .orElseThrow(() -> new ResourceNotFoundException(StorageMessages.FILE_NOT_FOUND));
+
+        User user = securityService.getAuthenticatedUser();
+        UUID ownerId = media.getCreatedBy() == null ? null : media.getCreatedBy().getId();
+
+        if (user.getId().equals(ownerId) || user.getAuthorities().contains(Role.ROLE_ADMIN)) {
+            return;
+        }
+
+        if (ownerId != null && jobApplicationService.hasApplicationForEmployer(user.getId(), ownerId)) {
+            log.info("Employer {} downloaded the cv of applicant {}", user.getId(), ownerId);
+            return;
+        }
+
+        log.warn("User {} tried to download private object {} owned by {}", user.getId(), storageKey, ownerId);
+        throw new ResourceNotFoundException(StorageMessages.FILE_NOT_FOUND);
     }
 
     @Override

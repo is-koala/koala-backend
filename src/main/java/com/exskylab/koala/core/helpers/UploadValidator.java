@@ -7,6 +7,12 @@ import com.exskylab.koala.core.exceptions.ValidationException;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
+import java.io.IOException;
+import java.util.Iterator;
+
 import java.util.Locale;
 import java.util.Set;
 
@@ -33,6 +39,39 @@ public class UploadValidator {
         String extension = extensionOf(file.getOriginalFilename());
 
         if (extension == null || !allowed.contains(extension)) {
+            throw new ValidationException(StorageMessages.UNSUPPORTED_TYPE);
+        }
+
+        if (folderType == FolderType.IMAGE) {
+            rejectOversizedCanvas(file);
+        }
+    }
+
+    private void rejectOversizedCanvas(MultipartFile file) {
+        long maximumPixels = (long) uploadProperties.getMaxImageMegapixels() * 1_000_000L;
+
+        try (ImageInputStream stream = ImageIO.createImageInputStream(file.getInputStream())) {
+            if (stream == null) {
+                throw new ValidationException(StorageMessages.UNSUPPORTED_TYPE);
+            }
+
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(stream);
+            if (!readers.hasNext()) {
+                throw new ValidationException(StorageMessages.UNSUPPORTED_TYPE);
+            }
+
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(stream);
+                long pixels = (long) reader.getWidth(0) * reader.getHeight(0);
+
+                if (pixels > maximumPixels) {
+                    throw new ValidationException(StorageMessages.IMAGE_TOO_LARGE);
+                }
+            } finally {
+                reader.dispose();
+            }
+        } catch (IOException e) {
             throw new ValidationException(StorageMessages.UNSUPPORTED_TYPE);
         }
     }

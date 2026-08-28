@@ -173,6 +173,7 @@ upload:
   max-file-size-mb: ${UPLOAD_MAX_FILE_SIZE_MB:10}
   max-company-images: ${UPLOAD_MAX_COMPANY_IMAGES:10}
   max-job-images: ${UPLOAD_MAX_JOB_IMAGES:10}
+  max-image-megapixels: ${UPLOAD_MAX_IMAGE_MEGAPIXELS:50}
 
 company-follow:
   enabled: ${COMPANY_FOLLOW_ENABLED:true}

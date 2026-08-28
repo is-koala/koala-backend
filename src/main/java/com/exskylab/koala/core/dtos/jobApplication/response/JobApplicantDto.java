@@ -26,4 +26,6 @@ public class JobApplicantDto {
 
     private SafeUserDto applicant;
 
+    private String cvUrl;
+
 }

@@ -12,4 +12,6 @@ public interface CvService {
     void deleteCv();
 
     String resolveCvUrl(UUID userId);
+
+    void assertCanDownload(String storageKey);
 }

@@ -201,6 +201,17 @@ public class JobApplicationManager implements JobApplicationService {
 
     @Override
     @Transactional(readOnly = true)
+    public boolean hasApplicationForEmployer(UUID employerId, UUID workerId) {
+        if (jobApplicationDao.existsByUserIdAndJobCreatorId(workerId, employerId)) {
+            return true;
+        }
+
+        return jobApplicationDao.findCompanyIdsAppliedToBy(workerId).stream()
+                .anyMatch(companyId -> companyContactService.isUserAContactOfCompany(companyId, employerId));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public PageDto<MyApplicationDto> getMyApplications(ApplicationStatus status, Pageable requested) {
         pageableSanitizer.rejectUnknownSort(requested, MY_APPLICATIONS_SORTABLE);
         Pageable pageable = pageableSanitizer.sanitize(requested, MY_APPLICATIONS_SORTABLE,
