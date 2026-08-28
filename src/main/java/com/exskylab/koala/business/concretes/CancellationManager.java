@@ -14,6 +14,7 @@ import com.exskylab.koala.dataAccess.CancellationDao;
 import com.exskylab.koala.entities.*;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.UserService;
+import com.exskylab.koala.business.abstracts.ActivityNotificationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,11 +39,13 @@ public class CancellationManager implements CancellationService {
     private final AssignmentParticipants participants;
     private final CancellationPolicy policy;
     private final PayoutService payoutService;
+    private final ActivityNotificationService activityNotificationService;
 
     public CancellationManager(CancellationDao cancellationDao, JobAssignmentService jobAssignmentService,
                                UserService userService, SecurityService securityService,
                                AssignmentParticipants participants, CancellationPolicy policy,
-                               PayoutService payoutService) {
+                               PayoutService payoutService,
+                               ActivityNotificationService activityNotificationService) {
         this.cancellationDao = cancellationDao;
         this.jobAssignmentService = jobAssignmentService;
         this.userService = userService;
@@ -50,6 +53,7 @@ public class CancellationManager implements CancellationService {
         this.participants = participants;
         this.policy = policy;
         this.payoutService = payoutService;
+        this.activityNotificationService = activityNotificationService;
     }
 
     @Override
@@ -97,6 +101,8 @@ public class CancellationManager implements CancellationService {
         log.info("Assignment {} cancelled by {} ({}), notice {} min, fee {}, refund {}",
                 jobAssignmentId, actorId, party, notice.toMinutes(),
                 outcome.feeAmount(), outcome.refundAmount());
+
+        activityNotificationService.assignmentCancelled(saved);
         return saved;
     }
 

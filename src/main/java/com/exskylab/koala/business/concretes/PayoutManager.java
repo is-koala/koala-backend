@@ -16,6 +16,7 @@ import com.exskylab.koala.dataAccess.RefundDao;
 import com.exskylab.koala.entities.*;
 import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.business.abstracts.PaymentService;
+import com.exskylab.koala.business.abstracts.ActivityNotificationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,11 +39,13 @@ public class PayoutManager implements PayoutService {
     private final DisputeDao disputeDao;
     private final PaymentStateMachine stateMachine;
     private final SettlementService settlementService;
+    private final ActivityNotificationService activityNotificationService;
 
     public PayoutManager(PayoutDao payoutDao, RefundDao refundDao, PaymentService paymentService,
                          JobAssignmentDao jobAssignmentDao, BankAccountService bankAccountService,
                          DisputeDao disputeDao, PaymentStateMachine stateMachine,
-                         SettlementService settlementService) {
+                         SettlementService settlementService,
+                         ActivityNotificationService activityNotificationService) {
         this.payoutDao = payoutDao;
         this.refundDao = refundDao;
         this.paymentService = paymentService;
@@ -51,6 +54,7 @@ public class PayoutManager implements PayoutService {
         this.disputeDao = disputeDao;
         this.stateMachine = stateMachine;
         this.settlementService = settlementService;
+        this.activityNotificationService = activityNotificationService;
     }
 
     @Override
@@ -89,6 +93,7 @@ public class PayoutManager implements PayoutService {
 
         Payout saved = payoutDao.save(payout);
         log.info("Payout {} created for assignment {} amount {}", saved.getId(), jobAssignmentId, saved.getAmount());
+        activityNotificationService.payoutReleased(assignment);
         return saved;
     }
 

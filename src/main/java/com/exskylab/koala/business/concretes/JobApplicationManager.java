@@ -44,12 +44,14 @@ public class JobApplicationManager implements JobApplicationService {
     private final JobApplicationMapper jobApplicationMapper;
     private final PageableSanitizer pageableSanitizer;
     private final GalleryService galleryService;
+    private final ActivityNotificationService activityNotificationService;
 
 
     public JobApplicationManager(JobApplicationDao jobApplicationDao, JobService jobService,
                                  SecurityService securityService, CompanyContactService companyContactService,
                                  JobAssignmentService jobAssignmentService, JobApplicationMapper jobApplicationMapper,
-                                 PageableSanitizer pageableSanitizer, GalleryService galleryService) {
+                                 PageableSanitizer pageableSanitizer, GalleryService galleryService,
+                                 ActivityNotificationService activityNotificationService) {
         this.jobApplicationDao = jobApplicationDao;
         this.jobService = jobService;
         this.securityService = securityService;
@@ -58,6 +60,7 @@ public class JobApplicationManager implements JobApplicationService {
         this.jobApplicationMapper = jobApplicationMapper;
         this.pageableSanitizer = pageableSanitizer;
         this.galleryService = galleryService;
+        this.activityNotificationService = activityNotificationService;
     }
 
     @Override
@@ -162,6 +165,8 @@ public class JobApplicationManager implements JobApplicationService {
             assignmentToReturn = jobAssignmentService.save(jobAssignment);
             log.info("Job application with id: {} accepted", applicationId);
 
+            activityNotificationService.assignmentOffered(assignmentToReturn);
+
         }else if (status.equals(ApplicationStatus.REJECTED)){
             jobApplication.setRejectionReason(jobApplicationsApplicationIdPatchRequestDto.getRejectionReason());
             log.info("Job application with id: {} rejected", applicationId);
@@ -175,6 +180,8 @@ public class JobApplicationManager implements JobApplicationService {
 
         jobApplicationDao.save(jobApplication);
         log.info("Saved job application with id: {}", jobApplication.getId());
+
+        activityNotificationService.applicationAnswered(jobApplication);
 
         return jobApplicationMapper.toJobApplicationsApplicationIdPatchResponseDto(jobApplication);
 

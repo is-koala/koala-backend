@@ -49,7 +49,7 @@ class UserPatchRulesTest {
                 securityService, mock(AddressService.class), mock(KimlikPaylasimSistemiService.class),
                 mock(AddressMapper.class), mock(UserProducerService.class), bankAccountService,
                 phoneVerificationService, mock(BadgeService.class), mock(BadgeMapper.class),
-                new com.exskylab.koala.core.helpers.PageableSanitizer());
+                new com.exskylab.koala.core.helpers.PageableSanitizer(), mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class));
 
         when(securityService.getAuthenticatedUser()).thenReturn(me);
         when(userDao.save(any())).thenAnswer(i -> i.getArgument(0));

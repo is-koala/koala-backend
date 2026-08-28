@@ -40,6 +40,7 @@ import java.time.LocalDateTime;
 import com.exskylab.koala.business.abstracts.GalleryService;
 import com.exskylab.koala.business.abstracts.SettingsService;
 import com.exskylab.koala.core.constants.SettingKeys;
+import com.exskylab.koala.business.abstracts.ActivityNotificationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -76,6 +77,7 @@ public class JobAssignmentManager implements JobAssignmentService {
     private final AutoCompletionProperties autoCompletionProperties;
     private final SettingsService settingsService;
     private final GalleryService galleryService;
+    private final ActivityNotificationService activityNotificationService;
 
 
     public JobAssignmentManager(JobAssignmentDao jobAssignmentDao, SecurityService securityService, JobAssignmentMapper jobAssignmentMapper, IyzicoPaymentService iyzicoPaymentService, CompanyContactService companyContactService, UserService userService,
@@ -85,7 +87,8 @@ public class JobAssignmentManager implements JobAssignmentService {
                                AssignmentParticipants participants, BadgeService badgeService,
                                PayoutService payoutService,
                                AutoCompletionProperties autoCompletionProperties,
-                               SettingsService settingsService, GalleryService galleryService) {
+                               SettingsService settingsService, GalleryService galleryService,
+                               ActivityNotificationService activityNotificationService) {
         this.jobAssignmentDao = jobAssignmentDao;
         this.securityService = securityService;
         this.jobAssignmentMapper = jobAssignmentMapper;
@@ -104,6 +107,7 @@ public class JobAssignmentManager implements JobAssignmentService {
         this.autoCompletionProperties = autoCompletionProperties;
         this.settingsService = settingsService;
         this.galleryService = galleryService;
+        this.activityNotificationService = activityNotificationService;
     }
 
 
@@ -147,6 +151,8 @@ public class JobAssignmentManager implements JobAssignmentService {
         assignment = jobAssignmentDao.save(assignment);
 
         log.info("Job assignment with id {} has been saved", assignmentId);
+
+        activityNotificationService.assignmentAnswered(assignment);
 
         return jobAssignmentMapper.toJobAssignmentsAssignmentIdStatusPatchResponseDto(assignment);
 
@@ -371,6 +377,7 @@ public class JobAssignmentManager implements JobAssignmentService {
 
         log.info("Assignment {} marked completed by employer {}", assignmentId,
                 securityService.getAuthenticatedUserId());
+        activityNotificationService.assignmentCompleted(assignment);
         return saved;
     }
 

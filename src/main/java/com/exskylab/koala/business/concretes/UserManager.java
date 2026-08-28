@@ -65,6 +65,7 @@ public class UserManager implements UserService {
     private final PhoneVerificationService phoneVerificationService;
     private final BadgeService badgeService;
     private final BadgeMapper badgeMapper;
+    private final ActivityNotificationService activityNotificationService;
 
     public UserManager(UserDao userDao,
                        EmailVerificationService emailVerificationService,
@@ -79,7 +80,8 @@ public class UserManager implements UserService {
                        BankAccountService bankAccountService,
                        PhoneVerificationService phoneVerificationService,
                        BadgeService badgeService, BadgeMapper badgeMapper,
-                                PageableSanitizer pageableSanitizer) {
+                                PageableSanitizer pageableSanitizer,
+                       ActivityNotificationService activityNotificationService) {
         this.userDao = userDao;
         this.emailVerificationService = emailVerificationService;
         this.userMapper = userMapper;
@@ -96,7 +98,8 @@ public class UserManager implements UserService {
         this.badgeService = badgeService;
         this.badgeMapper = badgeMapper;
             this.pageableSanitizer = pageableSanitizer;
-        }
+                this.activityNotificationService = activityNotificationService;
+    }
 
     @Override
     public User getByEmail(String email) {
@@ -358,6 +361,7 @@ public class UserManager implements UserService {
         currentUser.setTcIdentityNumber(usersMeIdentityVerificationRequestDto.getTcIdentityNumber());
         var savedUser = userDao.save(currentUser);
         badgeService.evaluate(savedUser.getId());
+        activityNotificationService.identityVerified(savedUser);
         userProducerService.publishUserProfileUpdated(savedUser);
         log.info("Identity verification successful for user with ID: {}", currentUser.getId());
 

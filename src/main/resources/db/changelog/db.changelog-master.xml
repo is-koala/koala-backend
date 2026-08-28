@@ -40,4 +40,5 @@
     <include file="db/changelog/2026/08/28-04-worker-and-employer-tools.xml"/>
     <include file="db/changelog/2026/08/28-05-media-gallery.xml"/>
     <include file="db/changelog/2026/08/28-06-company-follow.xml"/>
+    <include file="db/changelog/2026/08/28-07-company-contact-roles.xml"/>
 </databaseChangeLog>

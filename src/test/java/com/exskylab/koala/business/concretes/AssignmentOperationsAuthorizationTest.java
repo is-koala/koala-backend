@@ -69,9 +69,9 @@ class AssignmentOperationsAuthorizationTest {
         CancellationPolicy policy = new CancellationPolicy(new CancellationProperties(), passthroughSettings());
 
         cancellationManager = new CancellationManager(cancellationDao, jobAssignmentService, userService,
-                securityService, participants, policy, payoutService);
+                securityService, participants, policy, payoutService, mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class));
         disputeManager = new DisputeManager(disputeDaoStub, jobAssignmentService, userService,
-                securityService, participants, payoutService,
+                securityService, participants, payoutService, mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class),
                 new com.exskylab.koala.core.helpers.PageableSanitizer());
         timesheetManager = new TimesheetManager(workSessionDao, jobAssignmentService, securityService, participants);
         jobAssignmentManager = new JobAssignmentManager(jobAssignmentDao, securityService,
@@ -85,7 +85,7 @@ class AssignmentOperationsAuthorizationTest {
                 mock(com.exskylab.koala.business.abstracts.BankAccountService.class),
                 new com.exskylab.koala.core.helpers.PageableSanitizer(), participants, badgeService,
                 payoutService, new com.exskylab.koala.core.properties.AutoCompletionProperties(), passthroughSettings(),
-                mock(com.exskylab.koala.business.abstracts.GalleryService.class));
+                mock(com.exskylab.koala.business.abstracts.GalleryService.class), mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class));
 
         when(cancellationDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(disputeDaoStub.save(any())).thenAnswer(i -> i.getArgument(0));

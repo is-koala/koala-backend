@@ -52,7 +52,7 @@ class PayoutReleaseTest {
         settlementService = mock(SettlementService.class);
 
         payoutManager = new PayoutManager(payoutDao, refundDao, paymentService, jobAssignmentDao,
-                bankAccountService, disputeDao, new PaymentStateMachine(), settlementService);
+                bankAccountService, disputeDao, new PaymentStateMachine(), settlementService, mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class));
 
         when(payoutDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(refundDao.save(any())).thenAnswer(i -> i.getArgument(0));

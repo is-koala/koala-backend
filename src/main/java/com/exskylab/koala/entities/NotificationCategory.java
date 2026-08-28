@@ -5,6 +5,7 @@ public enum NotificationCategory {
     APPLICATION_UPDATES,
     IDENTITY_VERIFICATION,
     MARKETINGS,
+    COMPANY_UPDATES,
     JOB_ALERTS,
     NEWSLETTER
 }

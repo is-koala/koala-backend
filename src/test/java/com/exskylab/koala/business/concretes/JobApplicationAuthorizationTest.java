@@ -55,7 +55,8 @@ class JobApplicationAuthorizationTest {
                 jobAssignmentService,
                 mock(JobApplicationMapper.class),
                 new PageableSanitizer(),
-                mock(com.exskylab.koala.business.abstracts.GalleryService.class));
+                mock(com.exskylab.koala.business.abstracts.GalleryService.class),
+                mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class));
 
         when(jobApplicationDao.save(any())).thenAnswer(i -> i.getArgument(0));
     }

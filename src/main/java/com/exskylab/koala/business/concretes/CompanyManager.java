@@ -237,7 +237,7 @@ public class CompanyManager implements CompanyService {
                 "companyId", savedCompany.getId().toString(),
                 "companyEmail", savedCompany.getEmail()
         ));
-        sendEmailDto.setCategory(NotificationCategory.ACCOUNT_SECURITY);
+        sendEmailDto.setCategory(NotificationCategory.COMPANY_UPDATES);
         notificationService.sendEmail(sendEmailDto, DispatchPriority.NORMAL, true);
         log.info("Company created email queued for {}", LogMasks.email(sendEmailDto.getDestinationEmail()));
 
@@ -254,7 +254,7 @@ public class CompanyManager implements CompanyService {
                 "contactRole", contact.getRole().name(),
                 "contactEmail", contact.getUser().getEmail()
         ));
-        sendEmailDtoToContact.setCategory(NotificationCategory.ACCOUNT_SECURITY);
+        sendEmailDtoToContact.setCategory(NotificationCategory.COMPANY_UPDATES);
         notificationService.sendEmail(sendEmailDtoToContact, DispatchPriority.NORMAL, true);
         log.info("Company created email queued for contact {}", LogMasks.email(sendEmailDtoToContact.getDestinationEmail()));
 

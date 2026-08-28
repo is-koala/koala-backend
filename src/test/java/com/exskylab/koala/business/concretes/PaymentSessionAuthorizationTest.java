@@ -76,7 +76,7 @@ class PaymentSessionAuthorizationTest {
                 mock(BadgeService.class),
                 mock(com.exskylab.koala.business.abstracts.PayoutService.class),
                 new com.exskylab.koala.core.properties.AutoCompletionProperties(), passthroughSettings(),
-                mock(com.exskylab.koala.business.abstracts.GalleryService.class));
+                mock(com.exskylab.koala.business.abstracts.GalleryService.class), mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class));
     }
 
     @Test

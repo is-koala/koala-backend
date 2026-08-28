@@ -357,7 +357,7 @@ public class JobManager implements JobService {
                 push.setRecipient(application.getUser());
                 push.setTitle(job.getTitle());
                 push.setBody(messageResolver.resolve(JobMessages.JOB_CANCELLED_NOTICE));
-                push.setCategory(NotificationCategory.JOB_ALERTS);
+                push.setCategory(NotificationCategory.APPLICATION_UPDATES);
 
                 notificationService.sendPushToUser(push, DispatchPriority.NORMAL, true);
             } catch (Exception exception) {

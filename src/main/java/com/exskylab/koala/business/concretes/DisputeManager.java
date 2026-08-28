@@ -18,6 +18,7 @@ import com.exskylab.koala.business.abstracts.UserService;
 import org.springframework.data.domain.Sort;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import java.util.Set;
+import com.exskylab.koala.business.abstracts.ActivityNotificationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,10 +44,11 @@ public class DisputeManager implements DisputeService {
     private final SecurityService securityService;
     private final AssignmentParticipants participants;
     private final PayoutService payoutService;
+    private final ActivityNotificationService activityNotificationService;
 
     public DisputeManager(DisputeDao disputeDao, JobAssignmentService jobAssignmentService, UserService userService,
                           SecurityService securityService, AssignmentParticipants participants,
-                          PayoutService payoutService,
+                          PayoutService payoutService, ActivityNotificationService activityNotificationService,
                                 PageableSanitizer pageableSanitizer) {
         this.disputeDao = disputeDao;
         this.jobAssignmentService = jobAssignmentService;
@@ -54,6 +56,7 @@ public class DisputeManager implements DisputeService {
         this.securityService = securityService;
         this.participants = participants;
         this.payoutService = payoutService;
+        this.activityNotificationService = activityNotificationService;
             this.pageableSanitizer = pageableSanitizer;
     }
 
@@ -83,6 +86,8 @@ public class DisputeManager implements DisputeService {
 
         Dispute saved = disputeDao.save(dispute);
         log.info("Dispute {} opened on assignment {} by user {}", saved.getId(), jobAssignmentId, actorId);
+
+        activityNotificationService.disputeOpened(saved);
         return saved;
     }
 
@@ -112,6 +117,8 @@ public class DisputeManager implements DisputeService {
         }
 
         log.info("Dispute {} resolved as {} on assignment {}", disputeId, resolution, assignmentId);
+
+        activityNotificationService.disputeResolved(saved);
         return saved;
     }
 

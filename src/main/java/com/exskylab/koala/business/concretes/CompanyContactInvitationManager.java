@@ -57,7 +57,7 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
 
         SendEmailDto sendEmailDto = new SendEmailDto();
         sendEmailDto.setRecipient(userToInvite);
-        sendEmailDto.setCategory(NotificationCategory.ACCOUNT_SECURITY);
+        sendEmailDto.setCategory(NotificationCategory.COMPANY_UPDATES);
         sendEmailDto.setDestinationEmail(userToInvite.getEmail());
 
         sendEmailDto.setTemplateName("company-invitation-template");
@@ -114,7 +114,7 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
 
         SendEmailDto invitedUsersEmailNotification = new SendEmailDto();
         invitedUsersEmailNotification.setRecipient(invitation.getInvitedUser());
-        invitedUsersEmailNotification.setCategory(NotificationCategory.ACCOUNT_SECURITY);
+        invitedUsersEmailNotification.setCategory(NotificationCategory.COMPANY_UPDATES);
         invitedUsersEmailNotification.setDestinationEmail(invitation.getInvitedUser().getEmail());
         invitedUsersEmailNotification.setTemplateName(accepted ? "company-invitation-accepted-template" : "company-invitation-rejected-template");
         invitedUsersEmailNotification.setTemplateParameters(Map.of(
@@ -128,7 +128,7 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
 
         SendEmailDto invitedByEmailNotification = new SendEmailDto();
         invitedByEmailNotification.setRecipient(invitation.getInvitedBy());
-        invitedByEmailNotification.setCategory(NotificationCategory.ACCOUNT_SECURITY);
+        invitedByEmailNotification.setCategory(NotificationCategory.COMPANY_UPDATES);
         invitedByEmailNotification.setDestinationEmail(invitation.getInvitedBy().getEmail());
         invitedByEmailNotification.setTemplateName(accepted ? "company-invitation-accepted-by-inviter-template" : "company-invitation-rejected-by-inviter-template");
         invitedByEmailNotification.setTemplateParameters(Map.of(
