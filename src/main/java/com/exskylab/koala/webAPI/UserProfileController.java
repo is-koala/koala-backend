@@ -19,6 +19,12 @@ import com.exskylab.koala.core.dtos.education.response.EducationDto;
 import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
 import com.exskylab.koala.core.mappers.EducationMapper;
 import com.exskylab.koala.business.abstracts.CompanyService;
+import com.exskylab.koala.business.abstracts.DeviceService;
+import com.exskylab.koala.core.constants.DeviceMessages;
+import com.exskylab.koala.core.dtos.device.request.SavePushTokenDto;
+import com.exskylab.koala.core.helpers.ClientContext;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import com.exskylab.koala.core.constants.CompanyMessages;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.companyFollow.response.FollowedCompanyDto;
@@ -45,6 +51,7 @@ import java.util.UUID;
 public class UserProfileController {
 
     private final CompanyService companyService;
+    private final DeviceService deviceService;
     private final SavedJobService savedJobService;
     private final CvService cvService;
     private final EducationService educationService;
@@ -52,17 +59,50 @@ public class UserProfileController {
     private final EducationMapper educationMapper;
     private final MediaUrlResolver mediaUrlResolver;
 
-    public UserProfileController(CompanyService companyService,
+    public UserProfileController(CompanyService companyService, DeviceService deviceService,
                                  SavedJobService savedJobService, CvService cvService,
                                  EducationService educationService, JobMapper jobMapper,
                                  EducationMapper educationMapper, MediaUrlResolver mediaUrlResolver) {
         this.companyService = companyService;
+        this.deviceService = deviceService;
         this.savedJobService = savedJobService;
         this.cvService = cvService;
         this.educationService = educationService;
         this.jobMapper = jobMapper;
         this.educationMapper = educationMapper;
         this.mediaUrlResolver = mediaUrlResolver;
+    }
+
+    @Operation(summary = "Push bildirim token'ını kaydet",
+            description = "İstemci FCM token'ını buraya gönderir. Hedef gövdeden alınmaz: token daima **oturum sahibinin** `X-Device-Id` başlığıyla eşleşen cihazına yazılır, yani kimse başkasının cihazına token bağlayamaz. Aynı token başka bir cihaz kaydında duruyorsa oradan düşürülür — aynı telefonda hesap değiştirildiğinde önceki kullanıcının bildirimleri yeni kullanıcıya gitmesin diye. Token değiştiğinde (uygulama yeniden kurulumu, yedekten geri yükleme) istemci bu ucu tekrar çağırmalıdır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Token kaydedildi"),
+            @ApiResponse(responseCode = "400", description = "Token boş ya da çok uzun",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "Bu oturuma ait cihaz kaydı bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @PutMapping("/devices/push-token")
+    public ResponseEntity<Result> savePushToken(@RequestBody @Valid SavePushTokenDto request,
+                                                HttpServletRequest httpRequest) {
+
+        ClientContext client = ClientContext.from(httpRequest);
+        deviceService.savePushToken(client.userAgent(), client.deviceId(), request.getPushToken());
+
+        return ResponseEntity.ok(new SuccessResult(DeviceMessages.PUSH_TOKEN_SAVED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "Push bildirim token'ını sil",
+            description = "Çıkış yaparken çağrılır; cihaz kaydı durur, yalnızca token düşürülür. Cihaz bulunamazsa sessizce geçer.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Token silindi")
+    })
+    @DeleteMapping("/devices/push-token")
+    public ResponseEntity<Result> clearPushToken(HttpServletRequest httpRequest) {
+        ClientContext client = ClientContext.from(httpRequest);
+        deviceService.clearPushToken(client.userAgent(), client.deviceId());
+
+        return ResponseEntity.ok(new SuccessResult(DeviceMessages.PUSH_TOKEN_CLEARED, HttpStatus.OK));
     }
 
     @Operation(summary = "Takip ettiğim şirketler",

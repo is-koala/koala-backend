@@ -1,5 +1,9 @@
 package com.exskylab.koala.core.constants;
 
 public class DeviceMessages {
-    public static final String DEVICE_NOT_FOUND_BY_USER_AND_USER_AGENT = "{device.not.found.by.user.and.user.agent}";
+    public static final String PUSH_TOKEN_NOT_BLANK = "{device.push.token.not.blank}";
+    public static final String PUSH_TOKEN_TOO_LONG = "{device.push.token.too.long}";
+    public static final String PUSH_TOKEN_SAVED = "{device.push.token.saved}";
+    public static final String PUSH_TOKEN_CLEARED = "{device.push.token.cleared}";
+    public static final String DEVICE_NOT_FOUND = "{device.not.found}";
 }

@@ -14,4 +14,8 @@ public interface DeviceService {
     Device findOrCreateDevice(User user, String ipAddress, String userAgent, String clientDeviceId);
 
     Optional<Device> findDevice(User user, String userAgent, String clientDeviceId);
+
+    void savePushToken(String userAgent, String clientDeviceId, String pushToken);
+
+    void clearPushToken(String userAgent, String clientDeviceId);
 }

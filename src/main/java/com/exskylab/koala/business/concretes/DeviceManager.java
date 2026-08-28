@@ -10,6 +10,10 @@ import com.exskylab.koala.entities.User;
 import org.springframework.transaction.annotation.Transactional;
 import nl.basjes.parse.useragent.UserAgent;
 import nl.basjes.parse.useragent.UserAgentAnalyzer;
+import com.exskylab.koala.business.abstracts.SecurityService;
+import com.exskylab.koala.core.constants.DeviceMessages;
+import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -18,12 +22,14 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Service
+@Slf4j
 public class DeviceManager implements DeviceService {
 
     private final DeviceDao deviceDao;
     private final UserAgentAnalyzer userAgentAnalyzer;
+    private final SecurityService securityService;
 
-    public DeviceManager(DeviceDao deviceDao) {
+    public DeviceManager(DeviceDao deviceDao, SecurityService securityService) {
         this.deviceDao = deviceDao;
 
         this.userAgentAnalyzer = UserAgentAnalyzer
@@ -33,6 +39,7 @@ public class DeviceManager implements DeviceService {
                 .withField(UserAgent.OPERATING_SYSTEM_NAME_VERSION)
                 .withField(UserAgent.AGENT_NAME_VERSION)
                 .build();
+            this.securityService = securityService;
     }
 
     @Override
@@ -71,6 +78,47 @@ public class DeviceManager implements DeviceService {
         }
 
         return deviceDao.findByUserAndNameAndType(user, describe(userAgent), typeOf(userAgent));
+    }
+
+    @Override
+    @Transactional
+    public void savePushToken(String userAgent, String clientDeviceId, String pushToken) {
+        User user = securityService.getAuthenticatedUser();
+
+        Device device = findDevice(user, userAgent, clientDeviceId)
+                .orElseThrow(() -> new ResourceNotFoundException(DeviceMessages.DEVICE_NOT_FOUND));
+
+        detachTokenFromOtherDevices(pushToken, device.getId());
+
+        device.setPushToken(pushToken);
+        deviceDao.save(device);
+
+        log.info("Push token registered for device {} of user {}", device.getId(), user.getId());
+    }
+
+    @Override
+    @Transactional
+    public void clearPushToken(String userAgent, String clientDeviceId) {
+        User user = securityService.getAuthenticatedUser();
+
+        findDevice(user, userAgent, clientDeviceId).ifPresent(device -> {
+            device.setPushToken(null);
+            deviceDao.save(device);
+            log.info("Push token cleared for device {} of user {}", device.getId(), user.getId());
+        });
+    }
+
+    private void detachTokenFromOtherDevices(String pushToken, UUID keptDeviceId) {
+        for (Device other : deviceDao.findAllByPushToken(pushToken)) {
+            if (other.getId().equals(keptDeviceId)) {
+                continue;
+            }
+
+            other.setPushToken(null);
+            deviceDao.save(other);
+            log.info("Push token moved away from device {}, it now belongs to device {}",
+                    other.getId(), keptDeviceId);
+        }
     }
 
     private Device newDevice(User user, String userAgent, String clientDeviceId) {

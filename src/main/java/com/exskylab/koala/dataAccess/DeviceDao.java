@@ -15,6 +15,8 @@ public interface DeviceDao extends JpaRepository<Device, UUID> {
 
     List<Device> findAllByUser_IdAndPushTokenIsNotNull(UUID userId);
 
+    List<Device> findAllByPushToken(String pushToken);
+
     Optional<Device> findByUserAndNameAndType(User user, String name, DeviceType type);
 
     Optional<Device> findByUser_IdAndClientDeviceId(UUID userId, String clientDeviceId);

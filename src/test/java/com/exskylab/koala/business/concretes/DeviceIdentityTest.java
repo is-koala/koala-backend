@@ -27,7 +27,7 @@ class DeviceIdentityTest {
     @BeforeEach
     void setUp() {
         deviceDao = mock(DeviceDao.class);
-        deviceManager = new DeviceManager(deviceDao);
+        deviceManager = new DeviceManager(deviceDao, mock(com.exskylab.koala.business.abstracts.SecurityService.class));
         user = new User();
         user.setId(UUID.randomUUID());
 
