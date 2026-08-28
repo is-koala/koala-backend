@@ -38,7 +38,8 @@ class ActivityNotificationRulesTest {
         MessageResolver messageResolver = mock(MessageResolver.class);
         when(messageResolver.resolve(any())).thenAnswer(call -> "metin:" + call.getArgument(0));
 
-        manager = new ActivityNotificationManager(notificationService, messageResolver);
+        manager = new ActivityNotificationManager(notificationService, messageResolver,
+                new com.exskylab.koala.core.properties.AppProperties("http://localhost:8080", "http://localhost:3000"));
 
         job = new Job();
         job.setId(UUID.randomUUID());
@@ -49,6 +50,8 @@ class ActivityNotificationRulesTest {
     private static User user() {
         User user = new User();
         user.setId(UUID.randomUUID());
+        user.setFirstName("Ayşe");
+        user.setEmail("ayse@koala.test");
         return user;
     }
 
@@ -126,6 +129,35 @@ class ActivityNotificationRulesTest {
         manager.identityVerified(worker);
 
         assertEquals(NotificationCategory.IDENTITY_VERIFICATION, captured().getCategory());
+    }
+
+    @Test
+    void everyActivityGoesOutOnBothChannels() {
+        manager.assignmentCompleted(assignment());
+
+        verify(notificationService).sendPushToUser(any(), any(), anyBoolean());
+        verify(notificationService).sendEmail(any(), any(), anyBoolean());
+    }
+
+    @Test
+    void aRecipientWithoutAnEmailStillGetsThePush() {
+        JobAssignment assignment = assignment();
+        assignment.getWorker().setEmail(null);
+
+        manager.assignmentCompleted(assignment);
+
+        verify(notificationService).sendPushToUser(any(), any(), anyBoolean());
+        verify(notificationService, never()).sendEmail(any(), any(), anyBoolean());
+    }
+
+    @Test
+    void aFailingPushDoesNotStopTheEmail() {
+        doThrow(new IllegalStateException("push down"))
+                .when(notificationService).sendPushToUser(any(), any(), anyBoolean());
+
+        manager.assignmentCompleted(assignment());
+
+        verify(notificationService).sendEmail(any(), any(), anyBoolean());
     }
 
     @Test

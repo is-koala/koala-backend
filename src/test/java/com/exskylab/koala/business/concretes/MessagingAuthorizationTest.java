@@ -53,7 +53,9 @@ class MessagingAuthorizationTest {
         manager = new MessagingManager(conversationDao, messageDao, userBlockDao, jobService,
                 jobApplicationService, userService, securityService, mock(CompanyContactService.class),
                 new PageableSanitizer(), realtimePublisher,
-                mock(com.exskylab.koala.core.mappers.MessagingMapper.class));
+                mock(com.exskylab.koala.core.mappers.MessagingMapper.class),
+                new com.exskylab.koala.core.properties.MessagingProperties(),
+                mock(com.exskylab.koala.core.mappers.UserMapper.class));
 
         job = new Job();
         job.setId(UUID.randomUUID());
@@ -82,6 +84,8 @@ class MessagingAuthorizationTest {
         c.setJob(job);
         c.setEmployer(employer);
         c.setWorker(worker);
+        c.addParticipant(employer);
+        c.addParticipant(worker);
         when(conversationDao.findWithParticipantsById(c.getId())).thenReturn(Optional.of(c));
         return c;
     }
@@ -100,7 +104,8 @@ class MessagingAuthorizationTest {
     void anApplicantCanOpenAConversationWithTheEmployer() {
         when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());
         when(jobApplicationService.hasApplied(job.getId(), worker.getId())).thenReturn(true);
-        when(conversationDao.findByJobIdAndWorkerId(job.getId(), worker.getId())).thenReturn(Optional.empty());
+        when(conversationDao.findByJobIdAndWorkerIdAndKind(job.getId(), worker.getId(),
+                com.exskylab.koala.entities.ConversationKind.DIRECT)).thenReturn(Optional.empty());
 
         Conversation opened = manager.openConversation(job.getId(), worker.getId());
 
@@ -113,7 +118,8 @@ class MessagingAuthorizationTest {
         Conversation existing = conversation();
         when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());
         when(jobApplicationService.hasApplied(job.getId(), worker.getId())).thenReturn(true);
-        when(conversationDao.findByJobIdAndWorkerId(job.getId(), worker.getId())).thenReturn(Optional.of(existing));
+        when(conversationDao.findByJobIdAndWorkerIdAndKind(job.getId(), worker.getId(),
+                com.exskylab.koala.entities.ConversationKind.DIRECT)).thenReturn(Optional.of(existing));
 
         assertSame(existing, manager.openConversation(job.getId(), worker.getId()));
         verify(conversationDao, never()).save(any());

@@ -1,6 +1,7 @@
 package com.exskylab.koala.core.constants;
 
 public class MessagingMessages {
+    public static final String WINDOW_CLOSED = "{messaging.window.closed}";
     public static final String CONVERSATION_NOT_FOUND = "{messaging.conversation.not.found}";
     public static final String NOT_A_PARTICIPANT = "{messaging.not.a.participant}";
     public static final String NO_RELATIONSHIP_WITH_JOB = "{messaging.no.relationship.with.job}";

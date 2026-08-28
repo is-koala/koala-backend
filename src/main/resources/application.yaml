@@ -61,6 +61,10 @@ spring:
 server:
   port: ${SERVER_PORT:8080}
   forward-headers-strategy: framework
+  compression:
+    enabled: ${SERVER_COMPRESSION_ENABLED:true}
+    mime-types: application/json,application/javascript,text/javascript,text/css,text/html,text/plain
+    min-response-size: 1KB
 
 management:
   endpoints:
@@ -97,6 +101,11 @@ springdoc:
   swagger-ui:
     enabled: ${SPRINGDOC_ENABLED:true}
     path: /swagger-ui.html
+    doc-expansion: none
+    default-models-expand-depth: -1
+    display-request-duration: true
+    tags-sorter: alpha
+    operations-sorter: alpha
   api-docs:
     enabled: ${SPRINGDOC_ENABLED:true}
     path: /v3/api-docs
@@ -132,6 +141,10 @@ rate-limit:
 
 commission:
   rate: ${COMMISSION_RATE:0.075}
+
+messaging:
+  grace-days-after-job: ${MESSAGING_GRACE_DAYS_AFTER_JOB:7}
+  zone-id: ${MESSAGING_ZONE_ID:Europe/Istanbul}
 
 job-search:
   zone-id: ${JOB_SEARCH_ZONE_ID:Europe/Istanbul}

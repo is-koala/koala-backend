@@ -44,6 +44,8 @@ class StompSubscriptionSecurityTest {
         conversation.setId(UUID.randomUUID());
         conversation.setEmployer(employer);
         conversation.setWorker(participant);
+        conversation.addParticipant(employer);
+        conversation.addParticipant(participant);
 
         when(conversationDao.findById(conversation.getId())).thenReturn(Optional.of(conversation));
     }

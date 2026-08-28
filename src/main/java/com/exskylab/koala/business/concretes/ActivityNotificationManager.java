@@ -3,7 +3,9 @@ package com.exskylab.koala.business.concretes;
 import com.exskylab.koala.business.abstracts.ActivityNotificationService;
 import com.exskylab.koala.business.abstracts.NotificationService;
 import com.exskylab.koala.core.constants.ActivityMessages;
+import com.exskylab.koala.core.dtos.notification.request.SendEmailDto;
 import com.exskylab.koala.core.dtos.notification.request.SendPushToUserDto;
+import com.exskylab.koala.core.properties.AppProperties;
 import com.exskylab.koala.core.helpers.MessageResolver;
 import com.exskylab.koala.entities.ApplicationStatus;
 import com.exskylab.koala.entities.AssignmentStatus;
@@ -17,16 +19,22 @@ import com.exskylab.koala.entities.User;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
+import java.util.Map;
+
 @Service
 @Slf4j
 public class ActivityNotificationManager implements ActivityNotificationService {
 
     private final NotificationService notificationService;
     private final MessageResolver messageResolver;
+    private final AppProperties appProperties;
 
-    public ActivityNotificationManager(NotificationService notificationService, MessageResolver messageResolver) {
+    public ActivityNotificationManager(NotificationService notificationService, MessageResolver messageResolver,
+                                       AppProperties appProperties) {
         this.notificationService = notificationService;
         this.messageResolver = messageResolver;
+        this.appProperties = appProperties;
     }
 
     @Override
@@ -105,29 +113,64 @@ public class ActivityNotificationManager implements ActivityNotificationService 
 
     @Override
     public void identityVerified(User user) {
-        notify(user, messageResolver.resolve(ActivityMessages.IDENTITY_VERIFIED_TITLE),
-                ActivityMessages.IDENTITY_VERIFIED, NotificationCategory.IDENTITY_VERIFICATION);
+        notify(user, null, ActivityMessages.IDENTITY_VERIFIED, NotificationCategory.IDENTITY_VERIFICATION);
     }
 
     private User employerOf(JobAssignment assignment) {
         return assignment.getJob().getCreator();
     }
 
-    private void notify(User recipient, String title, String bodyKey, NotificationCategory category) {
+    private void notify(User recipient, String jobTitle, String bodyKey, NotificationCategory category) {
         if (recipient == null) {
             return;
         }
 
-        try {
-            SendPushToUserDto push = new SendPushToUserDto();
-            push.setRecipient(recipient);
-            push.setTitle(title);
-            push.setBody(messageResolver.resolve(bodyKey));
-            push.setCategory(category);
+        String message = messageResolver.resolve(bodyKey);
 
-            notificationService.sendPushToUser(push, DispatchPriority.NORMAL, true);
+        push(recipient, jobTitle, message, category, bodyKey);
+        email(recipient, jobTitle, message, category, bodyKey);
+    }
+
+    private void push(User recipient, String jobTitle, String message,
+                      NotificationCategory category, String bodyKey) {
+        try {
+            SendPushToUserDto dto = new SendPushToUserDto();
+            dto.setRecipient(recipient);
+            dto.setTitle(jobTitle);
+            dto.setBody(message);
+            dto.setCategory(category);
+
+            notificationService.sendPushToUser(dto, DispatchPriority.NORMAL, true);
         } catch (Exception exception) {
-            log.warn("Activity notification {} could not be delivered to {}: {}",
+            log.warn("Activity push {} could not be delivered to {}: {}",
+                    bodyKey, recipient.getId(), exception.getMessage());
+        }
+    }
+
+    private void email(User recipient, String jobTitle, String message,
+                       NotificationCategory category, String bodyKey) {
+        if (recipient.getEmail() == null || recipient.getEmail().isBlank()) {
+            return;
+        }
+
+        try {
+            SendEmailDto dto = new SendEmailDto();
+            dto.setRecipient(recipient);
+            dto.setDestinationEmail(recipient.getEmail());
+            dto.setCategory(category);
+            dto.setSubject(message);
+            dto.setTemplateName("activity-notice-template");
+
+            Map<String, Object> parameters = new HashMap<>();
+            parameters.put("firstName", recipient.getFirstName());
+            parameters.put("message", message);
+            parameters.put("jobTitle", jobTitle);
+            parameters.put("actionUrl", appProperties.frontendUrl());
+            dto.setTemplateParameters(parameters);
+
+            notificationService.sendEmail(dto, DispatchPriority.NORMAL, true);
+        } catch (Exception exception) {
+            log.warn("Activity email {} could not be delivered to {}: {}",
                     bodyKey, recipient.getId(), exception.getMessage());
         }
     }

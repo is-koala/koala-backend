@@ -85,7 +85,7 @@ class AssignmentOperationsAuthorizationTest {
                 mock(com.exskylab.koala.business.abstracts.BankAccountService.class),
                 new com.exskylab.koala.core.helpers.PageableSanitizer(), participants, badgeService,
                 payoutService, new com.exskylab.koala.core.properties.AutoCompletionProperties(), passthroughSettings(),
-                mock(com.exskylab.koala.business.abstracts.GalleryService.class), mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class));
+                mock(com.exskylab.koala.business.abstracts.GalleryService.class), mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class), mock(org.springframework.context.ApplicationEventPublisher.class));
 
         when(cancellationDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(disputeDaoStub.save(any())).thenAnswer(i -> i.getArgument(0));
@@ -283,6 +283,25 @@ class AssignmentOperationsAuthorizationTest {
         assertNotNull(session.getCheckInAt());
         assertNull(session.getCheckOutAt());
         assertEquals(AssignmentStatus.IN_PROGRESS, a.getStatus());
+    }
+
+    @Test
+    void workCannotStartBeforeTheEmployerHasPaid() {
+        JobAssignment a = assignment(AssignmentStatus.CONFIRMED, PaymentStatus.PENDING_COLLECTION, inHours(1));
+        when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());
+        when(workSessionDao.findByJobAssignmentIdAndCheckOutAtIsNull(a.getId())).thenReturn(Optional.empty());
+
+        assertThrows(ConflictException.class, () -> timesheetManager.checkIn(a.getId(), null, null));
+        assertEquals(AssignmentStatus.CONFIRMED, a.getStatus());
+    }
+
+    @Test
+    void anUnpaidAssignmentCannotBeMarkedComplete() {
+        JobAssignment a = assignment(AssignmentStatus.CONFIRMED, PaymentStatus.PENDING_COLLECTION, inHours(-2));
+        when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
+
+        assertThrows(ConflictException.class, () -> jobAssignmentManager.completeAssignment(a.getId()));
+        assertNotEquals(AssignmentStatus.COMPLETED, a.getStatus());
     }
 
     @Test

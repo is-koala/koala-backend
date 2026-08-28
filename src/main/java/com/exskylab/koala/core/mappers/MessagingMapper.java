@@ -3,6 +3,7 @@ package com.exskylab.koala.core.mappers;
 import com.exskylab.koala.core.dtos.messaging.response.ConversationDto;
 import com.exskylab.koala.core.dtos.messaging.response.MessageDto;
 import com.exskylab.koala.core.dtos.messaging.response.UserBlockDto;
+import com.exskylab.koala.core.dtos.user.response.SafeUserDto;
 import com.exskylab.koala.entities.Conversation;
 import com.exskylab.koala.entities.Message;
 import com.exskylab.koala.entities.UserBlock;
@@ -24,7 +25,10 @@ public interface MessagingMapper {
     @Mapping(target = "jobId", source = "conversation.job.id")
     @Mapping(target = "jobTitle", source = "conversation.job.title")
     @Mapping(target = "unreadCount", source = "unreadCount")
-    ConversationDto toConversationDto(Conversation conversation, long unreadCount);
+    @Mapping(target = "closed", source = "closed")
+    @Mapping(target = "participants", source = "members")
+    ConversationDto toConversationDto(Conversation conversation, long unreadCount, boolean closed,
+                                      List<SafeUserDto> members);
 
     UserBlockDto toUserBlockDto(UserBlock block);
 

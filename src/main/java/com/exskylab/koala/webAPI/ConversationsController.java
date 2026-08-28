@@ -52,16 +52,8 @@ public class ConversationsController {
     public ResponseEntity<SuccessDataResult<PageDto<ConversationDto>>> myConversations(
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
-        var page = messagingService.getMyConversations(pageable);
-        var unread = messagingService.unreadCounts(page.getContent().stream().map(Conversation::getId).toList());
-
-        var content = page.getContent().stream()
-                .map(conversation -> messagingMapper.toConversationDto(
-                        conversation, unread.getOrDefault(conversation.getId(), 0L)))
-                .toList();
-
         return ResponseEntity.ok(new SuccessDataResult<>(
-                PageDto.of(page, content),
+                messagingService.getMyConversations(pageable),
                 MessagingMessages.CONVERSATIONS_LISTED, HttpStatus.OK));
     }
 
@@ -79,7 +71,7 @@ public class ConversationsController {
             @PathVariable UUID jobId, @RequestParam(required = false) UUID workerId) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
-                messagingMapper.toConversationDto(messagingService.openConversation(jobId, workerId), 0L),
+                messagingMapper.toConversationDto(messagingService.openConversation(jobId, workerId), 0L, false, java.util.List.of()),
                 MessagingMessages.CONVERSATIONS_LISTED, HttpStatus.OK));
     }
 

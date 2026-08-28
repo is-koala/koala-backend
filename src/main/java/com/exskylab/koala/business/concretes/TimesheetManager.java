@@ -8,6 +8,7 @@ import com.exskylab.koala.core.constants.TimesheetMessages;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.dataAccess.WorkSessionDao;
+import com.exskylab.koala.entities.PaymentStatus;
 import com.exskylab.koala.entities.AssignmentStatus;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.WorkSession;
@@ -51,6 +52,12 @@ public class TimesheetManager implements TimesheetService {
 
         if (!OPEN_FOR_WORK.contains(assignment.getStatus())) {
             throw new ConflictException(TimesheetMessages.ASSIGNMENT_NOT_ACTIVE);
+        }
+
+        if (assignment.getPaymentStatus() != PaymentStatus.HELD_IN_ESCROW) {
+            log.warn("Check-in refused on assignment {}: money is not in escrow, payment status is {}",
+                    jobAssignmentId, assignment.getPaymentStatus());
+            throw new ConflictException(TimesheetMessages.PAYMENT_NOT_SECURED);
         }
 
         if (workSessionDao.findByJobAssignmentIdAndCheckOutAtIsNull(jobAssignmentId).isPresent()) {

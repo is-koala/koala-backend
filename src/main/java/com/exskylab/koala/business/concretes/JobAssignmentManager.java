@@ -41,6 +41,8 @@ import com.exskylab.koala.business.abstracts.GalleryService;
 import com.exskylab.koala.business.abstracts.SettingsService;
 import com.exskylab.koala.core.constants.SettingKeys;
 import com.exskylab.koala.business.abstracts.ActivityNotificationService;
+import com.exskylab.koala.core.events.AssignmentConfirmedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -78,6 +80,7 @@ public class JobAssignmentManager implements JobAssignmentService {
     private final SettingsService settingsService;
     private final GalleryService galleryService;
     private final ActivityNotificationService activityNotificationService;
+    private final ApplicationEventPublisher eventPublisher;
 
 
     public JobAssignmentManager(JobAssignmentDao jobAssignmentDao, SecurityService securityService, JobAssignmentMapper jobAssignmentMapper, IyzicoPaymentService iyzicoPaymentService, CompanyContactService companyContactService, UserService userService,
@@ -88,7 +91,8 @@ public class JobAssignmentManager implements JobAssignmentService {
                                PayoutService payoutService,
                                AutoCompletionProperties autoCompletionProperties,
                                SettingsService settingsService, GalleryService galleryService,
-                               ActivityNotificationService activityNotificationService) {
+                               ActivityNotificationService activityNotificationService,
+                               ApplicationEventPublisher eventPublisher) {
         this.jobAssignmentDao = jobAssignmentDao;
         this.securityService = securityService;
         this.jobAssignmentMapper = jobAssignmentMapper;
@@ -108,6 +112,7 @@ public class JobAssignmentManager implements JobAssignmentService {
         this.settingsService = settingsService;
         this.galleryService = galleryService;
         this.activityNotificationService = activityNotificationService;
+        this.eventPublisher = eventPublisher;
     }
 
 
@@ -151,6 +156,11 @@ public class JobAssignmentManager implements JobAssignmentService {
         assignment = jobAssignmentDao.save(assignment);
 
         log.info("Job assignment with id {} has been saved", assignmentId);
+
+        if (assignment.getStatus() == AssignmentStatus.CONFIRMED) {
+            eventPublisher.publishEvent(new AssignmentConfirmedEvent(
+                    assignment.getJob().getId(), assignment.getWorker().getId()));
+        }
 
         activityNotificationService.assignmentAnswered(assignment);
 
@@ -363,6 +373,12 @@ public class JobAssignmentManager implements JobAssignmentService {
         JobAssignment assignment = jobAssignmentDao.findWithDetailsForPaymentById(assignmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(JobAssignmentMessages.NOT_FOUND));
 
+        if (assignment.getPaymentStatus() != PaymentStatus.HELD_IN_ESCROW) {
+            log.warn("Completion refused on assignment {}: money is not in escrow, payment status is {}",
+                    assignmentId, assignment.getPaymentStatus());
+            throw new ConflictException(JobAssignmentMessages.PAYMENT_NOT_SECURED);
+        }
+
         if (participants.partyOf(assignment, securityService.getAuthenticatedUserId())
                 .filter(party -> party == CancellationParty.EMPLOYER).isEmpty()) {
             throw new ResourceNotFoundException(JobAssignmentMessages.ONLY_EMPLOYER_CAN_COMPLETE);
@@ -437,12 +453,6 @@ public class JobAssignmentManager implements JobAssignmentService {
     @Transactional(readOnly = true)
     public long countCompletedForWorker(UUID workerId) {
         return jobAssignmentDao.countByWorkerIdAndStatus(workerId, AssignmentStatus.COMPLETED);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public boolean hasLiveAssignmentForJob(UUID jobId) {
-        return jobAssignmentDao.existsByJobIdAndStatusIn(jobId, LIVE_ASSIGNMENT_STATUSES);
     }
 
     @Override

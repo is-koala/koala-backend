@@ -41,4 +41,5 @@
     <include file="db/changelog/2026/08/28-05-media-gallery.xml"/>
     <include file="db/changelog/2026/08/28-06-company-follow.xml"/>
     <include file="db/changelog/2026/08/28-07-company-contact-roles.xml"/>
+    <include file="db/changelog/2026/08/29-01-group-conversations.xml"/>
 </databaseChangeLog>

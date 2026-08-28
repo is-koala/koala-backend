@@ -8,13 +8,19 @@ import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.MessagingMessages;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
+import com.exskylab.koala.core.dtos.common.PageDto;
+import com.exskylab.koala.core.dtos.messaging.response.ConversationDto;
+import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
+import com.exskylab.koala.core.properties.MessagingProperties;
 import com.exskylab.koala.dataAccess.*;
 import com.exskylab.koala.entities.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import com.exskylab.koala.core.dtos.user.response.SafeUserDto;
 import com.exskylab.koala.core.mappers.MessagingMapper;
+import com.exskylab.koala.core.mappers.UserMapper;
 import com.exskylab.koala.core.realtime.RealtimePublisher;
 import com.exskylab.koala.business.abstracts.JobApplicationService;
 import com.exskylab.koala.business.abstracts.JobService;
@@ -23,6 +29,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.Collection;
@@ -49,13 +56,16 @@ public class MessagingManager implements MessagingService {
     private final PageableSanitizer pageableSanitizer;
     private final RealtimePublisher realtimePublisher;
     private final MessagingMapper messagingMapper;
+    private final MessagingProperties messagingProperties;
+    private final UserMapper userMapper;
 
     public MessagingManager(ConversationDao conversationDao, MessageDao messageDao,
                             UserBlockDao userBlockDao, JobService jobService,
                             JobApplicationService jobApplicationService, UserService userService,
                             SecurityService securityService, CompanyContactService companyContactService,
                             PageableSanitizer pageableSanitizer, RealtimePublisher realtimePublisher,
-                            MessagingMapper messagingMapper) {
+                            MessagingMapper messagingMapper, MessagingProperties messagingProperties,
+                            UserMapper userMapper) {
         this.conversationDao = conversationDao;
         this.messageDao = messageDao;
         this.userBlockDao = userBlockDao;
@@ -67,6 +77,8 @@ public class MessagingManager implements MessagingService {
         this.pageableSanitizer = pageableSanitizer;
         this.realtimePublisher = realtimePublisher;
         this.messagingMapper = messagingMapper;
+        this.messagingProperties = messagingProperties;
+        this.userMapper = userMapper;
     }
 
     @Override
@@ -81,15 +93,48 @@ public class MessagingManager implements MessagingService {
         assertNotBlocked(currentUserId, employerOf(job).getId().equals(currentUserId)
                 ? resolvedWorkerId : employerOf(job).getId());
 
-        return conversationDao.findByJobIdAndWorkerId(jobId, resolvedWorkerId)
+        assertMessagingWindowOpen(job);
+
+        return conversationDao.findByJobIdAndWorkerIdAndKind(jobId, resolvedWorkerId, ConversationKind.DIRECT)
                 .orElseGet(() -> {
                     Conversation conversation = new Conversation();
                     conversation.setJob(job);
+                    conversation.setKind(ConversationKind.DIRECT);
                     conversation.setEmployer(employerOf(job));
                     conversation.setWorker(userService.getReference(resolvedWorkerId));
-                    log.info("Conversation opened for job {} and worker {}", jobId, resolvedWorkerId);
+                    conversation.addParticipant(employerOf(job));
+                    conversation.addParticipant(userService.getReference(resolvedWorkerId));
+
+                    log.info("Direct conversation opened for job {} and worker {}", jobId, resolvedWorkerId);
                     return conversationDao.save(conversation);
                 });
+    }
+
+    @Override
+    @Transactional
+    public Conversation joinJobCrew(UUID jobId, UUID workerId) {
+        Job job = jobService.getById(jobId);
+        User worker = userService.getReference(workerId);
+
+        Conversation crew = conversationDao.findByJobIdAndKind(job.getId(), ConversationKind.GROUP)
+                .orElseGet(() -> {
+                    Conversation created = new Conversation();
+                    created.setJob(job);
+                    created.setKind(ConversationKind.GROUP);
+                    created.setEmployer(employerOf(job));
+                    created.addParticipant(employerOf(job));
+
+                    log.info("Crew conversation created for job {}", job.getId());
+                    return conversationDao.save(created);
+                });
+
+        if (!crew.hasParticipant(worker.getId())) {
+            crew.addParticipant(worker);
+            conversationDao.save(crew);
+            log.info("Worker {} joined the crew conversation of job {}", worker.getId(), job.getId());
+        }
+
+        return crew;
     }
 
     @Override
@@ -98,7 +143,11 @@ public class MessagingManager implements MessagingService {
         Conversation conversation = loadParticipating(conversationId);
         UUID senderId = securityService.getAuthenticatedUserId();
 
-        assertNotBlocked(senderId, conversation.counterpartOf(senderId).getId());
+        assertMessagingWindowOpen(conversation.getJob());
+
+        if (!conversation.isGroup()) {
+            assertNotBlocked(senderId, conversation.counterpartOf(senderId).getId());
+        }
 
         Message message = new Message();
         message.setConversation(conversation);
@@ -112,7 +161,7 @@ public class MessagingManager implements MessagingService {
         conversationDao.save(conversation);
 
         realtimePublisher.messageSent(conversationId, messagingMapper.toMessageDto(saved),
-                List.of(conversation.getEmployer().getId(), conversation.getWorker().getId()));
+                conversation.participantIds());
 
         log.info("Message {} sent in conversation {}", saved.getId(), conversationId);
         return saved;
@@ -129,10 +178,30 @@ public class MessagingManager implements MessagingService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Conversation> getMyConversations(Pageable requested) {
+    public PageDto<ConversationDto> getMyConversations(Pageable requested) {
         pageableSanitizer.rejectUnknownSort(requested, SORTABLE);
-        return conversationDao.findAllForParticipant(securityService.getAuthenticatedUserId(),
+
+        Page<Conversation> page = conversationDao.findAllForParticipant(securityService.getAuthenticatedUserId(),
                 pageableSanitizer.sanitize(requested, SORTABLE, CONVERSATION_SORT));
+
+        Map<UUID, Long> unread = unreadCounts(page.getContent().stream().map(Conversation::getId).toList());
+
+        return PageDto.of(page, page.getContent().stream()
+                .map(conversation -> messagingMapper.toConversationDto(conversation,
+                        unread.getOrDefault(conversation.getId(), 0L),
+                        isMessagingClosed(conversation.getJob()),
+                        membersOf(conversation)))
+                .toList());
+    }
+
+    @Override
+    public boolean isMessagingClosed(Job job) {
+        if (job == null || job.getEndDateTime() == null) {
+            return false;
+        }
+
+        return LocalDateTime.now(messagingProperties.zone())
+                .isAfter(job.getEndDateTime().plusDays(messagingProperties.getGraceDaysAfterJob()));
     }
 
     @Override
@@ -143,8 +212,7 @@ public class MessagingManager implements MessagingService {
 
         int marked = messageDao.markConversationRead(conversationId, readerId, Instant.now());
         if (marked > 0) {
-            realtimePublisher.conversationRead(conversationId, readerId,
-                    List.of(conversation.getEmployer().getId(), conversation.getWorker().getId()));
+            realtimePublisher.conversationRead(conversationId, readerId, conversation.participantIds());
         }
         return marked;
     }
@@ -180,6 +248,19 @@ public class MessagingManager implements MessagingService {
     @Transactional(readOnly = true)
     public List<UserBlock> getMyBlocks() {
         return userBlockDao.findAllByBlockerId(securityService.getAuthenticatedUserId());
+    }
+
+    private List<SafeUserDto> membersOf(Conversation conversation) {
+        return conversation.getParticipants().stream()
+                .map(participant -> userMapper.toSafeUserDto(participant.getUser()))
+                .toList();
+    }
+
+    private void assertMessagingWindowOpen(Job job) {
+        if (isMessagingClosed(job)) {
+            log.info("Messaging window closed for job {}, it ended at {}", job.getId(), job.getEndDateTime());
+            throw new ConflictException(MessagingMessages.WINDOW_CLOSED);
+        }
     }
 
     private Conversation loadParticipating(UUID conversationId) {

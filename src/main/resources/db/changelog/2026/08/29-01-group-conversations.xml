@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-08-29-01-conversation-kind" author="koala">
+        <addColumn tableName="conversations">
+            <column name="kind" type="VARCHAR(16)" defaultValue="DIRECT">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <dropNotNullConstraint tableName="conversations" columnName="worker_id" columnDataType="UUID"/>
+    </changeSet>
+
+    <changeSet id="2026-08-29-02-conversation-participants" author="koala">
+        <createTable tableName="conversation_participants">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="conversation_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="user_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="joined_at" type="TIMESTAMPTZ" defaultValueComputed="now()"><constraints nullable="false"/></column>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
+            <column name="deleted_by_id" type="UUID"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="now()"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="conversation_participants" baseColumnNames="conversation_id"
+                                 constraintName="fk_conversation_participants_conversation"
+                                 referencedTableName="conversations" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="conversation_participants" baseColumnNames="user_id"
+                                 constraintName="fk_conversation_participants_user"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <sql>
+            CREATE UNIQUE INDEX uk_conversation_participants_active
+                ON conversation_participants (conversation_id, user_id) WHERE is_deleted = false
+        </sql>
+        <sql>
+            CREATE INDEX ix_conversation_participants_user ON conversation_participants (user_id)
+        </sql>
+    </changeSet>
+
+    <changeSet id="2026-08-29-03-backfill-participants" author="koala">
+        <sql>
+            INSERT INTO conversation_participants (id, conversation_id, user_id, joined_at, is_deleted, created_at)
+            SELECT gen_random_uuid(), c.id, c.employer_id, COALESCE(c.created_at, now()), false, now()
+            FROM conversations c WHERE c.employer_id IS NOT NULL
+        </sql>
+        <sql>
+            INSERT INTO conversation_participants (id, conversation_id, user_id, joined_at, is_deleted, created_at)
+            SELECT gen_random_uuid(), c.id, c.worker_id, COALESCE(c.created_at, now()), false, now()
+            FROM conversations c WHERE c.worker_id IS NOT NULL
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

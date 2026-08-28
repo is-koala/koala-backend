@@ -1,6 +1,7 @@
 package com.exskylab.koala.core.constants;
 
 public class TimesheetMessages {
+    public static final String PAYMENT_NOT_SECURED = "{timesheet.payment.not.secured}";
     public static final String ASSIGNMENT_NOT_FOUND = "{timesheet.assignment.not.found}";
     public static final String NOT_THE_WORKER = "{timesheet.not.the.worker}";
     public static final String NOT_A_PARTICIPANT = "{timesheet.not.a.participant}";

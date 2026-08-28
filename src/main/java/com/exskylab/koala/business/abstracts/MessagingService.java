@@ -1,6 +1,8 @@
 package com.exskylab.koala.business.abstracts;
 
 import com.exskylab.koala.entities.Conversation;
+import com.exskylab.koala.entities.Job;
+import com.exskylab.koala.entities.User;
 import com.exskylab.koala.entities.Message;
 import com.exskylab.koala.entities.UserBlock;
 import org.springframework.data.domain.Page;
@@ -13,13 +15,17 @@ import java.util.UUID;
 
 public interface MessagingService {
 
+    Conversation joinJobCrew(UUID jobId, UUID workerId);
+
+    boolean isMessagingClosed(Job job);
+
     Conversation openConversation(UUID jobId, UUID workerId);
 
     Message sendMessage(UUID conversationId, String body);
 
     Page<Message> getMessages(UUID conversationId, Pageable pageable);
 
-    Page<Conversation> getMyConversations(Pageable pageable);
+    com.exskylab.koala.core.dtos.common.PageDto<com.exskylab.koala.core.dtos.messaging.response.ConversationDto> getMyConversations(Pageable pageable);
 
     int markRead(UUID conversationId);
 

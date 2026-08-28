@@ -54,7 +54,7 @@ class AutoCompletionRulesTest {
                 mock(BankAccountService.class), new PageableSanitizer(),
                 new AssignmentParticipants(contacts), badgeService,
                 payoutService, properties, passthroughSettings(), mock(com.exskylab.koala.business.abstracts.GalleryService.class),
-                mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class));
+                mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class), mock(org.springframework.context.ApplicationEventPublisher.class));
 
         when(jobAssignmentDao.save(any())).thenAnswer(i -> i.getArgument(0));
     }

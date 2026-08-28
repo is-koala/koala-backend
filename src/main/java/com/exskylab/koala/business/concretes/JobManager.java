@@ -26,6 +26,7 @@ import com.exskylab.koala.core.dtos.notification.request.SendPushToUserDto;
 import com.exskylab.koala.core.helpers.MessageResolver;
 import com.exskylab.koala.core.properties.JobSearchProperties;
 import com.exskylab.koala.dataAccess.JobApplicationDao;
+import com.exskylab.koala.dataAccess.JobAssignmentDao;
 import com.exskylab.koala.dataAccess.JobDao;
 import com.exskylab.koala.entities.*;
 import com.exskylab.koala.core.exceptions.ValidationException;
@@ -59,7 +60,7 @@ public class JobManager implements JobService {
     private final GalleryService galleryService;
     private final CompanyFollowService companyFollowService;
     private final JobApplicationDao jobApplicationDao;
-    private final JobAssignmentService jobAssignmentService;
+    private final JobAssignmentDao jobAssignmentDao;
     private final NotificationService notificationService;
     private final MessageResolver messageResolver;
     private final JobSearchProperties searchProperties;
@@ -68,7 +69,7 @@ public class JobManager implements JobService {
                       PageableSanitizer pageableSanitizer, CompanyContactService companyContactService,
                       JobAlertService jobAlertService, GalleryService galleryService,
                       CompanyFollowService companyFollowService, JobApplicationDao jobApplicationDao,
-                      JobAssignmentService jobAssignmentService, NotificationService notificationService,
+                      JobAssignmentDao jobAssignmentDao, NotificationService notificationService,
                       MessageResolver messageResolver, JobSearchProperties searchProperties) {
         this.jobDao = jobDao;
         this.securityService = securityService;
@@ -82,7 +83,7 @@ public class JobManager implements JobService {
         this.galleryService = galleryService;
         this.companyFollowService = companyFollowService;
         this.jobApplicationDao = jobApplicationDao;
-        this.jobAssignmentService = jobAssignmentService;
+        this.jobAssignmentDao = jobAssignmentDao;
         this.notificationService = notificationService;
         this.messageResolver = messageResolver;
         this.searchProperties = searchProperties;
@@ -252,6 +253,10 @@ public class JobManager implements JobService {
         return jobDao.existsById(jobId);
     }
 
+    private static final Set<AssignmentStatus> LIVE_ASSIGNMENT_STATUSES =
+            java.util.EnumSet.of(AssignmentStatus.PENDING_CONFIRMATION, AssignmentStatus.CONFIRMED,
+                    AssignmentStatus.IN_PROGRESS);
+
     private static final Set<String> SORTABLE_FIELDS =
             Set.of("createdAt", "salary", "startDateTime", "title");
 
@@ -339,7 +344,7 @@ public class JobManager implements JobService {
             throw new ConflictException(JobMessages.JOB_NOT_CANCELLABLE);
         }
 
-        if (jobAssignmentService.hasLiveAssignmentForJob(jobId)) {
+        if (jobAssignmentDao.existsByJobIdAndStatusIn(jobId, LIVE_ASSIGNMENT_STATUSES)) {
             throw new ConflictException(JobMessages.JOB_HAS_LIVE_ASSIGNMENT);
         }
 
