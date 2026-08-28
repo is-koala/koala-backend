@@ -111,7 +111,8 @@ public class MessagingManager implements MessagingService {
         conversation.setLastMessageBody(saved.getBody());
         conversationDao.save(conversation);
 
-        realtimePublisher.messageSent(conversationId, messagingMapper.toMessageDto(saved));
+        realtimePublisher.messageSent(conversationId, messagingMapper.toMessageDto(saved),
+                List.of(conversation.getEmployer().getId(), conversation.getWorker().getId()));
 
         log.info("Message {} sent in conversation {}", saved.getId(), conversationId);
         return saved;

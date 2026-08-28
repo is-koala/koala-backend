@@ -16,12 +16,10 @@ import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 
 import java.security.Principal;
-import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -33,7 +31,8 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     private static final Pattern CONVERSATION_TOPIC =
             Pattern.compile("^/topic/conversations/([0-9a-fA-F-]{36})$");
 
-    private static final Set<String> OPEN_TOPICS = Set.of("/topic/presence");
+    private static final Pattern PRESENCE_TOPIC =
+            Pattern.compile("^/topic/presence/([0-9a-fA-F-]{36})$");
 
     private final JwtService jwtService;
     private final SessionService sessionService;
@@ -72,8 +71,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         Session session = sessionService.findActiveSessionById(sessionId);
         UserPrincipal principal = UserPrincipal.from(session.getDevice().getUser(), sessionId);
 
-        accessor.setUser(new UsernamePasswordAuthenticationToken(
-                principal, null, principal.getAuthorities()));
+        accessor.setUser(new RealtimeAuthentication(principal));
 
         log.debug("Realtime connection authenticated for user {}", principal.id());
     }
@@ -84,19 +82,29 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
             throw new ForbiddenException(MessagingMessages.SUBSCRIPTION_NOT_ALLOWED);
         }
 
-        if (OPEN_TOPICS.contains(destination) || destination.startsWith("/user/")) {
+        if (destination.startsWith("/user/")) {
             return;
         }
 
+        UUID userId = currentUserId(accessor.getUser());
+
         Matcher conversation = CONVERSATION_TOPIC.matcher(destination);
-        if (!conversation.matches()) {
-            log.warn("Realtime subscription to an unknown destination was refused: {}", destination);
-            throw new ForbiddenException(MessagingMessages.SUBSCRIPTION_NOT_ALLOWED);
+        if (conversation.matches()) {
+            authoriseConversation(userId, UUID.fromString(conversation.group(1)));
+            return;
         }
 
-        UUID userId = currentUserId(accessor.getUser());
-        UUID conversationId = UUID.fromString(conversation.group(1));
+        Matcher presence = PRESENCE_TOPIC.matcher(destination);
+        if (presence.matches()) {
+            authorisePresence(userId, UUID.fromString(presence.group(1)));
+            return;
+        }
 
+        log.warn("Realtime subscription to an unknown destination was refused: {}", destination);
+        throw new ForbiddenException(MessagingMessages.SUBSCRIPTION_NOT_ALLOWED);
+    }
+
+    private void authoriseConversation(UUID userId, UUID conversationId) {
         boolean participant = conversationDao.findById(conversationId)
                 .map(existing -> existing.hasParticipant(userId))
                 .orElse(false);
@@ -106,6 +114,15 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
                     userId, conversationId);
             throw new ForbiddenException(MessagingMessages.SUBSCRIPTION_NOT_ALLOWED);
         }
+    }
+
+    private void authorisePresence(UUID userId, UUID watchedId) {
+        if (userId.equals(watchedId) || conversationDao.existsBetweenParticipants(userId, watchedId)) {
+            return;
+        }
+
+        log.warn("User {} tried to watch presence of {} without sharing a conversation", userId, watchedId);
+        throw new ForbiddenException(MessagingMessages.SUBSCRIPTION_NOT_ALLOWED);
     }
 
     private UUID currentUserId(Principal principal) {

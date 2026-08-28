@@ -23,4 +23,11 @@ public interface ConversationDao extends JpaRepository<Conversation, UUID> {
     @EntityGraph(attributePaths = {"job", "employer", "employer.profilePicture", "worker", "worker.profilePicture"})
     @Query("select c from Conversation c where c.employer.id = :userId or c.worker.id = :userId")
     Page<Conversation> findAllForParticipant(@Param("userId") UUID userId, Pageable pageable);
+
+    @Query("""
+            select count(c) > 0 from Conversation c
+            where (c.employer.id = :first and c.worker.id = :second)
+               or (c.employer.id = :second and c.worker.id = :first)
+            """)
+    boolean existsBetweenParticipants(@Param("first") UUID first, @Param("second") UUID second);
 }

@@ -7,6 +7,7 @@ import com.exskylab.koala.core.properties.RealtimeProperties;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
 import java.util.UUID;
 
 @Component
@@ -14,7 +15,8 @@ import java.util.UUID;
 public class RealtimePublisher {
 
     private static final String CONVERSATION_TOPIC = "/topic/conversations/";
-    private static final String PRESENCE_TOPIC = "/topic/presence";
+    private static final String PRESENCE_TOPIC = "/topic/presence/";
+    private static final String USER_MESSAGE_QUEUE = "/queue/messages";
 
     private final SimpMessagingTemplate messagingTemplate;
     private final RealtimeProperties properties;
@@ -24,8 +26,11 @@ public class RealtimePublisher {
         this.properties = properties;
     }
 
-    public void messageSent(UUID conversationId, MessageDto message) {
-        publish(CONVERSATION_TOPIC + conversationId, RealtimeEventDto.message(conversationId, message));
+    public void messageSent(UUID conversationId, MessageDto message, Collection<UUID> participantIds) {
+        RealtimeEventDto event = RealtimeEventDto.message(conversationId, message);
+
+        publish(CONVERSATION_TOPIC + conversationId, event);
+        participantIds.forEach(participantId -> publishToUser(participantId, USER_MESSAGE_QUEUE, event));
     }
 
     public void typing(UUID conversationId, UUID userId) {
@@ -37,7 +42,19 @@ public class RealtimePublisher {
     }
 
     public void presenceChanged(UUID userId, boolean online) {
-        publish(PRESENCE_TOPIC, RealtimeEventDto.presence(userId, online));
+        publish(PRESENCE_TOPIC + userId, RealtimeEventDto.presence(userId, online));
+    }
+
+    private void publishToUser(UUID userId, String destination, RealtimeEventDto event) {
+        if (!properties.isEnabled()) {
+            return;
+        }
+
+        try {
+            messagingTemplate.convertAndSendToUser(userId.toString(), destination, event);
+        } catch (Exception e) {
+            log.warn("Realtime publish to user {} at {} failed: {}", userId, destination, e.getMessage());
+        }
     }
 
     private void publish(String destination, RealtimeEventDto event) {
