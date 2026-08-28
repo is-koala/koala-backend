@@ -1,5 +1,15 @@
 package com.exskylab.koala.webAPI;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+
+import com.exskylab.koala.core.utilities.results.ErrorResult;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.exskylab.koala.business.abstracts.EducationService;
 import com.exskylab.koala.business.abstracts.JobCategoryService;
 import com.exskylab.koala.business.abstracts.LocationService;
@@ -22,6 +32,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.UUID;
 
+@Tag(name = "Referans veri", description = "Ülke, il, ilçe, iş kategorisi ve eğitim referansları. Tamamı herkese açıktır.")
 @RestController
 @RequestMapping("/reference")
 public class ReferenceDataController {
@@ -44,6 +55,11 @@ public class ReferenceDataController {
         this.educationMapper = educationMapper;
     }
 
+    @SecurityRequirements
+    @Operation(summary = "Ülkeler")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Ülkeler listelendi")
+    })
     @GetMapping("/countries")
     public ResponseEntity<SuccessDataResult<List<CountryDto>>> countries() {
         return ResponseEntity.ok(new SuccessDataResult<>(
@@ -51,6 +67,13 @@ public class ReferenceDataController {
                 LocationMessages.LISTED, HttpStatus.OK));
     }
 
+    @SecurityRequirements
+    @Operation(summary = "Ülkenin illeri")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "İller listelendi"),
+            @ApiResponse(responseCode = "404", description = "Ülke bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @GetMapping("/countries/{countryId}/cities")
     public ResponseEntity<SuccessDataResult<List<CityDto>>> cities(@PathVariable UUID countryId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
@@ -58,6 +81,13 @@ public class ReferenceDataController {
                 LocationMessages.LISTED, HttpStatus.OK));
     }
 
+    @SecurityRequirements
+    @Operation(summary = "İlin ilçeleri")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "İlçeler listelendi"),
+            @ApiResponse(responseCode = "404", description = "İl bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @GetMapping("/cities/{cityId}/districts")
     public ResponseEntity<SuccessDataResult<List<DistrictDto>>> districts(@PathVariable UUID cityId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
@@ -65,6 +95,12 @@ public class ReferenceDataController {
                 LocationMessages.LISTED, HttpStatus.OK));
     }
 
+    @SecurityRequirements
+    @Operation(summary = "İş kategorileri",
+            description = "Her kategori sabit bir code taşır. İstemci ikon, pin ve renk eşlemesini UUID ya da görünen ada değil bu koda bağlamalıdır; kodlar addan bağımsızdır ve değişmez.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Kategoriler listelendi")
+    })
     @GetMapping("/job-categories")
     public ResponseEntity<SuccessDataResult<List<JobCategoryDto>>> jobCategories() {
         return ResponseEntity.ok(new SuccessDataResult<>(
@@ -72,6 +108,11 @@ public class ReferenceDataController {
                 LocationMessages.LISTED, HttpStatus.OK));
     }
 
+    @SecurityRequirements
+    @Operation(summary = "Üniversiteler")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Üniversiteler listelendi")
+    })
     @GetMapping("/universities")
     public ResponseEntity<SuccessDataResult<List<UniversityDto>>> universities() {
         return ResponseEntity.ok(new SuccessDataResult<>(
@@ -79,6 +120,13 @@ public class ReferenceDataController {
                 LocationMessages.LISTED, HttpStatus.OK));
     }
 
+    @SecurityRequirements
+    @Operation(summary = "Üniversitenin fakülteleri")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Fakülteler listelendi"),
+            @ApiResponse(responseCode = "404", description = "Üniversite bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @GetMapping("/universities/{universityId}/faculties")
     public ResponseEntity<SuccessDataResult<List<FacultyDto>>> faculties(@PathVariable UUID universityId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
@@ -86,6 +134,13 @@ public class ReferenceDataController {
                 LocationMessages.LISTED, HttpStatus.OK));
     }
 
+    @SecurityRequirements
+    @Operation(summary = "Fakültenin bölümleri")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Bölümler listelendi"),
+            @ApiResponse(responseCode = "404", description = "Fakülte bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @GetMapping("/faculties/{facultyId}/departments")
     public ResponseEntity<SuccessDataResult<List<DepartmentDto>>> departments(@PathVariable UUID facultyId) {
         return ResponseEntity.ok(new SuccessDataResult<>(

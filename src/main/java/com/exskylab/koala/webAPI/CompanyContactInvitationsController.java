@@ -1,5 +1,13 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.core.utilities.results.ErrorResult;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.exskylab.koala.business.abstracts.CompanyContactInvitationService;
 import com.exskylab.koala.core.constants.CompanyContactInvitationMessages;
 import com.exskylab.koala.core.dtos.companyContactInvitation.request.AnswerToContactInvitationDto;
@@ -13,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
+@Tag(name = "Şirket davetleri", description = "Yetkili davetlerinin görüntülenmesi ve cevaplanması.")
 @RestController
 @RequestMapping("/contact-invitations")
 public class CompanyContactInvitationsController {
@@ -27,6 +36,15 @@ public class CompanyContactInvitationsController {
     }
 
 
+    @Operation(summary = "Daveti kabul et ya da reddet",
+            description = "Hem davet edilene hem davet edene bildirim gider.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Davet cevaplandı"),
+            @ApiResponse(responseCode = "404", description = "Davet bulunamadı ya da size ait değil",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "Davet zaten cevaplanmış",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @PostMapping("/{invitationId}")
     public ResponseEntity<SuccessDataResult<GetCompanyContactInvitationDto>> answerToInvitation(@PathVariable UUID invitationId, @RequestBody @Valid AnswerToContactInvitationDto answerToContactInvitationDto){
 
@@ -42,6 +60,12 @@ public class CompanyContactInvitationsController {
     }
 
 
+    @Operation(summary = "Davet detayı")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Davet döndürüldü"),
+            @ApiResponse(responseCode = "404", description = "Davet bulunamadı ya da size ait değil",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @GetMapping("/{invitationId}")
     public ResponseEntity<SuccessDataResult<GetCompanyContactInvitationDto>> getInvitation(@PathVariable UUID invitationId){
         var result = companyContactInvitationService.getInvitationById(invitationId);

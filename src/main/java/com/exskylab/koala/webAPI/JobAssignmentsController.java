@@ -1,5 +1,13 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.core.utilities.results.ErrorResult;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.core.constants.JobAssignmentMessages;
 import com.exskylab.koala.core.dtos.jobAssignment.request.AnswerAssignmentDto;
@@ -16,6 +24,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
+@Tag(name = "İş atamaları", description = "Atamaya cevap verme ve ödeme oturumu.")
 @RestController
 @RequestMapping("/job-assignments")
 public class JobAssignmentsController {
@@ -30,6 +39,17 @@ public class JobAssignmentsController {
 
 
 
+    @Operation(summary = "Atamayı kabul et ya da reddet",
+            description = "accepted alanı Boolean ve zorunludur; eksik gönderilirse 400 döner. Primitive olsaydı eksik alan sessizce reddetme sayılırdı.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Cevap kaydedildi"),
+            @ApiResponse(responseCode = "400", description = "accepted alanı eksik",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "Atama bulunamadı ya da taraf değilsiniz",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "Atama bu durumdan cevaplanamaz",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @PostMapping("/{assignmentId}/respond")
     public ResponseEntity<SuccessDataResult<JobAssignmentDto>> answerToAssignment(@PathVariable UUID assignmentId,
             @RequestBody @Valid AnswerAssignmentDto jobAssignmentsAssignmentIdStatusPatchRequestDto){
@@ -47,6 +67,19 @@ public class JobAssignmentsController {
     }
 
 
+    @Operation(summary = "Ödeme oturumu başlat",
+            description = "İşveren için Iyzico ödeme formu oturumu açar. Adres eksikliği ya da sağlayıcı hatası durumunda ödeme denemesi de geri alınır, sahipsiz kayıt kalmaz. Her deneme ayrı bir Payment kaydıdır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Ödeme oturumu açıldı"),
+            @ApiResponse(responseCode = "400", description = "Fatura adresi eksik",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "Atama bulunamadı ya da yetki yok",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "Bu atamanın parası zaten tahsil edilmiş",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "502", description = "Ödeme sağlayıcısına ulaşılamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @PostMapping("/{assignmentId}/payment-session")
     public ResponseEntity<SuccessDataResult<PaymentSessionDto>> initiatePaymentSession(@PathVariable UUID assignmentId, HttpServletRequest request){
         PaymentSessionDto dto = jobAssignmentService.initiatePaymentSession(assignmentId, getClientIpAddress(request));

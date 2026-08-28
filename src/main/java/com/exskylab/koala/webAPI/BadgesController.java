@@ -1,5 +1,15 @@
 package com.exskylab.koala.webAPI;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+
+import com.exskylab.koala.core.utilities.results.ErrorResult;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.exskylab.koala.business.abstracts.BadgeService;
 import com.exskylab.koala.core.constants.BadgeMessages;
 import com.exskylab.koala.core.dtos.badge.request.SaveBadgeDto;
@@ -17,6 +27,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 import java.util.UUID;
 
+@Tag(name = "Rozetler", description = "Rozet kataloğu, kullanıcı rozetleri ve rozet yönetimi.")
 @RestController
 public class BadgesController {
 
@@ -28,6 +39,14 @@ public class BadgesController {
         this.badgeMapper = badgeMapper;
     }
 
+    @SecurityRequirements
+    @Operation(summary = "Kullanıcının rozetleri",
+            description = "Kazanılan rozetler ve kazanılma tarihleri. Kazanılan rozet geri alınmaz. Herkese açıktır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Rozetler listelendi"),
+            @ApiResponse(responseCode = "404", description = "Kullanıcı bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @GetMapping("/users/{userId}/badges")
     public ResponseEntity<SuccessDataResult<List<BadgeDto>>> badgesOf(@PathVariable UUID userId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
@@ -35,6 +54,12 @@ public class BadgesController {
                 BadgeMessages.LISTED, HttpStatus.OK));
     }
 
+    @SecurityRequirements
+    @Operation(summary = "Aktif rozet kataloğu",
+            description = "Verilmeye devam eden rozetler. Pasifleştirilmiş rozetler burada görünmez ama sahiplerinde durur.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Katalog döndürüldü")
+    })
     @GetMapping("/reference/badges")
     public ResponseEntity<SuccessDataResult<List<BadgeDto>>> catalog() {
         return ResponseEntity.ok(new SuccessDataResult<>(
@@ -42,6 +67,11 @@ public class BadgesController {
                 BadgeMessages.CATALOG_LISTED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Tüm rozetler",
+            description = "Pasifleştirilmiş olanlar dahil.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Rozetler listelendi")
+    })
     @GetMapping("/admin/badges")
     public ResponseEntity<SuccessDataResult<List<BadgeAdminDto>>> allBadges() {
         return ResponseEntity.ok(new SuccessDataResult<>(
@@ -58,6 +88,15 @@ public class BadgesController {
                 BadgeMessages.CREATED, HttpStatus.CREATED));
     }
 
+    @Operation(summary = "Rozeti güncelle",
+            description = "Ad, açıklama, sıra ve eşikler değiştirilebilir.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Rozet güncellendi"),
+            @ApiResponse(responseCode = "400", description = "Kural için gereken eşik eksik",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "Rozet bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @PutMapping("/admin/badges/{badgeId}")
     public ResponseEntity<SuccessDataResult<BadgeAdminDto>> updateBadge(
             @PathVariable UUID badgeId, @RequestBody @Valid SaveBadgeDto request) {
@@ -67,6 +106,15 @@ public class BadgesController {
                 BadgeMessages.UPDATED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Rozet görselini değiştir",
+            description = "Görsel depoya yazılır ve yanıtlarda iconUrl olarak döner.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Görsel güncellendi"),
+            @ApiResponse(responseCode = "400", description = "Dosya desteklenmeyen türde",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "Rozet bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @PutMapping(value = "/admin/badges/{badgeId}/icon", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<SuccessDataResult<BadgeAdminDto>> setIcon(
             @PathVariable UUID badgeId, @RequestPart("icon") MultipartFile icon) {
@@ -76,6 +124,13 @@ public class BadgesController {
                 BadgeMessages.ICON_UPDATED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Rozeti aktifleştir ya da pasifleştir",
+            description = "Pasifleştirilen rozet o andan sonra kimseye verilmez ama sahiplerinde kalır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Durum güncellendi"),
+            @ApiResponse(responseCode = "404", description = "Rozet bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @PostMapping("/admin/badges/{badgeId}/activation")
     public ResponseEntity<SuccessDataResult<BadgeAdminDto>> setActive(
             @PathVariable UUID badgeId, @RequestParam boolean active) {

@@ -1,5 +1,13 @@
 package com.exskylab.koala.webAPI;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.exskylab.koala.business.abstracts.NotificationService;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
@@ -7,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Base64;
 import java.util.UUID;
 
+@Tag(name = "Bildirim takibi", description = "E-posta açılma takip pikseli.")
 @RestController
 @RequestMapping("/notification-tracking")
 public class NotificationTrackingController {
@@ -21,6 +30,12 @@ public class NotificationTrackingController {
     }
 
 
+    @SecurityRequirements
+    @Operation(summary = "Takip pikseli",
+            description = "E-posta gövdesine gömülen 1x1 görsel. İstek geldiğinde bildirim açılmış olarak işaretlenir.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Piksel döndürüldü")
+    })
     @GetMapping("/{id}.png")
     public ResponseEntity<byte[]> trackNotification(@PathVariable UUID id){
         notificationService.setAsOpened(id);

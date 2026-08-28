@@ -1,5 +1,15 @@
 package com.exskylab.koala.webAPI;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+
+import com.exskylab.koala.core.utilities.results.ErrorResult;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.exskylab.koala.business.abstracts.ReviewService;
 import com.exskylab.koala.core.constants.ReviewMessages;
 import com.exskylab.koala.core.dtos.common.PageDto;
@@ -17,6 +27,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
+@Tag(name = "Değerlendirmeler", description = "Puan bırakma ve itibar özeti.")
 @RestController
 @RequestMapping
 public class ReviewsController {
@@ -29,6 +40,17 @@ public class ReviewsController {
         this.reviewMapper = reviewMapper;
     }
 
+    @Operation(summary = "Değerlendirme bırak",
+            description = "Yalnızca tamamlanmış işte bırakılabilir. Her taraf bir kez yazabilir. Puan 1 ile 5 arasındadır. Anonim değerlendirme yoktur.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Değerlendirme kaydedildi"),
+            @ApiResponse(responseCode = "400", description = "Puan aralık dışında",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "Atama bulunamadı ya da taraf değilsiniz",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "İş tamamlanmamış ya da zaten değerlendirilmiş",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @PostMapping("/job-assignments/{assignmentId}/reviews")
     public ResponseEntity<SuccessDataResult<ReviewDto>> leaveReview(
             @PathVariable UUID assignmentId, @RequestBody @Valid CreateReviewDto request) {
@@ -39,6 +61,14 @@ public class ReviewsController {
                 ReviewMessages.CREATED, HttpStatus.CREATED));
     }
 
+    @SecurityRequirements
+    @Operation(summary = "Kullanıcı hakkındaki değerlendirmeler",
+            description = "Sayfalıdır ve herkese açıktır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Değerlendirmeler listelendi"),
+            @ApiResponse(responseCode = "404", description = "Kullanıcı bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @GetMapping("/users/{userId}/reviews")
     public ResponseEntity<SuccessDataResult<PageDto<ReviewDto>>> reviewsAbout(
             @PathVariable UUID userId, @PageableDefault(size = 20) Pageable pageable) {
@@ -49,6 +79,14 @@ public class ReviewsController {
                 ReviewMessages.LISTED, HttpStatus.OK));
     }
 
+    @SecurityRequirements
+    @Operation(summary = "Puan özeti",
+            description = "Ortalama ve yorum sayısı biriktirilerek tutulur, her istekte yeniden hesaplanmaz. Herkese açıktır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Özet döndürüldü"),
+            @ApiResponse(responseCode = "404", description = "Kullanıcı bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @GetMapping("/users/{userId}/rating-summary")
     public ResponseEntity<SuccessDataResult<RatingSummaryDto>> summary(@PathVariable UUID userId) {
         return ResponseEntity.ok(new SuccessDataResult<>(

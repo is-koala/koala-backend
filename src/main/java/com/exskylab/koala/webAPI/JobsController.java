@@ -1,5 +1,15 @@
 package com.exskylab.koala.webAPI;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+
+import com.exskylab.koala.core.utilities.results.ErrorResult;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.exskylab.koala.business.abstracts.JobApplicationService;
 import com.exskylab.koala.business.abstracts.JobService;
 import com.exskylab.koala.core.constants.JobApplicationMessages;
@@ -32,6 +42,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@Tag(name = "İlanlar", description = "İlan arama, detay, kapatma, galeri ve başvurular.")
 @RestController
 @RequestMapping("/jobs")
 public class JobsController {
@@ -51,6 +62,14 @@ public class JobsController {
 
 
 
+    @SecurityRequirements
+    @Operation(summary = "İlan ara",
+            description = "Metin, kategori, il, ilçe, tür, ücret aralığı, sigorta ve deneyim şartı ile süzer. Harita için minLatitude, maxLatitude, minLongitude ve maxLongitude ile sınırlayıcı kutu verilebilir. Yalnızca OPEN durumundaki ilanlar döner. Kart alanı coverImageUrl galerinin kapak görselinden gelir.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "İlanlar listelendi"),
+            @ApiResponse(responseCode = "400", description = "Sıralama alanı desteklenmiyor",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @GetMapping
     public ResponseEntity<SuccessDataResult<PageDto<JobSummaryDto>>> searchJobs(
             JobSearchCriteriaDto criteria,
@@ -60,6 +79,14 @@ public class JobsController {
                 jobService.search(criteria, pageable), JobMessages.JOBS_LISTED, HttpStatus.OK));
     }
 
+    @SecurityRequirements
+    @Operation(summary = "İlan detayı",
+            description = "Özet değil detay döner: açıklama, görevler, yaş aralığı, kıyafet kuralı, tam adres, ilan sahibi, şirket ve görsel galerisi.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "İlan döndürüldü"),
+            @ApiResponse(responseCode = "404", description = "İlan bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @GetMapping("/{jobId}")
     public ResponseEntity<SuccessDataResult<JobDetailDto>> getJob(@PathVariable UUID jobId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
@@ -67,18 +94,46 @@ public class JobsController {
                 JobMessages.JOB_RETRIEVED, HttpStatus.OK));
     }
 
+    @Operation(summary = "İlanı kapat",
+            description = "Yalnızca ilan sahibi ya da ilanın şirketinin yetkilisi kapatabilir. Yalnızca OPEN durumundan geçilebilir. Yetkisiz kullanıcı 404 alır, ilanın varlığı sızmaz.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "İlan kapatıldı"),
+            @ApiResponse(responseCode = "404", description = "İlan bulunamadı ya da yetki yok",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "İlan zaten açık değil",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @PostMapping("/{jobId}/close")
     public ResponseEntity<SuccessResult> closeJob(@PathVariable UUID jobId) {
         jobService.closeJob(jobId);
         return ResponseEntity.ok(new SuccessResult(JobMessages.JOB_CLOSED, HttpStatus.OK));
     }
 
+    @SecurityRequirements
+    @Operation(summary = "İlan galerisi",
+            description = "Sıra numarasına göre döner, kapak görseli cover bayrağıyla işaretlidir.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Galeri listelendi"),
+            @ApiResponse(responseCode = "404", description = "İlan bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @GetMapping("/{jobId}/images")
     public ResponseEntity<SuccessDataResult<List<GalleryImageDto>>> jobImages(@PathVariable UUID jobId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
                 jobService.getJobGallery(jobId), GalleryMessages.IMAGE_LISTED, HttpStatus.OK));
     }
 
+    @Operation(summary = "İlan galerisine görsel yükle",
+            description = "İlk yüklenen görsel kendiliğinden kapak olur. İlan başına azami görsel sayısı upload ayarlarından gelir.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Görsel eklendi"),
+            @ApiResponse(responseCode = "400", description = "Dosya boş, çok büyük ya da desteklenmeyen türde",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "İlan bulunamadı ya da yetki yok",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "Galeri sınırı aşıldı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @PostMapping(value = "/{jobId}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<SuccessDataResult<List<GalleryImageDto>>> addJobImage(
             @PathVariable UUID jobId, @RequestPart("image") MultipartFile image) {
@@ -87,6 +142,15 @@ public class JobsController {
                 jobService.addJobImage(jobId, image), GalleryMessages.IMAGE_ADDED, HttpStatus.CREATED));
     }
 
+    @Operation(summary = "İlan galerisini toptan değiştir",
+            description = "Gövdedeki imageId ya ilanın mevcut galerisinden ya da ilanın şirketinin galerisinden seçilebilir; böylece şirket mekânını bir kez yükleyip her ilanda yeniden seçer. Listede olmayan kayıtlar galeriden düşer. Aynı görsel iki kez listelenemez ve en fazla bir kapak seçilebilir; hiçbiri işaretlenmezse ilk sıradaki kapak yapılır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Galeri güncellendi"),
+            @ApiResponse(responseCode = "400", description = "Aynı görsel iki kez listelendi ya da birden fazla kapak seçildi",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "Görsel bu ilanda ve şirket galerisinde yok",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @PutMapping("/{jobId}/images")
     public ResponseEntity<SuccessDataResult<List<GalleryImageDto>>> updateJobGallery(
             @PathVariable UUID jobId, @RequestBody @Valid UpdateGalleryDto request) {
@@ -95,6 +159,13 @@ public class JobsController {
                 jobService.replaceJobGallery(jobId, request), GalleryMessages.IMAGE_UPDATED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Görseli ilan galerisinden çıkar",
+            description = "Kapak silinirse sıradaki görsel kapak olur. Medya kaydı silinmez, yalnızca ilişki kalkar.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Görsel kaldırıldı"),
+            @ApiResponse(responseCode = "404", description = "Görsel bu galeride yok",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @DeleteMapping("/{jobId}/images/{imageId}")
     public ResponseEntity<SuccessDataResult<List<GalleryImageDto>>> removeJobImage(
             @PathVariable UUID jobId, @PathVariable UUID imageId) {
@@ -103,6 +174,17 @@ public class JobsController {
                 jobService.removeJobImage(jobId, imageId), GalleryMessages.IMAGE_REMOVED, HttpStatus.OK));
     }
 
+    @Operation(summary = "İlana başvur",
+            description = "Kullanıcı kendi ilanına başvuramaz. Aynı ilana ikinci başvuru açılmaz.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Başvuru oluşturuldu"),
+            @ApiResponse(responseCode = "400", description = "Kendi ilanına başvurulamaz",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "İlan bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "Bu ilana zaten başvurulmuş",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @PostMapping("/{jobId}/applications")
     public ResponseEntity<SuccessDataResult<JobApplicationDto>> applyToJob(@PathVariable UUID jobId, @RequestBody @Valid CreateJobApplicationDto jobsJobIdApplicationsPostResponseDto){
 
@@ -118,6 +200,13 @@ public class JobsController {
     }
 
 
+    @Operation(summary = "İlana gelen başvurular",
+            description = "Yalnızca ilan sahibi ya da şirket yetkilisi görebilir.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Başvurular listelendi"),
+            @ApiResponse(responseCode = "404", description = "İlan bulunamadı ya da yetki yok",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @GetMapping("/{jobId}/applications")
     public ResponseEntity<SuccessDataResult<List<JobApplicantDto>>> getJobApplicationById(@PathVariable UUID jobId){
 

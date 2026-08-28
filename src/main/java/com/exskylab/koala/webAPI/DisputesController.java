@@ -1,5 +1,13 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.core.utilities.results.ErrorResult;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.exskylab.koala.business.abstracts.DisputeService;
 import com.exskylab.koala.core.constants.DisputeMessages;
 import com.exskylab.koala.core.dtos.common.PageDto;
@@ -16,6 +24,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
+@Tag(name = "Uyuşmazlık yönetimi", description = "Açık uyuşmazlıkların admin tarafından çözülmesi.")
 @RestController
 @RequestMapping("/admin/disputes")
 public class DisputesController {
@@ -28,6 +37,11 @@ public class DisputesController {
         this.disputeMapper = disputeMapper;
     }
 
+    @Operation(summary = "Açık uyuşmazlıklar",
+            description = "Sayfalıdır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Uyuşmazlıklar listelendi")
+    })
     @GetMapping
     public ResponseEntity<SuccessDataResult<PageDto<DisputeDto>>> pending(
             @PageableDefault(size = 20) Pageable pageable) {
@@ -38,6 +52,15 @@ public class DisputesController {
                 DisputeMessages.LISTED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Uyuşmazlığı çöz",
+            description = "RELEASE_TO_WORKER parayı işçiye çıkarır, REFUND_EMPLOYER işverene iade eder, DISMISSED emanete dokunmaz. Kısmi paylaşım yoktur: bir atama ya işçiye çıkar ya iade edilir.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Uyuşmazlık çözüldü"),
+            @ApiResponse(responseCode = "404", description = "Uyuşmazlık bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "Uyuşmazlık zaten çözülmüş",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @PostMapping("/{disputeId}/resolve")
     public ResponseEntity<SuccessDataResult<DisputeDto>> resolve(
             @PathVariable UUID disputeId, @RequestBody @Valid ResolveDisputeDto request) {

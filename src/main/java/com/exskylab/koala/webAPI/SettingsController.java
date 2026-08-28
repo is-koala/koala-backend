@@ -1,5 +1,13 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.core.utilities.results.ErrorResult;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.exskylab.koala.business.abstracts.SettingsService;
 import com.exskylab.koala.core.constants.SettingMessages;
 import com.exskylab.koala.core.dtos.setting.request.UpdateSettingDto;
@@ -13,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@Tag(name = "Çalışma zamanı ayarları", description = "Politika sayılarının deploy olmadan değiştirilmesi.")
 @RestController
 @RequestMapping("/admin/settings")
 public class SettingsController {
@@ -25,6 +34,11 @@ public class SettingsController {
         this.settingMapper = settingMapper;
     }
 
+    @Operation(summary = "Tanımlı ayarları listele",
+            description = "Tabloda satırı olmayan anahtarlar konfigürasyondaki varsayılana düşer.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Ayarlar listelendi")
+    })
     @GetMapping
     public ResponseEntity<SuccessDataResult<List<SettingDto>>> settings() {
         return ResponseEntity.ok(new SuccessDataResult<>(
@@ -32,6 +46,13 @@ public class SettingsController {
                 SettingMessages.LISTED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Ayarı güncelle",
+            description = "Yalnızca tanımlı anahtarlar yazılabilir; serbest anahtar deposu değildir. Değer sayısal olmak zorundadır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Ayar güncellendi"),
+            @ApiResponse(responseCode = "400", description = "Tanımsız anahtar ya da sayısal olmayan değer",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @PutMapping("/{key}")
     public ResponseEntity<SuccessDataResult<SettingDto>> update(
             @PathVariable String key, @RequestBody @Valid UpdateSettingDto request) {

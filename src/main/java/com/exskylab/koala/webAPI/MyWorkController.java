@@ -1,5 +1,13 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.core.utilities.results.ErrorResult;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.exskylab.koala.business.abstracts.JobApplicationService;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.MyWorkService;
@@ -29,6 +37,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.UUID;
 
+@Tag(name = "İşlerim", description = "Başvurular, atamalar, oturumlar ve bildirimler.")
 @RestController
 @RequestMapping("/users/me")
 public class MyWorkController {
@@ -60,6 +69,11 @@ public class MyWorkController {
         this.notificationMapper = notificationMapper;
     }
 
+    @Operation(summary = "Birleşik işlerim akışı",
+            description = "Başvuru ve atamaları tek bir zaman çizelgesinde birleştirir; her satır kind alanıyla APPLICATION ya da ASSIGNMENT olarak etiketlidir. limit varsayılan 50, 1 ile 100 arasına kırpılır, reddedilmez. asEmployer true iken başvuru döndürülmez; işverenin başvurusu olmaz, kendi ilanına gelenler ilan altındadır. Sayfalama yoktur, hepsini görmek için sayfalı uçlar kullanılır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Akış döndürüldü")
+    })
     @GetMapping("/work")
     public ResponseEntity<SuccessDataResult<WorkFeedDto>> myWork(
             @RequestParam(defaultValue = "false") boolean asEmployer,
@@ -69,6 +83,13 @@ public class MyWorkController {
                 myWorkService.getMyWork(asEmployer, limit), MyWorkMessages.WORK_LISTED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Başvurularım",
+            description = "status parametresiyle süzülebilir. Sayfalıdır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Başvurular listelendi"),
+            @ApiResponse(responseCode = "400", description = "Sıralama alanı desteklenmiyor",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @GetMapping("/applications")
     public ResponseEntity<SuccessDataResult<PageDto<MyApplicationDto>>> myApplications(
             @RequestParam(required = false) ApplicationStatus status,
@@ -79,6 +100,13 @@ public class MyWorkController {
                 MyWorkMessages.APPLICATIONS_LISTED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Atamalarım",
+            description = "asEmployer true ile işveren tarafı listelenir. Sayfalıdır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Atamalar listelendi"),
+            @ApiResponse(responseCode = "400", description = "Sıralama alanı desteklenmiyor",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @GetMapping("/assignments")
     public ResponseEntity<SuccessDataResult<PageDto<MyAssignmentDto>>> myAssignments(
             @RequestParam(defaultValue = "false") boolean asEmployer,
@@ -89,6 +117,11 @@ public class MyWorkController {
                 MyWorkMessages.ASSIGNMENTS_LISTED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Açık oturumlarım",
+            description = "İstek atan oturum current bayrağıyla işaretlidir.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Oturumlar listelendi")
+    })
     @GetMapping("/sessions")
     public ResponseEntity<SuccessDataResult<List<SessionDto>>> mySessions() {
         UUID currentSessionId = securityService.getAuthenticatedPrincipal().sessionId();
@@ -101,18 +134,35 @@ public class MyWorkController {
                 sessions, MyWorkMessages.SESSIONS_LISTED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Bir oturumu kapat",
+            description = "Başkasının oturumunu kapatmaya çalışmak 404 döner.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Oturum kapatıldı"),
+            @ApiResponse(responseCode = "404", description = "Oturum bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @DeleteMapping("/sessions/{sessionId}")
     public ResponseEntity<Result> revokeSession(@PathVariable UUID sessionId) {
         sessionService.revokeSession(sessionId);
         return ResponseEntity.ok(new SuccessResult(MyWorkMessages.SESSION_REVOKED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Diğer tüm oturumları kapat",
+            description = "İstek atan oturum hariç hepsi kapatılır; kaç oturumun kapandığı döner.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Oturumlar kapatıldı")
+    })
     @DeleteMapping("/sessions")
     public ResponseEntity<SuccessDataResult<Integer>> revokeOtherSessions() {
         return ResponseEntity.ok(new SuccessDataResult<>(
                 sessionService.revokeAllOtherSessions(), MyWorkMessages.SESSIONS_REVOKED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Bildirimlerim",
+            description = "Okunmamış sayısıyla birlikte döner. Sayfalıdır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Bildirimler listelendi")
+    })
     @GetMapping("/notifications")
     public ResponseEntity<SuccessDataResult<NotificationFeedDto>> myNotifications(
             @PageableDefault(size = 20) Pageable pageable) {
@@ -126,6 +176,11 @@ public class MyWorkController {
                 MyWorkMessages.NOTIFICATIONS_LISTED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Tüm bildirimleri okundu işaretle",
+            description = "Kaç bildirimin işaretlendiği döner.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Bildirimler okundu işaretlendi")
+    })
     @PostMapping("/notifications/read")
     public ResponseEntity<SuccessDataResult<Integer>> markNotificationsRead() {
         return ResponseEntity.ok(new SuccessDataResult<>(

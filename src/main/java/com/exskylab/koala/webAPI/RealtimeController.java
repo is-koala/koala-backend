@@ -1,5 +1,10 @@
 package com.exskylab.koala.webAPI;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.exskylab.koala.business.abstracts.MessagingService;
 import com.exskylab.koala.business.abstracts.PresenceService;
 import com.exskylab.koala.core.constants.MessagingMessages;
@@ -18,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.UUID;
 
+@Tag(name = "Gerçek zamanlı", description = "Presence sorguları ve yazıyor bildirimi.")
 @Controller
 public class RealtimeController {
 
@@ -39,6 +45,11 @@ public class RealtimeController {
         realtimePublisher.typing(conversationId, principal.id());
     }
 
+    @Operation(summary = "Kullanıcının çevrimiçi durumu",
+            description = "Anlık durum ve son görülme zamanı.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Durum döndürüldü")
+    })
     @GetMapping("/users/{userId}/presence")
     @ResponseBody
     public ResponseEntity<SuccessDataResult<PresenceDto>> presenceOf(@PathVariable UUID userId) {
@@ -47,6 +58,11 @@ public class RealtimeController {
                 MessagingMessages.PRESENCE_FETCHED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Toplu presence sorgusu",
+            description = "Sohbet listesi için tek istekte birden çok kullanıcının durumu.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Durumlar döndürüldü")
+    })
     @PostMapping("/presence/lookup")
     @ResponseBody
     public ResponseEntity<SuccessDataResult<List<PresenceDto>>> presenceOfMany(

@@ -1,5 +1,15 @@
 package com.exskylab.koala.webAPI;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+
+import com.exskylab.koala.core.utilities.results.ErrorResult;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.exskylab.koala.business.abstracts.CompanyContactInvitationService;
 import com.exskylab.koala.business.abstracts.CompanyService;
 import com.exskylab.koala.business.abstracts.JobService;
@@ -34,6 +44,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 import java.util.UUID;
 
+@Tag(name = "Şirketler", description = "Şirket oluşturma, düzenleme, yetkililer, galeri ve takip.")
 @RestController
 @RequestMapping("/companies")
 public class CompaniesController {
@@ -54,6 +65,13 @@ public class CompaniesController {
     }
 
 
+    @Operation(summary = "Şirket oluştur",
+            description = "Talebi oluşturan kullanıcı şirketin ADMIN yetkilisi olur. Şirket onaylanana kadar ilan yayınlayamaz. Kullanıcının kimliği doğrulanmış olmalıdır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Şirket oluşturuldu, onay bekliyor"),
+            @ApiResponse(responseCode = "400", description = "Kimlik doğrulanmamış ya da alan doğrulaması başarısız",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<SuccessDataResult<CompanyDto>> addCompany(
             @RequestPart("company") @Valid CreateCompanyRequestDto createCompanyRequestDto,
@@ -68,6 +86,15 @@ public class CompaniesController {
     }
 
 
+    @Operation(summary = "Şirkete yetkili davet et",
+            description = "Davet edilen kullanıcıya e-posta ve uygulama içi bildirim gider.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Davet gönderildi"),
+            @ApiResponse(responseCode = "404", description = "Şirket ya da kullanıcı bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "Kullanıcı zaten yetkili ya da bekleyen davet var",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @PostMapping("/{companyId}/contact-invitations")
     public ResponseEntity<SuccessResult> sendCompanyContactInvitation(@PathVariable UUID companyId, @RequestBody @Valid InviteContactToCompanyDto contactToCompanyDto){
 
@@ -79,6 +106,13 @@ public class CompaniesController {
 
     }
 
+    @Operation(summary = "Şirketin davetleri",
+            description = "Yalnızca ADMIN rolüne açıktır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Davetler listelendi"),
+            @ApiResponse(responseCode = "404", description = "Şirket bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @GetMapping("/{companyId}/contact-invitations")
     public ResponseEntity<SuccessDataResult<List<CompanyContactInvitationDto>>> getCompanyContactInvitations(@PathVariable UUID companyId){
         List<CompanyContactInvitationDto> response = companyContactInvitationService.getCompanyContactInvitationsByCompanyIdDto(companyId);
@@ -94,6 +128,15 @@ public class CompaniesController {
     }
 
 
+    @Operation(summary = "Şirket adına ilan aç",
+            description = "Yalnızca şirketin yetkilisi açabilir. İlan kaydedildikten sonra eşleşen iş alarmları ve şirketi takip edenler bildirilir.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "İlan oluşturuldu"),
+            @ApiResponse(responseCode = "400", description = "Alan doğrulaması başarısız",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "Şirket bulunamadı ya da yetki yok",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @PostMapping("/{companyId}/jobs")
     public ResponseEntity<SuccessDataResult<CompanyJobDto>> createJobForCompany(@PathVariable UUID companyId,
                                                                                                         @RequestBody @Valid CreateCompanyJobDto companiesCompanyIdJobsPostRequestDto){
@@ -106,6 +149,13 @@ public class CompaniesController {
                 ));
     }
 
+    @Operation(summary = "Şirket detayı",
+            description = "Yanıt takipçi sayısını ve oturum sahibinin takip edip etmediğini de taşır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Şirket döndürüldü"),
+            @ApiResponse(responseCode = "404", description = "Şirket bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @GetMapping("/{companyId}")
     public ResponseEntity<SuccessDataResult<CompanyDto>> getCompany(@PathVariable UUID companyId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
@@ -113,6 +163,13 @@ public class CompaniesController {
                 CompanyMessages.COMPANY_FETCHED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Şirketi güncelle",
+            description = "Yalnızca şirketin ADMIN yetkilisi düzenleyebilir; üye olmayan 404 alır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Şirket güncellendi"),
+            @ApiResponse(responseCode = "404", description = "Şirket bulunamadı ya da yetki yok",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @PatchMapping("/{companyId}")
     public ResponseEntity<SuccessDataResult<CompanyDto>> updateCompany(
             @PathVariable UUID companyId, @RequestBody @Valid UpdateCompanyRequestDto request) {
@@ -122,6 +179,12 @@ public class CompaniesController {
                 CompanyMessages.COMPANY_UPDATED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Şirketin yetkilileri")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Yetkililer listelendi"),
+            @ApiResponse(responseCode = "404", description = "Şirket bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @GetMapping("/{companyId}/contacts")
     public ResponseEntity<SuccessDataResult<List<CompanyContactDto>>> contacts(
             @PathVariable UUID companyId) {
@@ -131,24 +194,57 @@ public class CompaniesController {
                 CompanyMessages.CONTACTS_LISTED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Şirketi takip et",
+            description = "İdempotanttır, ikinci istek yeni kayıt açmaz. Takip edilen şirket ilan açtığında bildirim gider.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Takip ediliyor"),
+            @ApiResponse(responseCode = "404", description = "Şirket bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @PostMapping("/{companyId}/follow")
     public ResponseEntity<Result> followCompany(@PathVariable UUID companyId) {
         companyService.followCompany(companyId);
         return ResponseEntity.ok(new SuccessResult(CompanyMessages.COMPANY_FOLLOWED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Şirket takibini bırak",
+            description = "Takip edilmeyen bir şirketi bırakmak sessizce geçer.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Takip bırakıldı"),
+            @ApiResponse(responseCode = "404", description = "Şirket bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @DeleteMapping("/{companyId}/follow")
     public ResponseEntity<Result> unfollowCompany(@PathVariable UUID companyId) {
         companyService.unfollowCompany(companyId);
         return ResponseEntity.ok(new SuccessResult(CompanyMessages.COMPANY_UNFOLLOWED, HttpStatus.OK));
     }
 
+    @SecurityRequirements
+    @Operation(summary = "Şirket galerisi",
+            description = "Sıra numarasına göre döner. Herkese açıktır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Galeri listelendi"),
+            @ApiResponse(responseCode = "404", description = "Şirket bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @GetMapping("/{companyId}/images")
     public ResponseEntity<SuccessDataResult<List<GalleryImageDto>>> companyImages(@PathVariable UUID companyId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
                 companyService.getCompanyGallery(companyId), GalleryMessages.IMAGE_LISTED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Şirket galerisine görsel yükle",
+            description = "Yalnızca şirketin ADMIN yetkilisi ekleyebilir. İlk görsel kendiliğinden kapak olur.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Görsel eklendi"),
+            @ApiResponse(responseCode = "400", description = "Dosya boş, çok büyük ya da desteklenmeyen türde",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "Şirket bulunamadı ya da yetki yok",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "Galeri sınırı aşıldı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @PostMapping(value = "/{companyId}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<SuccessDataResult<List<GalleryImageDto>>> addCompanyImage(
             @PathVariable UUID companyId, @RequestPart("image") MultipartFile image) {
@@ -158,6 +254,15 @@ public class CompaniesController {
                 GalleryMessages.IMAGE_ADDED, HttpStatus.CREATED));
     }
 
+    @Operation(summary = "Şirket galerisini toptan değiştir",
+            description = "Listede olmayan kayıtlar galeriden düşer. Aynı görsel iki kez listelenemez ve en fazla bir kapak seçilebilir.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Galeri güncellendi"),
+            @ApiResponse(responseCode = "400", description = "Aynı görsel iki kez listelendi ya da birden fazla kapak seçildi",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "Görsel bu galeride yok",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @PutMapping("/{companyId}/images")
     public ResponseEntity<SuccessDataResult<List<GalleryImageDto>>> updateCompanyGallery(
             @PathVariable UUID companyId, @RequestBody @Valid UpdateGalleryDto request) {
@@ -167,6 +272,13 @@ public class CompaniesController {
                 GalleryMessages.IMAGE_UPDATED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Görseli şirket galerisinden çıkar",
+            description = "Kapak silinirse sıradaki görsel kapak olur.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Görsel kaldırıldı"),
+            @ApiResponse(responseCode = "404", description = "Görsel bu galeride yok",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @DeleteMapping("/{companyId}/images/{imageId}")
     public ResponseEntity<SuccessDataResult<List<GalleryImageDto>>> removeCompanyImage(
             @PathVariable UUID companyId, @PathVariable UUID imageId) {
@@ -176,6 +288,15 @@ public class CompaniesController {
                 GalleryMessages.IMAGE_REMOVED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Yetkiliyi şirketten çıkar",
+            description = "Yalnızca ADMIN çıkarabilir. Son ADMIN çıkarılamaz, yoksa şirket yönetilemez hâle gelir. Üyelik kaydı silinmez, soft delete edilir; aynı kişi sonradan yeniden eklenebilir.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Yetkili çıkarıldı"),
+            @ApiResponse(responseCode = "404", description = "Şirket ya da yetkili bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "Son yönetici çıkarılamaz",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @DeleteMapping("/{companyId}/contacts/{userId}")
     public ResponseEntity<Result> removeContact(@PathVariable UUID companyId, @PathVariable UUID userId) {
         companyService.removeContact(companyId, userId);
