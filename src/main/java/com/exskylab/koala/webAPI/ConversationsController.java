@@ -20,6 +20,7 @@ import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.core.utilities.results.SuccessResult;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -49,7 +50,7 @@ public class ConversationsController {
     })
     @GetMapping("/conversations")
     public ResponseEntity<SuccessDataResult<PageDto<ConversationDto>>> myConversations(
-            @PageableDefault(size = 20) Pageable pageable) {
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
         var page = messagingService.getMyConversations(pageable);
         var unread = messagingService.unreadCounts(page.getContent().stream().map(Conversation::getId).toList());
@@ -91,7 +92,7 @@ public class ConversationsController {
     })
     @GetMapping("/conversations/{conversationId}/messages")
     public ResponseEntity<SuccessDataResult<PageDto<MessageDto>>> messages(
-            @PathVariable UUID conversationId, @PageableDefault(size = 30) Pageable pageable) {
+            @PathVariable UUID conversationId, @ParameterObject @PageableDefault(size = 30) Pageable pageable) {
 
         var page = messagingService.getMessages(conversationId, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(

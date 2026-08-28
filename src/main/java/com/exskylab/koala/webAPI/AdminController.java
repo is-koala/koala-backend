@@ -22,6 +22,7 @@ import com.exskylab.koala.core.utilities.results.Result;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.core.utilities.results.SuccessResult;
 import org.springframework.data.domain.Pageable;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -66,7 +67,7 @@ public class AdminController {
     @GetMapping("/companies")
     public ResponseEntity<SuccessDataResult<PageDto<CompanyDto>>> companies(
             @RequestParam(defaultValue = "false") boolean approved,
-            @PageableDefault(size = 20) Pageable pageable) {
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
         var page = companyService.getCompaniesByApproval(approved, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
@@ -91,7 +92,7 @@ public class AdminController {
     @GetMapping("/users")
     public ResponseEntity<SuccessDataResult<PageDto<SafeUserDto>>> users(
             @RequestParam(required = false) String query,
-            @PageableDefault(size = 20) Pageable pageable) {
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
         var page = userService.search(query, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(

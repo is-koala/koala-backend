@@ -26,6 +26,9 @@ import com.exskylab.koala.core.exceptions.ValidationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import com.exskylab.koala.core.helpers.PageableSanitizer;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -39,8 +42,14 @@ import java.util.UUID;
 @Slf4j
 public class UserManager implements UserService {
 
+    private static final Set<String> USER_SORTABLE = Set.of("createdAt", "firstName", "lastName");
+
+    private static final Sort USER_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
+
+
     private static final Locale TURKISH = Locale.of("tr", "TR");
 
+    private final PageableSanitizer pageableSanitizer;
     private final UserDao userDao;
     private final EmailVerificationService emailVerificationService;
     private final UserMapper userMapper;
@@ -69,7 +78,8 @@ public class UserManager implements UserService {
                        AddressMapper addressMapper, UserProducerService userProducerService,
                        BankAccountService bankAccountService,
                        PhoneVerificationService phoneVerificationService,
-                       BadgeService badgeService, BadgeMapper badgeMapper) {
+                       BadgeService badgeService, BadgeMapper badgeMapper,
+                                PageableSanitizer pageableSanitizer) {
         this.userDao = userDao;
         this.emailVerificationService = emailVerificationService;
         this.userMapper = userMapper;
@@ -85,6 +95,7 @@ public class UserManager implements UserService {
         this.phoneVerificationService = phoneVerificationService;
         this.badgeService = badgeService;
         this.badgeMapper = badgeMapper;
+            this.pageableSanitizer = pageableSanitizer;
     }
 
     @Override
@@ -399,9 +410,11 @@ public class UserManager implements UserService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<User> search(String query, Pageable pageable) {
+    public Page<User> search(String query, Pageable requested) {
+        pageableSanitizer.rejectUnknownSort(requested, USER_SORTABLE);
         String trimmed = query == null || query.isBlank() ? null : query.trim();
-        return userDao.search(trimmed, pageable);
+        return userDao.search(trimmed,
+                pageableSanitizer.sanitize(requested, USER_SORTABLE, USER_SORT));
     }
 
     @Override

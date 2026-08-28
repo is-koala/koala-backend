@@ -19,6 +19,9 @@ import tools.jackson.databind.ObjectMapper;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import java.time.Instant;
+import org.springframework.data.domain.Sort;
+import com.exskylab.koala.core.helpers.PageableSanitizer;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +33,12 @@ import java.util.UUID;
 @Slf4j
 public class NotificationManager implements NotificationService {
 
+    private static final Set<String> NOTIFICATION_SORTABLE = Set.of("createdAt");
+
+    private static final Sort NOTIFICATION_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
+
+
+    private final PageableSanitizer pageableSanitizer;
     private final NotificationDao notificationDao;
     private final NotificationProducerService notificationProducerService;
     private final ObjectMapper objectMapper;
@@ -40,12 +49,14 @@ public class NotificationManager implements NotificationService {
                                 NotificationProducerService notificationProducerService,
                                DeviceService deviceService,
                                  ObjectMapper objectMapper,
-                               SecurityService securityService) {
+                               SecurityService securityService,
+                                PageableSanitizer pageableSanitizer) {
         this.notificationDao = notificationDao;
         this.notificationProducerService = notificationProducerService;
         this.objectMapper = objectMapper;
         this.deviceService = deviceService;
         this.securityService = securityService;
+            this.pageableSanitizer = pageableSanitizer;
     }
 
     @Override
@@ -355,9 +366,11 @@ public class NotificationManager implements NotificationService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Notification> getMyNotifications(Pageable pageable) {
+    public Page<Notification> getMyNotifications(Pageable requested) {
+        pageableSanitizer.rejectUnknownSort(requested, NOTIFICATION_SORTABLE);
         return notificationDao.findAllByRecipientIdOrderByCreatedAtDesc(
-                securityService.getAuthenticatedUserId(), pageable);
+                securityService.getAuthenticatedUserId(),
+                pageableSanitizer.sanitize(requested, NOTIFICATION_SORTABLE, NOTIFICATION_SORT));
     }
 
     @Override

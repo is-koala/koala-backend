@@ -17,6 +17,9 @@ import com.exskylab.koala.entities.Job;
 import com.exskylab.koala.entities.User;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import com.exskylab.koala.core.helpers.PageableSanitizer;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +29,12 @@ import java.util.UUID;
 @Slf4j
 public class CompanyFollowManager implements CompanyFollowService {
 
+    private static final Set<String> SORTABLE = Set.of("createdAt");
+
+    private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
+
+
+    private final PageableSanitizer pageableSanitizer;
     private final CompanyFollowDao companyFollowDao;
     private final UserService userService;
     private final NotificationService notificationService;
@@ -34,12 +43,14 @@ public class CompanyFollowManager implements CompanyFollowService {
 
     public CompanyFollowManager(CompanyFollowDao companyFollowDao, UserService userService,
                                 NotificationService notificationService,
-                                MediaUrlResolver mediaUrlResolver, CompanyFollowProperties properties) {
+                                MediaUrlResolver mediaUrlResolver, CompanyFollowProperties properties,
+                                PageableSanitizer pageableSanitizer) {
         this.companyFollowDao = companyFollowDao;
         this.userService = userService;
         this.notificationService = notificationService;
         this.mediaUrlResolver = mediaUrlResolver;
         this.properties = properties;
+            this.pageableSanitizer = pageableSanitizer;
     }
 
     @Override
@@ -82,7 +93,10 @@ public class CompanyFollowManager implements CompanyFollowService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageDto<FollowedCompanyDto> getFollowedCompanies(UUID followerId, Pageable pageable) {
+    public PageDto<FollowedCompanyDto> getFollowedCompanies(UUID followerId, Pageable requested) {
+        pageableSanitizer.rejectUnknownSort(requested, SORTABLE);
+        Pageable pageable = pageableSanitizer.sanitize(requested, SORTABLE, DEFAULT_SORT);
+
         log.debug("Listing companies followed by user {}", followerId);
 
         return PageDto.of(companyFollowDao.findAllByFollowerId(followerId, pageable), entry -> {

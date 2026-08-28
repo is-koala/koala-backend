@@ -15,6 +15,9 @@ import com.exskylab.koala.business.abstracts.JobService;
 import com.exskylab.koala.business.abstracts.ImageService;
 import com.exskylab.koala.business.abstracts.MessagingService;
 import com.exskylab.koala.business.abstracts.UserService;
+import org.springframework.data.domain.Sort;
+import com.exskylab.koala.core.helpers.PageableSanitizer;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +28,12 @@ import java.util.UUID;
 @Slf4j
 public class ReportManager implements ReportService {
 
+    private static final Set<String> SORTABLE = Set.of("createdAt", "status");
+
+    private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
+
+
+    private final PageableSanitizer pageableSanitizer;
     private final ReportDao reportDao;
     private final UserService userService;
     private final JobService jobService;
@@ -34,13 +43,15 @@ public class ReportManager implements ReportService {
 
     public ReportManager(ReportDao reportDao, UserService userService, JobService jobService,
                          MessagingService messagingService, SecurityService securityService,
-                         ImageService imageService) {
+                         ImageService imageService,
+                                PageableSanitizer pageableSanitizer) {
         this.reportDao = reportDao;
         this.userService = userService;
         this.jobService = jobService;
         this.messagingService = messagingService;
         this.securityService = securityService;
         this.imageService = imageService;
+            this.pageableSanitizer = pageableSanitizer;
     }
 
     @Override
@@ -99,13 +110,17 @@ public class ReportManager implements ReportService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Report> getMyReports(Pageable pageable) {
-        return reportDao.findAllByReporterId(securityService.getAuthenticatedUserId(), pageable);
+    public Page<Report> getMyReports(Pageable requested) {
+        pageableSanitizer.rejectUnknownSort(requested, SORTABLE);
+        return reportDao.findAllByReporterId(securityService.getAuthenticatedUserId(),
+                pageableSanitizer.sanitize(requested, SORTABLE, DEFAULT_SORT));
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Report> getByStatus(ReportStatus status, Pageable pageable) {
-        return reportDao.findAllByStatus(status, pageable);
+    public Page<Report> getByStatus(ReportStatus status, Pageable requested) {
+        pageableSanitizer.rejectUnknownSort(requested, SORTABLE);
+        return reportDao.findAllByStatus(status,
+                pageableSanitizer.sanitize(requested, SORTABLE, DEFAULT_SORT));
     }
 }

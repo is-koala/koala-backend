@@ -20,6 +20,7 @@ import com.exskylab.koala.core.mappers.ReviewMapper;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -71,7 +72,7 @@ public class ReviewsController {
     })
     @GetMapping("/users/{userId}/reviews")
     public ResponseEntity<SuccessDataResult<PageDto<ReviewDto>>> reviewsAbout(
-            @PathVariable UUID userId, @PageableDefault(size = 20) Pageable pageable) {
+            @PathVariable UUID userId, @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
         var page = reviewService.getReviewsAbout(userId, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(

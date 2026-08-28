@@ -14,6 +14,9 @@ import com.exskylab.koala.core.exceptions.ValidationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import com.exskylab.koala.business.abstracts.UserService;
+import org.springframework.data.domain.Sort;
+import com.exskylab.koala.core.helpers.PageableSanitizer;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,23 +26,33 @@ import java.util.UUID;
 @Slf4j
 public class TalentPoolManager implements TalentPoolService {
 
+    private static final Set<String> SORTABLE = Set.of("createdAt");
+
+    private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
+
+
+    private final PageableSanitizer pageableSanitizer;
     private final TalentPoolEntryDao talentPoolEntryDao;
     private final UserService userService;
     private final CompanyService companyService;
     private final SecurityService securityService;
 
     public TalentPoolManager(TalentPoolEntryDao talentPoolEntryDao, UserService userService,
-                             CompanyService companyService, SecurityService securityService) {
+                             CompanyService companyService, SecurityService securityService,
+                                PageableSanitizer pageableSanitizer) {
         this.talentPoolEntryDao = talentPoolEntryDao;
         this.userService = userService;
         this.companyService = companyService;
         this.securityService = securityService;
+            this.pageableSanitizer = pageableSanitizer;
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<TalentPoolEntry> getMyTalentPool(Pageable pageable) {
-        return talentPoolEntryDao.findAllByEmployerId(securityService.getAuthenticatedUserId(), pageable);
+    public Page<TalentPoolEntry> getMyTalentPool(Pageable requested) {
+        pageableSanitizer.rejectUnknownSort(requested, SORTABLE);
+        return talentPoolEntryDao.findAllByEmployerId(securityService.getAuthenticatedUserId(),
+                pageableSanitizer.sanitize(requested, SORTABLE, DEFAULT_SORT));
     }
 
     @Override

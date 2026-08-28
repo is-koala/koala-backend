@@ -17,6 +17,7 @@ import com.exskylab.koala.core.constants.UserMessages;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
 import org.springframework.data.domain.Pageable;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.web.PageableDefault;
 import com.exskylab.koala.core.dtos.address.request.CreateAddressRequestDto;
 import com.exskylab.koala.core.dtos.address.response.AddressDto;
@@ -225,7 +226,7 @@ public class UsersController {
     })
     @GetMapping("/me/jobs")
     public ResponseEntity<SuccessDataResult<PageDto<JobSummaryDto>>> myJobs(
-            @PageableDefault(size = 20) Pageable pageable) {
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
                 jobService.getJobsOfCurrentUser(pageable), JobMessages.JOBS_LISTED, HttpStatus.OK));

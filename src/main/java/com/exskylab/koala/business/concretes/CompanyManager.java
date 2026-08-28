@@ -28,6 +28,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import java.util.List;
 import com.exskylab.koala.business.abstracts.CompanyContactService;
+import org.springframework.data.domain.Sort;
+import com.exskylab.koala.core.helpers.PageableSanitizer;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -39,6 +42,12 @@ import java.util.UUID;
 @Slf4j
 public class CompanyManager implements CompanyService {
 
+    private static final Set<String> COMPANY_SORTABLE = Set.of("createdAt", "name");
+
+    private static final Sort COMPANY_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
+
+
+    private final PageableSanitizer pageableSanitizer;
     private final CompanyDao companyDao;
     private final UserService userService;
     private final NotificationService notificationService;
@@ -60,7 +69,8 @@ public class CompanyManager implements CompanyService {
                           SecurityService securityService, AddressService addressService,
                           EntityManager entityManager, CompanyMapper companyMapper,
                           CompanyContactService companyContactService, GalleryService galleryService,
-                          CompanyFollowService companyFollowService) {
+                          CompanyFollowService companyFollowService,
+                                PageableSanitizer pageableSanitizer) {
         this.companyDao = companyDao;
         this.userService = userService;
         this.notificationService = notificationService;
@@ -73,6 +83,7 @@ public class CompanyManager implements CompanyService {
         this.companyContactService = companyContactService;
         this.galleryService = galleryService;
         this.companyFollowService = companyFollowService;
+            this.pageableSanitizer = pageableSanitizer;
     }
 
     @Override
@@ -313,8 +324,10 @@ public class CompanyManager implements CompanyService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Company> getCompaniesByApproval(boolean approved, Pageable pageable) {
-        return companyDao.findAllByApproved(approved, pageable);
+    public Page<Company> getCompaniesByApproval(boolean approved, Pageable requested) {
+        pageableSanitizer.rejectUnknownSort(requested, COMPANY_SORTABLE);
+        return companyDao.findAllByApproved(approved,
+                pageableSanitizer.sanitize(requested, COMPANY_SORTABLE, COMPANY_SORT));
     }
 
     @Override

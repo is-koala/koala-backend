@@ -24,6 +24,7 @@ import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.core.utilities.results.SuccessResult;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -56,7 +57,7 @@ public class EmployerToolsController {
     })
     @GetMapping("/talent-pool")
     public ResponseEntity<SuccessDataResult<PageDto<TalentPoolEntryDto>>> talentPool(
-            @PageableDefault(size = 20) Pageable pageable) {
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
         var page = talentPoolService.getMyTalentPool(pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(

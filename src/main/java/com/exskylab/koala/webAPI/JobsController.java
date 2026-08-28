@@ -31,6 +31,7 @@ import com.exskylab.koala.core.mappers.JobMapper;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.core.utilities.results.SuccessResult;
 import org.springframework.data.domain.Pageable;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.web.PageableDefault;
 
 import java.util.UUID;
@@ -73,7 +74,7 @@ public class JobsController {
     @GetMapping
     public ResponseEntity<SuccessDataResult<PageDto<JobSummaryDto>>> searchJobs(
             JobSearchCriteriaDto criteria,
-            @PageableDefault(size = 20) Pageable pageable) {
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
                 jobService.search(criteria, pageable), JobMessages.JOBS_LISTED, HttpStatus.OK));

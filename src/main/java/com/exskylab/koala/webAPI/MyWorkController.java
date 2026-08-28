@@ -29,6 +29,7 @@ import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.core.utilities.results.SuccessResult;
 import com.exskylab.koala.entities.ApplicationStatus;
 import org.springframework.data.domain.Pageable;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -93,7 +94,7 @@ public class MyWorkController {
     @GetMapping("/applications")
     public ResponseEntity<SuccessDataResult<PageDto<MyApplicationDto>>> myApplications(
             @RequestParam(required = false) ApplicationStatus status,
-            @PageableDefault(size = 20) Pageable pageable) {
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
                 jobApplicationService.getMyApplications(status, pageable),
@@ -110,7 +111,7 @@ public class MyWorkController {
     @GetMapping("/assignments")
     public ResponseEntity<SuccessDataResult<PageDto<MyAssignmentDto>>> myAssignments(
             @RequestParam(defaultValue = "false") boolean asEmployer,
-            @PageableDefault(size = 20) Pageable pageable) {
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
                 jobAssignmentService.getMyAssignments(asEmployer, pageable),
@@ -165,7 +166,7 @@ public class MyWorkController {
     })
     @GetMapping("/notifications")
     public ResponseEntity<SuccessDataResult<NotificationFeedDto>> myNotifications(
-            @PageableDefault(size = 20) Pageable pageable) {
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
         var page = notificationService.getMyNotifications(pageable);
         PageDto<NotificationDto> content = PageDto.of(page,

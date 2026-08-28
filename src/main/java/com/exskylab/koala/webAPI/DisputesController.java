@@ -17,6 +17,7 @@ import com.exskylab.koala.core.mappers.DisputeMapper;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -44,7 +45,7 @@ public class DisputesController {
     })
     @GetMapping
     public ResponseEntity<SuccessDataResult<PageDto<DisputeDto>>> pending(
-            @PageableDefault(size = 20) Pageable pageable) {
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
         var page = disputeService.getPending(pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(

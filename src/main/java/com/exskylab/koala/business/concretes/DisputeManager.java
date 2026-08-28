@@ -15,6 +15,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.UserService;
+import org.springframework.data.domain.Sort;
+import com.exskylab.koala.core.helpers.PageableSanitizer;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,8 +29,14 @@ import java.util.UUID;
 @Slf4j
 public class DisputeManager implements DisputeService {
 
+    private static final Set<String> SORTABLE = Set.of("createdAt", "status");
+
+    private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
+
+
     static final List<DisputeStatus> ACTIVE = List.of(DisputeStatus.OPEN, DisputeStatus.UNDER_REVIEW);
 
+    private final PageableSanitizer pageableSanitizer;
     private final DisputeDao disputeDao;
     private final JobAssignmentService jobAssignmentService;
     private final UserService userService;
@@ -37,13 +46,15 @@ public class DisputeManager implements DisputeService {
 
     public DisputeManager(DisputeDao disputeDao, JobAssignmentService jobAssignmentService, UserService userService,
                           SecurityService securityService, AssignmentParticipants participants,
-                          PayoutService payoutService) {
+                          PayoutService payoutService,
+                                PageableSanitizer pageableSanitizer) {
         this.disputeDao = disputeDao;
         this.jobAssignmentService = jobAssignmentService;
         this.userService = userService;
         this.securityService = securityService;
         this.participants = participants;
         this.payoutService = payoutService;
+            this.pageableSanitizer = pageableSanitizer;
     }
 
     @Override
@@ -118,8 +129,10 @@ public class DisputeManager implements DisputeService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Dispute> getPending(Pageable pageable) {
-        return disputeDao.findAllByStatusIn(ACTIVE, pageable);
+    public Page<Dispute> getPending(Pageable requested) {
+        pageableSanitizer.rejectUnknownSort(requested, SORTABLE);
+        return disputeDao.findAllByStatusIn(ACTIVE,
+                pageableSanitizer.sanitize(requested, SORTABLE, DEFAULT_SORT));
     }
 
     @Override

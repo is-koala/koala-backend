@@ -19,6 +19,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.InsufficientAuthenticationException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
@@ -105,6 +106,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Result> handleBadRequestParameter(Exception ex) {
         log.warn("Gecersiz istek parametresi: {}", ex.getMessage());
         return build(HttpStatus.BAD_REQUEST, "{request.parameter.invalid}", null, ErrorCategory.PARAMETER_MISSING, null);
+    }
+
+    @ExceptionHandler(InvalidDataAccessApiUsageException.class)
+    public ResponseEntity<Result> handleInvalidDataAccess(InvalidDataAccessApiUsageException ex) {
+        log.warn("Gecersiz sorgu kullanimi: {}", ex.getMessage());
+        return build(HttpStatus.BAD_REQUEST, "{page.sort.field.not.allowed}", null,
+                ErrorCategory.VALIDATION_FAILED, null);
     }
 
     @ExceptionHandler(NoResourceFoundException.class)

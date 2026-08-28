@@ -24,6 +24,7 @@ import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.companyFollow.response.FollowedCompanyDto;
 import com.exskylab.koala.core.mappers.JobMapper;
 import org.springframework.data.domain.Pageable;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.web.PageableDefault;
 import com.exskylab.koala.core.helpers.MediaUrlResolver;
 import com.exskylab.koala.core.utilities.results.Result;
@@ -71,7 +72,7 @@ public class UserProfileController {
     })
     @GetMapping("/followed-companies")
     public ResponseEntity<SuccessDataResult<PageDto<FollowedCompanyDto>>> followedCompanies(
-            @PageableDefault(size = 20) Pageable pageable) {
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
                 companyService.getFollowedCompanies(pageable),

@@ -19,6 +19,7 @@ import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.entities.ReportStatus;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -64,7 +65,7 @@ public class ReportsController {
     })
     @GetMapping("/reports/me")
     public ResponseEntity<SuccessDataResult<PageDto<ReportDto>>> mine(
-            @PageableDefault(size = 20) Pageable pageable) {
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
         var page = reportService.getMyReports(pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
@@ -79,7 +80,7 @@ public class ReportsController {
     })
     @GetMapping("/admin/reports")
     public ResponseEntity<SuccessDataResult<PageDto<ReportDto>>> byStatus(
-            @RequestParam ReportStatus status, @PageableDefault(size = 20) Pageable pageable) {
+            @RequestParam ReportStatus status, @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
         var page = reportService.getByStatus(status, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
