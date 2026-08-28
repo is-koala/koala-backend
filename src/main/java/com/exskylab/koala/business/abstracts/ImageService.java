@@ -7,6 +7,8 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.UUID;
 
 public interface ImageService {
+    Image getById(UUID imageId);
+
     Image uploadImage(MultipartFile image);
 
     UploadImageResponseDto uploadImageDto(MultipartFile image);

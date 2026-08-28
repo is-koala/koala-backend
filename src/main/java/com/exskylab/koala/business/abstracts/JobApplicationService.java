@@ -1,5 +1,8 @@
 package com.exskylab.koala.business.abstracts;
 
+import com.exskylab.koala.core.dtos.common.PageDto;
+import com.exskylab.koala.core.dtos.jobApplication.response.MyApplicationDto;
+
 import com.exskylab.koala.core.dtos.jobApplication.request.AnswerApplicationDto;
 import com.exskylab.koala.core.dtos.jobApplication.request.CreateJobApplicationDto;
 import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationDetailDto;
@@ -24,7 +27,7 @@ public interface JobApplicationService {
 
     JobApplicationDetailDto respondToApplication(UUID applicationId, AnswerApplicationDto jobApplicationsApplicationIdPatchRequestDto);
 
-    Page<JobApplication> getMyApplications(ApplicationStatus status, Pageable pageable);
+    PageDto<MyApplicationDto> getMyApplications(ApplicationStatus status, Pageable pageable);
 
     boolean hasApplied(UUID jobId, UUID userId);
 }

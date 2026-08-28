@@ -13,7 +13,8 @@ import org.mapstruct.Mapping;
 import java.util.List;
 
 @Mapper(componentModel = "spring",
-        uses = {UserMapper.class, JobCategoryMapper.class, AddressMapper.class, CompanyMapper.class},
+        uses = {UserMapper.class, JobCategoryMapper.class, AddressMapper.class, CompanyMapper.class,
+                GalleryMapper.class},
         injectionStrategy = InjectionStrategy.CONSTRUCTOR)
 public interface JobMapper {
 
@@ -28,6 +29,7 @@ public interface JobMapper {
     @Mapping(target = "companyName", source = "company.name")
     @Mapping(target = "latitude", source = "address.latitude")
     @Mapping(target = "longitude", source = "address.longitude")
+    @Mapping(target = "coverImageUrl", ignore = true)
     JobSummaryDto toJobSummaryDto(Job job);
 
     JobDetailDto toJobDetailDto(Job job);

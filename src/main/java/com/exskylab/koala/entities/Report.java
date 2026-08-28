@@ -42,6 +42,10 @@ public class Report extends BaseEntity {
     @JoinColumn(name = "message_id")
     private Message message;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "image_id")
+    private Image image;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "reason", nullable = false, length = 32)
     private ReportReason reason;

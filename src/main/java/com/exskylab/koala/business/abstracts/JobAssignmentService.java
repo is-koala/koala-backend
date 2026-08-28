@@ -1,5 +1,8 @@
 package com.exskylab.koala.business.abstracts;
 
+import com.exskylab.koala.core.dtos.common.PageDto;
+import com.exskylab.koala.core.dtos.jobAssignment.response.MyAssignmentDto;
+
 import com.exskylab.koala.core.dtos.jobAssignment.request.AnswerAssignmentDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.PaymentSessionDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentDto;
@@ -20,7 +23,7 @@ public interface JobAssignmentService {
 
     PaymentSessionDto initiatePaymentSession(UUID assignmentId, String clientIpAddress);
 
-    Page<JobAssignment> getMyAssignments(boolean asEmployer, Pageable pageable);
+    PageDto<MyAssignmentDto> getMyAssignments(boolean asEmployer, Pageable pageable);
 
     JobAssignment completeAssignment(UUID assignmentId);
 
@@ -31,6 +34,8 @@ public interface JobAssignmentService {
     JobAssignment getDetailedById(UUID assignmentId);
 
     long countCompletedForWorker(UUID workerId);
+
+    long countCompletedForEmployer(UUID employerId);
 
     boolean hasMoneyInEscrowFor(UUID workerId);
 

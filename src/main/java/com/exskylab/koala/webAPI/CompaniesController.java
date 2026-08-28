@@ -12,6 +12,9 @@ import com.exskylab.koala.core.dtos.companyContactInvitation.response.CompanyCon
 import com.exskylab.koala.core.dtos.job.request.CreateCompanyJobDto;
 import com.exskylab.koala.core.dtos.job.response.CompanyJobDto;
 import com.exskylab.koala.core.dtos.companyContact.response.CompanyContactDto;
+import com.exskylab.koala.core.constants.GalleryMessages;
+import com.exskylab.koala.core.dtos.gallery.request.UpdateGalleryDto;
+import com.exskylab.koala.core.dtos.gallery.response.GalleryImageDto;
 import com.exskylab.koala.core.mappers.CompanyContactInvitationMapper;
 import com.exskylab.koala.core.mappers.CompanyContactMapper;
 import com.exskylab.koala.core.mappers.CompanyMapper;
@@ -126,6 +129,51 @@ public class CompaniesController {
         return ResponseEntity.ok(new SuccessDataResult<>(
                 companyContactMapper.toCompanyContactWithoutCompanyDtoList(companyService.getContacts(companyId)),
                 CompanyMessages.CONTACTS_LISTED, HttpStatus.OK));
+    }
+
+    @PostMapping("/{companyId}/follow")
+    public ResponseEntity<Result> followCompany(@PathVariable UUID companyId) {
+        companyService.followCompany(companyId);
+        return ResponseEntity.ok(new SuccessResult(CompanyMessages.COMPANY_FOLLOWED, HttpStatus.OK));
+    }
+
+    @DeleteMapping("/{companyId}/follow")
+    public ResponseEntity<Result> unfollowCompany(@PathVariable UUID companyId) {
+        companyService.unfollowCompany(companyId);
+        return ResponseEntity.ok(new SuccessResult(CompanyMessages.COMPANY_UNFOLLOWED, HttpStatus.OK));
+    }
+
+    @GetMapping("/{companyId}/images")
+    public ResponseEntity<SuccessDataResult<List<GalleryImageDto>>> companyImages(@PathVariable UUID companyId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                companyService.getCompanyGallery(companyId), GalleryMessages.IMAGE_LISTED, HttpStatus.OK));
+    }
+
+    @PostMapping(value = "/{companyId}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<SuccessDataResult<List<GalleryImageDto>>> addCompanyImage(
+            @PathVariable UUID companyId, @RequestPart("image") MultipartFile image) {
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(new SuccessDataResult<>(
+                companyService.addCompanyImage(companyId, image),
+                GalleryMessages.IMAGE_ADDED, HttpStatus.CREATED));
+    }
+
+    @PutMapping("/{companyId}/images")
+    public ResponseEntity<SuccessDataResult<List<GalleryImageDto>>> updateCompanyGallery(
+            @PathVariable UUID companyId, @RequestBody @Valid UpdateGalleryDto request) {
+
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                companyService.replaceCompanyGallery(companyId, request),
+                GalleryMessages.IMAGE_UPDATED, HttpStatus.OK));
+    }
+
+    @DeleteMapping("/{companyId}/images/{imageId}")
+    public ResponseEntity<SuccessDataResult<List<GalleryImageDto>>> removeCompanyImage(
+            @PathVariable UUID companyId, @PathVariable UUID imageId) {
+
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                companyService.removeCompanyImage(companyId, imageId),
+                GalleryMessages.IMAGE_REMOVED, HttpStatus.OK));
     }
 
     @DeleteMapping("/{companyId}/contacts/{userId}")

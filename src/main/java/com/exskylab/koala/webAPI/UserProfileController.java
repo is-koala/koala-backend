@@ -10,7 +10,13 @@ import com.exskylab.koala.core.dtos.education.request.SaveEducationDto;
 import com.exskylab.koala.core.dtos.education.response.EducationDto;
 import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
 import com.exskylab.koala.core.mappers.EducationMapper;
+import com.exskylab.koala.business.abstracts.CompanyService;
+import com.exskylab.koala.core.constants.CompanyMessages;
+import com.exskylab.koala.core.dtos.common.PageDto;
+import com.exskylab.koala.core.dtos.companyFollow.response.FollowedCompanyDto;
 import com.exskylab.koala.core.mappers.JobMapper;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import com.exskylab.koala.core.helpers.MediaUrlResolver;
 import com.exskylab.koala.core.utilities.results.Result;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
@@ -28,6 +34,7 @@ import java.util.UUID;
 @RequestMapping("/users/me")
 public class UserProfileController {
 
+    private final CompanyService companyService;
     private final SavedJobService savedJobService;
     private final CvService cvService;
     private final EducationService educationService;
@@ -35,15 +42,26 @@ public class UserProfileController {
     private final EducationMapper educationMapper;
     private final MediaUrlResolver mediaUrlResolver;
 
-    public UserProfileController(SavedJobService savedJobService, CvService cvService,
+    public UserProfileController(CompanyService companyService,
+                                 SavedJobService savedJobService, CvService cvService,
                                  EducationService educationService, JobMapper jobMapper,
                                  EducationMapper educationMapper, MediaUrlResolver mediaUrlResolver) {
+        this.companyService = companyService;
         this.savedJobService = savedJobService;
         this.cvService = cvService;
         this.educationService = educationService;
         this.jobMapper = jobMapper;
         this.educationMapper = educationMapper;
         this.mediaUrlResolver = mediaUrlResolver;
+    }
+
+    @GetMapping("/followed-companies")
+    public ResponseEntity<SuccessDataResult<PageDto<FollowedCompanyDto>>> followedCompanies(
+            @PageableDefault(size = 20) Pageable pageable) {
+
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                companyService.getFollowedCompanies(pageable),
+                CompanyMessages.FOLLOWED_COMPANIES_LISTED, HttpStatus.OK));
     }
 
     @GetMapping("/saved-jobs")

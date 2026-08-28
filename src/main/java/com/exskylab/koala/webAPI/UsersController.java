@@ -19,6 +19,8 @@ import com.exskylab.koala.core.dtos.user.request.VerifyIdentityDto;
 import com.exskylab.koala.core.dtos.user.response.UserMeResponseDto;
 import com.exskylab.koala.core.dtos.user.response.UserUpdateResponseDto;
 import com.exskylab.koala.core.helpers.BearerTokenExtractor;
+import com.exskylab.koala.business.abstracts.StatisticsService;
+import com.exskylab.koala.core.dtos.statistics.response.EmployerStatsDto;
 import com.exskylab.koala.core.mappers.JobMapper;
 import com.exskylab.koala.core.mappers.UserMapper;
 import com.exskylab.koala.core.security.JwtService;
@@ -49,13 +51,23 @@ public class UsersController {
     private final SecurityService securityService;
     private final JobService jobService;
     private final JobMapper jobMapper;
+    private final StatisticsService statisticsService;
 
-    public UsersController(UserService userService, JwtService jwtService, SecurityService securityService, JobService jobService, JobMapper jobMapper) {
+    public UsersController(UserService userService, JwtService jwtService, SecurityService securityService, JobService jobService, JobMapper jobMapper,
+                           StatisticsService statisticsService) {
         this.userService = userService;
         this.jwtService = jwtService;
         this.securityService = securityService;
         this.jobService = jobService;
         this.jobMapper = jobMapper;
+        this.statisticsService = statisticsService;
+    }
+
+    @GetMapping("/{userId}/employer-stats")
+    public ResponseEntity<SuccessDataResult<EmployerStatsDto>> employerStats(@PathVariable UUID userId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                statisticsService.getEmployerStats(userId),
+                UserMessages.EMPLOYER_STATS_RETRIEVED, HttpStatus.OK));
     }
 
    @GetMapping("/me")

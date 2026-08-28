@@ -7,7 +7,11 @@ import com.exskylab.koala.core.helpers.LogMasks;
 import com.exskylab.koala.business.abstracts.*;
 import com.exskylab.koala.core.constants.CompanyMessages;
 import com.exskylab.koala.core.dtos.company.request.CreateCompanyRequestDto;
+import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.company.response.CompanyDto;
+import com.exskylab.koala.core.dtos.companyFollow.response.FollowedCompanyDto;
+import com.exskylab.koala.core.dtos.gallery.request.UpdateGalleryDto;
+import com.exskylab.koala.core.dtos.gallery.response.GalleryImageDto;
 import com.exskylab.koala.core.dtos.companyContact.request.InviteContactToCompanyDto;
 import com.exskylab.koala.core.dtos.notification.request.SendEmailDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
@@ -46,6 +50,8 @@ public class CompanyManager implements CompanyService {
     private final EntityManager entityManager;
     private final CompanyMapper companyMapper;
     private final CompanyContactService companyContactService;
+    private final GalleryService galleryService;
+    private final CompanyFollowService companyFollowService;
     
 
     public CompanyManager(CompanyDao companyDao, UserService userService,
@@ -53,7 +59,8 @@ public class CompanyManager implements CompanyService {
                           CompanyContactInvitationService companyContactInvitationService,
                           SecurityService securityService, AddressService addressService,
                           EntityManager entityManager, CompanyMapper companyMapper,
-                          CompanyContactService companyContactService) {
+                          CompanyContactService companyContactService, GalleryService galleryService,
+                          CompanyFollowService companyFollowService) {
         this.companyDao = companyDao;
         this.userService = userService;
         this.notificationService = notificationService;
@@ -64,6 +71,8 @@ public class CompanyManager implements CompanyService {
         this.entityManager = entityManager;
         this.companyMapper = companyMapper;
         this.companyContactService = companyContactService;
+        this.galleryService = galleryService;
+        this.companyFollowService = companyFollowService;
     }
 
     @Override
@@ -244,7 +253,11 @@ public class CompanyManager implements CompanyService {
     @Override
     @Transactional(readOnly = true)
     public CompanyDto getCompanyDetail(UUID companyId) {
-        return companyMapper.toCompanyDto(getCompanyById(companyId));
+        CompanyDto company = companyMapper.toCompanyDto(getCompanyById(companyId));
+        company.setFollowerCount(companyFollowService.followerCount(companyId));
+        company.setFollowing(companyFollowService.isFollowing(companyId,
+                securityService.getAuthenticatedUserId()));
+        return company;
     }
 
     @Override
@@ -323,6 +336,52 @@ public class CompanyManager implements CompanyService {
         if (!companyContactService.isUserAContactOfCompany(companyId, securityService.getAuthenticatedUserId())) {
             throw new ResourceNotFoundException(CompanyMessages.USER_NOT_ASSOCIATED_WITH_COMPANY);
         }
+    }
+
+    @Override
+    @Transactional
+    public void followCompany(UUID companyId) {
+        companyFollowService.follow(getCompanyById(companyId), securityService.getAuthenticatedUserId());
+    }
+
+    @Override
+    @Transactional
+    public void unfollowCompany(UUID companyId) {
+        companyFollowService.unfollow(companyId, securityService.getAuthenticatedUserId());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageDto<FollowedCompanyDto> getFollowedCompanies(Pageable pageable) {
+        return companyFollowService.getFollowedCompanies(securityService.getAuthenticatedUserId(), pageable);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<GalleryImageDto> getCompanyGallery(UUID companyId) {
+        getCompanyById(companyId);
+        return galleryService.getCompanyGallery(companyId);
+    }
+
+    @Override
+    @Transactional
+    public List<GalleryImageDto> addCompanyImage(UUID companyId, MultipartFile file) {
+        requireCompanyAdmin(companyId);
+        return galleryService.addCompanyImage(getCompanyById(companyId), file);
+    }
+
+    @Override
+    @Transactional
+    public List<GalleryImageDto> replaceCompanyGallery(UUID companyId, UpdateGalleryDto request) {
+        requireCompanyAdmin(companyId);
+        return galleryService.replaceCompanyGallery(getCompanyById(companyId), request);
+    }
+
+    @Override
+    @Transactional
+    public List<GalleryImageDto> removeCompanyImage(UUID companyId, UUID imageId) {
+        requireCompanyAdmin(companyId);
+        return galleryService.removeCompanyImage(getCompanyById(companyId), imageId);
     }
 
     private void requireCompanyAdmin(UUID companyId) {

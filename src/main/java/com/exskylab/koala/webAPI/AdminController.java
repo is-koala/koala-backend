@@ -1,6 +1,7 @@
 package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.business.abstracts.CompanyService;
+import com.exskylab.koala.business.abstracts.GalleryService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.constants.AdminMessages;
 import com.exskylab.koala.core.dtos.common.PageDto;
@@ -8,7 +9,10 @@ import com.exskylab.koala.core.dtos.company.response.CompanyDto;
 import com.exskylab.koala.core.dtos.user.response.SafeUserDto;
 import com.exskylab.koala.core.mappers.CompanyMapper;
 import com.exskylab.koala.core.mappers.UserMapper;
+import com.exskylab.koala.core.constants.GalleryMessages;
+import com.exskylab.koala.core.utilities.results.Result;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
+import com.exskylab.koala.core.utilities.results.SuccessResult;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
@@ -25,13 +29,22 @@ public class AdminController {
     private final UserService userService;
     private final CompanyMapper companyMapper;
     private final UserMapper userMapper;
+    private final GalleryService galleryService;
 
     public AdminController(CompanyService companyService, UserService userService,
-                           CompanyMapper companyMapper, UserMapper userMapper) {
+                           CompanyMapper companyMapper, UserMapper userMapper,
+                           GalleryService galleryService) {
         this.companyService = companyService;
         this.userService = userService;
         this.companyMapper = companyMapper;
         this.userMapper = userMapper;
+        this.galleryService = galleryService;
+    }
+
+    @DeleteMapping("/images/{imageId}")
+    public ResponseEntity<Result> removeImage(@PathVariable UUID imageId) {
+        galleryService.removeImageEverywhere(imageId);
+        return ResponseEntity.ok(new SuccessResult(GalleryMessages.IMAGE_REMOVED, HttpStatus.OK));
     }
 
     @GetMapping("/companies")

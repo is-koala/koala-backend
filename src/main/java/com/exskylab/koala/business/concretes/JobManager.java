@@ -12,6 +12,9 @@ import com.exskylab.koala.core.dtos.job.response.IndividualJobDto;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.job.request.JobSearchCriteriaDto;
 import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
+import com.exskylab.koala.core.dtos.gallery.request.UpdateGalleryDto;
+import com.exskylab.koala.core.dtos.gallery.response.GalleryImageDto;
+import org.springframework.web.multipart.MultipartFile;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import org.springframework.data.domain.Page;
@@ -49,10 +52,13 @@ public class JobManager implements JobService {
     private final PageableSanitizer pageableSanitizer;
     private final CompanyContactService companyContactService;
     private final JobAlertService jobAlertService;
+    private final GalleryService galleryService;
+    private final CompanyFollowService companyFollowService;
 
     public JobManager(JobDao jobDao, SecurityService securityService, JobCategoryService jobCategoryService, AddressService addressService, CompanyService companyService, JobMapper jobMapper,
                       PageableSanitizer pageableSanitizer, CompanyContactService companyContactService,
-                      JobAlertService jobAlertService) {
+                      JobAlertService jobAlertService, GalleryService galleryService,
+                      CompanyFollowService companyFollowService) {
         this.jobDao = jobDao;
         this.securityService = securityService;
         this.jobCategoryService = jobCategoryService;
@@ -62,6 +68,8 @@ public class JobManager implements JobService {
         this.pageableSanitizer = pageableSanitizer;
         this.companyContactService = companyContactService;
         this.jobAlertService = jobAlertService;
+        this.galleryService = galleryService;
+        this.companyFollowService = companyFollowService;
     }
 
     @Override
@@ -128,6 +136,7 @@ public class JobManager implements JobService {
 
         Job savedJob = jobDao.save(job);
         jobAlertService.notifyMatching(savedJob);
+        companyFollowService.notifyFollowers(savedJob);
         log.info("Saved individual job with id: {}", savedJob.getId());
 
         return jobMapper.toUsersMeJobsPostResponseDto(savedJob);
@@ -203,6 +212,7 @@ public class JobManager implements JobService {
 
         Job savedJob = jobDao.save(job);
         jobAlertService.notifyMatching(savedJob);
+        companyFollowService.notifyFollowers(savedJob);
         log.info("Saved corporate job with id: {}", savedJob.getId());
 
 
@@ -263,7 +273,7 @@ public class JobManager implements JobService {
                 criteria.getMaxLongitude(),
                 pageable);
 
-        return PageDto.of(ids, jobMapper.toJobSummaryDtoList(inIdOrder(ids.getContent())));
+        return withCovers(PageDto.of(ids, jobMapper.toJobSummaryDtoList(inIdOrder(ids.getContent()))));
     }
 
     @Override
@@ -273,12 +283,43 @@ public class JobManager implements JobService {
         Pageable pageable = pageableSanitizer.sanitize(requested, SORTABLE_FIELDS, DEFAULT_SORT);
 
         Page<Job> jobs = jobDao.findAllByCreatorId(securityService.getAuthenticatedUserId(), pageable);
-        return PageDto.of(jobs, jobMapper::toJobSummaryDto);
+        return withCovers(PageDto.of(jobs, jobMapper::toJobSummaryDto));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<GalleryImageDto> getJobGallery(UUID jobId) {
+        if (!jobDao.existsById(jobId)) {
+            throw new ResourceNotFoundException(JobMessages.JOB_NOT_FOUND);
+        }
+        return galleryService.getJobGallery(jobId);
     }
 
     @Override
     @Transactional
-    public void closeJob(UUID jobId) {
+    public List<GalleryImageDto> addJobImage(UUID jobId, MultipartFile file) {
+        return galleryService.addJobImage(requireJobEditor(jobId), file);
+    }
+
+    @Override
+    @Transactional
+    public List<GalleryImageDto> replaceJobGallery(UUID jobId, UpdateGalleryDto request) {
+        return galleryService.replaceJobGallery(requireJobEditor(jobId), request);
+    }
+
+    @Override
+    @Transactional
+    public List<GalleryImageDto> removeJobImage(UUID jobId, UUID imageId) {
+        return galleryService.removeJobImage(requireJobEditor(jobId), imageId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countJobsCreatedBy(UUID userId) {
+        return jobDao.countByCreatorId(userId);
+    }
+
+    private Job requireJobEditor(UUID jobId) {
         Job job = jobDao.findById(jobId)
                 .orElseThrow(() -> new ResourceNotFoundException(JobMessages.JOB_NOT_FOUND));
 
@@ -290,6 +331,13 @@ public class JobManager implements JobService {
         if (!isOwner && !isCompanyContact) {
             throw new ResourceNotFoundException(JobMessages.JOB_NOT_FOUND);
         }
+        return job;
+    }
+
+    @Override
+    @Transactional
+    public void closeJob(UUID jobId) {
+        Job job = requireJobEditor(jobId);
 
         if (job.getStatus() != JobStatus.OPEN) {
             throw new ConflictException(JobMessages.JOB_NOT_OPEN);
@@ -297,7 +345,12 @@ public class JobManager implements JobService {
 
         job.setStatus(JobStatus.CLOSED);
         jobDao.save(job);
-        log.info("Job {} closed by user {}", jobId, currentUserId);
+        log.info("Job {} closed by user {}", jobId, securityService.getAuthenticatedUserId());
+    }
+
+    private PageDto<JobSummaryDto> withCovers(PageDto<JobSummaryDto> page) {
+        galleryService.fillJobCovers(page.content());
+        return page;
     }
 
     private List<Job> inIdOrder(List<UUID> ids) {

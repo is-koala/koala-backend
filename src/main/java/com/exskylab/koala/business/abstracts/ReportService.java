@@ -10,7 +10,7 @@ import java.util.UUID;
 
 public interface ReportService {
 
-    Report createReport(UUID reportedUserId, UUID jobId, UUID messageId,
+    Report createReport(UUID reportedUserId, UUID jobId, UUID messageId, UUID imageId,
                         ReportReason reason, String description);
 
     Report review(UUID reportId, ReportStatus status, String note);

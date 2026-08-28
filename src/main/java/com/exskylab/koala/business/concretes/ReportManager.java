@@ -12,6 +12,7 @@ import com.exskylab.koala.entities.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import com.exskylab.koala.business.abstracts.JobService;
+import com.exskylab.koala.business.abstracts.ImageService;
 import com.exskylab.koala.business.abstracts.MessagingService;
 import com.exskylab.koala.business.abstracts.UserService;
 import org.springframework.stereotype.Service;
@@ -29,19 +30,22 @@ public class ReportManager implements ReportService {
     private final JobService jobService;
     private final MessagingService messagingService;
     private final SecurityService securityService;
+    private final ImageService imageService;
 
     public ReportManager(ReportDao reportDao, UserService userService, JobService jobService,
-                         MessagingService messagingService, SecurityService securityService) {
+                         MessagingService messagingService, SecurityService securityService,
+                         ImageService imageService) {
         this.reportDao = reportDao;
         this.userService = userService;
         this.jobService = jobService;
         this.messagingService = messagingService;
         this.securityService = securityService;
+        this.imageService = imageService;
     }
 
     @Override
     @Transactional
-    public Report createReport(UUID reportedUserId, UUID jobId, UUID messageId,
+    public Report createReport(UUID reportedUserId, UUID jobId, UUID messageId, UUID imageId,
                                ReportReason reason, String description) {
 
         UUID reporterId = securityService.getAuthenticatedUserId();
@@ -63,6 +67,9 @@ public class ReportManager implements ReportService {
         }
         if (messageId != null) {
             report.setMessage(messagingService.getMessageById(messageId));
+        }
+        if (imageId != null) {
+            report.setImage(imageService.getById(imageId));
         }
 
         Report saved = reportDao.save(report);

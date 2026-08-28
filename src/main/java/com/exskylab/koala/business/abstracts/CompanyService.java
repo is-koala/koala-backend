@@ -5,6 +5,10 @@ import com.exskylab.koala.core.dtos.company.response.CompanyDto;
 import com.exskylab.koala.core.dtos.companyContact.request.InviteContactToCompanyDto;
 import com.exskylab.koala.core.dtos.companyContactInvitation.response.CompanyContactInvitationDto;
 import com.exskylab.koala.core.dtos.company.request.UpdateCompanyRequestDto;
+import com.exskylab.koala.core.dtos.common.PageDto;
+import com.exskylab.koala.core.dtos.companyFollow.response.FollowedCompanyDto;
+import com.exskylab.koala.core.dtos.gallery.request.UpdateGalleryDto;
+import com.exskylab.koala.core.dtos.gallery.response.GalleryImageDto;
 import com.exskylab.koala.entities.CompanyContact;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -17,6 +21,21 @@ import java.util.List;
 import java.util.UUID;
 
 public interface CompanyService {
+
+    void followCompany(UUID companyId);
+
+    void unfollowCompany(UUID companyId);
+
+    PageDto<FollowedCompanyDto> getFollowedCompanies(Pageable pageable);
+
+    List<GalleryImageDto> getCompanyGallery(UUID companyId);
+
+    List<GalleryImageDto> addCompanyImage(UUID companyId, MultipartFile file);
+
+    List<GalleryImageDto> replaceCompanyGallery(UUID companyId, UpdateGalleryDto request);
+
+    List<GalleryImageDto> removeCompanyImage(UUID companyId, UUID imageId);
+
 
 
     CompanyDto addCompany(@Valid CreateCompanyRequestDto createCompanyRequestDto, MultipartFile logo);

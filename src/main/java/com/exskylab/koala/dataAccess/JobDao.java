@@ -66,8 +66,11 @@ public interface JobDao extends JpaRepository<Job, UUID> {
     List<Job> findAllByIdIn(List<UUID> ids);
 
     @EntityGraph(attributePaths = {"category", "creator", "company", "address",
-            "address.city", "address.district", "address.city.country"})
+            "address.city", "address.district", "address.city.country",
+            "images", "images.image"})
     Optional<Job> findWithDetailsById(UUID id);
+
+    long countByCreatorId(UUID creatorId);
 
     @EntityGraph(attributePaths = {"category", "company", "address", "address.city", "address.district"})
     Page<Job> findAllByCreatorId(UUID creatorId, Pageable pageable);

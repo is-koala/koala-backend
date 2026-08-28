@@ -2,6 +2,7 @@ package com.exskylab.koala.core.dtos.job.response;
 
 import com.exskylab.koala.core.dtos.address.response.AddressDto;
 import com.exskylab.koala.core.dtos.company.response.OnlyCompanyDto;
+import com.exskylab.koala.core.dtos.gallery.response.GalleryImageDto;
 import com.exskylab.koala.core.dtos.jobCategory.response.JobCategoryDto;
 import com.exskylab.koala.core.dtos.user.response.SafeUserDto;
 import com.exskylab.koala.entities.JobEmployerType;
@@ -16,6 +17,7 @@ import lombok.Setter;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Getter
@@ -46,5 +48,6 @@ public class JobDetailDto {
     private AddressDto address;
     private SafeUserDto creator;
     private OnlyCompanyDto company;
+    private List<GalleryImageDto> images;
     private Instant createdAt;
 }

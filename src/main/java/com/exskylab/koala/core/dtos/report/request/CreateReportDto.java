@@ -24,6 +24,8 @@ public class CreateReportDto {
 
     private UUID messageId;
 
+    private UUID imageId;
+
     @NotNull(message = ReportMessages.TARGET_REQUIRED)
     private ReportReason reason;
 
@@ -32,6 +34,6 @@ public class CreateReportDto {
 
     @AssertTrue(message = ReportMessages.TARGET_REQUIRED)
     public boolean isPointingAtSomething() {
-        return reportedUserId != null || jobId != null || messageId != null;
+        return reportedUserId != null || jobId != null || messageId != null || imageId != null;
     }
 }

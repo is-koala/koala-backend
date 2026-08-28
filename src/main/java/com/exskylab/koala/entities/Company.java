@@ -62,6 +62,10 @@ public class Company extends BaseEntity{
     @OneToMany(mappedBy = "company", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<CompanyContactInvitation> contactInvitations = new ArrayList<>();
 
+    @OneToMany(mappedBy = "company", fetch = FetchType.LAZY)
+    @OrderBy("sortOrder ASC")
+    private List<CompanyImage> images = new ArrayList<>();
+
     @Column(name = "is_approved")
     private boolean isApproved;
 

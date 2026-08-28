@@ -12,6 +12,11 @@ import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.job.request.JobSearchCriteriaDto;
 import com.exskylab.koala.core.dtos.job.response.JobDetailDto;
 import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
+import com.exskylab.koala.core.constants.GalleryMessages;
+import com.exskylab.koala.core.dtos.gallery.request.UpdateGalleryDto;
+import com.exskylab.koala.core.dtos.gallery.response.GalleryImageDto;
+import org.springframework.http.MediaType;
+import org.springframework.web.multipart.MultipartFile;
 import com.exskylab.koala.core.mappers.JobMapper;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.core.utilities.results.SuccessResult;
@@ -66,6 +71,36 @@ public class JobsController {
     public ResponseEntity<SuccessResult> closeJob(@PathVariable UUID jobId) {
         jobService.closeJob(jobId);
         return ResponseEntity.ok(new SuccessResult(JobMessages.JOB_CLOSED, HttpStatus.OK));
+    }
+
+    @GetMapping("/{jobId}/images")
+    public ResponseEntity<SuccessDataResult<List<GalleryImageDto>>> jobImages(@PathVariable UUID jobId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                jobService.getJobGallery(jobId), GalleryMessages.IMAGE_LISTED, HttpStatus.OK));
+    }
+
+    @PostMapping(value = "/{jobId}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<SuccessDataResult<List<GalleryImageDto>>> addJobImage(
+            @PathVariable UUID jobId, @RequestPart("image") MultipartFile image) {
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(new SuccessDataResult<>(
+                jobService.addJobImage(jobId, image), GalleryMessages.IMAGE_ADDED, HttpStatus.CREATED));
+    }
+
+    @PutMapping("/{jobId}/images")
+    public ResponseEntity<SuccessDataResult<List<GalleryImageDto>>> updateJobGallery(
+            @PathVariable UUID jobId, @RequestBody @Valid UpdateGalleryDto request) {
+
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                jobService.replaceJobGallery(jobId, request), GalleryMessages.IMAGE_UPDATED, HttpStatus.OK));
+    }
+
+    @DeleteMapping("/{jobId}/images/{imageId}")
+    public ResponseEntity<SuccessDataResult<List<GalleryImageDto>>> removeJobImage(
+            @PathVariable UUID jobId, @PathVariable UUID imageId) {
+
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                jobService.removeJobImage(jobId, imageId), GalleryMessages.IMAGE_REMOVED, HttpStatus.OK));
     }
 
     @PostMapping("/{jobId}/applications")

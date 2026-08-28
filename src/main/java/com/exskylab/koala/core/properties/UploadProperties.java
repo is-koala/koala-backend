@@ -15,6 +15,10 @@ public class UploadProperties {
 
     private int maxFileSizeMb = 10;
 
+    private int maxCompanyImages = 10;
+
+    private int maxJobImages = 10;
+
     private Set<String> imageExtensions = new LinkedHashSet<>(List.of("png", "jpg", "jpeg", "webp"));
 
     private Set<String> fileExtensions = new LinkedHashSet<>(List.of("pdf", "doc", "docx"));
@@ -35,6 +39,22 @@ public class UploadProperties {
 
     public void setMaxFileSizeMb(int maxFileSizeMb) {
         this.maxFileSizeMb = maxFileSizeMb;
+    }
+
+    public int getMaxCompanyImages() {
+        return maxCompanyImages;
+    }
+
+    public void setMaxCompanyImages(int maxCompanyImages) {
+        this.maxCompanyImages = maxCompanyImages;
+    }
+
+    public int getMaxJobImages() {
+        return maxJobImages;
+    }
+
+    public void setMaxJobImages(int maxJobImages) {
+        this.maxJobImages = maxJobImages;
     }
 
     public Set<String> getImageExtensions() {

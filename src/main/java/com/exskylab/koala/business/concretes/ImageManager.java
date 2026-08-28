@@ -6,6 +6,7 @@ import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.utilities.storage.FolderType;
 import com.exskylab.koala.core.constants.ImageMessages;
 import com.exskylab.koala.core.dtos.images.response.UploadImageResponseDto;
+import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.mappers.ImageMapper;
 import com.exskylab.koala.core.utilities.storage.StorageService;
@@ -43,6 +44,12 @@ public class ImageManager implements ImageService {
         this.uploadValidator = uploadValidator;
     }
 
+
+    @Override
+    public Image getById(UUID imageId) {
+        return imageDao.findById(imageId)
+                .orElseThrow(() -> new ResourceNotFoundException(ImageMessages.IMAGE_NOT_FOUND_ERROR));
+    }
 
     @Override
     public Image uploadImage(MultipartFile image) {

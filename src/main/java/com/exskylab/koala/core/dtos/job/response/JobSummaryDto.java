@@ -38,6 +38,8 @@ public class JobSummaryDto {
     private String districtName;
     private String companyName;
 
+    private String coverImageUrl;
+
     private Double latitude;
 
     private Double longitude;

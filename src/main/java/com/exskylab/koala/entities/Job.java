@@ -94,6 +94,10 @@ public class Job extends BaseEntity{
     @Enumerated(EnumType.STRING)
     private JobStatus status;
 
+    @OneToMany(mappedBy = "job", fetch = FetchType.LAZY)
+    @OrderBy("sortOrder ASC")
+    private List<JobImage> images;
+
     @OneToMany(mappedBy = "job", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<JobApplication> applications;
 

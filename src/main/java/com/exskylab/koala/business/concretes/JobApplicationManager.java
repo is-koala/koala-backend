@@ -14,6 +14,8 @@ import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.mappers.JobApplicationMapper;
 import com.exskylab.koala.dataAccess.JobApplicationDao;
+import com.exskylab.koala.core.dtos.common.PageDto;
+import com.exskylab.koala.core.dtos.jobApplication.response.MyApplicationDto;
 import com.exskylab.koala.entities.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -41,12 +43,13 @@ public class JobApplicationManager implements JobApplicationService {
     private final JobAssignmentService jobAssignmentService;
     private final JobApplicationMapper jobApplicationMapper;
     private final PageableSanitizer pageableSanitizer;
+    private final GalleryService galleryService;
 
 
     public JobApplicationManager(JobApplicationDao jobApplicationDao, JobService jobService,
                                  SecurityService securityService, CompanyContactService companyContactService,
                                  JobAssignmentService jobAssignmentService, JobApplicationMapper jobApplicationMapper,
-                                 PageableSanitizer pageableSanitizer) {
+                                 PageableSanitizer pageableSanitizer, GalleryService galleryService) {
         this.jobApplicationDao = jobApplicationDao;
         this.jobService = jobService;
         this.securityService = securityService;
@@ -54,6 +57,7 @@ public class JobApplicationManager implements JobApplicationService {
         this.jobAssignmentService = jobAssignmentService;
         this.jobApplicationMapper = jobApplicationMapper;
         this.pageableSanitizer = pageableSanitizer;
+        this.galleryService = galleryService;
     }
 
     @Override
@@ -197,15 +201,20 @@ public class JobApplicationManager implements JobApplicationService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<JobApplication> getMyApplications(ApplicationStatus status, Pageable requested) {
+    public PageDto<MyApplicationDto> getMyApplications(ApplicationStatus status, Pageable requested) {
         pageableSanitizer.rejectUnknownSort(requested, MY_APPLICATIONS_SORTABLE);
         Pageable pageable = pageableSanitizer.sanitize(requested, MY_APPLICATIONS_SORTABLE,
                 Sort.by(Sort.Direction.DESC, "applicationDateTime"));
 
         UUID userId = securityService.getAuthenticatedUserId();
-        return status == null
+        Page<JobApplication> page = status == null
                 ? jobApplicationDao.findAllByUserId(userId, pageable)
                 : jobApplicationDao.findAllByUserIdAndStatus(userId, status, pageable);
+
+        PageDto<MyApplicationDto> result = PageDto.of(page,
+                jobApplicationMapper.toMyApplicationDtoList(page.getContent()));
+        galleryService.fillJobCovers(result.content().stream().map(MyApplicationDto::job).toList());
+        return result;
     }
 
     @Override

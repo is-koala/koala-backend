@@ -14,6 +14,7 @@ public interface ReportMapper {
     @Mapping(target = "reportedUserId", source = "reportedUser.id")
     @Mapping(target = "jobId", source = "job.id")
     @Mapping(target = "messageId", source = "message.id")
+    @Mapping(target = "imageId", source = "image.id")
     ReportDto toReportDto(Report report);
 
     List<ReportDto> toReportDtoList(List<Report> reports);

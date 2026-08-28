@@ -169,6 +169,11 @@ storage:
 upload:
   max-image-size-mb: ${UPLOAD_MAX_IMAGE_SIZE_MB:10}
   max-file-size-mb: ${UPLOAD_MAX_FILE_SIZE_MB:10}
+  max-company-images: ${UPLOAD_MAX_COMPANY_IMAGES:10}
+  max-job-images: ${UPLOAD_MAX_JOB_IMAGES:10}
+
+company-follow:
+  enabled: ${COMPANY_FOLLOW_ENABLED:true}
 
 iyzico:
   apiKey: ${IYZICO_API_KEY:}

@@ -9,12 +9,14 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 @Mapper(componentModel = "spring",
-        uses = {MediaUrlResolver.class, CompanyContactMapper.class, AddressMapper.class},
+        uses = {MediaUrlResolver.class, CompanyContactMapper.class, AddressMapper.class, GalleryMapper.class},
         injectionStrategy = InjectionStrategy.CONSTRUCTOR)
 public interface CompanyMapper {
 
     @Mapping(target = "logoUrl", source = "logo", qualifiedByName = "imageToPublicUrl")
     @Mapping(target = "companyContacts", source = "contacts")
+    @Mapping(target = "followerCount", ignore = true)
+    @Mapping(target = "following", ignore = true)
     CompanyDto toCompanyDto(Company company);
 
     @Mapping(target = "logoUrl", source = "logo", qualifiedByName = "imageToPublicUrl")

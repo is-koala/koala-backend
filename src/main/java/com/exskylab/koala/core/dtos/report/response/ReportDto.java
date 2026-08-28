@@ -6,7 +6,7 @@ import com.exskylab.koala.entities.ReportStatus;
 import java.time.Instant;
 import java.util.UUID;
 
-public record ReportDto(UUID id, UUID reportedUserId, UUID jobId, UUID messageId,
+public record ReportDto(UUID id, UUID reportedUserId, UUID jobId, UUID messageId, UUID imageId,
                         ReportReason reason, String description, ReportStatus status,
                         String reviewNote, Instant reviewedAt, Instant createdAt) {
 }

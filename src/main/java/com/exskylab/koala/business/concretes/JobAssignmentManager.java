@@ -22,6 +22,8 @@ import com.exskylab.koala.core.mappers.JobAssignmentMapper;
 import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.*;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
+import com.exskylab.koala.core.dtos.common.PageDto;
+import com.exskylab.koala.core.dtos.jobAssignment.response.MyAssignmentDto;
 import com.exskylab.koala.entities.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -35,6 +37,7 @@ import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.core.properties.AutoCompletionProperties;
 import org.springframework.data.domain.PageRequest;
 import java.time.LocalDateTime;
+import com.exskylab.koala.business.abstracts.GalleryService;
 import com.exskylab.koala.business.abstracts.SettingsService;
 import com.exskylab.koala.core.constants.SettingKeys;
 import org.springframework.stereotype.Service;
@@ -68,6 +71,7 @@ public class JobAssignmentManager implements JobAssignmentService {
     private final PayoutService payoutService;
     private final AutoCompletionProperties autoCompletionProperties;
     private final SettingsService settingsService;
+    private final GalleryService galleryService;
 
 
     public JobAssignmentManager(JobAssignmentDao jobAssignmentDao, SecurityService securityService, JobAssignmentMapper jobAssignmentMapper, IyzicoPaymentService iyzicoPaymentService, CompanyContactService companyContactService, UserService userService,
@@ -77,7 +81,7 @@ public class JobAssignmentManager implements JobAssignmentService {
                                AssignmentParticipants participants, BadgeService badgeService,
                                PayoutService payoutService,
                                AutoCompletionProperties autoCompletionProperties,
-                               SettingsService settingsService) {
+                               SettingsService settingsService, GalleryService galleryService) {
         this.jobAssignmentDao = jobAssignmentDao;
         this.securityService = securityService;
         this.jobAssignmentMapper = jobAssignmentMapper;
@@ -95,6 +99,7 @@ public class JobAssignmentManager implements JobAssignmentService {
         this.payoutService = payoutService;
         this.autoCompletionProperties = autoCompletionProperties;
         this.settingsService = settingsService;
+        this.galleryService = galleryService;
     }
 
 
@@ -326,15 +331,20 @@ public class JobAssignmentManager implements JobAssignmentService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<JobAssignment> getMyAssignments(boolean asEmployer, Pageable requested) {
+    public PageDto<MyAssignmentDto> getMyAssignments(boolean asEmployer, Pageable requested) {
         pageableSanitizer.rejectUnknownSort(requested, MY_ASSIGNMENTS_SORTABLE);
         Pageable pageable = pageableSanitizer.sanitize(requested, MY_ASSIGNMENTS_SORTABLE,
                 Sort.by(Sort.Direction.DESC, "assignmentDateTime"));
 
         UUID userId = securityService.getAuthenticatedUserId();
-        return asEmployer
+        Page<JobAssignment> page = asEmployer
                 ? jobAssignmentDao.findAllByJobCreatorId(userId, pageable)
                 : jobAssignmentDao.findAllByWorkerId(userId, pageable);
+
+        PageDto<MyAssignmentDto> result = PageDto.of(page,
+                jobAssignmentMapper.toMyAssignmentDtoList(page.getContent()));
+        galleryService.fillJobCovers(result.content().stream().map(MyAssignmentDto::job).toList());
+        return result;
     }
 
     @Override
@@ -416,6 +426,12 @@ public class JobAssignmentManager implements JobAssignmentService {
     @Transactional(readOnly = true)
     public long countCompletedForWorker(UUID workerId) {
         return jobAssignmentDao.countByWorkerIdAndStatus(workerId, AssignmentStatus.COMPLETED);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countCompletedForEmployer(UUID employerId) {
+        return jobAssignmentDao.countByJobCreatorIdAndStatus(employerId, AssignmentStatus.COMPLETED);
     }
 
     @Override

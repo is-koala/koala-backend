@@ -35,7 +35,7 @@ public class ReportsController {
         return ResponseEntity.status(HttpStatus.CREATED).body(new SuccessDataResult<>(
                 reportMapper.toReportDto(reportService.createReport(
                         request.getReportedUserId(), request.getJobId(), request.getMessageId(),
-                        request.getReason(), request.getDescription())),
+                        request.getImageId(), request.getReason(), request.getDescription())),
                 ReportMessages.CREATED, HttpStatus.CREATED));
     }
 

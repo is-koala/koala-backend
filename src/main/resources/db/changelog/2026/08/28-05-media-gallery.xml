@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-08-28-06-company-images" author="koala">
+        <createTable tableName="company_images">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="company_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="image_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="sort_order" type="INTEGER" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="is_cover" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="caption" type="VARCHAR(255)"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
+            <column name="deleted_by_id" type="UUID"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="now()"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="company_images" baseColumnNames="company_id"
+                                 constraintName="fk_company_images_company"
+                                 referencedTableName="companies" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="company_images" baseColumnNames="image_id"
+                                 constraintName="fk_company_images_image"
+                                 referencedTableName="media" referencedColumnNames="id"/>
+        <sql>
+            CREATE UNIQUE INDEX uk_company_images_active
+                ON company_images (company_id, image_id) WHERE is_deleted = false
+        </sql>
+        <sql>
+            CREATE INDEX ix_company_images_company ON company_images (company_id, sort_order)
+        </sql>
+    </changeSet>
+
+    <changeSet id="2026-08-28-07-job-images" author="koala">
+        <createTable tableName="job_images">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="job_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="image_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="sort_order" type="INTEGER" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="is_cover" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="caption" type="VARCHAR(255)"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
+            <column name="deleted_by_id" type="UUID"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="now()"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="job_images" baseColumnNames="job_id"
+                                 constraintName="fk_job_images_job"
+                                 referencedTableName="jobs" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="job_images" baseColumnNames="image_id"
+                                 constraintName="fk_job_images_image"
+                                 referencedTableName="media" referencedColumnNames="id"/>
+        <sql>
+            CREATE UNIQUE INDEX uk_job_images_active
+                ON job_images (job_id, image_id) WHERE is_deleted = false
+        </sql>
+        <sql>
+            CREATE INDEX ix_job_images_job ON job_images (job_id, sort_order)
+        </sql>
+    </changeSet>
+
+    <changeSet id="2026-08-28-08-report-image-target" author="koala">
+        <addColumn tableName="reports">
+            <column name="image_id" type="UUID"/>
+        </addColumn>
+        <addForeignKeyConstraint baseTableName="reports" baseColumnNames="image_id"
+                                 constraintName="fk_reports_image"
+                                 referencedTableName="media" referencedColumnNames="id"/>
+    </changeSet>
+
+</databaseChangeLog>
