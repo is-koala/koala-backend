@@ -42,6 +42,10 @@ public class JobSummaryDto {
 
     private long applicationCount;
 
+    private Integer headcount;
+
+    private long hiredCount;
+
     private Double latitude;
 
     private Double longitude;

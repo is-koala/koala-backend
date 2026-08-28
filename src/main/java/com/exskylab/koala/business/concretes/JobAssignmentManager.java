@@ -35,6 +35,7 @@ import com.exskylab.koala.entities.CancellationParty;
 import java.time.Instant;
 import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.core.properties.AutoCompletionProperties;
+import com.exskylab.koala.core.properties.UnpaidExpiryProperties;
 import org.springframework.data.domain.PageRequest;
 import java.time.LocalDateTime;
 import com.exskylab.koala.business.abstracts.GalleryService;
@@ -77,6 +78,7 @@ public class JobAssignmentManager implements JobAssignmentService {
     private final BadgeService badgeService;
     private final PayoutService payoutService;
     private final AutoCompletionProperties autoCompletionProperties;
+    private final UnpaidExpiryProperties unpaidExpiryProperties;
     private final SettingsService settingsService;
     private final GalleryService galleryService;
     private final ActivityNotificationService activityNotificationService;
@@ -90,6 +92,7 @@ public class JobAssignmentManager implements JobAssignmentService {
                                AssignmentParticipants participants, BadgeService badgeService,
                                PayoutService payoutService,
                                AutoCompletionProperties autoCompletionProperties,
+                               UnpaidExpiryProperties unpaidExpiryProperties,
                                SettingsService settingsService, GalleryService galleryService,
                                ActivityNotificationService activityNotificationService,
                                ApplicationEventPublisher eventPublisher) {
@@ -109,6 +112,7 @@ public class JobAssignmentManager implements JobAssignmentService {
         this.badgeService = badgeService;
         this.payoutService = payoutService;
         this.autoCompletionProperties = autoCompletionProperties;
+        this.unpaidExpiryProperties = unpaidExpiryProperties;
         this.settingsService = settingsService;
         this.galleryService = galleryService;
         this.activityNotificationService = activityNotificationService;
@@ -411,6 +415,22 @@ public class JobAssignmentManager implements JobAssignmentService {
                 PaymentStatus.HELD_IN_ESCROW,
                 endedBefore,
                 PageRequest.of(0, autoCompletionProperties.getBatchSize()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UUID> findUnpaidExpiringAssignmentIds() {
+        int hours = settingsService.intValue(SettingKeys.UNPAID_EXPIRY_HOURS_BEFORE_START,
+                unpaidExpiryProperties.getHoursBeforeStart());
+
+        LocalDateTime startingBefore = LocalDateTime.now(unpaidExpiryProperties.getZoneId())
+                .plusHours(hours);
+
+        return jobAssignmentDao.findUnpaidExpiringIds(
+                AssignmentStatus.CONFIRMED,
+                List.of(PaymentStatus.PENDING_COLLECTION, PaymentStatus.FAILED),
+                startingBefore,
+                PageRequest.of(0, unpaidExpiryProperties.getBatchSize()));
     }
 
     @Override

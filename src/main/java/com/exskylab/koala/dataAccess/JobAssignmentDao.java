@@ -56,4 +56,30 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
                                       @Param("paymentStatus") PaymentStatus paymentStatus,
                                       @Param("endedBefore") java.time.LocalDateTime endedBefore,
                                       Pageable pageable);
+
+    @Query("""
+            select a.id from JobAssignment a
+            where a.status = :status
+              and (a.paymentStatus is null or a.paymentStatus in :paymentStatuses)
+              and a.job.startDateTime is not null
+              and a.job.startDateTime <= :startingBefore
+            order by a.job.startDateTime asc
+            """)
+    List<UUID> findUnpaidExpiringIds(@Param("status") AssignmentStatus status,
+                                     @Param("paymentStatuses") List<PaymentStatus> paymentStatuses,
+                                     @Param("startingBefore") java.time.LocalDateTime startingBefore,
+                                     Pageable pageable);
+
+    @Query("select a.job.id as jobId, count(a) as total from JobAssignment a "
+            + "where a.job.id in :jobIds and a.status in :statuses group by a.job.id")
+    List<HiredCount> countHiredByJobIds(@Param("jobIds") java.util.Collection<UUID> jobIds,
+                                        @Param("statuses") java.util.Collection<AssignmentStatus> statuses);
+
+    long countByJobIdAndStatusIn(UUID jobId, java.util.Collection<AssignmentStatus> statuses);
+
+    interface HiredCount {
+        UUID getJobId();
+
+        long getTotal();
+    }
 }

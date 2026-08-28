@@ -88,6 +88,9 @@ public class Job extends BaseEntity{
     @Column(name = "experience_required")
     private boolean experienceRequired;
 
+    @Column(name = "headcount")
+    private Integer headcount;
+
     @Column(name = "dress_code")
     private String dressCode;
 

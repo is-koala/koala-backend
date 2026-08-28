@@ -50,4 +50,6 @@ public class JobDetailDto {
     private OnlyCompanyDto company;
     private List<GalleryImageDto> images;
     private Instant createdAt;
+    private Integer headcount;
+    private long hiredCount;
 }

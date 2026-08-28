@@ -71,6 +71,9 @@ public class CreateIndividualJobDto {
 
     private String dressCode;
 
+    @Min(value = 1, message = JobMessages.HEADCOUNT_MIN_VALUE)
+    private Integer headcount;
+
     @AssertTrue(message = JobMessages.MAXIMUM_AGE_BELOW_MINIMUM)
     public boolean isAgeRangeOrdered() {
         return minAge == null || maxAge == null || maxAge >= minAge;

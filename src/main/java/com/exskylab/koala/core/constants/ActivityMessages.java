@@ -11,6 +11,9 @@ public class ActivityMessages {
     public static final String DISPUTE_OPENED = "{activity.dispute.opened}";
     public static final String DISPUTE_RESOLVED = "{activity.dispute.resolved}";
     public static final String ASSIGNMENT_CANCELLED = "{activity.assignment.cancelled}";
+    public static final String ASSIGNMENT_EXPIRED_WORKER = "{activity.assignment.expired.worker}";
+    public static final String ASSIGNMENT_EXPIRED_EMPLOYER = "{activity.assignment.expired.employer}";
+    public static final String REVIEW_RECEIVED = "{activity.review.received}";
     public static final String IDENTITY_VERIFIED_TITLE = "{activity.identity.verified.title}";
     public static final String IDENTITY_VERIFIED = "{activity.identity.verified}";
 }

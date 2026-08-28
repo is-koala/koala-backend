@@ -8,4 +8,5 @@ public class CancellationMessages {
     public static final String REASON_REQUIRED = "{cancellation.reason.required}";
     public static final String CREATED = "{cancellation.created}";
     public static final String FETCHED = "{cancellation.fetched}";
+    public static final String PAYMENT_NOT_COLLECTED = "{cancellation.payment.not.collected}";
 }

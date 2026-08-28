@@ -10,6 +10,7 @@ import com.exskylab.koala.core.dtos.job.response.IndividualJobDto;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.job.request.JobSearchCriteriaDto;
 import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
+import com.exskylab.koala.core.dtos.job.response.JobDetailDto;
 import com.exskylab.koala.entities.Job;
 import org.springframework.data.domain.Pageable;
 
@@ -30,6 +31,8 @@ public interface JobService {
     CompanyJobDto createCorporateJob(UUID companyId, CreateCompanyJobDto companiesCompanyIdJobsPostRequestDto);
 
     Job getById(UUID jobId);
+
+    JobDetailDto getJobDetail(UUID jobId);
 
     Job getDetailedById(UUID jobId);
 

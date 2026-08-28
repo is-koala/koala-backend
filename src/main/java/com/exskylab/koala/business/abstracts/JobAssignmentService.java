@@ -29,6 +29,8 @@ public interface JobAssignmentService {
 
     List<UUID> findAutoCompletableAssignmentIds();
 
+    List<UUID> findUnpaidExpiringAssignmentIds();
+
     boolean autoCompleteAssignment(UUID assignmentId);
 
     JobAssignment getDetailedById(UUID assignmentId);

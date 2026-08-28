@@ -3,6 +3,7 @@ package com.exskylab.koala.business.concretes;
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.exceptions.ConflictException;
+import com.exskylab.koala.business.abstracts.ActivityNotificationService;
 import com.exskylab.koala.business.abstracts.BadgeService;
 import com.exskylab.koala.business.abstracts.CompanyContactService;
 import com.exskylab.koala.business.abstracts.ReviewService;
@@ -42,11 +43,13 @@ public class ReviewManager implements ReviewService {
     private final CompanyContactService companyContactService;
     private final PageableSanitizer pageableSanitizer;
     private final BadgeService badgeService;
+    private final ActivityNotificationService activityNotificationService;
 
     public ReviewManager(ReviewDao reviewDao, RatingSummaryDao ratingSummaryDao,
                          JobAssignmentService jobAssignmentService, UserService userService,
                          SecurityService securityService, CompanyContactService companyContactService,
-                         PageableSanitizer pageableSanitizer, BadgeService badgeService) {
+                         PageableSanitizer pageableSanitizer, BadgeService badgeService,
+                         ActivityNotificationService activityNotificationService) {
         this.reviewDao = reviewDao;
         this.ratingSummaryDao = ratingSummaryDao;
         this.jobAssignmentService = jobAssignmentService;
@@ -55,6 +58,7 @@ public class ReviewManager implements ReviewService {
         this.companyContactService = companyContactService;
         this.pageableSanitizer = pageableSanitizer;
         this.badgeService = badgeService;
+        this.activityNotificationService = activityNotificationService;
     }
 
     @Override
@@ -89,6 +93,8 @@ public class ReviewManager implements ReviewService {
         badgeService.evaluate(subject.getId());
 
         log.info("Review {} left on assignment {} about user {}", saved.getId(), jobAssignmentId, subject.getId());
+
+        activityNotificationService.reviewReceived(saved);
         return saved;
     }
 

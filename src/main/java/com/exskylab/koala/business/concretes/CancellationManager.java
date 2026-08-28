@@ -18,6 +18,7 @@ import com.exskylab.koala.business.abstracts.ActivityNotificationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.EnumSet;
@@ -104,6 +105,46 @@ public class CancellationManager implements CancellationService {
 
         activityNotificationService.assignmentCancelled(saved);
         return saved;
+    }
+
+    @Override
+    @Transactional
+    public boolean expireUnpaidAssignment(UUID jobAssignmentId) {
+        JobAssignment assignment = jobAssignmentService.getDetailedById(jobAssignmentId);
+
+        if (assignment.getStatus() != AssignmentStatus.CONFIRMED
+                || assignment.getPaymentStatus() == PaymentStatus.HELD_IN_ESCROW
+                || assignment.getPaymentStatus() == PaymentStatus.RELEASED_TO_WORKER) {
+            return false;
+        }
+
+        if (cancellationDao.existsByJobAssignmentId(jobAssignmentId)) {
+            return false;
+        }
+
+        Duration notice = policy.noticeBefore(assignment.getJob().getStartDateTime(), Instant.now());
+
+        Cancellation cancellation = new Cancellation();
+        cancellation.setJobAssignment(assignment);
+        cancellation.setCancelledBy(securityService.getSystemUser());
+        cancellation.setCancelledByParty(CancellationParty.EMPLOYER);
+        cancellation.setReason(CancellationMessages.PAYMENT_NOT_COLLECTED);
+        cancellation.setNoticeMinutes(notice.toMinutes());
+        cancellation.setFeeRate(BigDecimal.ZERO);
+        cancellation.setFeeAmount(BigDecimal.ZERO);
+        cancellation.setRefundAmount(BigDecimal.ZERO);
+        cancellation.setCancelledAt(Instant.now());
+
+        assignment.setStatus(AssignmentStatus.CANCELLED);
+        jobAssignmentService.save(assignment);
+
+        Cancellation saved = cancellationDao.save(cancellation);
+
+        log.info("Assignment {} expired: the employer did not pay before the job start, {} min of notice left.",
+                jobAssignmentId, notice.toMinutes());
+
+        activityNotificationService.assignmentExpired(saved);
+        return true;
     }
 
     @Override

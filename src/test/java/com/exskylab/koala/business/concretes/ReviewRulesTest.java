@@ -2,6 +2,7 @@ package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.exceptions.ConflictException;
+import com.exskylab.koala.business.abstracts.ActivityNotificationService;
 import com.exskylab.koala.business.abstracts.BadgeService;
 import com.exskylab.koala.business.abstracts.CompanyContactService;
 import com.exskylab.koala.business.abstracts.SecurityService;
@@ -31,6 +32,7 @@ class ReviewRulesTest {
     private RatingSummaryDao ratingSummaryDao;
     private JobAssignmentService jobAssignmentService;
     private SecurityService securityService;
+    private ActivityNotificationService notifications;
     private ReviewManager manager;
 
     private final User employer = user();
@@ -45,10 +47,11 @@ class ReviewRulesTest {
         jobAssignmentService = mock(JobAssignmentService.class);
         securityService = mock(SecurityService.class);
         UserService userService = mock(UserService.class);
+        notifications = mock(ActivityNotificationService.class);
 
         manager = new ReviewManager(reviewDao, ratingSummaryDao, jobAssignmentService, userService,
                 securityService, mock(CompanyContactService.class), new PageableSanitizer(),
-                mock(BadgeService.class));
+                mock(BadgeService.class), notifications);
 
         when(reviewDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(ratingSummaryDao.save(any())).thenAnswer(i -> i.getArgument(0));
@@ -159,5 +162,25 @@ class ReviewRulesTest {
         verify(ratingSummaryDao).save(argThat(s ->
                 s.getReviewCount() == 1 && s.getRatingSum() == 4
                         && s.getAverageRating().compareTo(new BigDecimal("4.00")) == 0));
+    }
+
+    @Test
+    void theReviewedPersonIsToldTheyWereRated() {
+        assignment = assignment(AssignmentStatus.COMPLETED);
+        when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
+
+        manager.leaveReview(assignment.getId(), 5, "Harika");
+
+        verify(notifications).reviewReceived(any(Review.class));
+    }
+
+    @Test
+    void aRefusedReviewNotifiesNobody() {
+        assignment = assignment(AssignmentStatus.IN_PROGRESS);
+        when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
+
+        assertThrows(ConflictException.class, () -> manager.leaveReview(assignment.getId(), 5, null));
+
+        verifyNoInteractions(notifications);
     }
 }

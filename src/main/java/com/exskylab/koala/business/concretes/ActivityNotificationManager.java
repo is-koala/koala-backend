@@ -15,6 +15,7 @@ import com.exskylab.koala.entities.Dispute;
 import com.exskylab.koala.entities.JobApplication;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.NotificationCategory;
+import com.exskylab.koala.entities.Review;
 import com.exskylab.koala.entities.User;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -109,6 +110,23 @@ public class ActivityNotificationManager implements ActivityNotificationService 
 
         notify(counterpart, assignment.getJob().getTitle(),
                 ActivityMessages.ASSIGNMENT_CANCELLED, NotificationCategory.APPLICATION_UPDATES);
+    }
+
+    @Override
+    public void assignmentExpired(Cancellation cancellation) {
+        JobAssignment assignment = cancellation.getJobAssignment();
+        String jobTitle = assignment.getJob().getTitle();
+
+        notify(assignment.getWorker(), jobTitle,
+                ActivityMessages.ASSIGNMENT_EXPIRED_WORKER, NotificationCategory.APPLICATION_UPDATES);
+        notify(employerOf(assignment), jobTitle,
+                ActivityMessages.ASSIGNMENT_EXPIRED_EMPLOYER, NotificationCategory.APPLICATION_UPDATES);
+    }
+
+    @Override
+    public void reviewReceived(Review review) {
+        notify(review.getSubject(), review.getJobAssignment().getJob().getTitle(),
+                ActivityMessages.REVIEW_RECEIVED, NotificationCategory.APPLICATION_UPDATES);
     }
 
     @Override

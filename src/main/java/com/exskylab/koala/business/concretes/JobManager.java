@@ -12,6 +12,7 @@ import com.exskylab.koala.core.dtos.job.response.IndividualJobDto;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.job.request.JobSearchCriteriaDto;
 import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
+import com.exskylab.koala.core.dtos.job.response.JobDetailDto;
 import com.exskylab.koala.core.dtos.gallery.request.UpdateGalleryDto;
 import com.exskylab.koala.core.dtos.gallery.response.GalleryImageDto;
 import org.springframework.web.multipart.MultipartFile;
@@ -149,6 +150,7 @@ public class JobManager implements JobService {
         job.setMaxAge(usersMeJobsPostRequestDto.getMaxAge());
         job.setExperienceRequired(usersMeJobsPostRequestDto.getExperienceRequired());
         job.setDressCode(usersMeJobsPostRequestDto.getDressCode());
+        job.setHeadcount(usersMeJobsPostRequestDto.getHeadcount());
         job.setStatus(JobStatus.OPEN);
 
         Job savedJob = jobDao.save(job);
@@ -224,6 +226,7 @@ public class JobManager implements JobService {
         job.setMaxAge(companiesCompanyIdJobsPostRequestDto.getMaxAge());
         job.setExperienceRequired(companiesCompanyIdJobsPostRequestDto.getExperienceRequired());
         job.setDressCode(companiesCompanyIdJobsPostRequestDto.getDressCode());
+        job.setHeadcount(companiesCompanyIdJobsPostRequestDto.getHeadcount());
         job.setStatus(JobStatus.OPEN);
 
 
@@ -257,10 +260,22 @@ public class JobManager implements JobService {
             java.util.EnumSet.of(AssignmentStatus.PENDING_CONFIRMATION, AssignmentStatus.CONFIRMED,
                     AssignmentStatus.IN_PROGRESS);
 
+    private static final Set<AssignmentStatus> HIRED_STATUSES =
+            java.util.EnumSet.of(AssignmentStatus.CONFIRMED, AssignmentStatus.IN_PROGRESS,
+                    AssignmentStatus.COMPLETED);
+
     private static final Set<String> SORTABLE_FIELDS =
             Set.of("createdAt", "salary", "startDateTime", "title");
 
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
+
+    @Override
+    @Transactional(readOnly = true)
+    public JobDetailDto getJobDetail(UUID jobId) {
+        JobDetailDto detail = jobMapper.toJobDetailDto(getDetailedById(jobId));
+        detail.setHiredCount(jobAssignmentDao.countByJobIdAndStatusIn(jobId, HIRED_STATUSES));
+        return detail;
+    }
 
     @Override
     @Transactional(readOnly = true)
@@ -420,7 +435,14 @@ public class JobManager implements JobService {
                 .collect(Collectors.toMap(JobApplicationDao.JobApplicationCount::getJobId,
                         JobApplicationDao.JobApplicationCount::getTotal));
 
-        content.forEach(job -> job.setApplicationCount(counts.getOrDefault(job.getId(), 0L)));
+        Map<UUID, Long> hired = jobAssignmentDao.countHiredByJobIds(ids, HIRED_STATUSES).stream()
+                .collect(Collectors.toMap(JobAssignmentDao.HiredCount::getJobId,
+                        JobAssignmentDao.HiredCount::getTotal));
+
+        content.forEach(job -> {
+            job.setApplicationCount(counts.getOrDefault(job.getId(), 0L));
+            job.setHiredCount(hired.getOrDefault(job.getId(), 0L));
+        });
         return page;
     }
 

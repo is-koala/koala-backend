@@ -91,7 +91,7 @@ public class JobsController {
     @GetMapping("/{jobId}")
     public ResponseEntity<SuccessDataResult<JobDetailDto>> getJob(@PathVariable UUID jobId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
-                jobMapper.toJobDetailDto(jobService.getDetailedById(jobId)),
+                jobService.getJobDetail(jobId),
                 JobMessages.JOB_RETRIEVED, HttpStatus.OK));
     }
 

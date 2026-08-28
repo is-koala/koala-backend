@@ -160,6 +160,12 @@ assignment:
     batch-size: ${ASSIGNMENT_AUTO_COMPLETION_BATCH_SIZE:100}
     zone-id: ${ASSIGNMENT_AUTO_COMPLETION_ZONE_ID:Europe/Istanbul}
     cron: ${ASSIGNMENT_AUTO_COMPLETION_CRON:0 15 * * * *}
+  unpaid-expiry:
+    enabled: ${ASSIGNMENT_UNPAID_EXPIRY_ENABLED:true}
+    hours-before-start: ${ASSIGNMENT_UNPAID_EXPIRY_HOURS_BEFORE_START:6}
+    batch-size: ${ASSIGNMENT_UNPAID_EXPIRY_BATCH_SIZE:100}
+    zone-id: ${ASSIGNMENT_UNPAID_EXPIRY_ZONE_ID:Europe/Istanbul}
+    cron: ${ASSIGNMENT_UNPAID_EXPIRY_CRON:0 45 * * * *}
 
 realtime:
   enabled: ${REALTIME_ENABLED:true}

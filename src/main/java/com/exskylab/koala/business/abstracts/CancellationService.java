@@ -9,5 +9,7 @@ public interface CancellationService {
 
     Cancellation cancelAssignment(UUID jobAssignmentId, String reason);
 
+    boolean expireUnpaidAssignment(UUID jobAssignmentId);
+
     Optional<Cancellation> getForAssignment(UUID jobAssignmentId);
 }

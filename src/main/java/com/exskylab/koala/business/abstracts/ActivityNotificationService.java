@@ -4,6 +4,7 @@ import com.exskylab.koala.entities.Cancellation;
 import com.exskylab.koala.entities.Dispute;
 import com.exskylab.koala.entities.JobApplication;
 import com.exskylab.koala.entities.JobAssignment;
+import com.exskylab.koala.entities.Review;
 import com.exskylab.koala.entities.User;
 
 public interface ActivityNotificationService {
@@ -23,6 +24,10 @@ public interface ActivityNotificationService {
     void disputeResolved(Dispute dispute);
 
     void assignmentCancelled(Cancellation cancellation);
+
+    void assignmentExpired(Cancellation cancellation);
+
+    void reviewReceived(Review review);
 
     void identityVerified(User user);
 }

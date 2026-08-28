@@ -1,6 +1,7 @@
 package com.exskylab.koala.core.constants;
 
 public class JobMessages {
+    public static final String HEADCOUNT_MIN_VALUE = "{job.headcount.min.value}";
     public static final String CATEGORY_UUID_ID_INVALID = "{job.category.uuid.id.invalid}";
     public static final String TITLE_NOT_BLANK = "{job.title.not.blank}";
     public static final String DESCRIPTION_NOT_BLANK = "{job.description.not.blank}";

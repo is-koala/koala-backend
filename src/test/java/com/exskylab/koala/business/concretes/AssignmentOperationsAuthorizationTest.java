@@ -84,7 +84,8 @@ class AssignmentOperationsAuthorizationTest {
                 new com.exskylab.koala.core.properties.AppProperties("http://localhost:8080", "http://localhost:3000"),
                 mock(com.exskylab.koala.business.abstracts.BankAccountService.class),
                 new com.exskylab.koala.core.helpers.PageableSanitizer(), participants, badgeService,
-                payoutService, new com.exskylab.koala.core.properties.AutoCompletionProperties(), passthroughSettings(),
+                payoutService, new com.exskylab.koala.core.properties.AutoCompletionProperties(),
+                new com.exskylab.koala.core.properties.UnpaidExpiryProperties(), passthroughSettings(),
                 mock(com.exskylab.koala.business.abstracts.GalleryService.class), mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class), mock(org.springframework.context.ApplicationEventPublisher.class));
 
         when(cancellationDao.save(any())).thenAnswer(i -> i.getArgument(0));

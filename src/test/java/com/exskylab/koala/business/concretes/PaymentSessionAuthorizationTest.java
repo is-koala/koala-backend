@@ -75,7 +75,8 @@ class PaymentSessionAuthorizationTest {
                 new AssignmentParticipants(companyContactService),
                 mock(BadgeService.class),
                 mock(com.exskylab.koala.business.abstracts.PayoutService.class),
-                new com.exskylab.koala.core.properties.AutoCompletionProperties(), passthroughSettings(),
+                new com.exskylab.koala.core.properties.AutoCompletionProperties(),
+                new com.exskylab.koala.core.properties.UnpaidExpiryProperties(), passthroughSettings(),
                 mock(com.exskylab.koala.business.abstracts.GalleryService.class), mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class), mock(org.springframework.context.ApplicationEventPublisher.class));
     }
 
