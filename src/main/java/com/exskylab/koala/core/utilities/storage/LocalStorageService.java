@@ -2,6 +2,7 @@ package com.exskylab.koala.core.utilities.storage;
 
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.constants.StorageMessages;
+import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.properties.AppProperties;
 import com.exskylab.koala.core.properties.StorageProperties;
@@ -50,6 +51,25 @@ public class LocalStorageService implements StorageService {
             log.error("Local file delete failed for {}: {}", key, e.getMessage());
             throw new ValidationException(StorageMessages.DELETE_FAILED);
         }
+    }
+
+    @Override
+    public byte[] readFile(String key) {
+        try {
+            Path source = resolve(key);
+            if (!Files.exists(source)) {
+                throw new ResourceNotFoundException(StorageMessages.FILE_NOT_FOUND);
+            }
+            return Files.readAllBytes(source);
+        } catch (IOException e) {
+            log.error("Local file read failed for {}: {}", key, e.getMessage());
+            throw new ValidationException(StorageMessages.DOWNLOAD_FAILED);
+        }
+    }
+
+    @Override
+    public boolean supportsSignedUrls() {
+        return false;
     }
 
     @Override

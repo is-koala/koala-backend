@@ -2,6 +2,7 @@ package com.exskylab.koala.core.utilities.storage;
 
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.constants.StorageMessages;
+import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.properties.StorageProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -10,6 +11,7 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
@@ -64,6 +66,26 @@ public class S3StorageService implements StorageService {
         }
 
         log.info("Deleted from S3: {}", key);
+    }
+
+    @Override
+    public byte[] readFile(String key) {
+        try {
+            return s3Client.getObjectAsBytes(GetObjectRequest.builder()
+                    .bucket(storageProperties.getBucket())
+                    .key(key)
+                    .build()).asByteArray();
+        } catch (NoSuchKeyException e) {
+            throw new ResourceNotFoundException(StorageMessages.FILE_NOT_FOUND);
+        } catch (RuntimeException e) {
+            log.error("S3 read failed for {}: {}", key, e.getMessage());
+            throw new ValidationException(StorageMessages.DOWNLOAD_FAILED);
+        }
+    }
+
+    @Override
+    public boolean supportsSignedUrls() {
+        return true;
     }
 
     @Override

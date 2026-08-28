@@ -13,12 +13,13 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.StorageMessages;
-import com.exskylab.koala.core.helpers.StorageUrlResolver;
 import com.exskylab.koala.core.utilities.storage.StorageKeys;
 import com.exskylab.koala.core.utilities.storage.StorageService;
 import jakarta.servlet.http.HttpServletRequest;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.MediaTypeFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -33,20 +34,17 @@ public class StorageDownloadController {
     private static final String BASE_PATH = "/uploads/";
 
     private final StorageService storageService;
-    private final StorageUrlResolver storageUrlResolver;
     private final SecurityService securityService;
 
-    public StorageDownloadController(StorageService storageService, StorageUrlResolver storageUrlResolver,
-                                     SecurityService securityService) {
+    public StorageDownloadController(StorageService storageService, SecurityService securityService) {
         this.storageService = storageService;
-        this.storageUrlResolver = storageUrlResolver;
         this.securityService = securityService;
     }
 
     @Operation(summary = "Özel dosya indir",
             description = "Özgeçmiş ve kimlik belgesi gibi nesneler. Kimlik doğrulaması ister, sonra kısa ömürlü imzalı adrese yönlendirir.")
     @ApiResponses({
-            @ApiResponse(responseCode = "302", description = "İmzalı adrese yönlendirildi",
+            @ApiResponse(responseCode = "302", description = "S3 kullanılıyorsa imzalı adrese yönlendirilir",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "400", description = "Tanınmayan depo öneki",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
@@ -54,17 +52,17 @@ public class StorageDownloadController {
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @GetMapping("/uploads/files/**")
-    public ResponseEntity<Void> downloadPrivate(HttpServletRequest request) {
+    public ResponseEntity<?> downloadPrivate(HttpServletRequest request) {
         String key = keyOf(request);
         log.info("Private download of {} by user {}", key, securityService.getAuthenticatedUserId());
-        return redirect(storageService.temporaryUrl(key));
+        return serve(key);
     }
 
     @SecurityRequirements
     @Operation(summary = "Genel dosya indir",
             description = "Giriş istemeyen belgeler. Nesne özel kalır, kısa ömürlü imzalı adrese yönlendirilir.")
     @ApiResponses({
-            @ApiResponse(responseCode = "302", description = "İmzalı adrese yönlendirildi",
+            @ApiResponse(responseCode = "302", description = "S3 kullanılıyorsa imzalı adrese yönlendirilir",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "400", description = "Tanınmayan depo öneki",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
@@ -72,15 +70,15 @@ public class StorageDownloadController {
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @GetMapping("/uploads/public/**")
-    public ResponseEntity<Void> downloadPublicFile(HttpServletRequest request) {
-        return redirect(storageService.temporaryUrl(keyOf(request)));
+    public ResponseEntity<?> downloadPublicFile(HttpServletRequest request) {
+        return serve(keyOf(request));
     }
 
     @SecurityRequirements
     @Operation(summary = "Görsel indir",
             description = "Görseller CDN üzerinden doğrudan servis edilir.")
     @ApiResponses({
-            @ApiResponse(responseCode = "302", description = "Görsel adresine yönlendirildi",
+            @ApiResponse(responseCode = "302", description = "S3 kullanılıyorsa imzalı adrese yönlendirilir",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "400", description = "Tanınmayan depo öneki",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
@@ -88,8 +86,8 @@ public class StorageDownloadController {
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @GetMapping("/uploads/images/**")
-    public ResponseEntity<Void> downloadImage(HttpServletRequest request) {
-        return redirect(storageUrlResolver.urlFor(keyOf(request)));
+    public ResponseEntity<?> downloadImage(HttpServletRequest request) {
+        return serve(keyOf(request));
     }
 
     private String keyOf(HttpServletRequest request) {
@@ -102,7 +100,18 @@ public class StorageDownloadController {
         return key;
     }
 
-    private ResponseEntity<Void> redirect(String url) {
-        return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(url)).build();
+    private ResponseEntity<?> serve(String key) {
+        if (storageService.supportsSignedUrls()) {
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .location(URI.create(storageService.temporaryUrl(key)))
+                    .build();
+        }
+
+        byte[] bytes = storageService.readFile(key);
+
+        return ResponseEntity.ok()
+                .contentType(MediaTypeFactory.getMediaType(key).orElse(MediaType.APPLICATION_OCTET_STREAM))
+                .contentLength(bytes.length)
+                .body(bytes);
     }
 }

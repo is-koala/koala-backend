@@ -7,4 +7,8 @@ public interface StorageService {
     void deleteFile(String key);
 
     String temporaryUrl(String key);
+
+    byte[] readFile(String key);
+
+    boolean supportsSignedUrls();
 }
