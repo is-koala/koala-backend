@@ -121,7 +121,12 @@ public class PayoutManager implements PayoutService {
         refund.setStatus(RefundStatus.PENDING);
         refund.setReason(reason);
 
-        settlementService.enqueue(payment, assignment, SettlementOperation.DISAPPROVE);
+        settlementService.enqueueRefund(payment, assignment, refundAmount);
+
+        if (refundAmount.compareTo(payment.getTotalCharged()) < 0) {
+            settlementService.enqueue(payment, assignment, SettlementOperation.DISAPPROVE);
+        }
+
         stateMachine.transition(assignment, PaymentStatus.REFUNDED);
 
         Refund saved = refundDao.save(refund);

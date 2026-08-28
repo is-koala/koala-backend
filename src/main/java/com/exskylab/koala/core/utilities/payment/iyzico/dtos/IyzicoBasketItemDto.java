@@ -12,9 +12,9 @@ public class IyzicoBasketItemDto {
     private String id;
     private String name;
     private String category1="Hizmet";
-    private double price;
+    private BigDecimal price;
     private String itemType = "VIRTUAL";
     private String subMerchantKey;
-    private double subMerchantPrice;
+    private BigDecimal subMerchantPrice;
 
 }

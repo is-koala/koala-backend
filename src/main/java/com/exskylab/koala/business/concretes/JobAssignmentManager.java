@@ -234,8 +234,8 @@ public class JobAssignmentManager implements JobAssignmentService {
         PaymentSessionRequestDto iyzicoRequest = new PaymentSessionRequestDto();
 
         iyzicoRequest.setConversationId(payment.getConversationId());
-        iyzicoRequest.setPrice(breakdown.totalCharged().doubleValue());
-        iyzicoRequest.setPaidPrice(breakdown.totalCharged().doubleValue());
+        iyzicoRequest.setPrice(breakdown.totalCharged());
+        iyzicoRequest.setPaidPrice(breakdown.totalCharged());
         iyzicoRequest.setCurrency("TRY");
         iyzicoRequest.setBasketId(assignment.getId().toString());
         iyzicoRequest.setPaymentGroup("PRODUCT");
@@ -246,9 +246,9 @@ public class JobAssignmentManager implements JobAssignmentService {
         IyzicoBasketItemDto basketItem = new IyzicoBasketItemDto();
         basketItem.setId(job.getId().toString());
         basketItem.setName(job.getTitle());
-        basketItem.setPrice(breakdown.totalCharged().doubleValue());
+        basketItem.setPrice(breakdown.totalCharged());
         basketItem.setSubMerchantKey(worker.getIyzicoSubmerchantKey());
-        basketItem.setSubMerchantPrice(breakdown.workerPayout().doubleValue());
+        basketItem.setSubMerchantPrice(breakdown.workerPayout());
         iyzicoRequest.setBasketItems(List.of(basketItem));
 
         PaymentSessionResponseDto paymentSession = iyzicoPaymentService.initiateCheckoutFormPayment(iyzicoRequest);

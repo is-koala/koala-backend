@@ -1,21 +1,30 @@
 package com.exskylab.koala.core.utilities.payment.iyzico;
 
-import lombok.extern.slf4j.Slf4j;
+import com.exskylab.koala.core.constants.PaymentMessages;
+import com.exskylab.koala.core.exceptions.ExternalServiceException;
 import com.exskylab.koala.core.properties.IyzicoProperties;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.*;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.RestTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
-import org.springframework.http.*;
-import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestTemplate;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -23,356 +32,306 @@ import java.util.UUID;
 @Slf4j
 public class IyzicoPaymentService {
 
+
     private final RestTemplate restTemplate;
-
     private final IyzicoProperties iyzicoProperties;
-
     private final ObjectMapper objectMapper;
 
-    public IyzicoPaymentService(RestTemplate restTemplate, IyzicoProperties iyzicoProperties, ObjectMapper objectMapper) {
+    public IyzicoPaymentService(RestTemplate restTemplate, IyzicoProperties iyzicoProperties,
+                                ObjectMapper objectMapper) {
         this.restTemplate = restTemplate;
         this.iyzicoProperties = iyzicoProperties;
         this.objectMapper = objectMapper;
     }
 
+    public SubMerchantCreateResponseDto createSubMerchant(SubMerchantCreateRequestDto request) {
+        log.info("iyzico: creating sub-merchant for externalId {}", request.getSubMerchantExternalId());
 
-    public SubMerchantCreateResponseDto createSubMerchant(SubMerchantCreateRequestDto request){
-        String endpoint = "/onboarding/submerchant";
-        String url = iyzicoProperties.getBaseUrl()+endpoint;
-        log.info("iyzico: Creating sub-merchant for externalId: {}", request.getSubMerchantExternalId());
+        Map<String, Object> body = new HashMap<>();
+        body.put("locale", "tr");
+        body.put("conversationId", request.getSubMerchantExternalId());
+        body.put("subMerchantExternalId", request.getSubMerchantExternalId());
+        body.put("name", request.getName());
+        body.put("email", request.getEmail());
+        body.put("gsmNumber", request.getGsmNumber());
+        body.put("address", request.getAddress());
+        body.put("iban", request.getIban());
+        body.put("currency", "TRY");
 
-        try{
-
-            Map<String, Object> iyzicoRequestBody = new HashMap<>();
-
-            iyzicoRequestBody.put("locale", "tr");
-            iyzicoRequestBody.put("conversationId", UUID.randomUUID().toString());
-            iyzicoRequestBody.put("subMerchantExternalId", request.getSubMerchantExternalId());
-            iyzicoRequestBody.put("name", request.getName());
-            iyzicoRequestBody.put("email", request.getEmail());
-            iyzicoRequestBody.put("gsmNumber", request.getGsmNumber());
-            iyzicoRequestBody.put("address", request.getAddress());
-            iyzicoRequestBody.put("iban", request.getIban());
-            iyzicoRequestBody.put("currency", "TRY");
-
-            switch (request.getSubMerchantType()){
-                case PERSONAL:
-                    iyzicoRequestBody.put("subMerchantType", "PERSONAL");
-                    iyzicoRequestBody.put("identityNumber", request.getIdentityNumber());
-                    iyzicoRequestBody.put("contactName", request.getContactName());
-                    iyzicoRequestBody.put("contactSurname", request.getContactSurname());
-                    break;
-                case PRIVATE_COMPANY:
-                    iyzicoRequestBody.put("subMerchantType", "PRIVATE_COMPANY");
-                    iyzicoRequestBody.put("identityNumber", request.getIdentityNumber());
-                    iyzicoRequestBody.put("taxOffice", request.getTaxOffice());
-                    break;
-                case LIMITED_OR_JOINT_STOCK_COMPANY:
-                    iyzicoRequestBody.put("subMerchantType", "LIMITED_OR_JOINT_STOCK_COMPANY");
-                    iyzicoRequestBody.put("taxNumber", request.getTaxNumber());
-                    iyzicoRequestBody.put("legalCompanyTitle", request.getLegalCompanyTitle());
-                    iyzicoRequestBody.put("taxOffice", request.getTaxOffice());
-                    break;
+        switch (request.getSubMerchantType()) {
+            case PERSONAL -> {
+                body.put("subMerchantType", "PERSONAL");
+                body.put("identityNumber", request.getIdentityNumber());
+                body.put("contactName", request.getContactName());
+                body.put("contactSurname", request.getContactSurname());
             }
-
-            String jsonBody = objectMapper.writeValueAsString(iyzicoRequestBody);
-            HttpHeaders headers = createIyzicoHeaders(endpoint, jsonBody);
-
-            HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
-
-            ResponseEntity<String> response = restTemplate.postForEntity(url, entity, String.class);
-
-
-            JsonNode root = objectMapper.readTree(response.getBody());
-
-            if ("success".equals(root.path("status").asText())){
-                SubMerchantCreateResponseDto responseDto = objectMapper.treeToValue(root, SubMerchantCreateResponseDto.class);
-
-                log.info("iyzico: Sub-merchant created successfully for externalId: {}. Key: {}",
-                        request.getSubMerchantExternalId(), responseDto.getSubMerchantKey());
-
-                return responseDto;
-            }else {
-                String errorMessage = root.path("errorMessage").asText();
-                log.error("iyzico: Failed to create sub-merchant for externalId: {}. Error: {}",
-                        request.getSubMerchantExternalId(), errorMessage);
-                throw new RuntimeException("Failed to create sub-merchant: " + errorMessage);
+            case PRIVATE_COMPANY -> {
+                body.put("subMerchantType", "PRIVATE_COMPANY");
+                body.put("identityNumber", request.getIdentityNumber());
+                body.put("taxOffice", request.getTaxOffice());
             }
-
-        }catch (Exception e){
-            log.error("iyzico: Exception during sub-merchant creation for externalId: {}. Exception: {}", request.getSubMerchantExternalId(), e.getMessage());
-            throw new RuntimeException("Exception during sub-merchant creation: " + e.getMessage(), e);
+            case LIMITED_OR_JOINT_STOCK_COMPANY -> {
+                body.put("subMerchantType", "LIMITED_OR_JOINT_STOCK_COMPANY");
+                body.put("taxNumber", request.getTaxNumber());
+                body.put("legalCompanyTitle", request.getLegalCompanyTitle());
+                body.put("taxOffice", request.getTaxOffice());
+            }
         }
 
+        JsonNode root = call(HttpMethod.POST, IyzicoEndpoints.SUBMERCHANT, body, "sub-merchant creation");
+
+        SubMerchantCreateResponseDto response = new SubMerchantCreateResponseDto();
+        response.setStatus(root.path("status").asString());
+        response.setSubMerchantKey(root.path("subMerchantKey").asString());
+
+        log.info("iyzico: sub-merchant created for externalId {}", request.getSubMerchantExternalId());
+        return response;
     }
 
+    public SubMerchantUpdateResponseDto updateSubMerchant(SubMerchantUpdateRequestDto request) {
+        log.info("iyzico: updating sub-merchant {}", request.getSubMerchantKey());
 
-    public SubMerchantUpdateResponseDto updateSubMerchant(SubMerchantUpdateRequestDto request){
+        Map<String, Object> body = new HashMap<>();
+        body.put("locale", "tr");
+        body.put("conversationId", request.getSubMerchantKey());
+        body.put("subMerchantKey", request.getSubMerchantKey());
+        body.put("name", request.getName());
+        body.put("email", request.getEmail());
+        body.put("gsmNumber", request.getGsmNumber());
+        body.put("address", request.getAddress());
+        body.put("iban", request.getIban());
+        body.put("contactName", request.getContactName());
+        body.put("contactSurname", request.getContactSurname());
+        body.put("currency", "TRY");
+        body.put("identityNumber", request.getIdentityNumber());
 
-        String endpoint = "/onboarding/submerchant";
-        String url = iyzicoProperties.getBaseUrl()+endpoint;
-        log.info("iyzico: Updating sub-merchant for externalId: {}", request.getSubMerchantKey());
+        JsonNode root = call(HttpMethod.PUT, IyzicoEndpoints.SUBMERCHANT, body, "sub-merchant update");
 
-        try{
+        SubMerchantUpdateResponseDto response = new SubMerchantUpdateResponseDto();
+        response.setStatus(root.path("status").asString());
+        response.setSubMerchantKey(root.path("subMerchantKey").asString());
+        return response;
+    }
 
+    public PaymentSessionResponseDto initiateCheckoutFormPayment(PaymentSessionRequestDto request) {
+        log.info("iyzico: initiating checkout form for conversationId {}", request.getConversationId());
 
-            Map<String, Object> iyzicoRequestBody = convertUpdateRequestToIyzicoMap(request);
+        JsonNode root = call(HttpMethod.POST, IyzicoEndpoints.CHECKOUT_FORM_INITIALIZE, request,
+                "payment session initiation");
 
-            String jsonBody = objectMapper.writeValueAsString(iyzicoRequestBody);
-            HttpHeaders headers = createIyzicoHeaders(endpoint, jsonBody);
-            HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
+        PaymentSessionResponseDto response = new PaymentSessionResponseDto();
+        response.setStatus(root.path("status").asString());
+        response.setToken(root.path("token").asString());
+        response.setPaymentPageUrl(root.path("paymentPageUrl").asString());
+        response.setCheckoutFormContent(root.path("checkoutFormContent").asString());
 
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.PUT, entity, String.class);
+        log.info("iyzico: checkout form initiated for conversationId {}", request.getConversationId());
+        return response;
+    }
 
-            JsonNode root = objectMapper.readTree(response.getBody());
+    public IyzicoPaymentResultResponseDto retrieveCheckoutFormResult(IyzicoPaymentResultRequestDto request) {
+        log.info("iyzico: retrieving checkout form result for conversationId {}", request.getConversationId());
 
-            if ("success".equals(root.path("status").asText())){
-                SubMerchantUpdateResponseDto responseDto = objectMapper.treeToValue(root, SubMerchantUpdateResponseDto.class);
-                log.info("iyzico: Sub-merchant with key {} updated successfully.", request.getSubMerchantKey());
-                return responseDto;
-            }else {
-                String errorMessage = root.path("errorMessage").asText();
-                log.error("iyzico: Failed to update sub-merchant with key {}. Error: {}",
-                        request.getSubMerchantKey(), errorMessage);
-                throw new RuntimeException("Failed to update sub-merchant: " + errorMessage);
-            }
+        Map<String, Object> body = new HashMap<>();
+        body.put("locale", "tr");
+        body.put("conversationId", request.getConversationId());
+        body.put("token", request.getToken());
 
+        JsonNode root = call(HttpMethod.POST, IyzicoEndpoints.CHECKOUT_FORM_RETRIEVE, body,
+                "payment result retrieval");
 
-        }catch (Exception e){
-            log.error("iyzico: Exception during sub-merchant update for externalId: {}. Exception: {}", request.getSubMerchantKey(), e.getMessage());
-            throw new RuntimeException("Exception during sub-merchant update: " + e.getMessage(), e);
+        IyzicoPaymentResultResponseDto result = new IyzicoPaymentResultResponseDto();
+        result.setStatus(root.path("status").asString());
+        result.setPaymentId(text(root, "paymentId"));
+        result.setConversationId(text(root, "conversationId"));
+        result.setPaymentStatus(text(root, "paymentStatus"));
+        result.setFraudStatus(root.has("fraudStatus") && !root.path("fraudStatus").isNull()
+                ? root.path("fraudStatus").asInt() : null);
+        result.setPrice(decimal(root, "price"));
+        result.setPaidPrice(decimal(root, "paidPrice"));
+        result.setCurrency(text(root, "currency"));
+        result.setBasketId(text(root, "basketId"));
+
+        JsonNode items = root.path("itemTransactions");
+        if (items.isArray() && !items.isEmpty()) {
+            JsonNode first = items.get(0);
+            result.setPaymentTransactionId(text(first, "paymentTransactionId"));
+            result.setItemPaidPrice(decimal(first, "paidPrice"));
         }
 
+        log.info("iyzico: payment result for conversationId {} is paymentStatus={} fraudStatus={}",
+                request.getConversationId(), result.getPaymentStatus(), result.getFraudStatus());
+        return result;
     }
 
+    public IyzicoApprovalResponseDto approvePaymentSettlement(String paymentTransactionId, String conversationId) {
+        return itemDecision(IyzicoEndpoints.ITEM_APPROVE, paymentTransactionId, conversationId,
+                "payment settlement approval");
+    }
 
+    public IyzicoApprovalResponseDto disapprovePaymentSettlement(String paymentTransactionId, String conversationId) {
+        return itemDecision(IyzicoEndpoints.ITEM_DISAPPROVE, paymentTransactionId, conversationId,
+                "payment settlement disapproval");
+    }
 
-    public PaymentSessionResponseDto initiateCheckoutFormPayment(PaymentSessionRequestDto request){
+    public IyzicoRefundResponseDto refund(IyzicoRefundRequestDto request) {
+        log.info("iyzico: refunding {} on transaction {}", request.getPrice(), request.getPaymentTransactionId());
 
-        String endpoint = "/payment/iyzipos/checkoutform/initialize/auth/ecom";
-        String url = iyzicoProperties.getBaseUrl()+endpoint;
-        log.info("iyzico: Initiating checkout form payment for conversationId: {}", request.getConversationId());
-
-
-        try{
-            String jsonBody = objectMapper.writeValueAsString(request);
-            HttpHeaders headers = createIyzicoHeaders(endpoint, jsonBody);
-
-            HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
-
-            ResponseEntity<String> response = restTemplate.postForEntity(url, entity, String.class);
-
-            JsonNode root = objectMapper.readTree(response.getBody());
-            if ("success".equals(root.path("status").asText())){
-                PaymentSessionResponseDto sessionResponseDto = objectMapper.treeToValue(root, PaymentSessionResponseDto.class);
-
-                log.info("iyzico: Checkout form payment initiated successfully for conversationId: {}.",
-                        request.getConversationId());
-
-
-                return sessionResponseDto;
-            } else {
-                String errorMessage = root.path("errorMessage").asText();
-                throw new RuntimeException("Failed to initiate payment session: " + errorMessage);
-            }
-
-        } catch (Exception e){
-            log.error("iyzico: Exception during payment session initiation for conversationId: {}. Exception: {}", request.getConversationId(), e.getMessage());
-            throw new RuntimeException("Exception during payment session initiation: " + e.getMessage(), e);
+        Map<String, Object> body = new HashMap<>();
+        body.put("locale", "tr");
+        body.put("conversationId", request.getConversationId());
+        body.put("paymentTransactionId", request.getPaymentTransactionId());
+        body.put("price", request.getPrice());
+        body.put("currency", request.getCurrency());
+        if (request.getIp() != null) {
+            body.put("ip", request.getIp());
         }
 
+        JsonNode root = call(HttpMethod.POST, IyzicoEndpoints.REFUND, body, "refund");
 
+        IyzicoRefundResponseDto response = new IyzicoRefundResponseDto();
+        response.setStatus(root.path("status").asString());
+        response.setPaymentId(text(root, "paymentId"));
+        response.setPaymentTransactionId(text(root, "paymentTransactionId"));
+        response.setPrice(decimal(root, "price"));
+        response.setCurrency(text(root, "currency"));
+        response.setAuthCode(text(root, "authCode"));
+        response.setHostReference(text(root, "hostReference"));
+        response.setRefundHostReference(text(root, "refundHostReference"));
+
+        log.info("iyzico: refunded {} on transaction {}", response.getPrice(), request.getPaymentTransactionId());
+        return response;
     }
 
+    public IyzicoRefundResponseDto cancel(String paymentId, String conversationId, String ip) {
+        log.info("iyzico: cancelling payment {}", paymentId);
 
-    public IyzicoPaymentResultResponseDto retrieveCheckoutFormResult(IyzicoPaymentResultRequestDto request){
-
-        String endpoint = "/payment/checkout-form/retrieve";
-        String url = iyzicoProperties.getBaseUrl()+endpoint;
-        log.info("iyzico: Retrieving checkout form result for conversationId: {}", request.getConversationId());
-
-        try{
-            String jsonBody = objectMapper.writeValueAsString(request);
-            HttpHeaders headers = createIyzicoHeaders(endpoint, jsonBody);
-            HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
-
-            ResponseEntity<String> response = restTemplate.postForEntity(url, entity, String.class);
-
-            JsonNode root = objectMapper.readTree(response.getBody());
-            if ("success".equals(root.path("status").asText())){
-                if (!"SUCCESS".equals(root.path("paymentStatus").asText())){
-                    log.error("iyzico: Payment failed for conversationId: {}. PaymentStatus: {}",
-                            request.getConversationId(), root.path("paymentStatus").asText());
-                    throw new RuntimeException("Payment failed with status: " + root.path("paymentStatus").asText());
-                }
-                IyzicoPaymentResultResponseDto responseDto = objectMapper.treeToValue(root, IyzicoPaymentResultResponseDto.class);
-                String transactionId = root.path("itemTransactions").get(0).path("paymentTransactionId").asText();
-                responseDto.setPaymentTransactionId(transactionId);
-
-                log.info("iyzico: Payment successful for conversationId: {}. TransactionId: {}", request.getConversationId(), transactionId);
-
-                return responseDto;
-            }else {
-                String errorMessage = root.path("errorMessage").asText();
-                log.error("iyzico: Failed to retrieve payment result for conversationId: {}. Error: {}",
-                        request.getConversationId(), errorMessage);
-                throw new RuntimeException("Failed to retrieve payment result: " + errorMessage);
-            }
-
-        } catch (Exception e){
-            log.error("iyzico: Exception during payment result retrieval for conversationId: {}. Exception: {}", request.getConversationId(), e.getMessage());
-            throw new RuntimeException("Exception during payment result retrieval: " + e.getMessage(), e);
+        Map<String, Object> body = new HashMap<>();
+        body.put("locale", "tr");
+        body.put("conversationId", conversationId);
+        body.put("paymentId", paymentId);
+        if (ip != null) {
+            body.put("ip", ip);
         }
 
+        JsonNode root = call(HttpMethod.POST, IyzicoEndpoints.CANCEL, body, "cancel");
+
+        IyzicoRefundResponseDto response = new IyzicoRefundResponseDto();
+        response.setStatus(root.path("status").asString());
+        response.setPaymentId(text(root, "paymentId"));
+        response.setPrice(decimal(root, "price"));
+        response.setCurrency(text(root, "currency"));
+        response.setAuthCode(text(root, "authCode"));
+        response.setHostReference(text(root, "hostReference"));
+        return response;
     }
 
+    private IyzicoApprovalResponseDto itemDecision(String endpoint, String paymentTransactionId,
+                                                   String conversationId, String operation) {
+        log.info("iyzico: {} for transaction {}", operation, paymentTransactionId);
 
+        Map<String, Object> body = new HashMap<>();
+        body.put("locale", "tr");
+        body.put("conversationId", conversationId);
+        body.put("paymentTransactionId", paymentTransactionId);
 
+        JsonNode root = call(HttpMethod.POST, endpoint, body, operation);
 
-    public IyzicoApprovalResponseDto approvePaymentSettlement(String paymentTransactionId){
-        String endpoint = "/payment/iyzipos/item/approve";
-        String url = iyzicoProperties.getBaseUrl()+endpoint;
+        return new IyzicoApprovalResponseDto(root.path("status").asString(),
+                text(root, "paymentTransactionId"));
+    }
 
-        log.info("iyzico: Approving payment settlement for transactionId: {}", paymentTransactionId);
+    private JsonNode call(HttpMethod method, String endpoint, Object body, String operation) {
+        String url = iyzicoProperties.getBaseUrl() + endpoint;
+        String responseBody;
 
+        try {
+            String jsonBody = objectMapper.writeValueAsString(body);
+            String randomKey = newRandomKey();
+            HttpHeaders headers = createIyzicoHeaders(endpoint, jsonBody, randomKey);
 
-        try{
-            Map<String, String> requestBody = Map.of(
-                    "locale", "tr",
-                    "conversationId", UUID.randomUUID().toString(),
-                    "paymentTransactionId", paymentTransactionId
-            );
-            String jsonBody = objectMapper.writeValueAsString(requestBody);
-            HttpHeaders headers = createIyzicoHeaders(endpoint, jsonBody);
-            HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
-
-            ResponseEntity<String> response = restTemplate.postForEntity(url, entity, String.class);
-
-            JsonNode root = objectMapper.readTree(response.getBody());
-            if ("success".equals(root.path("status").asText())){
-                return objectMapper.treeToValue(root, IyzicoApprovalResponseDto.class);
-            }else {
-                String errorMessage = root.path("errorMessage").asText();
-                log.error("iyzico: Failed to approve payment settlement for transactionId: {}. Error: {}",
-                        paymentTransactionId, errorMessage);
-                throw new RuntimeException("Failed to approve payment settlement: " + errorMessage);
-
-
+            ResponseEntity<String> response =
+                    restTemplate.exchange(url, method, new HttpEntity<>(jsonBody, headers), String.class);
+            responseBody = response.getBody();
+        } catch (HttpStatusCodeException e) {
+            responseBody = e.getResponseBodyAsString();
+            if (responseBody == null || responseBody.isBlank()) {
+                log.error("iyzico: {} failed with HTTP {} and an empty body", operation, e.getStatusCode());
+                throw new ExternalServiceException(PaymentMessages.PROVIDER_UNAVAILABLE);
             }
-        }catch (Exception e){
-            log.error("iyzico: Exception during payment settlement approval for transactionId: {}. Exception: {}",
-                    paymentTransactionId, e.getMessage());
-
-            throw new RuntimeException("Exception during payment settlement approval: " + e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("iyzico: {} could not be performed: {}", operation, e.getMessage());
+            throw new ExternalServiceException(PaymentMessages.PROVIDER_UNAVAILABLE);
         }
 
-    }
-
-    public IyzicoApprovalResponseDto disapprovePaymentSettlement(String paymentTransactionId){
-        String endpoint = "/payment/iyzipos/item/disapprove";
-        String url = iyzicoProperties.getBaseUrl()+endpoint;
-
-        log.info("iyzico: Disapproving payment settlement for transactionId: {}", paymentTransactionId);
-
-
-        try{
-            Map<String, String> requestBody = Map.of(
-                    "locale", "tr",
-                    "conversationId", UUID.randomUUID().toString(),
-                    "paymentTransactionId", paymentTransactionId
-            );
-            String jsonBody = objectMapper.writeValueAsString(requestBody);
-            HttpHeaders headers = createIyzicoHeaders(endpoint, jsonBody);
-            HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
-
-            ResponseEntity<String> response = restTemplate.postForEntity(url, entity, String.class);
-
-            JsonNode root = objectMapper.readTree(response.getBody());
-            if ("success".equals(root.path("status").asText())){
-                return objectMapper.treeToValue(root, IyzicoApprovalResponseDto.class);
-            }else {
-                String errorMessage = root.path("errorMessage").asText();
-                log.error("iyzico: Failed to disapprove payment settlement for transactionId: {}. Error: {}",
-                        paymentTransactionId, errorMessage);
-                throw new RuntimeException("Failed to approve payment settlement: " + errorMessage);
-
-
-            }
-        }catch (Exception e){
-            log.error("iyzico: Exception during payment settlement disapprovement for transactionId: {}. Exception: {}",
-                    paymentTransactionId, e.getMessage());
-
-            throw new RuntimeException("Exception during payment settlement disapprove: " + e.getMessage(), e);
+        JsonNode root;
+        try {
+            root = objectMapper.readTree(responseBody);
+        } catch (Exception e) {
+            log.error("iyzico: {} returned an unreadable body: {}", operation, e.getMessage());
+            throw new ExternalServiceException(PaymentMessages.PROVIDER_UNAVAILABLE);
         }
 
+        if (!"success".equals(root.path("status").asString())) {
+            log.error("iyzico: {} rejected, errorCode={} errorMessage={}", operation,
+                    text(root, "errorCode"), text(root, "errorMessage"));
+            throw new ExternalServiceException(PaymentMessages.PROVIDER_REJECTED);
+        }
+
+        return root;
     }
 
-
-
-    private HttpHeaders createIyzicoHeaders(String uriPath, String jsonBody) throws Exception {
-        String randomKey = String.valueOf(System.currentTimeMillis());
-
-        String payload = (jsonBody == null || jsonBody.isEmpty()) ? uriPath : uriPath+jsonBody;
-
-        String signature= generateIyzicoV2Signature(randomKey, payload);
+    private HttpHeaders createIyzicoHeaders(String uriPath, String jsonBody, String randomKey) throws Exception {
+        String payload = (jsonBody == null || jsonBody.isEmpty()) ? uriPath : uriPath + jsonBody;
+        String signature = generateIyzicoV2Signature(randomKey, payload);
 
         String authorizationString = "apiKey:" + iyzicoProperties.getApiKey()
                 + "&randomKey:" + randomKey
                 + "&signature:" + signature;
 
         String base64EncodedAuth = Base64.getEncoder().encodeToString(
-                authorizationString.getBytes(StandardCharsets.UTF_8)
-        );
+                authorizationString.getBytes(StandardCharsets.UTF_8));
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Authorization", "IYZWSv2 " + base64EncodedAuth);
+        headers.set("x-iyzi-rnd", randomKey);
 
         return headers;
-
     }
 
-
-    private Map<String, Object> convertUpdateRequestToIyzicoMap(SubMerchantUpdateRequestDto dto) {
-        Map<String, Object> map = new HashMap<>();
-        map.put("locale", "tr");
-        map.put("conversationId", UUID.randomUUID().toString());
-        map.put("subMerchantKey", dto.getSubMerchantKey());
-
-        map.put("name", dto.getName());
-        map.put("email", dto.getEmail());
-        map.put("gsmNumber", dto.getGsmNumber());
-        map.put("address", dto.getAddress());
-        map.put("iban", dto.getIban());
-        map.put("contactName", dto.getContactName());
-        map.put("contactSurname", dto.getContactSurname());
-        map.put("currency", "TRY");
-        map.put("identityNumber", dto.getIdentityNumber());
-
-        return map;
-
+    private static String newRandomKey() {
+        return System.currentTimeMillis() + UUID.randomUUID().toString().replace("-", "");
     }
 
+    private static String text(JsonNode node, String field) {
+        JsonNode value = node.path(field);
+        return value.isMissingNode() || value.isNull() ? null : value.asString();
+    }
 
+    private static BigDecimal decimal(JsonNode node, String field) {
+        JsonNode value = node.path(field);
+        if (value.isMissingNode() || value.isNull()) {
+            return null;
+        }
+        try {
+            return new BigDecimal(value.asString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
 
-
-
-    private String generateIyzicoV2Signature(String randomKey, String payload) throws NoSuchAlgorithmException, InvalidKeyException {
-        String secretKey = iyzicoProperties.getSecretKey();
-        String dataToEncrypt = randomKey+payload;
-
+    private String generateIyzicoV2Signature(String randomKey, String payload)
+            throws NoSuchAlgorithmException, InvalidKeyException {
         Mac sha256Hmac = Mac.getInstance("HmacSHA256");
-        SecretKeySpec secret_key_spec = new SecretKeySpec(secretKey.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
-        sha256Hmac.init(secret_key_spec);
+        sha256Hmac.init(new SecretKeySpec(
+                iyzicoProperties.getSecretKey().getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
 
-        byte[] hmac_sha256_bytes = sha256Hmac.doFinal(dataToEncrypt.getBytes(StandardCharsets.UTF_8));
-
-        return bytesToHex(hmac_sha256_bytes);
-
+        byte[] hash = sha256Hmac.doFinal((randomKey + payload).getBytes(StandardCharsets.UTF_8));
+        return bytesToHex(hash);
     }
 
     private static String bytesToHex(byte[] hash) {
-
         StringBuilder hexString = new StringBuilder(2 * hash.length);
         for (byte b : hash) {
             String hex = Integer.toHexString(0xff & b);
@@ -381,10 +340,6 @@ public class IyzicoPaymentService {
             }
             hexString.append(hex);
         }
-
-        return hexString.toString();
-
+        return hexString.toString().toLowerCase(Locale.ROOT);
     }
-
-
 }

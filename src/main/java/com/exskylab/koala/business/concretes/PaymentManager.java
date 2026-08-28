@@ -18,6 +18,7 @@ import com.exskylab.koala.core.constants.PayoutMessages;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -79,19 +80,68 @@ public class PaymentManager implements PaymentService {
         request.setToken(providerToken);
         request.setConversationId(payment.getConversationId());
 
+        IyzicoPaymentResultResponseDto result;
         try {
-            IyzicoPaymentResultResponseDto result = iyzicoPaymentService.retrieveCheckoutFormResult(request);
-            return settle(payment, result);
+            result = iyzicoPaymentService.retrieveCheckoutFormResult(request);
         } catch (RuntimeException e) {
             log.warn("Payment {} could not be verified with the provider: {}", payment.getId(), e.getMessage());
             return fail(payment, e.getMessage());
         }
+
+        if (!"SUCCESS".equalsIgnoreCase(result.getPaymentStatus())) {
+            log.info("Payment {} was not completed by the provider, paymentStatus={}",
+                    payment.getId(), result.getPaymentStatus());
+            return fail(payment, "paymentStatus=" + result.getPaymentStatus());
+        }
+
+        if (result.getFraudStatus() != null && result.getFraudStatus() == -1) {
+            log.warn("Payment {} was rejected by fraud filters.", payment.getId());
+            return fail(payment, PaymentMessages.FRAUD_REVIEW);
+        }
+
+        if (result.getFraudStatus() != null && result.getFraudStatus() == 0) {
+            log.warn("Payment {} is under fraud review, escrow is not opened yet.", payment.getId());
+            return hold(payment, result);
+        }
+
+        String amountMismatch = amountMismatch(payment, result);
+        if (amountMismatch != null) {
+            log.error("Payment {} rejected: {}", payment.getId(), amountMismatch);
+            return fail(payment, amountMismatch);
+        }
+
+        return settle(payment, result);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<Payment> getAttemptsForAssignment(UUID jobAssignmentId) {
         return paymentDao.findAllByJobAssignmentIdOrderByCreatedAtDesc(jobAssignmentId);
+    }
+
+    private String amountMismatch(Payment payment, IyzicoPaymentResultResponseDto result) {
+        BigDecimal charged = result.getPaidPrice();
+        if (charged == null) {
+            return "provider did not report a paid price";
+        }
+
+        if (charged.compareTo(payment.getTotalCharged()) != 0) {
+            return "expected " + payment.getTotalCharged() + " but the provider collected " + charged;
+        }
+
+        if (result.getCurrency() != null && !CURRENCY.equalsIgnoreCase(result.getCurrency())) {
+            return "expected currency " + CURRENCY + " but the provider used " + result.getCurrency();
+        }
+
+        return null;
+    }
+
+    private Payment hold(Payment payment, IyzicoPaymentResultResponseDto result) {
+        payment.setStatus(PaymentAttemptStatus.IN_REVIEW);
+        payment.setProviderPaymentId(result.getPaymentId());
+        payment.setProviderTransactionId(result.getPaymentTransactionId());
+        payment.setFailureReason(PaymentMessages.FRAUD_REVIEW);
+        return paymentDao.save(payment);
     }
 
     private Payment settle(Payment payment, IyzicoPaymentResultResponseDto result) {

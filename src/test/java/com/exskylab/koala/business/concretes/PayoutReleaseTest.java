@@ -209,13 +209,36 @@ class PayoutReleaseTest {
     }
 
     @Test
-    void aRefundQueuesTheProviderDisapprovalSoTheWorkerShareIsNotPaidOut() {
+    void aFullRefundSendsTheMoneyBackToTheCard() {
         JobAssignment assignment = assignment(AssignmentStatus.CANCELLED, PaymentStatus.HELD_IN_ESCROW);
         Payment payment = settledPaymentExists();
         payment.setProviderTransactionId("txn-456");
 
         payoutManager.refundEmployer(assignmentId, null, "iptal");
 
+        verify(settlementService).enqueueRefund(eq(payment), eq(assignment), eq(new BigDecimal("1075.00")));
+    }
+
+    @Test
+    void aFullRefundNeedsNoDisapprovalBecauseTheLineIsReversed() {
+        assignment(AssignmentStatus.CANCELLED, PaymentStatus.HELD_IN_ESCROW);
+        Payment payment = settledPaymentExists();
+        payment.setProviderTransactionId("txn-456");
+
+        payoutManager.refundEmployer(assignmentId, null, "iptal");
+
+        verify(settlementService, never()).enqueue(any(), any(), eq(SettlementOperation.DISAPPROVE));
+    }
+
+    @Test
+    void aPartialRefundAlsoBlocksTheWorkerShareOnWhatIsKept() {
+        JobAssignment assignment = assignment(AssignmentStatus.CANCELLED, PaymentStatus.HELD_IN_ESCROW);
+        Payment payment = settledPaymentExists();
+        payment.setProviderTransactionId("txn-456");
+
+        payoutManager.refundEmployer(assignmentId, new BigDecimal("537.50"), "gec iptal");
+
+        verify(settlementService).enqueueRefund(eq(payment), eq(assignment), eq(new BigDecimal("537.50")));
         verify(settlementService).enqueue(eq(payment), eq(assignment), eq(SettlementOperation.DISAPPROVE));
     }
 }

@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.utilities.payment.iyzico.dtos;
 
+import java.math.BigDecimal;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -10,4 +11,11 @@ public class IyzicoPaymentResultResponseDto {
     private String paymentId;
     private String paymentTransactionId;
     private String conversationId;
+    private String paymentStatus;
+    private Integer fraudStatus;
+    private BigDecimal price;
+    private BigDecimal paidPrice;
+    private BigDecimal itemPaidPrice;
+    private String currency;
+    private String basketId;
 }

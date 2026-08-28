@@ -10,5 +10,6 @@ public class SubMerchantUpdateResponseDto {
     private String status;
     private String locale;
     private String conversationId;
+    private String subMerchantKey;
 
 }

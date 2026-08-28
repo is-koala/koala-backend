@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.utilities.payment.iyzico.dtos;
 
+import java.math.BigDecimal;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -11,9 +12,9 @@ public class PaymentSessionRequestDto {
 
     private String conversationId; //jobAssignmentID
 
-    private double price;
+    private BigDecimal price;
 
-    private double paidPrice;
+    private BigDecimal paidPrice;
 
     private String currency = "TRY";
 

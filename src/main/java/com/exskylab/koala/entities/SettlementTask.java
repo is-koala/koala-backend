@@ -57,6 +57,9 @@ public class SettlementTask extends BaseEntity {
     @Column(name = "completed_at")
     private Instant completedAt;
 
+    @Column(name = "amount", precision = 19, scale = 2)
+    private java.math.BigDecimal amount;
+
     @Column(name = "provider_reference", length = 128)
     private String providerReference;
 }

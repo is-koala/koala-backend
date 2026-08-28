@@ -13,6 +13,8 @@ public interface SettlementService {
 
     Optional<SettlementTask> enqueue(Payment payment, JobAssignment assignment, SettlementOperation operation);
 
+    Optional<SettlementTask> enqueueRefund(Payment payment, JobAssignment assignment, java.math.BigDecimal amount);
+
     boolean runTask(UUID taskId);
 
     List<UUID> findDueTaskIds();

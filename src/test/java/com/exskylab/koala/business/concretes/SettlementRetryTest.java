@@ -98,7 +98,8 @@ class SettlementRetryTest {
     @Test
     void aSuccessfulDisapprovalClosesTheRefundInsteadOfLeavingItPending() {
         Refund refund = pendingRefund();
-        SettlementTask task = pendingTask(SettlementOperation.DISAPPROVE);
+        SettlementTask task = pendingTask(SettlementOperation.REFUND);
+        when(iyzicoPaymentService.refund(any())).thenReturn(refundResponse());
 
         manager.runTask(task.getId());
 
@@ -111,7 +112,7 @@ class SettlementRetryTest {
         Payout payout = pendingPayout();
         SettlementTask task = pendingTask(SettlementOperation.APPROVE);
         task.setAttempts(retryProperties.getMaxAttempts());
-        when(iyzicoPaymentService.approvePaymentSettlement(any()))
+        when(iyzicoPaymentService.approvePaymentSettlement(any(), any()))
                 .thenThrow(new IllegalStateException("saglayici hatasi"));
 
         manager.runTask(task.getId());
@@ -121,11 +122,11 @@ class SettlementRetryTest {
     }
 
     @Test
-    void givingUpOnADisapprovalMarksTheRefundFailed() {
+    void givingUpOnARefundMarksTheRefundFailed() {
         Refund refund = pendingRefund();
-        SettlementTask task = pendingTask(SettlementOperation.DISAPPROVE);
+        SettlementTask task = pendingTask(SettlementOperation.REFUND);
         task.setAttempts(retryProperties.getMaxAttempts());
-        when(iyzicoPaymentService.disapprovePaymentSettlement(any()))
+        when(iyzicoPaymentService.refund(any()))
                 .thenThrow(new IllegalStateException("saglayici hatasi"));
 
         manager.runTask(task.getId());
@@ -174,7 +175,7 @@ class SettlementRetryTest {
         Payout payout = new Payout();
         payout.setStatus(PayoutStatus.PENDING);
         when(payoutDao.findByJobAssignmentId(assignment.getId())).thenReturn(Optional.of(payout));
-        when(iyzicoPaymentService.approvePaymentSettlement("txn-1"))
+        when(iyzicoPaymentService.approvePaymentSettlement(eq("txn-1"), any()))
                 .thenReturn(new IyzicoApprovalResponseDto("success", "txn-1"));
 
         assertTrue(manager.runTask(task.getId()));
@@ -187,7 +188,7 @@ class SettlementRetryTest {
     @Test
     void aFailedRunStaysPendingAndBacksOff() {
         SettlementTask task = pendingTask(SettlementOperation.APPROVE);
-        when(iyzicoPaymentService.approvePaymentSettlement("txn-1"))
+        when(iyzicoPaymentService.approvePaymentSettlement(eq("txn-1"), any()))
                 .thenThrow(new RuntimeException("provider down"));
 
         assertFalse(manager.runTask(task.getId()));
@@ -203,7 +204,7 @@ class SettlementRetryTest {
         retryProperties.setMaxAttempts(3);
         SettlementTask task = pendingTask(SettlementOperation.APPROVE);
         task.setAttempts(2);
-        when(iyzicoPaymentService.approvePaymentSettlement("txn-1"))
+        when(iyzicoPaymentService.approvePaymentSettlement(eq("txn-1"), any()))
                 .thenThrow(new RuntimeException("provider down"));
 
         manager.runTask(task.getId());
@@ -233,15 +234,41 @@ class SettlementRetryTest {
     }
 
     @Test
-    void aRefundQueuesADisapprovalAndRunsIt() {
+    void aDisapprovalNeverTouchesThePayoutOrTheRefund() {
+        Refund refund = pendingRefund();
         SettlementTask task = pendingTask(SettlementOperation.DISAPPROVE);
-        when(iyzicoPaymentService.disapprovePaymentSettlement("txn-1"))
+        when(iyzicoPaymentService.disapprovePaymentSettlement(eq("txn-1"), any()))
                 .thenReturn(new IyzicoApprovalResponseDto("success", "txn-1"));
 
         assertTrue(manager.runTask(task.getId()));
 
-        verify(iyzicoPaymentService).disapprovePaymentSettlement("txn-1");
-        verify(iyzicoPaymentService, never()).approvePaymentSettlement(any());
+        verify(iyzicoPaymentService).disapprovePaymentSettlement(eq("txn-1"), any());
+        verify(iyzicoPaymentService, never()).approvePaymentSettlement(any(), any());
         verify(payoutDao, never()).save(any());
+        assertEquals(RefundStatus.PENDING, refund.getStatus());
+    }
+
+    @Test
+    void theRefundIsSentToTheProviderWithTheQueuedAmount() {
+        Refund refund = pendingRefund();
+        SettlementTask task = pendingTask(SettlementOperation.REFUND);
+        task.setAmount(new java.math.BigDecimal("537.50"));
+        when(iyzicoPaymentService.refund(any())).thenReturn(refundResponse());
+
+        assertTrue(manager.runTask(task.getId()));
+
+        verify(iyzicoPaymentService).refund(argThat(request -> {
+            assertEquals(0, new java.math.BigDecimal("537.50").compareTo(request.getPrice()));
+            assertEquals("txn-1", request.getPaymentTransactionId());
+            return true;
+        }));
+        assertEquals(RefundStatus.COMPLETED, refund.getStatus());
+    }
+
+    private static com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoRefundResponseDto refundResponse() {
+        var response = new com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoRefundResponseDto();
+        response.setStatus("success");
+        response.setPaymentTransactionId("txn-1");
+        return response;
     }
 }

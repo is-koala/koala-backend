@@ -6,6 +6,8 @@ import com.exskylab.koala.core.properties.IyzicoProperties;
 import com.exskylab.koala.core.properties.SettlementRetryProperties;
 import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoApprovalResponseDto;
+import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoRefundRequestDto;
+import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoRefundResponseDto;
 import com.exskylab.koala.dataAccess.PayoutDao;
 import com.exskylab.koala.dataAccess.RefundDao;
 import com.exskylab.koala.entities.Refund;
@@ -18,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -49,6 +52,17 @@ public class SettlementManager implements SettlementService {
     @Transactional
     public Optional<SettlementTask> enqueue(Payment payment, JobAssignment assignment,
                                             SettlementOperation operation) {
+        return enqueue(payment, assignment, operation, null);
+    }
+
+    @Override
+    @Transactional
+    public Optional<SettlementTask> enqueueRefund(Payment payment, JobAssignment assignment, BigDecimal amount) {
+        return enqueue(payment, assignment, SettlementOperation.REFUND, amount);
+    }
+
+    private Optional<SettlementTask> enqueue(Payment payment, JobAssignment assignment,
+                                             SettlementOperation operation, BigDecimal amount) {
 
         if (!iyzicoProperties.isSettlementEnabled()) {
             log.warn("Provider settlement is disabled, {} not queued for payment {}.", operation, payment.getId());
@@ -75,6 +89,7 @@ public class SettlementManager implements SettlementService {
         task.setProviderTransactionId(transactionId);
         task.setStatus(SettlementTaskStatus.PENDING);
         task.setAttempts(0);
+        task.setAmount(amount);
         task.setNextAttemptAt(Instant.now());
 
         SettlementTask saved = settlementTaskDao.save(task);
@@ -100,19 +115,17 @@ public class SettlementManager implements SettlementService {
         task.setAttempts(task.getAttempts() + 1);
 
         try {
-            IyzicoApprovalResponseDto response = task.getOperation() == SettlementOperation.APPROVE
-                    ? iyzicoPaymentService.approvePaymentSettlement(task.getProviderTransactionId())
-                    : iyzicoPaymentService.disapprovePaymentSettlement(task.getProviderTransactionId());
+            String reference = dispatch(task);
 
             task.setStatus(SettlementTaskStatus.SUCCEEDED);
             task.setCompletedAt(Instant.now());
             task.setLastError(null);
-            task.setProviderReference(response == null ? null : response.getPaymentTransactionId());
+            task.setProviderReference(reference);
             settlementTaskDao.save(task);
 
             if (task.getOperation() == SettlementOperation.APPROVE) {
                 markPayoutProcessing(task);
-            } else {
+            } else if (task.getOperation() == SettlementOperation.REFUND) {
                 markRefundCompleted(task);
             }
 
@@ -135,6 +148,34 @@ public class SettlementManager implements SettlementService {
 
             settlementTaskDao.save(task);
             return false;
+        }
+    }
+
+    private String dispatch(SettlementTask task) {
+        String conversationId = task.getPayment() == null ? task.getId().toString()
+                : task.getPayment().getConversationId();
+
+        switch (task.getOperation()) {
+            case APPROVE -> {
+                IyzicoApprovalResponseDto response = iyzicoPaymentService
+                        .approvePaymentSettlement(task.getProviderTransactionId(), conversationId);
+                return response == null ? null : response.getPaymentTransactionId();
+            }
+            case DISAPPROVE -> {
+                IyzicoApprovalResponseDto response = iyzicoPaymentService
+                        .disapprovePaymentSettlement(task.getProviderTransactionId(), conversationId);
+                return response == null ? null : response.getPaymentTransactionId();
+            }
+            default -> {
+                IyzicoRefundRequestDto request = new IyzicoRefundRequestDto();
+                request.setPaymentTransactionId(task.getProviderTransactionId());
+                request.setConversationId(conversationId);
+                request.setPrice(task.getAmount());
+                request.setCurrency(task.getPayment() == null ? "TRY" : task.getPayment().getCurrency());
+
+                IyzicoRefundResponseDto response = iyzicoPaymentService.refund(request);
+                return response == null ? null : response.getPaymentTransactionId();
+            }
         }
     }
 
@@ -162,6 +203,10 @@ public class SettlementManager implements SettlementService {
     }
 
     private void markSettlementGivenUp(SettlementTask task) {
+        if (task.getOperation() == SettlementOperation.DISAPPROVE) {
+            return;
+        }
+
         if (task.getOperation() == SettlementOperation.APPROVE) {
             if (task.getJobAssignment() == null) {
                 return;

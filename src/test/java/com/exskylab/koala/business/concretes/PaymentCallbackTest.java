@@ -59,8 +59,13 @@ class PaymentCallbackTest {
     private IyzicoPaymentResultResponseDto providerSuccess() {
         IyzicoPaymentResultResponseDto result = new IyzicoPaymentResultResponseDto();
         result.setStatus("success");
+        result.setPaymentStatus("SUCCESS");
+        result.setFraudStatus(1);
         result.setPaymentId("pay-1");
         result.setPaymentTransactionId("txn-1");
+        result.setPaidPrice(new BigDecimal("1075.00"));
+        result.setItemPaidPrice(new BigDecimal("1075.00"));
+        result.setCurrency("TRY");
         return result;
     }
 
@@ -155,5 +160,75 @@ class PaymentCallbackTest {
                 "Her deneme kendi conversationId'sini almali; aksi halde mutabakat yapilamaz.");
         assertNotEquals(assignment.getId().toString(), first.getConversationId(),
                 "conversationId assignmentId ile esitlenmemeli.");
+    }
+
+    @Test
+    void aDeclinedPaymentIsRecordedAsFailedWithoutOpeningEscrow() {
+        Payment payment = pendingPayment();
+        IyzicoPaymentResultResponseDto declined = providerSuccess();
+        declined.setPaymentStatus("FAILURE");
+        when(paymentDao.findByProviderToken(TOKEN)).thenReturn(Optional.of(payment));
+        when(iyzicoPaymentService.retrieveCheckoutFormResult(any())).thenReturn(declined);
+
+        Payment result = paymentManager.completeFromCallback(TOKEN);
+
+        assertEquals(PaymentAttemptStatus.FAILED, result.getStatus());
+        assertEquals(PaymentStatus.FAILED, result.getJobAssignment().getPaymentStatus());
+    }
+
+    @Test
+    void aPaymentRejectedByFraudFiltersFails() {
+        Payment payment = pendingPayment();
+        IyzicoPaymentResultResponseDto rejected = providerSuccess();
+        rejected.setFraudStatus(-1);
+        when(paymentDao.findByProviderToken(TOKEN)).thenReturn(Optional.of(payment));
+        when(iyzicoPaymentService.retrieveCheckoutFormResult(any())).thenReturn(rejected);
+
+        Payment result = paymentManager.completeFromCallback(TOKEN);
+
+        assertEquals(PaymentAttemptStatus.FAILED, result.getStatus());
+        assertNotEquals(PaymentStatus.HELD_IN_ESCROW, result.getJobAssignment().getPaymentStatus());
+    }
+
+    @Test
+    void aPaymentUnderFraudReviewDoesNotOpenEscrowYet() {
+        Payment payment = pendingPayment();
+        IyzicoPaymentResultResponseDto inReview = providerSuccess();
+        inReview.setFraudStatus(0);
+        when(paymentDao.findByProviderToken(TOKEN)).thenReturn(Optional.of(payment));
+        when(iyzicoPaymentService.retrieveCheckoutFormResult(any())).thenReturn(inReview);
+
+        Payment result = paymentManager.completeFromCallback(TOKEN);
+
+        assertEquals(PaymentAttemptStatus.IN_REVIEW, result.getStatus());
+        assertEquals(PaymentStatus.PENDING_COLLECTION, result.getJobAssignment().getPaymentStatus());
+        assertEquals("txn-1", result.getProviderTransactionId());
+    }
+
+    @Test
+    void aShortPaymentIsRefusedInsteadOfSettled() {
+        Payment payment = pendingPayment();
+        IyzicoPaymentResultResponseDto tampered = providerSuccess();
+        tampered.setPaidPrice(new BigDecimal("1.00"));
+        when(paymentDao.findByProviderToken(TOKEN)).thenReturn(Optional.of(payment));
+        when(iyzicoPaymentService.retrieveCheckoutFormResult(any())).thenReturn(tampered);
+
+        Payment result = paymentManager.completeFromCallback(TOKEN);
+
+        assertEquals(PaymentAttemptStatus.FAILED, result.getStatus());
+        assertNotEquals(PaymentStatus.HELD_IN_ESCROW, result.getJobAssignment().getPaymentStatus());
+    }
+
+    @Test
+    void aPaymentInAnotherCurrencyIsRefused() {
+        Payment payment = pendingPayment();
+        IyzicoPaymentResultResponseDto foreign = providerSuccess();
+        foreign.setCurrency("USD");
+        when(paymentDao.findByProviderToken(TOKEN)).thenReturn(Optional.of(payment));
+        when(iyzicoPaymentService.retrieveCheckoutFormResult(any())).thenReturn(foreign);
+
+        Payment result = paymentManager.completeFromCallback(TOKEN);
+
+        assertEquals(PaymentAttemptStatus.FAILED, result.getStatus());
     }
 }
