@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,6 +29,10 @@ public class RateLimiter {
     }
 
     public boolean tryAcquire(String key) {
+        return tryAcquire(key, properties.getMaxAttempts(), properties.getWindow());
+    }
+
+    public boolean tryAcquire(String key, int maxAttempts, Duration allowance) {
         if (!properties.isEnabled()) {
             return true;
         }
@@ -35,12 +40,12 @@ public class RateLimiter {
         Instant now = Instant.now(clock);
         Window window = windows.compute(key, (ignored, current) -> {
             if (current == null || current.isExpired(now)) {
-                return new Window(now.plus(properties.getWindow()));
+                return new Window(now.plus(allowance));
             }
             return current;
         });
 
-        return window.count().incrementAndGet() <= properties.getMaxAttempts();
+        return window.count().incrementAndGet() <= maxAttempts;
     }
 
     public void evictExpired() {

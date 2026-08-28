@@ -1,22 +1,27 @@
 package com.exskylab.koala.core.configs;
 
-import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.constants.AuthMessages;
 import com.exskylab.koala.core.exceptions.TooManyRequestsException;
+import com.exskylab.koala.core.helpers.ClientIpResolver;
 import com.exskylab.koala.core.helpers.RateLimiter;
+import com.exskylab.koala.core.properties.RateLimitProperties;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
-import com.exskylab.koala.core.helpers.ClientIpResolver;
+import org.springframework.http.server.PathContainer;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.servlet.HandlerExceptionResolver;
+import org.springframework.web.util.pattern.PathPattern;
+import org.springframework.web.util.pattern.PathPatternParser;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Set;
 
 @Component
@@ -24,30 +29,58 @@ import java.util.Set;
 @Slf4j
 public class RateLimitFilter extends OncePerRequestFilter {
 
-    private static final Set<String> LIMITED_PATHS = Set.of(
+    private static final PathPatternParser PARSER = PathPatternParser.defaultInstance;
+
+    private static final Set<String> AUTH_PATHS = Set.of(
             "/auth/login",
             "/auth/start-registration",
             "/auth/verify-registration-token",
             "/auth/complete-registration",
             "/auth/refresh-token",
+            "/auth/forgot-password",
+            "/auth/reset-password",
             "/users/me/identity-verification");
 
+    private static final List<PathPattern> UPLOAD_PATHS = List.of(
+            PARSER.parse("/images"),
+            PARSER.parse("/users/me/cv"),
+            PARSER.parse("/users/me/profile-picture"),
+            PARSER.parse("/companies"),
+            PARSER.parse("/companies/{companyId}/images"),
+            PARSER.parse("/jobs/{jobId}/images"),
+            PARSER.parse("/admin/badges/{badgeId}/icon"));
+
+    private static final PathPattern MESSAGE_PATH =
+            PARSER.parse("/conversations/{conversationId}/messages");
+
+    private static final Set<String> WRITE_METHODS = Set.of("POST", "PUT", "PATCH", "DELETE");
+
     private final RateLimiter rateLimiter;
+    private final RateLimitProperties properties;
     private final HandlerExceptionResolver exceptionResolver;
 
-    public RateLimitFilter(RateLimiter rateLimiter,
+    public RateLimitFilter(RateLimiter rateLimiter, RateLimitProperties properties,
                            @Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver) {
         this.rateLimiter = rateLimiter;
+        this.properties = properties;
         this.exceptionResolver = exceptionResolver;
+    }
+
+    private enum Bucket {
+        AUTH, UPLOAD, MESSAGE, WRITE, NONE
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        String key = request.getMethod() + " " + request.getRequestURI() + " " + ClientIpResolver.resolve(request);
+        Bucket bucket = bucketOf(request);
 
-        if (!rateLimiter.tryAcquire(key)) {
-            log.warn("Rate limit exceeded for {} {}", request.getMethod(), request.getRequestURI());
+        if (bucket != Bucket.NONE && !rateLimiter.tryAcquire(keyOf(bucket, request),
+                settingsOf(bucket).getMaxAttempts(), settingsOf(bucket).getWindow())) {
+
+            log.warn("Rate limit exceeded in bucket {} for {} {} from ip {}",
+                    bucket, request.getMethod(), request.getRequestURI(), ClientIpResolver.resolve(request));
+
             exceptionResolver.resolveException(request, response, null,
                     new TooManyRequestsException(AuthMessages.TOO_MANY_REQUESTS));
             return;
@@ -56,9 +89,46 @@ public class RateLimitFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
-    @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !LIMITED_PATHS.contains(request.getRequestURI());
+    Bucket bucketOf(HttpServletRequest request) {
+        String path = request.getRequestURI();
+
+        if (AUTH_PATHS.contains(path)) {
+            return Bucket.AUTH;
+        }
+
+        if (!WRITE_METHODS.contains(request.getMethod())) {
+            return Bucket.NONE;
+        }
+
+        PathContainer container = PathContainer.parsePath(path);
+
+        if (MESSAGE_PATH.matches(container)) {
+            return Bucket.MESSAGE;
+        }
+
+        if (UPLOAD_PATHS.stream().anyMatch(pattern -> pattern.matches(container))) {
+            return Bucket.UPLOAD;
+        }
+
+        return Bucket.WRITE;
     }
 
+    private RateLimitProperties.Bucket settingsOf(Bucket bucket) {
+        return switch (bucket) {
+            case AUTH -> properties.getAuth();
+            case UPLOAD -> properties.getUpload();
+            case MESSAGE -> properties.getMessage();
+            default -> properties.getWrite();
+        };
+    }
+
+    private String keyOf(Bucket bucket, HttpServletRequest request) {
+        String client = ClientIpResolver.resolve(request);
+
+        if (bucket == Bucket.AUTH) {
+            return "AUTH " + request.getMethod() + " " + request.getRequestURI() + " " + client;
+        }
+
+        return bucket + " " + client;
+    }
 }

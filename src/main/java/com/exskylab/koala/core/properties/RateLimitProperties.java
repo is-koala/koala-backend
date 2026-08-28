@@ -13,6 +13,68 @@ public class RateLimitProperties {
     private int maxAttempts = 10;
     private Duration window = Duration.ofMinutes(1);
 
+    private Bucket upload = new Bucket(20, Duration.ofMinutes(1));
+    private Bucket message = new Bucket(30, Duration.ofMinutes(1));
+    private Bucket write = new Bucket(60, Duration.ofMinutes(1));
+
+    public static class Bucket {
+
+        private int maxAttempts;
+        private Duration window;
+
+        public Bucket() {
+        }
+
+        public Bucket(int maxAttempts, Duration window) {
+            this.maxAttempts = maxAttempts;
+            this.window = window;
+        }
+
+        public int getMaxAttempts() {
+            return maxAttempts;
+        }
+
+        public void setMaxAttempts(int maxAttempts) {
+            this.maxAttempts = maxAttempts;
+        }
+
+        public Duration getWindow() {
+            return window;
+        }
+
+        public void setWindow(Duration window) {
+            this.window = window;
+        }
+    }
+
+    public Bucket getUpload() {
+        return upload;
+    }
+
+    public void setUpload(Bucket upload) {
+        this.upload = upload;
+    }
+
+    public Bucket getMessage() {
+        return message;
+    }
+
+    public void setMessage(Bucket message) {
+        this.message = message;
+    }
+
+    public Bucket getWrite() {
+        return write;
+    }
+
+    public void setWrite(Bucket write) {
+        this.write = write;
+    }
+
+    public Bucket getAuth() {
+        return new Bucket(maxAttempts, window);
+    }
+
     public boolean isEnabled() {
         return enabled;
     }
