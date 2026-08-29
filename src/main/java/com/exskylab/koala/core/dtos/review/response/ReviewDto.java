@@ -5,5 +5,6 @@ import com.exskylab.koala.core.dtos.user.response.SafeUserDto;
 import java.time.Instant;
 import java.util.UUID;
 
-public record ReviewDto(UUID id, SafeUserDto author, int rating, String comment, Instant createdAt) {
+public record ReviewDto(UUID id, SafeUserDto author, int rating, String comment, boolean anonymous,
+                        Instant createdAt) {
 }

@@ -23,4 +23,6 @@ public class CreateReviewDto {
 
     @Size(max = 2000)
     private String comment;
+
+    private Boolean anonymous;
 }

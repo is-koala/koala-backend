@@ -45,13 +45,15 @@ public class JobApplicationManager implements JobApplicationService {
     private final PageableSanitizer pageableSanitizer;
     private final GalleryService galleryService;
     private final ActivityNotificationService activityNotificationService;
+    private final BankAccountService bankAccountService;
 
 
     public JobApplicationManager(JobApplicationDao jobApplicationDao, JobService jobService,
                                  SecurityService securityService, CompanyContactService companyContactService,
                                  JobAssignmentService jobAssignmentService, JobApplicationMapper jobApplicationMapper,
                                  PageableSanitizer pageableSanitizer, GalleryService galleryService,
-                                 ActivityNotificationService activityNotificationService) {
+                                 ActivityNotificationService activityNotificationService,
+                                 BankAccountService bankAccountService) {
         this.jobApplicationDao = jobApplicationDao;
         this.jobService = jobService;
         this.securityService = securityService;
@@ -61,6 +63,7 @@ public class JobApplicationManager implements JobApplicationService {
         this.pageableSanitizer = pageableSanitizer;
         this.galleryService = galleryService;
         this.activityNotificationService = activityNotificationService;
+        this.bankAccountService = bankAccountService;
     }
 
     @Override
@@ -85,6 +88,8 @@ public class JobApplicationManager implements JobApplicationService {
                 throw new ValidationException(JobApplicationMessages.CONTACT_USER_CANNOT_APPLY_TO_COMPANY_JOB);
             }
         }
+
+        assertReadyToWork(authenticatedUser);
 
         JobApplication jobApplication = new JobApplication();
         jobApplication.setJob(job);
@@ -185,6 +190,27 @@ public class JobApplicationManager implements JobApplicationService {
 
         return jobApplicationMapper.toJobApplicationsApplicationIdPatchResponseDto(jobApplication);
 
+    }
+
+    private void assertReadyToWork(User applicant) {
+        if (!applicant.isIdentityVerified()) {
+            log.info("User {} cannot apply yet: identity is not verified.", applicant.getId());
+            throw new ValidationException(JobApplicationMessages.APPLICANT_IDENTITY_NOT_VERIFIED);
+        }
+
+        if (applicant.getAddress() == null) {
+            log.info("User {} cannot apply yet: no address on file.", applicant.getId());
+            throw new ValidationException(JobApplicationMessages.APPLICANT_ADDRESS_REQUIRED);
+        }
+
+        boolean hasIban = bankAccountService.findPrimaryIban(applicant.getId())
+                .filter(iban -> !iban.isBlank())
+                .isPresent();
+
+        if (!hasIban) {
+            log.info("User {} cannot apply yet: no primary bank account.", applicant.getId());
+            throw new ValidationException(JobApplicationMessages.APPLICANT_BANK_ACCOUNT_REQUIRED);
+        }
     }
 
     private void assertCurrentUserIsEmployerOf(Job job) {

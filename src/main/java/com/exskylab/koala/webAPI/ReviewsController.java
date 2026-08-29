@@ -58,7 +58,8 @@ public class ReviewsController {
 
         return ResponseEntity.status(HttpStatus.CREATED).body(new SuccessDataResult<>(
                 reviewMapper.toReviewDto(reviewService.leaveReview(
-                        assignmentId, request.getRating(), request.getComment())),
+                        assignmentId, request.getRating(), request.getComment(),
+                        Boolean.TRUE.equals(request.getAnonymous()))),
                 ReviewMessages.CREATED, HttpStatus.CREATED));
     }
 

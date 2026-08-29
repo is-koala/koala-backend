@@ -90,7 +90,7 @@ class ReviewRulesTest {
         when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());
 
         assertThrows(ConflictException.class,
-                () -> manager.leaveReview(assignment.getId(), 5, "harika"));
+                () -> manager.leaveReview(assignment.getId(), 5, "harika", false));
         verify(reviewDao, never()).save(any());
     }
 
@@ -99,10 +99,10 @@ class ReviewRulesTest {
         assignment = assignment(AssignmentStatus.COMPLETED);
 
         when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());
-        assertEquals(employer.getId(), manager.leaveReview(assignment.getId(), 5, null).getSubject().getId());
+        assertEquals(employer.getId(), manager.leaveReview(assignment.getId(), 5, null, false).getSubject().getId());
 
         when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
-        assertEquals(worker.getId(), manager.leaveReview(assignment.getId(), 4, null).getSubject().getId());
+        assertEquals(worker.getId(), manager.leaveReview(assignment.getId(), 4, null, false).getSubject().getId());
     }
 
     @Test
@@ -111,7 +111,7 @@ class ReviewRulesTest {
         when(securityService.getAuthenticatedUserId()).thenReturn(stranger.getId());
 
         assertThrows(ResourceNotFoundException.class,
-                () -> manager.leaveReview(assignment.getId(), 5, null));
+                () -> manager.leaveReview(assignment.getId(), 5, null, false));
     }
 
     @Test
@@ -121,7 +121,7 @@ class ReviewRulesTest {
         when(reviewDao.existsByJobAssignmentIdAndAuthorId(assignment.getId(), worker.getId())).thenReturn(true);
 
         assertThrows(ConflictException.class,
-                () -> manager.leaveReview(assignment.getId(), 5, null));
+                () -> manager.leaveReview(assignment.getId(), 5, null, false));
     }
 
     @Test
@@ -129,8 +129,8 @@ class ReviewRulesTest {
         assignment = assignment(AssignmentStatus.COMPLETED);
         when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());
 
-        assertThrows(ValidationException.class, () -> manager.leaveReview(assignment.getId(), 0, null));
-        assertThrows(ValidationException.class, () -> manager.leaveReview(assignment.getId(), 6, null));
+        assertThrows(ValidationException.class, () -> manager.leaveReview(assignment.getId(), 0, null, false));
+        assertThrows(ValidationException.class, () -> manager.leaveReview(assignment.getId(), 6, null, false));
         verify(reviewDao, never()).save(any());
     }
 
@@ -145,7 +145,7 @@ class ReviewRulesTest {
         existing.setRatingSum(12);
         when(ratingSummaryDao.findByUserId(employer.getId())).thenReturn(Optional.of(existing));
 
-        manager.leaveReview(assignment.getId(), 5, null);
+        manager.leaveReview(assignment.getId(), 5, null, false);
 
         assertEquals(4, existing.getReviewCount());
         assertEquals(17, existing.getRatingSum());
@@ -157,7 +157,7 @@ class ReviewRulesTest {
         assignment = assignment(AssignmentStatus.COMPLETED);
         when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());
 
-        manager.leaveReview(assignment.getId(), 4, null);
+        manager.leaveReview(assignment.getId(), 4, null, false);
 
         verify(ratingSummaryDao).save(argThat(s ->
                 s.getReviewCount() == 1 && s.getRatingSum() == 4
@@ -169,7 +169,7 @@ class ReviewRulesTest {
         assignment = assignment(AssignmentStatus.COMPLETED);
         when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
 
-        manager.leaveReview(assignment.getId(), 5, "Harika");
+        manager.leaveReview(assignment.getId(), 5, "Harika", false);
 
         verify(notifications).reviewReceived(any(Review.class));
     }
@@ -179,8 +179,51 @@ class ReviewRulesTest {
         assignment = assignment(AssignmentStatus.IN_PROGRESS);
         when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
 
-        assertThrows(ConflictException.class, () -> manager.leaveReview(assignment.getId(), 5, null));
+        assertThrows(ConflictException.class, () -> manager.leaveReview(assignment.getId(), 5, null, false));
 
         verifyNoInteractions(notifications);
+    }
+
+    @Test
+    void aReviewIsNamedUnlessTheAuthorAsksOtherwise() {
+        assignment = assignment(AssignmentStatus.COMPLETED);
+        when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
+
+        assertFalse(manager.leaveReview(assignment.getId(), 5, null, false).isAnonymous());
+    }
+
+    @Test
+    void anAnonymousReviewIsStoredAsAnonymousButKeepsItsAuthor() {
+        assignment = assignment(AssignmentStatus.COMPLETED);
+        when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
+
+        Review review = manager.leaveReview(assignment.getId(), 5, "iyiydi", true);
+
+        assertTrue(review.isAnonymous());
+        assertEquals(employer.getId(), review.getAuthor().getId());
+    }
+
+    @Test
+    void anAnonymousReviewStillCountsTowardsTheRating() {
+        assignment = assignment(AssignmentStatus.COMPLETED);
+        when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
+
+        manager.leaveReview(assignment.getId(), 4, null, true);
+
+        verify(ratingSummaryDao).save(argThat(summary -> {
+            assertEquals(1, summary.getReviewCount());
+            assertEquals(4, summary.getRatingSum());
+            return true;
+        }));
+    }
+
+    @Test
+    void aSecondReviewIsRefusedEvenWhenItIsAnonymous() {
+        assignment = assignment(AssignmentStatus.COMPLETED);
+        when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
+        when(reviewDao.existsByJobAssignmentIdAndAuthorId(assignment.getId(), employer.getId()))
+                .thenReturn(true);
+
+        assertThrows(ConflictException.class, () -> manager.leaveReview(assignment.getId(), 5, null, true));
     }
 }

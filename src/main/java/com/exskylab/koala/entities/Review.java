@@ -42,4 +42,7 @@ public class Review extends BaseEntity {
 
     @Column(name = "comment", length = 2000)
     private String comment;
+
+    @Column(name = "anonymous", nullable = false)
+    private boolean anonymous;
 }

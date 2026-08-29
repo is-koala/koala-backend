@@ -183,6 +183,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/job-assignments/{assignmentId}/complete").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/job-assignments/{assignmentId}/cancel").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/job-assignments/{assignmentId}/cancellation").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/job-assignments/{assignmentId}/cancellation-preview").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/job-assignments/{assignmentId}/disputes").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/job-assignments/{assignmentId}/disputes").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/job-assignments/{assignmentId}/check-in").hasAnyRole("USER", "ADMIN")

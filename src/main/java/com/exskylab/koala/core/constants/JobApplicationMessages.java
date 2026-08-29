@@ -15,4 +15,7 @@ public class JobApplicationMessages {
     public static final String INVALID_STATUS_TRANSITION = "{job.application.invalid.status.transition}";
     public static final String JOB_APPLICATION_RESPONDED_SUCCESS = "{job.application.responded.success}";
     public static final String JOB_APPLICATION_ALREADY_RESPONDED = "{job.application.already.responded}";
+    public static final String APPLICANT_IDENTITY_NOT_VERIFIED = "{applicant.identity.not.verified}";
+    public static final String APPLICANT_ADDRESS_REQUIRED = "{applicant.address.required}";
+    public static final String APPLICANT_BANK_ACCOUNT_REQUIRED = "{applicant.bank.account.required}";
 }

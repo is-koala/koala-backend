@@ -63,7 +63,7 @@ public class ReviewManager implements ReviewService {
 
     @Override
     @Transactional
-    public Review leaveReview(UUID jobAssignmentId, int rating, String comment) {
+    public Review leaveReview(UUID jobAssignmentId, int rating, String comment, boolean anonymous) {
         if (rating < 1 || rating > 5) {
             throw new ValidationException(ReviewMessages.RATING_RANGE);
         }
@@ -87,6 +87,7 @@ public class ReviewManager implements ReviewService {
         review.setSubject(subject);
         review.setRating(rating);
         review.setComment(comment);
+        review.setAnonymous(anonymous);
 
         Review saved = reviewDao.save(review);
         applyToSummary(subject, rating);

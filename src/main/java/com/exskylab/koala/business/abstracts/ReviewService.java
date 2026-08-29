@@ -10,7 +10,7 @@ import java.util.UUID;
 
 public interface ReviewService {
 
-    Review leaveReview(UUID jobAssignmentId, int rating, String comment);
+    Review leaveReview(UUID jobAssignmentId, int rating, String comment, boolean anonymous);
 
     Page<Review> getReviewsAbout(UUID userId, Pageable pageable);
 

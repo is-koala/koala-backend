@@ -14,9 +14,24 @@ import java.util.List;
         injectionStrategy = InjectionStrategy.CONSTRUCTOR)
 public interface ReviewMapper {
 
-    ReviewDto toReviewDto(Review review);
+    ReviewDto toNamedReviewDto(Review review);
 
-    List<ReviewDto> toReviewDtoList(List<Review> reviews);
+    @Mapping(target = "author", ignore = true)
+    ReviewDto toAnonymousReviewDto(Review review);
+
+    default ReviewDto toReviewDto(Review review) {
+        if (review == null) {
+            return null;
+        }
+        return review.isAnonymous() ? toAnonymousReviewDto(review) : toNamedReviewDto(review);
+    }
+
+    default List<ReviewDto> toReviewDtoList(List<Review> reviews) {
+        if (reviews == null) {
+            return null;
+        }
+        return reviews.stream().map(this::toReviewDto).toList();
+    }
 
     @Mapping(target = "userId", source = "user.id")
     RatingSummaryDto toRatingSummaryDto(RatingSummary summary);

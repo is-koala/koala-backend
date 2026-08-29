@@ -40,7 +40,8 @@ class JobHeadcountRulesTest {
 
         manager = new JobApplicationManager(jobApplicationDao, mock(JobService.class), security,
                 mock(CompanyContactService.class), jobAssignmentService, mock(JobApplicationMapper.class),
-                new PageableSanitizer(), mock(GalleryService.class), mock(ActivityNotificationService.class));
+                new PageableSanitizer(), mock(GalleryService.class), mock(ActivityNotificationService.class),
+                mock(com.exskylab.koala.business.abstracts.BankAccountService.class));
     }
 
     private static User user() {

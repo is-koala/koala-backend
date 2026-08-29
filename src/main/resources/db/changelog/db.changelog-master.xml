@@ -44,4 +44,5 @@
     <include file="db/changelog/2026/08/29-01-group-conversations.xml"/>
     <include file="db/changelog/2026/08/29-02-job-headcount.xml"/>
     <include file="db/changelog/2026/08/29-03-settlement-refund.xml"/>
+    <include file="db/changelog/2026/08/29-04-review-anonymous.xml"/>
 </databaseChangeLog>

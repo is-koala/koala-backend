@@ -7,6 +7,7 @@ import com.exskylab.koala.business.abstracts.CancellationService;
 import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.CancellationMessages;
+import com.exskylab.koala.core.dtos.cancellation.response.CancellationPreviewDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.core.helpers.CancellationPolicy;
@@ -105,6 +106,27 @@ public class CancellationManager implements CancellationService {
 
         activityNotificationService.assignmentCancelled(saved);
         return saved;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CancellationPreviewDto previewCancellation(UUID jobAssignmentId) {
+        JobAssignment assignment = jobAssignmentService.getDetailedById(jobAssignmentId);
+
+        UUID actorId = securityService.getAuthenticatedUserId();
+        CancellationParty party = participants.partyOf(assignment, actorId)
+                .orElseThrow(() -> new ResourceNotFoundException(CancellationMessages.NOT_A_PARTICIPANT));
+
+        Duration notice = policy.noticeBefore(assignment.getJob().getStartDateTime(), Instant.now());
+        boolean escrowHeld = assignment.getPaymentStatus() == PaymentStatus.HELD_IN_ESCROW;
+        CancellationPolicy.Outcome outcome = policy.evaluate(
+                party, escrowHeld ? assignment.getTotalCharged() : null, notice);
+
+        boolean cancellableNow = CANCELLABLE.contains(assignment.getStatus())
+                && !cancellationDao.existsByJobAssignmentId(jobAssignmentId);
+
+        return new CancellationPreviewDto(outcome.feeRate(), outcome.feeAmount(), outcome.refundAmount(),
+                notice.toMinutes(), cancellableNow);
     }
 
     @Override

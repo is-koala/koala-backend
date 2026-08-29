@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -242,8 +243,9 @@ public class IyzicoPaymentService {
     }
 
     private JsonNode call(HttpMethod method, String endpoint, Object body, String operation) {
-        String url = iyzicoProperties.getBaseUrl() + endpoint;
+        String url = baseUrl() + endpoint;
         String responseBody;
+        HttpStatusCode status;
 
         try {
             String jsonBody = objectMapper.writeValueAsString(body);
@@ -252,15 +254,19 @@ public class IyzicoPaymentService {
 
             ResponseEntity<String> response =
                     restTemplate.exchange(url, method, new HttpEntity<>(jsonBody, headers), String.class);
+
+            status = response.getStatusCode();
             responseBody = response.getBody();
         } catch (HttpStatusCodeException e) {
+            status = e.getStatusCode();
             responseBody = e.getResponseBodyAsString();
-            if (responseBody == null || responseBody.isBlank()) {
-                log.error("iyzico: {} failed with HTTP {} and an empty body", operation, e.getStatusCode());
-                throw new ExternalServiceException(PaymentMessages.PROVIDER_UNAVAILABLE);
-            }
         } catch (Exception e) {
-            log.error("iyzico: {} could not be performed: {}", operation, e.getMessage());
+            log.error("iyzico: {} could not reach {}: {}", operation, url, e.getMessage());
+            throw new ExternalServiceException(PaymentMessages.PROVIDER_UNAVAILABLE);
+        }
+
+        if (responseBody == null || responseBody.isBlank()) {
+            log.error("iyzico: {} returned HTTP {} with an empty body from {}", operation, status, url);
             throw new ExternalServiceException(PaymentMessages.PROVIDER_UNAVAILABLE);
         }
 
@@ -268,17 +274,36 @@ public class IyzicoPaymentService {
         try {
             root = objectMapper.readTree(responseBody);
         } catch (Exception e) {
-            log.error("iyzico: {} returned an unreadable body: {}", operation, e.getMessage());
+            log.error("iyzico: {} returned HTTP {} from {} with a body that is not JSON: {}",
+                    operation, status, url, abbreviate(responseBody));
             throw new ExternalServiceException(PaymentMessages.PROVIDER_UNAVAILABLE);
         }
 
         if (!"success".equals(root.path("status").asString())) {
-            log.error("iyzico: {} rejected, errorCode={} errorMessage={}", operation,
+            log.error("iyzico: {} rejected with HTTP {}, errorCode={} errorMessage={}", operation, status,
                     text(root, "errorCode"), text(root, "errorMessage"));
             throw new ExternalServiceException(PaymentMessages.PROVIDER_REJECTED);
         }
 
         return root;
+    }
+
+    private String baseUrl() {
+        String configured = iyzicoProperties.getBaseUrl();
+        if (configured == null) {
+            return "";
+        }
+
+        String trimmed = configured.trim();
+        while (trimmed.endsWith("/")) {
+            trimmed = trimmed.substring(0, trimmed.length() - 1);
+        }
+        return trimmed;
+    }
+
+    private static String abbreviate(String body) {
+        String flattened = body.replaceAll("\\s+", " ").trim();
+        return flattened.length() <= 500 ? flattened : flattened.substring(0, 500) + "…";
     }
 
     private HttpHeaders createIyzicoHeaders(String uriPath, String jsonBody, String randomKey) throws Exception {

@@ -16,6 +16,7 @@ import com.exskylab.koala.core.constants.DisputeMessages;
 import com.exskylab.koala.core.constants.TimesheetMessages;
 import com.exskylab.koala.core.dtos.cancellation.request.CancelAssignmentDto;
 import com.exskylab.koala.core.dtos.cancellation.response.CancellationDto;
+import com.exskylab.koala.core.dtos.cancellation.response.CancellationPreviewDto;
 import com.exskylab.koala.core.dtos.dispute.request.OpenDisputeDto;
 import com.exskylab.koala.core.dtos.dispute.response.DisputeDto;
 import com.exskylab.koala.core.dtos.timesheet.request.CheckPointDto;
@@ -85,6 +86,22 @@ public class JobAssignmentOperationsController {
                 cancellationMapper.toCancellationDto(
                         cancellationService.cancelAssignment(assignmentId, request.getReason())),
                 CancellationMessages.CREATED, HttpStatus.CREATED));
+    }
+
+    @Operation(summary = "İptal kesintisini önizle",
+            description = "İptal etmeden, şu an iptal edilse ne kesileceğini döndürür. Hiçbir kayıt oluşturmaz. Kesinti iptal edenin tarafına göre değiştiği için hesap çağıranın kendi tarafına göre yapılır. Atama iptal edilebilir durumda değilse hata yerine cancellableNow=false döner.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Önizleme döndürüldü"),
+            @ApiResponse(responseCode = "404", description = "Atama bulunamadı ya da taraf değilsiniz",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @GetMapping("/{assignmentId}/cancellation-preview")
+    public ResponseEntity<SuccessDataResult<CancellationPreviewDto>> cancellationPreview(
+            @PathVariable UUID assignmentId) {
+
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                cancellationService.previewCancellation(assignmentId),
+                CancellationMessages.FETCHED, HttpStatus.OK));
     }
 
     @Operation(summary = "İptal kaydını getir",
