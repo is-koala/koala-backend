@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -28,6 +29,8 @@ class CancellationPreviewTest {
     private JobAssignmentService jobAssignmentService;
     private CancellationManager manager;
 
+    private static final ZoneId POLICY_ZONE = new CancellationProperties().getZoneId();
+
     private final User employer = user();
     private final User worker = user();
 
@@ -41,6 +44,10 @@ class CancellationPreviewTest {
                 securityService, new AssignmentParticipants(mock(CompanyContactService.class)),
                 new CancellationPolicy(new CancellationProperties(), passthroughSettings()),
                 mock(PayoutService.class), mock(ActivityNotificationService.class));
+    }
+
+    private static LocalDateTime startsInHours(long hours) {
+        return LocalDateTime.now(POLICY_ZONE).plusHours(hours);
     }
 
     private static User user() {
@@ -69,7 +76,7 @@ class CancellationPreviewTest {
 
     @Test
     void aWorkerSeesNoFeeAndAFullRefund() {
-        JobAssignment a = assignment(AssignmentStatus.CONFIRMED, LocalDateTime.now().plusHours(2));
+        JobAssignment a = assignment(AssignmentStatus.CONFIRMED, startsInHours(2));
         when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());
 
         CancellationPreviewDto preview = manager.previewCancellation(a.getId());
@@ -81,7 +88,7 @@ class CancellationPreviewTest {
 
     @Test
     void anEmployerInsideTheFreeWindowSeesNoFee() {
-        JobAssignment a = assignment(AssignmentStatus.CONFIRMED, LocalDateTime.now().plusDays(3));
+        JobAssignment a = assignment(AssignmentStatus.CONFIRMED, startsInHours(72));
         when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
 
         assertEquals(0, manager.previewCancellation(a.getId()).feeRate().signum());
@@ -89,7 +96,7 @@ class CancellationPreviewTest {
 
     @Test
     void anEmployerOutsideTheFreeWindowSeesTheLateFee() {
-        JobAssignment a = assignment(AssignmentStatus.CONFIRMED, LocalDateTime.now().plusHours(2));
+        JobAssignment a = assignment(AssignmentStatus.CONFIRMED, startsInHours(2));
         when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
 
         CancellationPreviewDto preview = manager.previewCancellation(a.getId());
@@ -101,7 +108,7 @@ class CancellationPreviewTest {
 
     @Test
     void onceTheJobHasStartedNothingIsRefunded() {
-        JobAssignment a = assignment(AssignmentStatus.IN_PROGRESS, LocalDateTime.now().minusHours(1));
+        JobAssignment a = assignment(AssignmentStatus.IN_PROGRESS, startsInHours(-1));
         when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
 
         CancellationPreviewDto preview = manager.previewCancellation(a.getId());
@@ -112,7 +119,7 @@ class CancellationPreviewTest {
 
     @Test
     void anAlreadyCancelledAssignmentPreviewsAsNotCancellable() {
-        JobAssignment a = assignment(AssignmentStatus.CONFIRMED, LocalDateTime.now().plusDays(2));
+        JobAssignment a = assignment(AssignmentStatus.CONFIRMED, startsInHours(48));
         when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
         when(cancellationDao.existsByJobAssignmentId(a.getId())).thenReturn(true);
 
@@ -121,7 +128,7 @@ class CancellationPreviewTest {
 
     @Test
     void aCompletedAssignmentPreviewsAsNotCancellableInsteadOfThrowing() {
-        JobAssignment a = assignment(AssignmentStatus.COMPLETED, LocalDateTime.now().minusDays(1));
+        JobAssignment a = assignment(AssignmentStatus.COMPLETED, startsInHours(-24));
         when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
 
         assertFalse(manager.previewCancellation(a.getId()).cancellableNow());
@@ -129,7 +136,7 @@ class CancellationPreviewTest {
 
     @Test
     void previewingLeavesNoTrace() {
-        JobAssignment a = assignment(AssignmentStatus.CONFIRMED, LocalDateTime.now().plusDays(2));
+        JobAssignment a = assignment(AssignmentStatus.CONFIRMED, startsInHours(48));
         when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
 
         manager.previewCancellation(a.getId());
@@ -141,7 +148,7 @@ class CancellationPreviewTest {
 
     @Test
     void someoneWhoIsNotAPartyGetsNotFound() {
-        JobAssignment a = assignment(AssignmentStatus.CONFIRMED, LocalDateTime.now().plusDays(2));
+        JobAssignment a = assignment(AssignmentStatus.CONFIRMED, startsInHours(48));
         when(securityService.getAuthenticatedUserId()).thenReturn(UUID.randomUUID());
 
         assertThrows(ResourceNotFoundException.class, () -> manager.previewCancellation(a.getId()));
