@@ -3,6 +3,7 @@ package com.exskylab.koala.business.concretes;
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.SettingsService;
 import com.exskylab.koala.core.constants.SettingKeys;
+import com.exskylab.koala.core.helpers.AppVersion;
 import com.exskylab.koala.core.constants.SettingMessages;
 import com.exskylab.koala.dataAccess.AppSettingDao;
 import com.exskylab.koala.entities.AppSetting;
@@ -46,6 +47,15 @@ public class SettingsManager implements SettingsService {
 
     @Override
     @Transactional(readOnly = true)
+    public String stringValue(String key, String fallback) {
+        return appSettingDao.findByKey(key)
+                .map(AppSetting::getValue)
+                .filter(value -> !value.isBlank())
+                .orElse(fallback);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public int intValue(String key, int fallback) {
         return appSettingDao.findByKey(key)
                 .map(AppSetting::getValue)
@@ -77,7 +87,11 @@ public class SettingsManager implements SettingsService {
         if (value == null || value.isBlank()) {
             throw new ValidationException(SettingMessages.VALUE_REQUIRED);
         }
-        if (!value.trim().matches("-?\\d+(\\.\\d+)?")) {
+        if (SettingKeys.MINIMUM_APP_VERSION.equals(key)) {
+            if (!AppVersion.isParsable(value.trim())) {
+                throw new ValidationException(SettingMessages.VALUE_NOT_A_VERSION);
+            }
+        } else if (!value.trim().matches("-?\\d+(\\.\\d+)?")) {
             throw new ValidationException(SettingMessages.VALUE_NOT_NUMERIC);
         }
 

@@ -16,6 +16,7 @@ public enum ErrorCategory {
     TOKEN_EXPIRED,
     ACCESS_DENIED,
     RATE_LIMITED,
+    CLIENT_TOO_OLD,
     UPSTREAM_FAILED,
     UNEXPECTED
 }

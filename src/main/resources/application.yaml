@@ -111,6 +111,7 @@ springdoc:
     path: /v3/api-docs
 
 app:
+  minimum-version: ${APP_MINIMUM_VERSION:}
   api-url: ${API_URL:http://localhost:8080}
   frontend-url: ${FRONTEND_URL:http://localhost:3000}
   cors:

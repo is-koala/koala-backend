@@ -9,6 +9,8 @@ public interface SettingsService {
 
     int intValue(String key, int fallback);
 
+    String stringValue(String key, String fallback);
+
     BigDecimal decimalValue(String key, BigDecimal fallback);
 
     List<AppSetting> getAll();
