@@ -168,6 +168,11 @@ assignment:
     zone-id: ${ASSIGNMENT_UNPAID_EXPIRY_ZONE_ID:Europe/Istanbul}
     cron: ${ASSIGNMENT_UNPAID_EXPIRY_CRON:0 45 * * * *}
 
+identity:
+  passive-authentication:
+    enabled: ${IDENTITY_PASSIVE_AUTH_ENABLED:false}
+    trust-anchor-directory: ${IDENTITY_CSCA_DIRECTORY:}
+
 realtime:
   enabled: ${REALTIME_ENABLED:true}
   endpoint: ${REALTIME_ENDPOINT:/ws}

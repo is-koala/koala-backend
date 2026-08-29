@@ -21,6 +21,11 @@ import com.exskylab.koala.core.mappers.UserMapper;
 import com.exskylab.koala.core.producers.user.UserProducerService;
 import com.exskylab.koala.dataAccess.UserDao;
 import com.exskylab.koala.entities.*;
+import com.exskylab.koala.core.constants.IdentityMessages;
+import com.exskylab.koala.core.properties.IdentityVerificationProperties;
+import com.exskylab.koala.core.utilities.identity.CscaTrustStore;
+import com.exskylab.koala.core.utilities.identity.PassiveAuthenticationException;
+import com.exskylab.koala.core.utilities.identity.PassiveAuthenticationResult;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -61,6 +66,8 @@ public class UserManager implements UserService {
     private final AddressMapper addressMapper;
     private final UserProducerService userProducerService;
     private final BankAccountService bankAccountService;
+    private final IdentityVerificationProperties identityVerificationProperties;
+    private final CscaTrustStore cscaTrustStore;
     private final PhoneVerificationService phoneVerificationService;
     private final BadgeService badgeService;
     private final BadgeMapper badgeMapper;
@@ -76,6 +83,8 @@ public class UserManager implements UserService {
                        AddressService addressService,
                        AddressMapper addressMapper, UserProducerService userProducerService,
                        BankAccountService bankAccountService,
+                       IdentityVerificationProperties identityVerificationProperties,
+                       CscaTrustStore cscaTrustStore,
                        PhoneVerificationService phoneVerificationService,
                        BadgeService badgeService, BadgeMapper badgeMapper,
                                 PageableSanitizer pageableSanitizer,
@@ -91,6 +100,8 @@ public class UserManager implements UserService {
         this.addressMapper = addressMapper;
         this.userProducerService = userProducerService;
         this.bankAccountService = bankAccountService;
+        this.identityVerificationProperties = identityVerificationProperties;
+        this.cscaTrustStore = cscaTrustStore;
         this.phoneVerificationService = phoneVerificationService;
         this.badgeService = badgeService;
         this.badgeMapper = badgeMapper;
@@ -338,6 +349,8 @@ public class UserManager implements UserService {
             throw new ValidationException(UserMessages.USER_ALREADY_IDENTITY_VERIFIED);
         }
 
+        PassiveAuthenticationResult evidence = verifyChipEvidence(usersMeIdentityVerificationRequestDto);
+
         if (userDao.existsByTcIdentityNumber(usersMeIdentityVerificationRequestDto.getTcIdentityNumber())) {
             log.warn("Identity verification refused for user {}: the identity number is already claimed.",
                     currentUser.getId());
@@ -350,12 +363,56 @@ public class UserManager implements UserService {
         currentUser.setLastName(capitalizeFirstLetter(usersMeIdentityVerificationRequestDto.getLastName()));
         currentUser.setBirthDate(usersMeIdentityVerificationRequestDto.getBirthDate());
         currentUser.setTcIdentityNumber(usersMeIdentityVerificationRequestDto.getTcIdentityNumber());
+        if (evidence != null) {
+            currentUser.setIdentityEvidenceDigest(evidence.evidenceDigest());
+            currentUser.setIdentityDocumentSigner(evidence.documentSigner());
+        }
         var savedUser = userDao.save(currentUser);
         badgeService.evaluate(savedUser.getId());
         activityNotificationService.identityVerified(savedUser);
         userProducerService.publishUserProfileUpdated(savedUser);
         log.info("Identity verification successful for user with ID: {}", currentUser.getId());
 
+    }
+
+    private PassiveAuthenticationResult verifyChipEvidence(VerifyIdentityDto request) {
+        if (!identityVerificationProperties.isEnabled()) {
+            return null;
+        }
+
+        if (request.getSod() == null || request.getSod().isBlank()
+                || request.getDg1() == null || request.getDg1().isBlank()) {
+            throw new ValidationException(IdentityMessages.EVIDENCE_REQUIRED);
+        }
+
+        byte[] securityObject;
+        byte[] dataGroup1;
+        try {
+            securityObject = java.util.Base64.getDecoder().decode(request.getSod().trim());
+            dataGroup1 = java.util.Base64.getDecoder().decode(request.getDg1().trim());
+        } catch (IllegalArgumentException e) {
+            throw new ValidationException(IdentityMessages.SOD_UNREADABLE);
+        }
+
+        PassiveAuthenticationResult result;
+        try {
+            result = cscaTrustStore.verifier().verify(securityObject, dataGroup1);
+        } catch (PassiveAuthenticationException e) {
+            log.warn("Passive authentication failed: {}", e.getMessage());
+            throw new ValidationException(e.getMessageKey());
+        }
+
+        if (!result.nationalIdentityNumber().equals(request.getTcIdentityNumber())) {
+            log.warn("Passive authentication refused: the identity number does not match the signed chip data.");
+            throw new ValidationException(IdentityMessages.IDENTITY_NUMBER_MISMATCH);
+        }
+
+        if (!result.birthDate().equals(request.getBirthDate())) {
+            log.warn("Passive authentication refused: the birth date does not match the signed chip data.");
+            throw new ValidationException(IdentityMessages.BIRTH_DATE_MISMATCH);
+        }
+
+        return result;
     }
 
     @Override

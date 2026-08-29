@@ -46,4 +46,5 @@
     <include file="db/changelog/2026/08/29-03-settlement-refund.xml"/>
     <include file="db/changelog/2026/08/29-04-review-anonymous.xml"/>
     <include file="db/changelog/2026/08/29-05-identity-evidence.xml"/>
+    <include file="db/changelog/2026/08/29-06-identity-passive-auth.xml"/>
 </databaseChangeLog>

@@ -47,6 +47,8 @@ class UserPatchRulesTest {
                 mock(PasswordEncoder.class), mock(SessionService.class), mock(ImageService.class),
                 securityService, mock(AddressService.class),
                 mock(AddressMapper.class), mock(UserProducerService.class), bankAccountService,
+                new com.exskylab.koala.core.properties.IdentityVerificationProperties(),
+                new com.exskylab.koala.core.utilities.identity.CscaTrustStore(new com.exskylab.koala.core.properties.IdentityVerificationProperties()),
                 phoneVerificationService, mock(BadgeService.class), mock(BadgeMapper.class),
                 new com.exskylab.koala.core.helpers.PageableSanitizer(), mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class));
 

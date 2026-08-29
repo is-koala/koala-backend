@@ -62,6 +62,12 @@ public class User extends BaseEntity {
     @Column(name = "tc_document_number")
     private String tcDocumentNumber;
 
+    @Column(name = "identity_evidence_digest", length = 64)
+    private String identityEvidenceDigest;
+
+    @Column(name = "identity_document_signer", length = 512)
+    private String identityDocumentSigner;
+
     @Column(name = "job_title")
     private String jobTitle;
 

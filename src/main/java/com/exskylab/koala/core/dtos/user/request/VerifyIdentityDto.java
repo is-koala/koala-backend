@@ -35,4 +35,8 @@ public class VerifyIdentityDto {
     @NotBlank(message = UserMessages.TC_DOCUMENT_NUMBER_CANNOT_BE_BLANK)
     private String tcDocumentNumber;
 
+    private String sod;
+
+    private String dg1;
+
 }
