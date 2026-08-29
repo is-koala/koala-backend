@@ -42,7 +42,7 @@ public class UserMeResponseDto {
 
     private Gender gender;
 
-    private String tcIdentityNumber;
+    private String maskedTcIdentityNumber;
 
     private String jobTitle;
 

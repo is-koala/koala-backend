@@ -23,6 +23,8 @@ public interface UserDao extends JpaRepository<User, UUID> {
 
     boolean existsByPhoneNumber(String phoneNumber);
 
+    boolean existsByTcIdentityNumber(String tcIdentityNumber);
+
     List<User> findByEmailVerifiedTrue();
 
     List<User> findByFirstNameContainingIgnoreCaseOrLastNameContainingIgnoreCase(String firstName, String lastName);

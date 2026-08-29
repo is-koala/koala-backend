@@ -6,7 +6,6 @@ import com.exskylab.koala.core.mappers.AddressMapper;
 import com.exskylab.koala.core.mappers.BadgeMapper;
 import com.exskylab.koala.core.mappers.UserMapper;
 import com.exskylab.koala.core.producers.user.UserProducerService;
-import com.exskylab.koala.core.utilities.kps.KimlikPaylasimSistemiService;
 import com.exskylab.koala.dataAccess.UserDao;
 import com.exskylab.koala.entities.PhoneVerification;
 import com.exskylab.koala.entities.User;
@@ -46,7 +45,7 @@ class UserPatchRulesTest {
 
         userManager = new UserManager(userDao, mock(EmailVerificationService.class), userMapper,
                 mock(PasswordEncoder.class), mock(SessionService.class), mock(ImageService.class),
-                securityService, mock(AddressService.class), mock(KimlikPaylasimSistemiService.class),
+                securityService, mock(AddressService.class),
                 mock(AddressMapper.class), mock(UserProducerService.class), bankAccountService,
                 phoneVerificationService, mock(BadgeService.class), mock(BadgeMapper.class),
                 new com.exskylab.koala.core.helpers.PageableSanitizer(), mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class));

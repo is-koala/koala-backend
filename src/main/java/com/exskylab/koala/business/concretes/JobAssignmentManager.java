@@ -201,6 +201,12 @@ public class JobAssignmentManager implements JobAssignmentService {
                      log.warn("User with id {} is not the creator of the job with id {}", currentUser.getId(), job.getId());
                      throw new ForbiddenException(JobAssignmentMessages.NOT_CREATOR_OF_JOB);
                }
+
+               if (!creator.isIdentityVerified() || creator.getTcIdentityNumber() == null) {
+                   log.warn("Payment refused on assignment {}: the individual employer {} is not identity verified.",
+                           assignmentId, creator.getId());
+                   throw new ValidationException(JobAssignmentMessages.EMPLOYER_IDENTITY_NOT_VERIFIED);
+               }
                break;
             }
             case COMPANY -> {

@@ -31,9 +31,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -48,7 +46,7 @@ class PaymentSessionAuthorizationTest {
     private IyzicoPaymentService iyzicoPaymentService;
     private JobAssignmentManager manager;
 
-    private final User employer = user();
+    private final User employer = verifiedUser();
     private final User worker = user();
     private final User stranger = user();
 
@@ -133,6 +131,13 @@ class PaymentSessionAuthorizationTest {
         verify(iyzicoPaymentService, never()).initiateCheckoutFormPayment(any());
     }
 
+    private static User verifiedUser() {
+        User u = user();
+        u.setIdentityVerified(true);
+        u.setTcIdentityNumber("10000000146");
+        return u;
+    }
+
     private Job individualJob() {
         Job job = new Job();
         job.setId(UUID.randomUUID());
@@ -179,5 +184,37 @@ class PaymentSessionAuthorizationTest {
         org.mockito.Mockito.when(settings.decimalValue(org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any())).thenAnswer(i -> i.getArgument(1));
         return settings;
+    }
+
+    @Test
+    void anUnverifiedIndividualEmployerCannotStartThePayment() {
+        employer.setIdentityVerified(false);
+        employer.setTcIdentityNumber(null);
+        JobAssignment assignment = confirmedAssignment(individualJob());
+        when(jobAssignmentDao.findById(assignment.getId())).thenReturn(Optional.of(assignment));
+        when(securityService.getAuthenticatedUser()).thenReturn(employer);
+
+        ValidationException thrown = assertThrows(ValidationException.class,
+                () -> manager.initiatePaymentSession(assignment.getId(), "127.0.0.1"));
+
+        assertEquals("JOB_ASSIGNMENT_EMPLOYER_IDENTITY_NOT_VERIFIED", thrown.getErrorCode());
+        verify(iyzicoPaymentService, never()).createSubMerchant(any());
+        verify(iyzicoPaymentService, never()).initiateCheckoutFormPayment(any());
+    }
+
+    @Test
+    void aCompanyJobIsNotBlockedByTheIndividualIdentityGate() {
+        Job job = companyJob();
+        JobAssignment assignment = confirmedAssignment(job);
+        when(jobAssignmentDao.findById(assignment.getId())).thenReturn(Optional.of(assignment));
+        when(securityService.getAuthenticatedUser()).thenReturn(employer);
+        when(companyContactService.isUserAContactOfCompany(job.getCompany().getId(), employer.getId()))
+                .thenReturn(true);
+
+        RuntimeException thrown = assertThrows(RuntimeException.class,
+                () -> manager.initiatePaymentSession(assignment.getId(), "127.0.0.1"));
+
+        assertNotEquals("JOB_ASSIGNMENT_EMPLOYER_IDENTITY_NOT_VERIFIED",
+                thrown instanceof com.exskylab.koala.core.exceptions.KoalaException k ? k.getErrorCode() : null);
     }
 }

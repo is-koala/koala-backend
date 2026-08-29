@@ -19,9 +19,9 @@ import com.exskylab.koala.core.mappers.AddressMapper;
 import com.exskylab.koala.core.mappers.BadgeMapper;
 import com.exskylab.koala.core.mappers.UserMapper;
 import com.exskylab.koala.core.producers.user.UserProducerService;
-import com.exskylab.koala.core.utilities.kps.KimlikPaylasimSistemiService;
 import com.exskylab.koala.dataAccess.UserDao;
 import com.exskylab.koala.entities.*;
+import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.data.domain.Page;
@@ -58,7 +58,6 @@ public class UserManager implements UserService {
     private final ImageService imageService;
     private final SecurityService securityService;
     private final AddressService addressService;
-    private final KimlikPaylasimSistemiService kimlikPaylasimSistemiService;
     private final AddressMapper addressMapper;
     private final UserProducerService userProducerService;
     private final BankAccountService bankAccountService;
@@ -75,7 +74,6 @@ public class UserManager implements UserService {
                        ImageService imageService,
                        SecurityService securityService,
                        AddressService addressService,
-                       KimlikPaylasimSistemiService kimlikPaylasimSistemiService,
                        AddressMapper addressMapper, UserProducerService userProducerService,
                        BankAccountService bankAccountService,
                        PhoneVerificationService phoneVerificationService,
@@ -90,7 +88,6 @@ public class UserManager implements UserService {
         this.imageService = imageService;
         this.securityService = securityService;
         this.addressService = addressService;
-        this.kimlikPaylasimSistemiService = kimlikPaylasimSistemiService;
         this.addressMapper = addressMapper;
         this.userProducerService = userProducerService;
         this.bankAccountService = bankAccountService;
@@ -341,20 +338,14 @@ public class UserManager implements UserService {
             throw new ValidationException(UserMessages.USER_ALREADY_IDENTITY_VERIFIED);
         }
 
-        boolean isVerified = kimlikPaylasimSistemiService.kimlikDogrula(
-                usersMeIdentityVerificationRequestDto.getTcIdentityNumber(),
-                usersMeIdentityVerificationRequestDto.getFirstName(),
-                usersMeIdentityVerificationRequestDto.getLastName(),
-                usersMeIdentityVerificationRequestDto.getBirthDate(),
-                usersMeIdentityVerificationRequestDto.getTcDocumentNumber()
-        );
-
-        if (!isVerified){
-            log.warn("Identity verification failed for user with ID: {}", currentUser.getId());
-            throw new ValidationException(UserMessages.IDENTITY_VERIFICATION_FAILED);
+        if (userDao.existsByTcIdentityNumber(usersMeIdentityVerificationRequestDto.getTcIdentityNumber())) {
+            log.warn("Identity verification refused for user {}: the identity number is already claimed.",
+                    currentUser.getId());
+            throw new ConflictException(UserMessages.TC_IDENTITY_NUMBER_ALREADY_IN_USE);
         }
 
         currentUser.setIdentityVerified(true);
+        currentUser.setTcDocumentNumber(usersMeIdentityVerificationRequestDto.getTcDocumentNumber());
         currentUser.setFirstName(capitalizeFirstLetter(usersMeIdentityVerificationRequestDto.getFirstName()));
         currentUser.setLastName(capitalizeFirstLetter(usersMeIdentityVerificationRequestDto.getLastName()));
         currentUser.setBirthDate(usersMeIdentityVerificationRequestDto.getBirthDate());

@@ -59,6 +59,9 @@ public class User extends BaseEntity {
     @Column(name ="tc_identity_number")
     private String tcIdentityNumber;
 
+    @Column(name = "tc_document_number")
+    private String tcDocumentNumber;
+
     @Column(name = "job_title")
     private String jobTitle;
 

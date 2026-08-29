@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="29-05-add-tc-document-number" author="koala">
+        <addColumn tableName="users">
+            <column name="tc_document_number" type="VARCHAR(255)"/>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="29-05-unique-tc-identity-number-active" author="koala">
+        <preConditions onFail="HALT">
+            <sqlCheck expectedResult="0">
+                SELECT count(*) FROM (
+                    SELECT tc_identity_number
+                    FROM public.users
+                    WHERE is_deleted = false AND tc_identity_number IS NOT NULL
+                    GROUP BY tc_identity_number
+                    HAVING count(*) > 1
+                ) AS duplicates
+            </sqlCheck>
+        </preConditions>
+        <sql splitStatements="true" endDelimiter=";">
+            CREATE UNIQUE INDEX IF NOT EXISTS uk_users_tc_identity_number_active
+                ON public.users (tc_identity_number) WHERE is_deleted = false AND tc_identity_number IS NOT NULL;
+        </sql>
+        <rollback>
+            <sql splitStatements="true" endDelimiter=";">
+                DROP INDEX IF EXISTS uk_users_tc_identity_number_active;
+            </sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

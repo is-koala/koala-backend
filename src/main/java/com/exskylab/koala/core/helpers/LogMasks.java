@@ -57,4 +57,8 @@ public final class LogMasks {
     public static String identityNumber(String identityNumber) {
         return REDACTED;
     }
+
+    public static String maskedIdentityNumber(String identityNumber) {
+        return identityNumber == null || identityNumber.isBlank() ? null : "***********";
+    }
 }

@@ -1,6 +1,8 @@
 package com.exskylab.koala.core.constants;
 
 public class JobMessages {
+    public static final String INDIVIDUAL_EMPLOYER_IDENTITY_NOT_VERIFIED =
+            "{job.individual.employer.identity.not.verified}";
     public static final String HEADCOUNT_MIN_VALUE = "{job.headcount.min.value}";
     public static final String CATEGORY_UUID_ID_INVALID = "{job.category.uuid.id.invalid}";
     public static final String TITLE_NOT_BLANK = "{job.title.not.blank}";

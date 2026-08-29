@@ -23,6 +23,8 @@ public interface UserMapper {
     @Mapping(target = "companies", source = "user.companyContacts")
     @Mapping(target = "cvUrl", source = "user.cv", qualifiedByName = "mediaToPublicUrl")
     @Mapping(target = "maskedIban", source = "maskedIban")
+    @Mapping(target = "maskedTcIdentityNumber",
+             expression = "java(com.exskylab.koala.core.helpers.LogMasks.maskedIdentityNumber(user.getTcIdentityNumber()))")
     @Mapping(target = "badges", source = "badges")
     UserMeResponseDto toUserMeResponseDto(User user, String maskedIban, java.util.List<com.exskylab.koala.core.dtos.badge.response.BadgeDto> badges);
 

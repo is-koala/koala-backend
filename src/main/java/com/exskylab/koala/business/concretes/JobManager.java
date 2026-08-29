@@ -102,6 +102,12 @@ public class JobManager implements JobService {
             throw new ForbiddenException(JobMessages.USER_IS_NOT_EMPLOYER);
         }
 
+        if (!authenticatedUser.isIdentityVerified()) {
+            log.info("User {} cannot open an individual job yet: identity is not verified.",
+                    authenticatedUser.getId());
+            throw new ValidationException(JobMessages.INDIVIDUAL_EMPLOYER_IDENTITY_NOT_VERIFIED);
+        }
+
         JobType type;
         try {
             type = JobType.valueOf(usersMeJobsPostRequestDto.getType().toUpperCase(Locale.ROOT));
