@@ -6,6 +6,7 @@ import java.util.Optional;
 
 public final class MachineReadableZone {
 
+
     private static final char FILLER = '<';
     private static final int TD1_LINE_LENGTH = 30;
     private static final int TD1_TOTAL_LENGTH = TD1_LINE_LENGTH * 3;
@@ -31,6 +32,42 @@ public final class MachineReadableZone {
         String optionalData = raw.substring(15, TD1_LINE_LENGTH).replace(String.valueOf(FILLER), "");
 
         return optionalData.matches("\\d{11}") ? Optional.of(optionalData) : Optional.empty();
+    }
+
+
+    public boolean matchesHolder(String firstName, String lastName) {
+        String nameLine = raw.substring(TD1_LINE_LENGTH * 2);
+        String[] parts = nameLine.split("<<", 2);
+
+        String mrzSurname = normalize(parts[0]);
+        String mrzGivenNames = normalize(parts.length > 1 ? parts[1] : "");
+
+        return prefixCompatible(mrzSurname, normalize(lastName))
+                && prefixCompatible(mrzGivenNames, normalize(firstName));
+    }
+
+    private static boolean prefixCompatible(String fromCard, String claimed) {
+        if (fromCard.isEmpty() || claimed.isEmpty()) {
+            return false;
+        }
+        return fromCard.startsWith(claimed) || claimed.startsWith(fromCard);
+    }
+
+    private static String normalize(String value) {
+        if (value == null) {
+            return "";
+        }
+
+        String folded = value
+                .replace('ı', 'i').replace('İ', 'I')
+                .replace('ğ', 'g').replace('Ğ', 'G')
+                .replace('ü', 'u').replace('Ü', 'U')
+                .replace('ş', 's').replace('Ş', 'S')
+                .replace('ö', 'o').replace('Ö', 'O')
+                .replace('ç', 'c').replace('Ç', 'C')
+                .toUpperCase(java.util.Locale.ROOT);
+
+        return folded.replaceAll("[^A-Z]", "");
     }
 
     public Optional<LocalDate> birthDate() {

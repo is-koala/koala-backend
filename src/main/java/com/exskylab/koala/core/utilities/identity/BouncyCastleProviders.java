@@ -4,12 +4,12 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 import java.security.Security;
 
-final class BouncyCastleProviders {
+public final class BouncyCastleProviders {
 
     private BouncyCastleProviders() {
     }
 
-    static void register() {
+    public static void register() {
         if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null) {
             Security.addProvider(new BouncyCastleProvider());
         }

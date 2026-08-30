@@ -112,7 +112,6 @@ class PassiveAuthenticationTest {
 
     @Test
     void theIdentityNumberIsReadFromOptionalDataAfterTheSeparator() {
-        // Real card: I<TUR + document no (9) + check digit + "<" + TCKN (11) + "<<<"
         byte[] realLayout = TestChip.dataGroup1WithUpperLine("I<TURA01A000004<" + TCKN + "<<<", "980412");
 
         assertEquals(TCKN, MachineReadableZone.fromDataGroup1(realLayout).orElseThrow()
@@ -129,8 +128,6 @@ class PassiveAuthenticationTest {
 
     @Test
     void aTruncatedDocumentNumberIsNeverMistakenForAnIdentityNumber() {
-        // ICAO note (j): a document number longer than 9 characters puts a filler where the
-        // check digit belongs and spills the rest into the optional data field.
         byte[] noteJ = TestChip.dataGroup1WithUpperLine("I<TURD23145890<12331234567<<<<", "980412");
 
         assertTrue(MachineReadableZone.fromDataGroup1(noteJ).orElseThrow()
@@ -143,5 +140,76 @@ class PassiveAuthenticationTest {
 
         assertTrue(MachineReadableZone.fromDataGroup1(shortNumber).orElseThrow()
                 .nationalIdentityNumber().isEmpty());
+    }
+
+    @Test
+    void theHolderNameOnTheCardMustMatchTheClaim() {
+        MachineReadableZone mrz = MachineReadableZone.fromDataGroup1(dg1).orElseThrow();
+
+        assertTrue(mrz.matchesHolder("Yusuf", "Acmaci"));
+        assertFalse(mrz.matchesHolder("Mehmet", "Acmaci"));
+        assertFalse(mrz.matchesHolder("Yusuf", "Kahraman"));
+    }
+
+    @Test
+    void turkishCharactersInTheClaimedNameAreFoldedBeforeComparing() {
+        byte[] card = TestChip.dataGroup1WithNameLine("CAGRI<<ILKER<<<<<<<<<<<<<<<<<<");
+
+        MachineReadableZone mrz = MachineReadableZone.fromDataGroup1(card).orElseThrow();
+
+        assertTrue(mrz.matchesHolder("İlker", "Çağrı"));
+    }
+
+    @Test
+    void aNameTruncatedByTheThirtyCharacterLimitStillMatches() {
+        byte[] card = TestChip.dataGroup1WithNameLine("KARAHANOGULLARINDA<<ABDULLAHM<");
+
+        MachineReadableZone mrz = MachineReadableZone.fromDataGroup1(card).orElseThrow();
+
+        assertTrue(mrz.matchesHolder("Abdullahmehmet", "Karahanogullarindan"),
+                "MRZ 30 karakterde kesiyor, uzun adli kullanici kilitlenmemeli");
+    }
+
+    @Test
+    void theNationalSpellingOfTheNameComesFromDataGroup11() throws Exception {
+        byte[] dg11 = TestChip.dataGroup11("ÇAĞRI", "İLKER");
+        byte[] sod = turkey.securityObjectWithDg11(dg1, dg11);
+
+        PassiveAuthenticationResult result = verifierTrusting(turkey).verify(sod, dg1, dg11);
+
+        AdditionalPersonalDetails name = result.nationalName().orElseThrow();
+        assertEquals("ÇAĞRI", name.surname());
+        assertEquals("İLKER", name.givenNames());
+    }
+
+    @Test
+    void aTamperedDataGroup11IsRefused() throws Exception {
+        byte[] dg11 = TestChip.dataGroup11("ACMACI", "YUSUF");
+        byte[] sod = turkey.securityObjectWithDg11(dg1, dg11);
+        byte[] forged = TestChip.dataGroup11("KAHRAMAN", "YAKUP");
+
+        PassiveAuthenticationException thrown = assertThrows(PassiveAuthenticationException.class,
+                () -> verifierTrusting(turkey).verify(sod, dg1, forged));
+
+        assertEquals("{identity.data.group.tampered}", thrown.getMessageKey());
+    }
+
+    @Test
+    void withoutDataGroup11TheChipReadStillVerifies() throws Exception {
+        PassiveAuthenticationResult result =
+                verifierTrusting(turkey).verify(turkey.securityObject(dg1), dg1, null);
+
+        assertEquals(TCKN, result.nationalIdentityNumber());
+        assertTrue(result.nationalName().isEmpty());
+    }
+
+    @Test
+    void aDataGroup11WithoutAFullNameFieldIsIgnoredRatherThanFatal() throws Exception {
+        byte[] dg11 = new byte[]{0x6C, 0x03, 0x5C, 0x01, 0x0E};
+        byte[] sod = turkey.securityObjectWithDg11(dg1, dg11);
+
+        PassiveAuthenticationResult result = verifierTrusting(turkey).verify(sod, dg1, dg11);
+
+        assertTrue(result.nationalName().isEmpty());
     }
 }

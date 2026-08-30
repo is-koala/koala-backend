@@ -71,18 +71,24 @@ final class TestChip {
         return Set.of(new TrustAnchor(csca, null));
     }
 
-    /** TD1: three 30-character lines, the identity number sits in optional data 1. */
     static byte[] dataGroup1(String identityNumber, String yymmdd) {
         return dataGroup1WithUpperLine(pad("I<TUR" + "A01A00000" + "4", 15) + "<" + identityNumber + "<<<", yymmdd);
     }
 
-    /** Upper line verbatim, so a test can build the note (j) truncated-document-number shape too. */
+    static byte[] dataGroup1WithNameLine(String line3) {
+        String line1 = pad("I<TUR" + "A01A00000" + "4", 15) + "<" + "10000000146" + "<<<";
+        String line2 = pad("980412" + "1" + "M" + "300101" + "7" + "TUR", 29) + "4";
+        return wrap((line1 + line2 + pad(line3, 30)).getBytes(StandardCharsets.US_ASCII));
+    }
+
     static byte[] dataGroup1WithUpperLine(String line1, String yymmdd) {
         String line2 = pad(yymmdd + "1" + "M" + "300101" + "7" + "TUR", 29) + "4";
         String line3 = pad("ACMACI<<YUSUF", 30);
 
-        byte[] mrz = (line1 + line2 + line3).getBytes(StandardCharsets.US_ASCII);
+        return wrap((line1 + line2 + line3).getBytes(StandardCharsets.US_ASCII));
+    }
 
+    private static byte[] wrap(byte[] mrz) {
         byte[] inner = new byte[3 + mrz.length];
         inner[0] = 0x5F;
         inner[1] = 0x1F;
@@ -102,12 +108,23 @@ final class TestChip {
     }
 
     byte[] securityObjectForHash(byte[] dataGroup1Hash) throws Exception {
+        return securityObjectForHashes(dataGroup1Hash, null);
+    }
+
+    byte[] securityObjectForHashes(byte[] dataGroup1Hash, byte[] dataGroup11Hash) throws Exception {
         ASN1EncodableVector hashEntry = new ASN1EncodableVector();
         hashEntry.add(new ASN1Integer(1));
         hashEntry.add(new DEROctetString(dataGroup1Hash));
 
         ASN1EncodableVector hashes = new ASN1EncodableVector();
         hashes.add(new DERSequence(hashEntry));
+
+        if (dataGroup11Hash != null) {
+            ASN1EncodableVector entry11 = new ASN1EncodableVector();
+            entry11.add(new ASN1Integer(11));
+            entry11.add(new DEROctetString(dataGroup11Hash));
+            hashes.add(new DERSequence(entry11));
+        }
 
         ASN1EncodableVector lds = new ASN1EncodableVector();
         lds.add(new ASN1Integer(0));
@@ -129,6 +146,26 @@ final class TestChip {
                 new org.bouncycastle.cms.CMSProcessableByteArray(LDS_SECURITY_OBJECT, eContent), true);
 
         return signed.getEncoded();
+    }
+
+    static byte[] dataGroup11(String surname, String givenNames) {
+        byte[] name = (surname + "<<" + givenNames).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+        byte[] inner = new byte[3 + name.length];
+        inner[0] = 0x5F;
+        inner[1] = 0x0E;
+        inner[2] = (byte) name.length;
+        System.arraycopy(name, 0, inner, 3, name.length);
+
+        byte[] outer = new byte[2 + inner.length];
+        outer[0] = 0x6C;
+        outer[1] = (byte) inner.length;
+        System.arraycopy(inner, 0, outer, 2, inner.length);
+        return outer;
+    }
+
+    byte[] securityObjectWithDg11(byte[] dg1, byte[] dg11) throws Exception {
+        return securityObjectForHashes(sha256(dg1), sha256(dg11));
     }
 
     static byte[] sha256(byte[] content) throws Exception {

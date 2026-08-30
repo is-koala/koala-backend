@@ -43,6 +43,10 @@ public class PassiveAuthenticationVerifier {
     }
 
     public PassiveAuthenticationResult verify(byte[] securityObject, byte[] dataGroup1) {
+        return verify(securityObject, dataGroup1, null);
+    }
+
+    public PassiveAuthenticationResult verify(byte[] securityObject, byte[] dataGroup1, byte[] dataGroup11) {
         if (trustAnchors.isEmpty()) {
             throw new PassiveAuthenticationException(IdentityMessages.NO_TRUST_ANCHORS,
                     "no CSCA trust anchors are configured");
@@ -75,7 +79,17 @@ public class PassiveAuthenticationVerifier {
                 .orElseThrow(() -> new PassiveAuthenticationException(IdentityMessages.MRZ_UNREADABLE,
                         "the machine readable zone carries no birth date"));
 
-        return new PassiveAuthenticationResult(identityNumber, birthDate,
+        AdditionalPersonalDetails additional = null;
+        if (dataGroup11 != null && dataGroup11.length > 0) {
+            byte[] expectedDg11 = lds.hashForDataGroup(11);
+            if (!MessageDigest.isEqual(expectedDg11, digest(lds.hashAlgorithm(), dataGroup11))) {
+                throw new PassiveAuthenticationException(IdentityMessages.DATA_GROUP_TAMPERED,
+                        "DG11 hash does not match the signed security object");
+            }
+            additional = AdditionalPersonalDetails.parse(dataGroup11).orElse(null);
+        }
+
+        return new PassiveAuthenticationResult(identityNumber, birthDate, mrz, additional,
                 documentSigner.getSubjectX500Principal().getName(), sha256Hex(securityObject));
     }
 

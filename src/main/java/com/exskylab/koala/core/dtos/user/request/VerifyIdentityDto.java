@@ -39,4 +39,6 @@ public class VerifyIdentityDto {
 
     private String dg1;
 
+    private String dg11;
+
 }

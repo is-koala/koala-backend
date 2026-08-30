@@ -10,4 +10,5 @@ public class IdentityMessages {
     public static final String MRZ_UNREADABLE = "{identity.mrz.unreadable}";
     public static final String IDENTITY_NUMBER_MISMATCH = "{identity.number.mismatch}";
     public static final String BIRTH_DATE_MISMATCH = "{identity.birth.date.mismatch}";
+    public static final String NAME_MISMATCH = "{identity.name.mismatch}";
 }

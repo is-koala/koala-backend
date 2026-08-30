@@ -359,10 +359,7 @@ public class UserManager implements UserService {
 
         currentUser.setIdentityVerified(true);
         currentUser.setTcDocumentNumber(usersMeIdentityVerificationRequestDto.getTcDocumentNumber());
-        currentUser.setFirstName(capitalizeFirstLetter(usersMeIdentityVerificationRequestDto.getFirstName()));
-        currentUser.setLastName(capitalizeFirstLetter(usersMeIdentityVerificationRequestDto.getLastName()));
-        currentUser.setBirthDate(usersMeIdentityVerificationRequestDto.getBirthDate());
-        currentUser.setTcIdentityNumber(usersMeIdentityVerificationRequestDto.getTcIdentityNumber());
+        stampVerifiedIdentity(currentUser, usersMeIdentityVerificationRequestDto, evidence);
         if (evidence != null) {
             currentUser.setIdentityEvidenceDigest(evidence.evidenceDigest());
             currentUser.setIdentityDocumentSigner(evidence.documentSigner());
@@ -373,6 +370,32 @@ public class UserManager implements UserService {
         userProducerService.publishUserProfileUpdated(savedUser);
         log.info("Identity verification successful for user with ID: {}", currentUser.getId());
 
+    }
+
+    private void stampVerifiedIdentity(User user, VerifyIdentityDto request, PassiveAuthenticationResult evidence) {
+        if (evidence == null) {
+            user.setFirstName(capitalizeFirstLetter(request.getFirstName()));
+            user.setLastName(capitalizeFirstLetter(request.getLastName()));
+            user.setBirthDate(request.getBirthDate());
+            user.setTcIdentityNumber(request.getTcIdentityNumber());
+            return;
+        }
+
+        user.setBirthDate(evidence.birthDate());
+        user.setTcIdentityNumber(evidence.nationalIdentityNumber());
+
+        evidence.nationalName().ifPresentOrElse(
+                name -> {
+                    user.setFirstName(capitalizeFirstLetter(name.givenNames()));
+                    user.setLastName(capitalizeFirstLetter(name.surname()));
+                    log.info("Identity fields for user {} taken from the chip, name from DG11.", user.getId());
+                },
+                () -> {
+                    user.setFirstName(capitalizeFirstLetter(request.getFirstName()));
+                    user.setLastName(capitalizeFirstLetter(request.getLastName()));
+                    log.info("Identity fields for user {} taken from the chip, name kept from the request "
+                            + "because DG11 was not supplied.", user.getId());
+                });
     }
 
     private PassiveAuthenticationResult verifyChipEvidence(VerifyIdentityDto request) {
@@ -387,16 +410,20 @@ public class UserManager implements UserService {
 
         byte[] securityObject;
         byte[] dataGroup1;
+        byte[] dataGroup11 = null;
         try {
             securityObject = java.util.Base64.getDecoder().decode(request.getSod().trim());
             dataGroup1 = java.util.Base64.getDecoder().decode(request.getDg1().trim());
+            if (request.getDg11() != null && !request.getDg11().isBlank()) {
+                dataGroup11 = java.util.Base64.getDecoder().decode(request.getDg11().trim());
+            }
         } catch (IllegalArgumentException e) {
             throw new ValidationException(IdentityMessages.SOD_UNREADABLE);
         }
 
         PassiveAuthenticationResult result;
         try {
-            result = cscaTrustStore.verifier().verify(securityObject, dataGroup1);
+            result = cscaTrustStore.verifier().verify(securityObject, dataGroup1, dataGroup11);
         } catch (PassiveAuthenticationException e) {
             log.warn("Passive authentication failed: {}", e.getMessage());
             throw new ValidationException(e.getMessageKey());
@@ -405,6 +432,11 @@ public class UserManager implements UserService {
         if (!result.nationalIdentityNumber().equals(request.getTcIdentityNumber())) {
             log.warn("Passive authentication refused: the identity number does not match the signed chip data.");
             throw new ValidationException(IdentityMessages.IDENTITY_NUMBER_MISMATCH);
+        }
+
+        if (!result.machineReadableZone().matchesHolder(request.getFirstName(), request.getLastName())) {
+            log.warn("Passive authentication refused: the name does not match the signed chip data.");
+            throw new ValidationException(IdentityMessages.NAME_MISMATCH);
         }
 
         if (!result.birthDate().equals(request.getBirthDate())) {
