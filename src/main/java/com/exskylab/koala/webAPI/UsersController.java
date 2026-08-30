@@ -193,6 +193,18 @@ public class UsersController {
                         HttpStatus.OK));
     }
 
+    @Operation(summary = "Çip doğrulaması için tek kullanımlık sayı al",
+            description = "Kimlik kartının çipine imzalatılacak rastgele sayıyı döndürür. Aynı sayı yalnızca bir kez kullanılabilir ve süresi dolar; böylece daha önce kaydedilmiş bir çip okuması tekrar gönderilemez.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Sayı üretildi")
+    })
+    @PostMapping("/me/identity-verification/challenge")
+    public ResponseEntity<SuccessDataResult<String>> startIdentityChallenge() {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                userService.startIdentityChallenge(),
+                UserMessages.IDENTITY_CHALLENGE_CREATED, HttpStatus.OK));
+    }
+
     @Operation(summary = "Kimlik doğrulama başlat",
             description = "Ad, soyad, TCKN ve doğum yılı ile kimlik doğrulaması yapar. Başarılı olursa kullanıcının rozetleri yeniden değerlendirilir.")
     @ApiResponses({

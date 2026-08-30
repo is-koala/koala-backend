@@ -26,6 +26,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class IdentityVerificationRulesTest {
@@ -40,6 +41,7 @@ class IdentityVerificationRulesTest {
     private UserManager manager;
     private IdentityVerificationProperties identityProperties;
     private CscaTrustStore trustStore;
+    private com.exskylab.koala.business.abstracts.IdentityChallengeService identityChallengeService;
 
     private User current;
 
@@ -58,12 +60,13 @@ class IdentityVerificationRulesTest {
 
         identityProperties = new IdentityVerificationProperties();
         trustStore = mock(CscaTrustStore.class);
+        identityChallengeService = mock(com.exskylab.koala.business.abstracts.IdentityChallengeService.class);
 
         manager = new UserManager(userDao, mock(EmailVerificationService.class), mock(UserMapper.class),
                 mock(PasswordEncoder.class), mock(SessionService.class), mock(ImageService.class),
                 security, mock(AddressService.class),
                 mock(AddressMapper.class), producer, mock(BankAccountService.class),
-                identityProperties, trustStore,
+                identityProperties, trustStore, identityChallengeService,
                 mock(PhoneVerificationService.class), badgeService, mock(BadgeMapper.class),
                 new com.exskylab.koala.core.helpers.PageableSanitizer(), notifications);
 
@@ -318,5 +321,48 @@ class IdentityVerificationRulesTest {
         outer[0] = 0x6C; outer[1] = (byte) inner.length;
         System.arraycopy(inner, 0, outer, 2, inner.length);
         return outer;
+    }
+
+    @Test
+    void withoutTheActiveGateAChipReadWithoutASignatureIsAccepted() {
+        PassiveAuthenticationVerifier verifier = mock(PassiveAuthenticationVerifier.class);
+        when(verifier.verify(any(), any(), any())).thenReturn(new PassiveAuthenticationResult(
+                TCKN, LocalDate.of(1998, 4, 12), chipZone(), null, "CN=DS", "abc123"));
+        enablePassiveAuthentication(verifier);
+
+        assertDoesNotThrow(() -> manager.verificateIdentityofAuthenticatedUser(requestWithChip()));
+        verifyNoInteractions(identityChallengeService);
+    }
+
+    @Test
+    void withTheActiveGateOnAChipReadWithoutASignatureIsRefused() {
+        PassiveAuthenticationVerifier verifier = mock(PassiveAuthenticationVerifier.class);
+        when(verifier.verify(any(), any(), any())).thenReturn(new PassiveAuthenticationResult(
+                TCKN, LocalDate.of(1998, 4, 12), chipZone(), null, "CN=DS", "abc123"));
+        enablePassiveAuthentication(verifier);
+        identityProperties.setActiveAuthenticationRequired(true);
+
+        ValidationException thrown = assertThrows(ValidationException.class,
+                () -> manager.verificateIdentityofAuthenticatedUser(requestWithChip()));
+
+        assertEquals("IDENTITY_ACTIVE_AUTHENTICATION_REQUIRED", thrown.getErrorCode());
+        assertFalse(current.isIdentityVerified());
+    }
+
+    @Test
+    void aSuppliedSignatureIsCheckedAgainstTheIssuedChallenge() {
+        PassiveAuthenticationVerifier verifier = mock(PassiveAuthenticationVerifier.class);
+        when(verifier.verify(any(), any(), any())).thenReturn(new PassiveAuthenticationResult(
+                TCKN, LocalDate.of(1998, 4, 12), chipZone(), null, "CN=DS", "abc123"));
+        enablePassiveAuthentication(verifier);
+
+        VerifyIdentityDto dto = requestWithChip();
+        dto.setDg15("AAECAw==");
+        dto.setChallenge("BBBBBBBBBBA=");
+        dto.setActiveAuthenticationSignature("CQoLDA==");
+
+        manager.verificateIdentityofAuthenticatedUser(dto);
+
+        verify(identityChallengeService).consume(eq(current), eq("BBBBBBBBBBA="), any(), any());
     }
 }

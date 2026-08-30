@@ -47,6 +47,8 @@ public interface UserService {
     void updateEmailVerification(User user, String newEmail);
 
 
+    String startIdentityChallenge();
+
     void verificateIdentityofAuthenticatedUser(VerifyIdentityDto usersMeIdentityVerificationRequestDto);
 
     UserMeResponseDto getCurrentUserFromDatabaseDto();

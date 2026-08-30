@@ -3,6 +3,7 @@ package com.exskylab.koala.core.constants;
 import org.springframework.http.HttpStatus;
 
 public class UserMessages {
+    public static final String IDENTITY_CHALLENGE_CREATED = "{identity.challenge.created}";
     public static final String TC_IDENTITY_NUMBER_ALREADY_IN_USE = "{tc.identity.number.already.in.use}";
     public static final String EMPLOYER_STATS_RETRIEVED = "{user.employer.stats.retrieved}";
     public static final String NOT_FOUND_BY_EMAIL = "{user.not.found.by.email}";

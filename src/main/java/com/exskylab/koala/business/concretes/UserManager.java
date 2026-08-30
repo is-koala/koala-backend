@@ -23,6 +23,7 @@ import com.exskylab.koala.dataAccess.UserDao;
 import com.exskylab.koala.entities.*;
 import com.exskylab.koala.core.constants.IdentityMessages;
 import com.exskylab.koala.core.properties.IdentityVerificationProperties;
+import com.exskylab.koala.business.abstracts.IdentityChallengeService;
 import com.exskylab.koala.core.utilities.identity.CscaTrustStore;
 import com.exskylab.koala.core.utilities.identity.PassiveAuthenticationException;
 import com.exskylab.koala.core.utilities.identity.PassiveAuthenticationResult;
@@ -68,6 +69,7 @@ public class UserManager implements UserService {
     private final BankAccountService bankAccountService;
     private final IdentityVerificationProperties identityVerificationProperties;
     private final CscaTrustStore cscaTrustStore;
+    private final IdentityChallengeService identityChallengeService;
     private final PhoneVerificationService phoneVerificationService;
     private final BadgeService badgeService;
     private final BadgeMapper badgeMapper;
@@ -85,6 +87,7 @@ public class UserManager implements UserService {
                        BankAccountService bankAccountService,
                        IdentityVerificationProperties identityVerificationProperties,
                        CscaTrustStore cscaTrustStore,
+                       IdentityChallengeService identityChallengeService,
                        PhoneVerificationService phoneVerificationService,
                        BadgeService badgeService, BadgeMapper badgeMapper,
                                 PageableSanitizer pageableSanitizer,
@@ -102,6 +105,7 @@ public class UserManager implements UserService {
         this.bankAccountService = bankAccountService;
         this.identityVerificationProperties = identityVerificationProperties;
         this.cscaTrustStore = cscaTrustStore;
+        this.identityChallengeService = identityChallengeService;
         this.phoneVerificationService = phoneVerificationService;
         this.badgeService = badgeService;
         this.badgeMapper = badgeMapper;
@@ -372,6 +376,36 @@ public class UserManager implements UserService {
 
     }
 
+    @Override
+    @Transactional
+    public String startIdentityChallenge() {
+        return identityChallengeService.issue(securityService.getAuthenticatedUser());
+    }
+
+    private void verifyChipPresence(User user, VerifyIdentityDto request, byte[] dataGroup15) {
+        boolean supplied = request.getChallenge() != null && !request.getChallenge().isBlank()
+                && request.getActiveAuthenticationSignature() != null
+                && !request.getActiveAuthenticationSignature().isBlank()
+                && dataGroup15 != null && dataGroup15.length > 0;
+
+        if (!supplied) {
+            if (identityVerificationProperties.isActiveAuthenticationRequired()) {
+                throw new ValidationException(IdentityMessages.ACTIVE_AUTHENTICATION_REQUIRED);
+            }
+            return;
+        }
+
+        byte[] signature;
+        try {
+            signature = java.util.Base64.getDecoder()
+                    .decode(request.getActiveAuthenticationSignature().trim());
+        } catch (IllegalArgumentException e) {
+            throw new ValidationException(IdentityMessages.CHALLENGE_INVALID);
+        }
+
+        identityChallengeService.consume(user, request.getChallenge().trim(), dataGroup15, signature);
+    }
+
     private void stampVerifiedIdentity(User user, VerifyIdentityDto request, PassiveAuthenticationResult evidence) {
         if (evidence == null) {
             user.setFirstName(capitalizeFirstLetter(request.getFirstName()));
@@ -411,11 +445,15 @@ public class UserManager implements UserService {
         byte[] securityObject;
         byte[] dataGroup1;
         byte[] dataGroup11 = null;
+        byte[] dataGroup15 = null;
         try {
             securityObject = java.util.Base64.getDecoder().decode(request.getSod().trim());
             dataGroup1 = java.util.Base64.getDecoder().decode(request.getDg1().trim());
             if (request.getDg11() != null && !request.getDg11().isBlank()) {
                 dataGroup11 = java.util.Base64.getDecoder().decode(request.getDg11().trim());
+            }
+            if (request.getDg15() != null && !request.getDg15().isBlank()) {
+                dataGroup15 = java.util.Base64.getDecoder().decode(request.getDg15().trim());
             }
         } catch (IllegalArgumentException e) {
             throw new ValidationException(IdentityMessages.SOD_UNREADABLE);
@@ -433,6 +471,8 @@ public class UserManager implements UserService {
             log.warn("Passive authentication refused: the identity number does not match the signed chip data.");
             throw new ValidationException(IdentityMessages.IDENTITY_NUMBER_MISMATCH);
         }
+
+        verifyChipPresence(securityService.getAuthenticatedUser(), request, dataGroup15);
 
         if (!result.machineReadableZone().matchesHolder(request.getFirstName(), request.getLastName())) {
             log.warn("Passive authentication refused: the name does not match the signed chip data.");

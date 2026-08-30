@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="29-07-create-identity-challenges" author="koala">
+        <createTable tableName="identity_challenges">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="challenge" type="VARCHAR(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="expires_at" type="TIMESTAMPTZ">
+                <constraints nullable="false"/>
+            </column>
+            <column name="consumed_at" type="TIMESTAMPTZ"/>
+            <column name="created_at" type="TIMESTAMPTZ"/>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
+            <column name="deleted_by_id" type="UUID"/>
+        </createTable>
+
+        <addForeignKeyConstraint baseTableName="identity_challenges" baseColumnNames="user_id"
+                                 constraintName="fk_identity_challenges_user"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+
+        <sql>
+            CREATE UNIQUE INDEX IF NOT EXISTS uk_identity_challenges_active
+                ON public.identity_challenges (user_id, challenge) WHERE is_deleted = false;
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

@@ -41,4 +41,10 @@ public class VerifyIdentityDto {
 
     private String dg11;
 
+    private String dg15;
+
+    private String challenge;
+
+    private String activeAuthenticationSignature;
+
 }

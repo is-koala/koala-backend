@@ -11,6 +11,10 @@ public class IdentityVerificationProperties {
 
     private String trustAnchorDirectory = "";
 
+    private boolean activeAuthenticationRequired = false;
+
+    private int challengeValidityMinutes = 10;
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -25,5 +29,21 @@ public class IdentityVerificationProperties {
 
     public void setTrustAnchorDirectory(String trustAnchorDirectory) {
         this.trustAnchorDirectory = trustAnchorDirectory;
+    }
+
+    public boolean isActiveAuthenticationRequired() {
+        return activeAuthenticationRequired;
+    }
+
+    public void setActiveAuthenticationRequired(boolean activeAuthenticationRequired) {
+        this.activeAuthenticationRequired = activeAuthenticationRequired;
+    }
+
+    public int getChallengeValidityMinutes() {
+        return challengeValidityMinutes;
+    }
+
+    public void setChallengeValidityMinutes(int challengeValidityMinutes) {
+        this.challengeValidityMinutes = challengeValidityMinutes;
     }
 }

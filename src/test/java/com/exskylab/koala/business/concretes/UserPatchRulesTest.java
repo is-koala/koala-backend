@@ -49,6 +49,7 @@ class UserPatchRulesTest {
                 mock(AddressMapper.class), mock(UserProducerService.class), bankAccountService,
                 new com.exskylab.koala.core.properties.IdentityVerificationProperties(),
                 new com.exskylab.koala.core.utilities.identity.CscaTrustStore(new com.exskylab.koala.core.properties.IdentityVerificationProperties()),
+                mock(com.exskylab.koala.business.abstracts.IdentityChallengeService.class),
                 phoneVerificationService, mock(BadgeService.class), mock(BadgeMapper.class),
                 new com.exskylab.koala.core.helpers.PageableSanitizer(), mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class));
 

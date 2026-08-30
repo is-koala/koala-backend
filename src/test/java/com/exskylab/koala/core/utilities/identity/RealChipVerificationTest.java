@@ -69,6 +69,7 @@ class RealChipVerificationTest {
             }
 
             CMSSignedData signed = new CMSSignedData(unwrapped);
+            describeDataGroups(signed);
             signed.getCertificates().getMatches(null).forEach(holder -> {
                 X509CertificateHolder certificate = (X509CertificateHolder) holder;
                 System.out.println("ds subject : " + certificate.getSubject());
@@ -77,6 +78,30 @@ class RealChipVerificationTest {
             });
         } catch (Exception e) {
             System.out.println("ds         : sertifika okunamadi -> " + e.getMessage());
+        }
+    }
+
+    private static void describeDataGroups(CMSSignedData signed) {
+        try {
+            byte[] eContent = (byte[]) signed.getSignedContent().getContent();
+            org.bouncycastle.asn1.ASN1Sequence lds = org.bouncycastle.asn1.ASN1Sequence.getInstance(
+                    org.bouncycastle.asn1.ASN1Primitive.fromByteArray(eContent));
+            org.bouncycastle.asn1.ASN1Sequence hashes =
+                    org.bouncycastle.asn1.ASN1Sequence.getInstance(lds.getObjectAt(2));
+
+            StringBuilder present = new StringBuilder();
+            for (int i = 0; i < hashes.size(); i++) {
+                org.bouncycastle.asn1.ASN1Sequence entry =
+                        org.bouncycastle.asn1.ASN1Sequence.getInstance(hashes.getObjectAt(i));
+                present.append("DG")
+                       .append(org.bouncycastle.asn1.ASN1Integer.getInstance(entry.getObjectAt(0)).intValueExact())
+                       .append(' ');
+            }
+            System.out.println("kartta      : " + present.toString().trim());
+            System.out.println("              (DG11 varsa ad ulusal karakterlerle alinabilir, "
+                    + "DG15 varsa Active Authentication mumkun)");
+        } catch (Exception e) {
+            System.out.println("veri gruplari okunamadi -> " + e.getMessage());
         }
     }
 
