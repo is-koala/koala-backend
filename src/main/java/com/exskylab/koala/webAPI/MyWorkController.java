@@ -187,4 +187,16 @@ public class MyWorkController {
         return ResponseEntity.ok(new SuccessDataResult<>(
                 notificationService.markAllRead(), MyWorkMessages.NOTIFICATIONS_READ, HttpStatus.OK));
     }
+
+    @Operation(summary = "Tek bildirimi okundu işaretle",
+            description = "Zaten okunmuş ya da başkasına ait bir bildirimde sessizce geçer; hata dönmez.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Bildirim okundu işaretlendi")
+    })
+    @PostMapping("/notifications/{notificationId}/read")
+    public ResponseEntity<SuccessResult> markNotificationRead(@PathVariable UUID notificationId) {
+        notificationService.markRead(notificationId);
+
+        return ResponseEntity.ok(new SuccessResult(MyWorkMessages.NOTIFICATION_READ, HttpStatus.OK));
+    }
 }

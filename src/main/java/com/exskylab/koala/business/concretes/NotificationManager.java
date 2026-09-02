@@ -355,23 +355,58 @@ public class NotificationManager implements NotificationService {
  */
 
     @Override
+    @Transactional
+    public Notification sendInApp(SendInAppDto sendInAppDto) {
+        Notification notification = new Notification();
+        notification.setRecipient(sendInAppDto.getRecipient());
+        notification.setSender(securityService.getSystemUser());
+        notification.setChannel(NotificationChannel.IN_APP);
+        notification.setCategory(sendInAppDto.getCategory());
+        notification.setSubject(sendInAppDto.getSubject());
+        notification.setBody(sendInAppDto.getBody());
+        notification.setTargetType(sendInAppDto.getTargetType());
+        notification.setTargetId(sendInAppDto.getTargetId());
+        notification.setStatus(NotificationStatus.SENT);
+        notification.setSentAt(Instant.now());
+
+        Notification saved = notificationDao.save(notification);
+        log.info("In-app notification {} recorded for user {}", saved.getId(), sendInAppDto.getRecipient().getId());
+        return saved;
+    }
+
+    @Override
+    @Transactional
+    public void markRead(UUID notificationId) {
+        UUID recipientId = securityService.getAuthenticatedUserId();
+
+        notificationDao.findById(notificationId)
+                .filter(notification -> notification.getRecipient().getId().equals(recipientId))
+                .ifPresent(notification -> {
+                    if (notification.getReadAt() == null) {
+                        notification.setReadAt(Instant.now());
+                        notificationDao.save(notification);
+                    }
+                });
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public Page<Notification> getMyNotifications(Pageable requested) {
         pageableSanitizer.rejectUnknownSort(requested, NOTIFICATION_SORTABLE);
-        return notificationDao.findAllByRecipientIdOrderByCreatedAtDesc(
-                securityService.getAuthenticatedUserId(),
+        return notificationDao.findAllByRecipientIdAndChannelOrderByCreatedAtDesc(
+                securityService.getAuthenticatedUserId(), NotificationChannel.IN_APP,
                 pageableSanitizer.sanitize(requested, NOTIFICATION_SORTABLE, NOTIFICATION_SORT));
     }
 
     @Override
     @Transactional(readOnly = true)
     public long myUnreadCount() {
-        return notificationDao.countByRecipientIdAndReadAtIsNull(securityService.getAuthenticatedUserId());
+        return notificationDao.countByRecipientIdAndChannelAndReadAtIsNull(securityService.getAuthenticatedUserId(), NotificationChannel.IN_APP);
     }
 
     @Override
     @Transactional
     public int markAllRead() {
-        return notificationDao.markAllRead(securityService.getAuthenticatedUserId(), Instant.now());
+        return notificationDao.markAllRead(securityService.getAuthenticatedUserId(), NotificationChannel.IN_APP, Instant.now());
     }
 }

@@ -48,4 +48,5 @@
     <include file="db/changelog/2026/08/29-05-identity-evidence.xml"/>
     <include file="db/changelog/2026/08/29-06-identity-passive-auth.xml"/>
     <include file="db/changelog/2026/08/29-07-identity-challenges.xml"/>
+    <include file="db/changelog/2026/08/30-01-in-app-notifications.xml"/>
 </databaseChangeLog>

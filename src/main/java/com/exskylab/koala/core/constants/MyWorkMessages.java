@@ -1,6 +1,7 @@
 package com.exskylab.koala.core.constants;
 
 public class MyWorkMessages {
+    public static final String NOTIFICATION_READ = "{notification.read}";
     public static final String WORK_LISTED = "{my.work.listed}";
     public static final String APPLICATIONS_LISTED = "{my.applications.listed}";
     public static final String ASSIGNMENTS_LISTED = "{my.assignments.listed}";

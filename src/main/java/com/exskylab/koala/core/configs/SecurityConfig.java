@@ -95,6 +95,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/users/me/sessions/{sessionId}").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/users/me/notifications").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/users/me/notifications/read").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/users/me/notifications/{notificationId}/read").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/users/me/work").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/users/me/devices/push-token").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/users/me/devices/push-token").hasAnyRole("USER", "ADMIN")

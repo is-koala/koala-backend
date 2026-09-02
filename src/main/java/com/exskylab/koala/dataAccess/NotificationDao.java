@@ -17,12 +17,20 @@ public interface NotificationDao extends JpaRepository<Notification, UUID> {
 
     Page<Notification> findAllByRecipientIdOrderByCreatedAtDesc(UUID recipientId, Pageable pageable);
 
+    Page<Notification> findAllByRecipientIdAndChannelOrderByCreatedAtDesc(
+            UUID recipientId, com.exskylab.koala.entities.NotificationChannel channel, Pageable pageable);
+
+    long countByRecipientIdAndChannelAndReadAtIsNull(UUID recipientId,
+                                                     com.exskylab.koala.entities.NotificationChannel channel);
+
     long countByRecipientIdAndReadAtIsNull(UUID recipientId);
 
     @Modifying
     @Query("""
             update Notification n set n.readAt = :readAt
-            where n.recipient.id = :recipientId and n.readAt is null
+            where n.recipient.id = :recipientId and n.channel = :channel and n.readAt is null
             """)
-    int markAllRead(@Param("recipientId") UUID recipientId, @Param("readAt") Instant readAt);
+    int markAllRead(@Param("recipientId") UUID recipientId,
+                    @Param("channel") com.exskylab.koala.entities.NotificationChannel channel,
+                    @Param("readAt") Instant readAt);
 }

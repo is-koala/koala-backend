@@ -4,6 +4,7 @@ import com.exskylab.koala.business.abstracts.ActivityNotificationService;
 import com.exskylab.koala.business.abstracts.NotificationService;
 import com.exskylab.koala.core.constants.ActivityMessages;
 import com.exskylab.koala.core.dtos.notification.request.SendEmailDto;
+import com.exskylab.koala.core.dtos.notification.request.SendInAppDto;
 import com.exskylab.koala.core.dtos.notification.request.SendPushToUserDto;
 import com.exskylab.koala.core.properties.AppProperties;
 import com.exskylab.koala.core.helpers.MessageResolver;
@@ -15,12 +16,14 @@ import com.exskylab.koala.entities.Dispute;
 import com.exskylab.koala.entities.JobApplication;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.NotificationCategory;
+import com.exskylab.koala.entities.NotificationTargetType;
 import com.exskylab.koala.entities.Review;
 import com.exskylab.koala.entities.User;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
+import java.util.UUID;
 import java.util.Map;
 
 @Service
@@ -45,13 +48,15 @@ public class ActivityNotificationManager implements ActivityNotificationService 
                 : ActivityMessages.APPLICATION_REJECTED;
 
         notify(application.getUser(), application.getJob().getTitle(), key,
-                NotificationCategory.APPLICATION_UPDATES);
+                NotificationCategory.APPLICATION_UPDATES,
+                NotificationTargetType.JOB_APPLICATION, application.getId());
     }
 
     @Override
     public void assignmentOffered(JobAssignment assignment) {
         notify(assignment.getWorker(), assignment.getJob().getTitle(),
-                ActivityMessages.ASSIGNMENT_OFFERED, NotificationCategory.APPLICATION_UPDATES);
+                ActivityMessages.ASSIGNMENT_OFFERED, NotificationCategory.APPLICATION_UPDATES,
+                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
     }
 
     @Override
@@ -61,19 +66,22 @@ public class ActivityNotificationManager implements ActivityNotificationService 
                 : ActivityMessages.ASSIGNMENT_REJECTED;
 
         notify(employerOf(assignment), assignment.getJob().getTitle(), key,
-                NotificationCategory.APPLICATION_UPDATES);
+                NotificationCategory.APPLICATION_UPDATES,
+                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
     }
 
     @Override
     public void assignmentCompleted(JobAssignment assignment) {
         notify(assignment.getWorker(), assignment.getJob().getTitle(),
-                ActivityMessages.WORK_COMPLETED, NotificationCategory.APPLICATION_UPDATES);
+                ActivityMessages.WORK_COMPLETED, NotificationCategory.APPLICATION_UPDATES,
+                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
     }
 
     @Override
     public void payoutReleased(JobAssignment assignment) {
         notify(assignment.getWorker(), assignment.getJob().getTitle(),
-                ActivityMessages.PAYOUT_RELEASED, NotificationCategory.APPLICATION_UPDATES);
+                ActivityMessages.PAYOUT_RELEASED, NotificationCategory.APPLICATION_UPDATES,
+                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
     }
 
     @Override
@@ -85,7 +93,8 @@ public class ActivityNotificationManager implements ActivityNotificationService 
                 : assignment.getWorker();
 
         notify(counterpart, assignment.getJob().getTitle(),
-                ActivityMessages.DISPUTE_OPENED, NotificationCategory.APPLICATION_UPDATES);
+                ActivityMessages.DISPUTE_OPENED, NotificationCategory.APPLICATION_UPDATES,
+                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
     }
 
     @Override
@@ -93,9 +102,11 @@ public class ActivityNotificationManager implements ActivityNotificationService 
         JobAssignment assignment = dispute.getJobAssignment();
 
         notify(assignment.getWorker(), assignment.getJob().getTitle(),
-                ActivityMessages.DISPUTE_RESOLVED, NotificationCategory.APPLICATION_UPDATES);
+                ActivityMessages.DISPUTE_RESOLVED, NotificationCategory.APPLICATION_UPDATES,
+                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
         notify(employerOf(assignment), assignment.getJob().getTitle(),
-                ActivityMessages.DISPUTE_RESOLVED, NotificationCategory.APPLICATION_UPDATES);
+                ActivityMessages.DISPUTE_RESOLVED, NotificationCategory.APPLICATION_UPDATES,
+                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
     }
 
     @Override
@@ -109,7 +120,8 @@ public class ActivityNotificationManager implements ActivityNotificationService 
                 : assignment.getWorker();
 
         notify(counterpart, assignment.getJob().getTitle(),
-                ActivityMessages.ASSIGNMENT_CANCELLED, NotificationCategory.APPLICATION_UPDATES);
+                ActivityMessages.ASSIGNMENT_CANCELLED, NotificationCategory.APPLICATION_UPDATES,
+                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
     }
 
     @Override
@@ -118,20 +130,24 @@ public class ActivityNotificationManager implements ActivityNotificationService 
         String jobTitle = assignment.getJob().getTitle();
 
         notify(assignment.getWorker(), jobTitle,
-                ActivityMessages.ASSIGNMENT_EXPIRED_WORKER, NotificationCategory.APPLICATION_UPDATES);
+                ActivityMessages.ASSIGNMENT_EXPIRED_WORKER, NotificationCategory.APPLICATION_UPDATES,
+                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
         notify(employerOf(assignment), jobTitle,
-                ActivityMessages.ASSIGNMENT_EXPIRED_EMPLOYER, NotificationCategory.APPLICATION_UPDATES);
+                ActivityMessages.ASSIGNMENT_EXPIRED_EMPLOYER, NotificationCategory.APPLICATION_UPDATES,
+                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
     }
 
     @Override
     public void reviewReceived(Review review) {
         notify(review.getSubject(), review.getJobAssignment().getJob().getTitle(),
-                ActivityMessages.REVIEW_RECEIVED, NotificationCategory.APPLICATION_UPDATES);
+                ActivityMessages.REVIEW_RECEIVED, NotificationCategory.APPLICATION_UPDATES,
+                NotificationTargetType.JOB_ASSIGNMENT, review.getJobAssignment().getId());
     }
 
     @Override
     public void identityVerified(User user) {
-        notify(user, null, ActivityMessages.IDENTITY_VERIFIED, NotificationCategory.IDENTITY_VERIFICATION);
+        notify(user, null, ActivityMessages.IDENTITY_VERIFIED, NotificationCategory.IDENTITY_VERIFICATION,
+                NotificationTargetType.USER, user.getId());
     }
 
     private User employerOf(JobAssignment assignment) {
@@ -139,14 +155,38 @@ public class ActivityNotificationManager implements ActivityNotificationService 
     }
 
     private void notify(User recipient, String jobTitle, String bodyKey, NotificationCategory category) {
+        notify(recipient, jobTitle, bodyKey, category, null, null);
+    }
+
+    private void notify(User recipient, String jobTitle, String bodyKey, NotificationCategory category,
+                        NotificationTargetType targetType, UUID targetId) {
         if (recipient == null) {
             return;
         }
 
         String message = messageResolver.resolve(bodyKey);
 
+        inApp(recipient, jobTitle, message, category, bodyKey, targetType, targetId);
         push(recipient, jobTitle, message, category, bodyKey);
         email(recipient, jobTitle, message, category, bodyKey);
+    }
+
+    private void inApp(User recipient, String jobTitle, String message, NotificationCategory category,
+                       String bodyKey, NotificationTargetType targetType, UUID targetId) {
+        try {
+            SendInAppDto dto = new SendInAppDto();
+            dto.setRecipient(recipient);
+            dto.setCategory(category);
+            dto.setSubject(jobTitle);
+            dto.setBody(message);
+            dto.setTargetType(targetType);
+            dto.setTargetId(targetId);
+
+            notificationService.sendInApp(dto);
+        } catch (Exception exception) {
+            log.warn("Activity feed entry {} could not be recorded for {}: {}",
+                    bodyKey, recipient.getId(), exception.getMessage());
+        }
     }
 
     private void push(User recipient, String jobTitle, String message,

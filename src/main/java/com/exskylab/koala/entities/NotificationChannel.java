@@ -3,5 +3,6 @@ package com.exskylab.koala.entities;
 public enum NotificationChannel {
     EMAIL,
     SMS,
-    PUSH
+    PUSH,
+    IN_APP
 }

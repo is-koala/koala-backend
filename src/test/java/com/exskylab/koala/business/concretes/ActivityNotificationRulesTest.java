@@ -177,4 +177,40 @@ class ActivityNotificationRulesTest {
         assertDoesNotThrow(() -> manager.assignmentAnswered(orphan));
         verifyNoInteractions(notificationService);
     }
+
+    @Test
+    void everyActivityAlsoLandsInTheInAppFeedExactlyOnce() {
+        JobAssignment assignment = assignment();
+
+        manager.assignmentCompleted(assignment);
+
+        verify(notificationService).sendInApp(argThat(dto -> {
+            assertEquals(assignment.getWorker(), dto.getRecipient());
+            assertEquals(assignment.getJob().getTitle(), dto.getSubject());
+            assertNotNull(dto.getBody());
+            return true;
+        }));
+    }
+
+    @Test
+    void theFeedEntryKnowsWhereTappingShouldGo() {
+        JobAssignment assignment = assignment();
+
+        manager.assignmentCompleted(assignment);
+
+        verify(notificationService).sendInApp(argThat(dto -> {
+            assertEquals(com.exskylab.koala.entities.NotificationTargetType.JOB_ASSIGNMENT, dto.getTargetType());
+            assertEquals(assignment.getId(), dto.getTargetId());
+            return true;
+        }));
+    }
+
+    @Test
+    void aFeedFailureDoesNotStopTheOtherChannels() {
+        doThrow(new RuntimeException("feed down")).when(notificationService).sendInApp(any());
+
+        assertDoesNotThrow(() -> manager.assignmentCompleted(assignment()));
+
+        verify(notificationService).sendEmail(any(), any(), anyBoolean());
+    }
 }

@@ -52,6 +52,16 @@ public class Notification extends BaseEntity{
     @Column(name = "subject")
     private String subject;
 
+    @Column(name = "body", length = 1000)
+    private String body;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "target_type", length = 32)
+    private NotificationTargetType targetType;
+
+    @Column(name = "target_id")
+    private UUID targetId;
+
     @Column(name = "template_name")
     private String templateName;
 
