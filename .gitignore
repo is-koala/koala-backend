@@ -22,7 +22,6 @@ target/
 *.ipr
 
 /graphify-out
-CLAUDE.md
 
 ### NetBeans ###
 /nbproject/private/
