@@ -5,15 +5,16 @@ import com.exskylab.koala.business.abstracts.NotificationService;
 import com.exskylab.koala.core.configs.RabbitMQConfig;
 import com.exskylab.koala.core.producers.notification.EmailTaskDto;
 import com.exskylab.koala.core.properties.AppProperties;
+import com.exskylab.koala.core.properties.EmailDeliveryProperties;
 import com.exskylab.koala.entities.Notification;
 import com.exskylab.koala.entities.NotificationStatus;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.thymeleaf.context.Context;
 import org.thymeleaf.spring6.SpringTemplateEngine;
 
@@ -23,21 +24,24 @@ import java.time.Instant;
 @Slf4j
 public class EmailConsumer {
 
-    private AppProperties appProperties;
+    private final AppProperties appProperties;
+    private final EmailDeliveryProperties deliveryProperties;
     private final NotificationService notificationService;
     private final JavaMailSender javaMailSender;
     private final SpringTemplateEngine templateEngine;
 
-    public EmailConsumer(NotificationService notificationService, JavaMailSender javaMailSender, SpringTemplateEngine templateEngine, AppProperties appProperties) {
+    public EmailConsumer(NotificationService notificationService, JavaMailSender javaMailSender, SpringTemplateEngine templateEngine, AppProperties appProperties, EmailDeliveryProperties deliveryProperties) {
         this.notificationService = notificationService;
         this.javaMailSender = javaMailSender;
         this.templateEngine = templateEngine;
         this.appProperties = appProperties;
+        this.deliveryProperties = deliveryProperties;
     }
 
 
-    @RabbitListener(queues = RabbitMQConfig.EMAIL_QUEUE)
-    @Transactional
+    @RabbitListener(
+            queues = RabbitMQConfig.EMAIL_QUEUE,
+            containerFactory = "emailListenerContainerFactory")
     public void handleEmailTask(EmailTaskDto emailTaskDto){
         log.info("Handling email task for id: {}", emailTaskDto.id());
 
@@ -47,6 +51,29 @@ public class EmailConsumer {
             notification = notificationService.getById(emailTaskDto.id());
         }catch (Exception e){
             log.error("Notification not found to send mail ID: {}. Aborting request.", emailTaskDto.id(), e.getMessage());
+            throw new AmqpRejectAndDontRequeueException(
+                    "Email notification does not exist: " + emailTaskDto.id(), e);
+        }
+
+        if (notification.getSentAt() != null || notification.getStatus() == NotificationStatus.SUPPRESSED) {
+            return;
+        }
+
+        if (notification.getDestinationEmail() == null || emailTaskDto.to() == null
+                || !notification.getDestinationEmail().strip().equalsIgnoreCase(emailTaskDto.to().strip())) {
+            notification.setStatus(NotificationStatus.FAILED);
+            notification.setProcessedAt(Instant.now());
+            notification.setFailureReason("EMAIL_RECIPIENT_MISMATCH");
+            notificationService.save(notification);
+            throw new AmqpRejectAndDontRequeueException("Email task recipient does not match its notification");
+        }
+
+        if (!deliveryProperties.allows(emailTaskDto.to())) {
+            notification.setStatus(NotificationStatus.SUPPRESSED);
+            notification.setProcessedAt(Instant.now());
+            notification.setFailureReason("EMAIL_RECIPIENT_NOT_ALLOWED");
+            notificationService.save(notification);
+            log.info("Email delivery suppressed for notification id: {}", notification.getId());
             return;
         }
 
@@ -69,10 +96,16 @@ public class EmailConsumer {
         }catch (Exception e){
             log.error("Email task could not be sent for id: {}, Error: {}", emailTaskDto.id(), e.getMessage());
             notification.setStatus(NotificationStatus.FAILED);
-            notification.setFailureReason(e.getMessage().substring(0, Math.min(e.getMessage().length(), 255)));
-        }finally {
+            String failureMessage = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+            notification.setFailureReason(failureMessage.substring(0, Math.min(failureMessage.length(), 255)));
             notificationService.save(notification);
+            if (e instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new IllegalStateException("Email delivery failed", e);
         }
+
+        notificationService.save(notification);
 
     }
 

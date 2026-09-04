@@ -5,14 +5,17 @@ import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.annotation.EnableRabbit;
 import org.springframework.amqp.rabbit.config.RetryInterceptorBuilder;
 import org.springframework.amqp.rabbit.config.StatefulRetryOperationsInterceptor;
+import org.springframework.amqp.rabbit.config.StatelessRetryOperationsInterceptor;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.boot.amqp.autoconfigure.SimpleRabbitListenerContainerFactoryConfigurer;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.retry.RejectAndDontRequeueRecoverer;
+import org.springframework.amqp.rabbit.retry.RepublishMessageRecoverer;
 import org.springframework.amqp.support.converter.JacksonJsonMessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 @Configuration
 @EnableRabbit
@@ -22,6 +25,9 @@ public class RabbitMQConfig {
 
     public static final String EMAIL_QUEUE = "email.queue";
     public static final String EMAIL_ROUTING_KEY = "notification.email";
+    public static final String EMAIL_DEAD_LETTER_EXCHANGE = "notification.email.dead-letter.exchange";
+    public static final String EMAIL_DEAD_LETTER_QUEUE = "email.queue.dlq";
+    public static final String EMAIL_DEAD_LETTER_ROUTING_KEY = "notification.email.dead-letter";
 
     public static final String SMS_QUEUE = "sms.queue";
     public static final String SMS_ROUTING_KEY = "notification.sms";
@@ -44,6 +50,23 @@ public class RabbitMQConfig {
     @Bean
     public Queue emailQueue(){
         return QueueBuilder.durable(EMAIL_QUEUE).build();
+    }
+
+    @Bean
+    public DirectExchange emailDeadLetterExchange() {
+        return new DirectExchange(EMAIL_DEAD_LETTER_EXCHANGE);
+    }
+
+    @Bean
+    public Queue emailDeadLetterQueue() {
+        return QueueBuilder.durable(EMAIL_DEAD_LETTER_QUEUE).build();
+    }
+
+    @Bean
+    public Binding emailDeadLetterBinding() {
+        return BindingBuilder.bind(emailDeadLetterQueue())
+                .to(emailDeadLetterExchange())
+                .with(EMAIL_DEAD_LETTER_ROUTING_KEY);
     }
 
     @Bean
@@ -124,6 +147,28 @@ public class RabbitMQConfig {
         return factory;
     }
 
+    @Bean(name = "emailRetryInterceptor")
+    public StatelessRetryOperationsInterceptor emailRetryInterceptor(RabbitTemplate rabbitTemplate) {
+        return RetryInterceptorBuilder.stateless()
+                .maxRetries(2)
+                .backOffOptions(1000, 2.0, 5000)
+                .recoverer(new RepublishMessageRecoverer(rabbitTemplate,
+                        EMAIL_DEAD_LETTER_EXCHANGE, EMAIL_DEAD_LETTER_ROUTING_KEY))
+                .build();
+    }
+
+    @Bean(name = "emailListenerContainerFactory")
+    public SimpleRabbitListenerContainerFactory emailListenerContainerFactory(
+            SimpleRabbitListenerContainerFactoryConfigurer configurer,
+            ConnectionFactory connectionFactory,
+            @Qualifier("emailRetryInterceptor") StatelessRetryOperationsInterceptor emailRetryInterceptor) {
+        SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
+        configurer.configure(factory, connectionFactory);
+        factory.setMessageConverter(messageConverter());
+        factory.setAdviceChain(emailRetryInterceptor);
+        return factory;
+    }
+
 
     @Bean(name = "iyzicoRetryInterceptor")
     public StatefulRetryOperationsInterceptor iyzicoRetryInterceptor() {
@@ -138,7 +183,7 @@ public class RabbitMQConfig {
     public SimpleRabbitListenerContainerFactory iyzicoListenerContainerFactory(
             SimpleRabbitListenerContainerFactoryConfigurer configurer,
             ConnectionFactory connectionFactory,
-            StatefulRetryOperationsInterceptor iyzicoRetryInterceptor) {
+            @Qualifier("iyzicoRetryInterceptor") StatefulRetryOperationsInterceptor iyzicoRetryInterceptor) {
 
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(factory, connectionFactory);

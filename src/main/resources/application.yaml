@@ -117,6 +117,11 @@ app:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
 
+email:
+  delivery:
+    mode: ${MAIL_DELIVERY_MODE:ALLOWLIST}
+    allowed-recipients: ${MAIL_ALLOWED_RECIPIENTS:}
+
 jwt:
   secret: ${JWT_SECRET:}
   access-token:
