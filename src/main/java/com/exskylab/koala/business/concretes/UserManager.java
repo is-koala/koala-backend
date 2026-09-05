@@ -5,6 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.helpers.LogMasks;
 
 import com.exskylab.koala.business.abstracts.*;
+import com.exskylab.koala.core.constants.AdminMessages;
+import com.exskylab.koala.core.constants.SystemUser;
 import com.exskylab.koala.core.constants.UserMessages;
 import com.exskylab.koala.core.dtos.address.request.AddressWriteDto;
 import com.exskylab.koala.core.dtos.address.response.AddressDto;
@@ -39,6 +41,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -549,5 +552,85 @@ public class UserManager implements UserService {
     @Transactional(readOnly = true)
     public User getReference(UUID id) {
         return userDao.getReferenceById(id);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UserDao.RoleGrantView> getRoleGrants(UUID userId) {
+        return userDao.findRoleGrants(getById(userId).getId());
+    }
+
+    @Override
+    @Transactional
+    public List<UserDao.RoleGrantView> grantRole(UUID userId, Role role) {
+        User target = getById(userId);
+        rejectSystemUser(target);
+
+        if (target.getAuthorities().contains(role)) {
+            log.info("Role {} already present on user {}, nothing written.", role, target.getId());
+            return userDao.findRoleGrants(target.getId());
+        }
+
+        UUID grantedById = securityService.getAuthenticatedUserId();
+        addRole(target, role);
+        userDao.stampRoleGrant(target.getId(), role.name(), Instant.now(), grantedById);
+        log.info("Role {} granted to user {} by {}", role, target.getId(), grantedById);
+
+        return userDao.findRoleGrants(target.getId());
+    }
+
+    @Override
+    @Transactional
+    public void revokeRole(UUID userId, Role role) {
+        User target = getById(userId);
+        rejectSystemUser(target);
+
+        if (role == Role.ROLE_USER) {
+            throw new ConflictException(AdminMessages.MEMBERSHIP_ROLE_PROTECTED);
+        }
+
+        if (!target.getAuthorities().contains(role)) {
+            return;
+        }
+
+        if (role == Role.ROLE_ADMIN) {
+            if (target.getId().equals(securityService.getAuthenticatedUserId())) {
+                throw new ConflictException(AdminMessages.OWN_ADMIN_ROLE_PROTECTED);
+            }
+            if (userDao.countUsersWithRole(Role.ROLE_ADMIN.name()) <= 1) {
+                throw new ConflictException(AdminMessages.LAST_ADMIN_ROLE_PROTECTED);
+            }
+        }
+
+        target.getAuthorities().remove(role);
+        userDao.saveAndFlush(target);
+        log.info("Role {} revoked from user {}", role, target.getId());
+    }
+
+    @Override
+    @Transactional
+    public boolean bootstrapAdminRole(String email) {
+        User target = getByEmail(email);
+
+        if (target.getAuthorities().contains(Role.ROLE_ADMIN)) {
+            return false;
+        }
+
+        addRole(target, Role.ROLE_ADMIN);
+        userDao.stampRoleGrantTime(target.getId(), Role.ROLE_ADMIN.name(), Instant.now());
+        log.info("Bootstrap granted ROLE_ADMIN to user {}", target.getId());
+
+        return true;
+    }
+
+    private void addRole(User target, Role role) {
+        target.getAuthorities().add(role);
+        userDao.saveAndFlush(target);
+    }
+
+    private void rejectSystemUser(User target) {
+        if (SystemUser.ID.equals(target.getId())) {
+            throw new ConflictException(AdminMessages.SYSTEM_USER_ROLES_PROTECTED);
+        }
     }
 }
