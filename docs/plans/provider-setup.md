@@ -1,6 +1,8 @@
 # Google ve QA kurulum hazırlığı
 
-Durum: Hazırlık aracı üretildi ve statik olarak kontrol edildi; sağlayıcı kurulumu, mail gönderimi veya simülatör doğrulaması yapılmış değildir.
+Durum: iOS staging haritası gerçek tile ile doğrulandı. Backend Places/Geocoding
+anahtarı henüz hazır değildir; adres yardımını açmadan önce aşağıdaki sunucu
+anahtarı kabul kapısı tamamlanmalıdır.
 
 ## Bugünkü kurulum
 
@@ -21,6 +23,27 @@ QA adresleri kullanıcı tarafından verildi: ilk adres işveren, ikinci adres i
 
 Wizard gerçek anahtar değerlerini çıktılamaz; anahtarların var olması yetkili olduklarını kanıtlamaz. Doğru bundle ile build ve gerçek harita görüntüsü kabul testidir. Hiçbir adım veritabanını silmez, Dokploy deploy'u veya GitHub secret yazımı yapmaz; mevcut CI bu Maps değişkenlerini tüketmediği için gereksiz CI secret'ları oluşturulmaz.
 
+## Backend adres servisi kabul kapısı
+
+5 Eylül 2026'da mevcut staging iOS anahtarı, değeri loglanmadan iki web-service
+ucunda denendi. Places API (New) `PERMISSION_DENIED`, Geocoding API ise billing
+etkin olmadığı için `REQUEST_DENIED` döndürdü. Bu anahtar backend'e taşınmaz.
+
+Google Cloud'da ayrı bir sunucu anahtarı oluşturulmalı:
+
+1. Projede billing etkinleştirilir; Places API (New) ve Geocoding API açılır.
+2. Anahtarın API restrictions listesi yalnız bu iki API ile sınırlandırılır.
+3. Dokploy'un sabit çıkış IP'si varsa application restriction olarak bu IP/CIDR
+   kullanılır. Sabit IP yoksa egress sabitlenmeden özellik production'a açılmaz.
+4. Günlük kota ve bütçe alarmı tanımlanır.
+5. Anahtar yalnız Dokploy secret ortamında `GOOGLE_PLACES_API_KEY` olarak tutulur;
+   Git, mobil binary, issue, PR ve loglara yazılmaz.
+6. Anahtar iki dar sağlık isteğiyle doğrulandıktan sonra
+   `ADDRESS_SEARCH_ENABLED=true` yapılır.
+
+Bu kapı kapanmazsa canonical adres formu yine manuel yapılandırılmış alan + pin
+ile çalışır; autocomplete ve ters geocoding kullanıcıya kapalı tutulur.
+
 Lansman reseti farklı bir prosedürdür. Bu hazırlık aracı o işlemi içermez.
 
 ## Doğrulama
@@ -28,7 +51,9 @@ Lansman reseti farklı bir prosedürdür. Bu hazırlık aracı o işlemi içerme
 - Bash sözdizimi kontrolü geçti.
 - Wizard kütüphanesi skill şablonuyla birebir aynı bırakıldı.
 - Yerel QA dosyasının Git tarafından dışlandığı ve tracked olmadığı doğrulandı.
-- Etkileşimli kurulum uçtan uca çalıştırılmadı.
+- iOS staging build'i ve bir simülatörde İstanbul harita tile'ları doğrulandı.
+- Backend web-service kabul testi çalıştırıldı ve yukarıdaki yetki/billing
+  eksikliği nedeniyle özellik kapalı bırakıldı.
 - ShellCheck bu makinede bulunmadığından çalıştırılmadı.
 
 ## Kaynaklar
