@@ -1,6 +1,8 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.DeviceService;
+import com.exskylab.koala.business.abstracts.NotificationPreferenceService;
+import com.exskylab.koala.business.abstracts.UnsubscribeTokenService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.dtos.notification.request.SendInAppDto;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
@@ -9,6 +11,7 @@ import com.exskylab.koala.dataAccess.NotificationDao;
 import com.exskylab.koala.entities.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -39,9 +42,12 @@ class NotificationFeedRulesTest {
         when(security.getAuthenticatedUserId()).thenReturn(me.getId());
         when(security.getSystemUser()).thenReturn(me);
 
+        NotificationPreferenceService preferences = mock(NotificationPreferenceService.class);
+        when(preferences.isAllowed(any(), any(), any())).thenReturn(true);
+
         manager = new NotificationManager(notificationDao, mock(NotificationProducerService.class),
-                mock(DeviceService.class), new tools.jackson.databind.ObjectMapper(),
-                security, new PageableSanitizer());
+                mock(DeviceService.class), new ObjectMapper(),
+                security, new PageableSanitizer(), preferences, mock(UnsubscribeTokenService.class));
 
         when(notificationDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(notificationDao.findAllByRecipientIdAndChannelOrderByCreatedAtDesc(any(), any(), any()))

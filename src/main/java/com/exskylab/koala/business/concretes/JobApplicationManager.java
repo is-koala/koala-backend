@@ -10,6 +10,7 @@ import com.exskylab.koala.core.dtos.jobApplication.request.CreateJobApplicationD
 import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationDetailDto;
 import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicantDto;
 import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationDto;
+import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.mappers.JobApplicationMapper;
@@ -82,7 +83,8 @@ public class JobApplicationManager implements JobApplicationService {
             throw new ValidationException(JobApplicationMessages.USER_CANNOT_APPLY_TO_OWN_JOB);
         }
 
-        if (jobApplicationDao.existsByJobIdAndUserId(jobId, authenticatedUser.getId())) {
+        if (jobApplicationDao.existsByJobIdAndUserIdAndStatusNot(jobId, authenticatedUser.getId(),
+                ApplicationStatus.WITHDRAWN)) {
             throw new ValidationException(JobApplicationMessages.USER_ALREADY_APPLIED_TO_JOB);
         }
 
@@ -150,6 +152,11 @@ public class JobApplicationManager implements JobApplicationService {
         });
 
 
+        if (jobApplication.getStatus() == ApplicationStatus.WITHDRAWN) {
+            log.error("Job application with id: {} has been withdrawn by its applicant", applicationId);
+            throw new ConflictException(JobApplicationMessages.JOB_APPLICATION_ALREADY_WITHDRAWN);
+        }
+
         if (jobApplication.getStatus() == ApplicationStatus.ACCEPTED || jobApplication.getStatus() == ApplicationStatus.REJECTED) {
             log.error("Job application with id: {} has already been responded to", applicationId);
             throw new ValidationException(JobApplicationMessages.JOB_APPLICATION_ALREADY_RESPONDED);
@@ -194,6 +201,39 @@ public class JobApplicationManager implements JobApplicationService {
 
         return jobApplicationMapper.toJobApplicationsApplicationIdPatchResponseDto(jobApplication);
 
+    }
+
+    @Override
+    @Transactional
+    public JobApplicationDetailDto withdrawApplication(UUID applicationId) {
+        log.info("Withdrawing application with id: {}", applicationId);
+
+        JobApplication jobApplication = jobApplicationDao.findById(applicationId).orElseThrow(() -> {
+            log.error("Job application with id: {} not found", applicationId);
+            return new ResourceNotFoundException(JobApplicationMessages.JOB_APPLICATION_NOT_FOUND);
+        });
+
+        UUID authenticatedUserId = securityService.getAuthenticatedUserId();
+        if (!jobApplication.getUser().getId().equals(authenticatedUserId)) {
+            log.warn("User with id: {} is not the owner of application with id: {}",
+                    authenticatedUserId, applicationId);
+            throw new ResourceNotFoundException(JobApplicationMessages.JOB_APPLICATION_NOT_FOUND);
+        }
+
+        if (jobApplication.getStatus() != ApplicationStatus.APPLIED) {
+            log.error("Job application with id: {} is not withdrawable in status: {}",
+                    applicationId, jobApplication.getStatus());
+            throw new ConflictException(JobApplicationMessages.JOB_APPLICATION_NOT_WITHDRAWABLE);
+        }
+
+        jobApplication.setStatus(ApplicationStatus.WITHDRAWN);
+        jobApplication.setAnsweredDateTime(Instant.now());
+        jobApplicationDao.save(jobApplication);
+        log.info("Job application with id: {} withdrawn", applicationId);
+
+        activityNotificationService.applicationWithdrawn(jobApplication);
+
+        return jobApplicationMapper.toJobApplicationsApplicationIdPatchResponseDto(jobApplication);
     }
 
     private void assertReadyToWork(User applicant) {

@@ -58,6 +58,10 @@
                             <div style='font-family: "DM Sans", sans-serif; font-size: 14px; color: #1F1F1F; line-height: 1.5; margin: 0 0 20px 0;'>
                                 YTÜ Teknopark Davutpaşa Kampüsü<br> İstanbul, Türkiye
                             </div>
+                            <div th:if="${unsubscribeUrl != null}" style='font-family: "DM Sans", sans-serif; font-size: 12px; color: #6B6B6B; line-height: 1.5;'>
+                                Bu tür e-postaları almak istemiyorsan
+                                <a th:href="${unsubscribeUrl}" href="#" target="_blank" style="color: #6B6B6B; text-decoration: underline;">tek tıkla çıkabilirsin</a>.
+                            </div>
                         </td>
                     </tr>
 

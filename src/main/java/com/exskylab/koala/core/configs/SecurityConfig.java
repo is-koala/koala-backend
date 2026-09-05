@@ -74,6 +74,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/companies/{companyId}/images/{imageId}").hasAnyRole("USER", "ADMIN")
 
                         //admin endpoints
+                        .requestMatchers(HttpMethod.GET, "/admin/users/{userId}/roles").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/admin/users/{userId}/roles").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/admin/users/{userId}/roles/{role}").hasRole("ADMIN")
                         .requestMatchers("/admin/**").hasRole("ADMIN")
 
                         //image endpoints
@@ -100,6 +103,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/users/me/notifications").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/users/me/notifications/read").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/users/me/notifications/{notificationId}/read").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/users/me/notification-preferences").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/users/me/notification-preferences").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/notification-preferences/unsubscribe").permitAll()
                         .requestMatchers(HttpMethod.GET, "/users/me/work").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/users/me/devices/push-token").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/users/me/devices/push-token").hasAnyRole("USER", "ADMIN")
@@ -148,6 +154,7 @@ public class SecurityConfig {
 
                         //job-application endpoints
                         .requestMatchers(HttpMethod.POST, "/job-applications/{applicationId}/respond").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/job-applications/{applicationId}/withdraw").hasAnyRole("USER", "ADMIN")
 
 
 

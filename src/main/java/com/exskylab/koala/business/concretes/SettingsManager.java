@@ -24,6 +24,9 @@ public class SettingsManager implements SettingsService {
 
     private static final Set<String> KNOWN_KEYS = knownKeys();
 
+    private static final Set<String> RATE_KEYS = Set.of(
+            SettingKeys.COMMISSION_RATE, SettingKeys.CANCELLATION_LATE_FEE_RATE);
+
     private final AppSettingDao appSettingDao;
 
     public SettingsManager(AppSettingDao appSettingDao) {
@@ -93,6 +96,11 @@ public class SettingsManager implements SettingsService {
             }
         } else if (!value.trim().matches("-?\\d+(\\.\\d+)?")) {
             throw new ValidationException(SettingMessages.VALUE_NOT_NUMERIC);
+        } else if (RATE_KEYS.contains(key)) {
+            BigDecimal rate = new BigDecimal(value.trim());
+            if (rate.signum() < 0 || rate.compareTo(BigDecimal.ONE) > 0) {
+                throw new ValidationException(SettingMessages.VALUE_OUT_OF_RANGE);
+            }
         }
 
         AppSetting setting = appSettingDao.findByKey(key).orElseGet(() -> {

@@ -1,6 +1,7 @@
 package com.exskylab.koala.core.configs;
 
 import com.exskylab.koala.business.abstracts.SecurityService;
+import com.exskylab.koala.core.constants.SystemUser;
 import com.exskylab.koala.dataAccess.UserDao;
 import com.exskylab.koala.entities.User;
 import org.springframework.context.annotation.Bean;
@@ -12,8 +13,6 @@ import java.util.UUID;
 
 @Configuration
 public class AuditorAwareImpl implements AuditorAware<User> {
-
-    private static final UUID SYSTEM_USER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
 
     private final SecurityService securityService;
     private final UserDao userDao;
@@ -29,7 +28,7 @@ public class AuditorAwareImpl implements AuditorAware<User> {
         try {
             auditorId = securityService.getAuthenticatedUserId();
         } catch (RuntimeException e) {
-            auditorId = SYSTEM_USER_ID;
+            auditorId = SystemUser.ID;
         }
         return Optional.of(userDao.getReferenceById(auditorId));
     }

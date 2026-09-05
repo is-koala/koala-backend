@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.helpers;
 
+import com.exskylab.koala.support.FallbackSettings;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.properties.CommissionProperties;
 import org.junit.jupiter.api.Test;
@@ -14,7 +15,7 @@ class CommissionCalculatorTest {
     private CommissionCalculator calculatorWithRate(String rate) {
         CommissionProperties properties = new CommissionProperties();
         properties.setRate(new BigDecimal(rate));
-        return new CommissionCalculator(properties);
+        return FallbackSettings.commissionCalculator(properties);
     }
 
     private final CommissionCalculator calculator = calculatorWithRate("0.075");
