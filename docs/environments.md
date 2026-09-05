@@ -26,6 +26,11 @@ ve sağlayıcı kaynaklarıyla çalıştırır.
 - `MAIL_DELIVERY_MODE=ALLOWLIST`; allowlist dışındaki teslimat reddedilir
 - DB, RabbitMQ, S3 ve Google anahtarları production ile ortak olamaz
 
+`SERVICE_ENVIRONMENT` ile `IYZICO_BASE_URL` artık açılışta karşılıklı
+doğrulanıyor: staging canlı Iyzico ortamına, production sandbox'a bağlanamaz ve
+eşleşmeyen yapılandırmada uygulama hiç açılmaz. Kural ve operasyon adımları
+`docs/runbooks/payments.md` içinde.
+
 Staging web `X-Robots-Tag: noindex, nofollow, noarchive` ile tümden kapatılır ve
 Dokploy proxy katmanında HTTP Basic Auth arkasında tutulur. Parola ve anahtarlar
 yalnız Dokploy secret store'da yaşar; issue, log veya repoya yazılmaz.
