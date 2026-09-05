@@ -20,7 +20,7 @@ Durum: Q23–Q37 kararları ve uygulama/test sınırları kullanıcı tarafında
 6. Bireysel işveren olarak şirket kurmadan kendi adıma ilan yayımlamak istiyorum.
 7. Şirket işvereni olarak yetkili olduğum şirket adına ilan yayımlamak istiyorum.
 8. İş arayan olarak başvuru önkoşullarındaki eksikleri görmek ve ilgili profile dönerek tamamlamak istiyorum.
-9. Test yapan kişi olarak İstanbul'da 100'den fazla ilişkili kayıt görmek istiyorum; böylece boş ekranlarla sınırlı kalmayayım.
+9. Test yapan kişi olarak kayıtları kendi oluşturduğum gerçek akışla görmek istiyorum; ekranlar başlangıçta boştur (ADR-0008).
 10. Test yapan kişi olarak her şirketin sahibi/yetkilisi, ilanı ve ilgili kullanıcı ilişkileri bulunmasını istiyorum.
 11. Kullanıcı olarak şirket ve ilan listeleri ile detaylarının aynı backend kayıtlarını göstermesini istiyorum.
 12. Kullanıcı olarak Google harita karolarını ve ilanın izin verilen konumunu görmek istiyorum.
@@ -51,8 +51,7 @@ Durum: Q23–Q37 kararları ve uygulama/test sınırları kullanıcı tarafında
 - Mobil kimlikler production için `com.iskoala.koala`, staging için `com.iskoala.koala.staging`, dev için `com.iskoala.koala.dev` olur. Staging mevcut internet API'sine, dev açıkça seçilen yerel backend'e bağlanır. Ortam eksikliği sessiz internet API varsayımına dönüşmez.
 - İşveren ve iş arayan QA adresleri kullanıcı tarafından sağlandı; ilk adres işveren, ikinci adres iş arayan içindir. Adresler ve şifreler sürüm kontrollü doküman, kaynak kod veya mobil build'e gömülmez.
 - Gerçek SMTP yalnız iki kontrollü QA alıcısına teslimat yapar. Diğer sentetik alıcıların gönderimleri SMTP'ye ulaşmadan engellenir; gönderilmeyen ileti başarılı teslimat gibi işaretlenmez. Mailpit kullanılmaz.
-- Mevcut seed'in 150 kullanıcı, 30 şirket, 180 ilan hedefi korunur; bütün şirketler kullanıcı hesabına bağlıdır. Normal API ve gerçek tablolar kullanılır. Şirket işvereni ve bireysel işveren ayrımı korunur.
-- Seed sürümlü, idempotent ve açıkça çalıştırılan tek seferlik işlemdir. Tekrar çalıştırma manuel testte ilerletilmiş kayıtları yeniden başlangıca çekmez. Normal backend açılışı seed çalıştırmaz. Q36-C gereği kayıt başına `testData` veya `seedRunId` eklenmez; reset yalnız test veritabanı bütününde, ayrı ve doğrulanmış operasyondur.
+- Örnek veri paketi kaldırılmıştır ([ADR-0008](../adr/0008-ship-an-empty-database-without-sample-data.md)). Veritabanı yalnız referans verisiyle gelir; test hesapları gerçek kayıt akışıyla oluşturulur. Kayıt başına `testData` veya `seedRunId` eklenmez; reset yalnız test veritabanı bütününde, ayrı ve doğrulanmış operasyondur.
 - Sentetik finansal/provider kimlikleri gerçek Iyzico çağrısına gönderilmez. Ödeme başarısı ve para hareketi yalnız gerçek Sandbox yanıtıyla oluşur. Mevcut doğrudan seed edilen finansal kayıtların nasıl kaldırılacağı/yenileneceği veri paketinin kabul ölçütüdür; tüm durum matrisi sağlayıcı testlerinin kanıtından ayrı tutulur.
 - Runtime demo girişleri, hardcoded hesaplar, fake servis veya test API'si bulunmaz. Test doubles sadece test katmanında kalır.
 - Google anahtarları ortam × iOS/Android/backend bazında ayrılır. Backend servis anahtarı mobil uygulamaya verilmez. Eksik veya placeholder iOS anahtarı giderilmeden beyaz harita düzelmiş sayılmaz.

@@ -5,6 +5,6 @@ Koala henüz gerçek kullanıcılara açılmadığı için mevcut Dokploy uygula
 ## Sonuçlar
 
 - Günlük testler gerçek Koala API'si ve PostgreSQL, gerçek SMTP ile yalnız iki kontrollü alıcı ve Iyzico Sandbox kullanır.
-- Seed sürümlü ve idempotent tek seferlik bir işlemdir; normal uygulama açılışında çalışmaz. Seçici seed silme yerine açıkça hedeflenmiş test veritabanı reseti kullanılır.
+- ~~Seed sürümlü ve idempotent tek seferlik bir işlemdir; normal uygulama açılışında çalışmaz.~~ Bu madde ADR-0008 ile geçersizdir: seed tamamen kaldırılmıştır, veritabanı yalnız referans verisiyle gelir. Seçici seed silme yerine açıkça hedeflenmiş test veritabanı reseti kullanılır.
 - Lansman reseti bugün çalıştırılmaz. Çalıştırılacağı anda hedef veritabanı doğrulanır, geri alınabilir yedek hazırlanır; eski kuyruk mesajları, medya ve oturumların temiz production verisine taşınmaması geçiş planında ele alınır.
 - Lansman sonrasında geniş sentetik veriyle yapılan testler tekrar production üzerinde yürütülmez; ayrı test altyapısı o dönemin işidir. Production kontrolleri ADR-0005 kapsamındadır.
