@@ -237,6 +237,7 @@ class LegalConsentTest {
         assertFalse(legalManager.processDeletionRequest(request.getId()));
         assertEquals(AccountDeletionStatus.REQUESTED, request.getStatus());
         assertEquals(LegalMessages.DELETION_BLOCKED_BY_DISPUTE, request.getBlockedReason());
+        assertTrue(request.getNextAttemptAt().isAfter(Instant.now()));
         verifyNoInteractions(accountAnonymizer);
     }
 

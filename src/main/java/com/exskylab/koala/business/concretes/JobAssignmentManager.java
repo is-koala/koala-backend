@@ -21,6 +21,7 @@ import com.exskylab.koala.core.properties.AppProperties;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.mappers.JobAssignmentMapper;
+import com.exskylab.koala.core.monitoring.PaymentMetrics;
 import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.*;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
@@ -33,6 +34,7 @@ import org.springframework.data.domain.Sort;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.business.abstracts.BadgeService;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
+import com.exskylab.koala.core.helpers.JobAddressVisibility;
 import com.exskylab.koala.entities.CancellationParty;
 import java.time.Instant;
 import com.exskylab.koala.business.abstracts.PayoutService;
@@ -85,6 +87,8 @@ public class JobAssignmentManager implements JobAssignmentService {
     private final GalleryService galleryService;
     private final ActivityNotificationService activityNotificationService;
     private final ApplicationEventPublisher eventPublisher;
+    private final PaymentMetrics paymentMetrics;
+    private final JobAddressVisibility addressVisibility = new JobAddressVisibility();
 
 
     public JobAssignmentManager(JobAssignmentDao jobAssignmentDao, SecurityService securityService, JobAssignmentMapper jobAssignmentMapper, IyzicoPaymentService iyzicoPaymentService, CompanyContactService companyContactService, UserService userService,
@@ -97,7 +101,7 @@ public class JobAssignmentManager implements JobAssignmentService {
                                UnpaidExpiryProperties unpaidExpiryProperties,
                                SettingsService settingsService, GalleryService galleryService,
                                ActivityNotificationService activityNotificationService,
-                               ApplicationEventPublisher eventPublisher) {
+                               ApplicationEventPublisher eventPublisher, PaymentMetrics paymentMetrics) {
         this.jobAssignmentDao = jobAssignmentDao;
         this.securityService = securityService;
         this.jobAssignmentMapper = jobAssignmentMapper;
@@ -119,6 +123,7 @@ public class JobAssignmentManager implements JobAssignmentService {
         this.galleryService = galleryService;
         this.activityNotificationService = activityNotificationService;
         this.eventPublisher = eventPublisher;
+        this.paymentMetrics = paymentMetrics;
     }
 
 
@@ -259,8 +264,20 @@ public class JobAssignmentManager implements JobAssignmentService {
         basketItem.setSubMerchantPrice(breakdown.workerPayout());
         iyzicoRequest.setBasketItems(List.of(basketItem));
 
-        PaymentSessionResponseDto paymentSession = iyzicoPaymentService.initiateCheckoutFormPayment(iyzicoRequest);
-        paymentService.attachProviderToken(payment, paymentSession.getToken());
+        PaymentSessionResponseDto paymentSession;
+        try {
+            paymentSession = iyzicoPaymentService.initiateCheckoutFormPayment(iyzicoRequest);
+        } catch (RuntimeException exception) {
+            paymentMetrics.initiationProviderError();
+            throw exception;
+        }
+        try {
+            paymentService.attachProviderToken(payment, paymentSession.getToken());
+        } catch (RuntimeException exception) {
+            paymentMetrics.initiationPersistenceError();
+            throw exception;
+        }
+        paymentMetrics.initiationSucceeded();
 
         log.info("Payment session initiated for job assignment with id {} and payment {}", assignmentId, payment.getId());
         PaymentSessionDto response = jobAssignmentMapper
@@ -376,8 +393,13 @@ public class JobAssignmentManager implements JobAssignmentService {
                 ? jobAssignmentDao.findAllByJobCreatorId(userId, pageable)
                 : jobAssignmentDao.findAllByWorkerId(userId, pageable);
 
-        PageDto<MyAssignmentDto> result = PageDto.of(page,
-                jobAssignmentMapper.toMyAssignmentDtoList(page.getContent()));
+        List<MyAssignmentDto> summaries = page.getContent().stream().map(assignment -> {
+            MyAssignmentDto dto = jobAssignmentMapper.toMyAssignmentDto(assignment);
+            boolean activeWorker = !asEmployer && LIVE_ASSIGNMENT_STATUSES.contains(assignment.getStatus());
+            addressVisibility.protect(assignment.getJob(), dto.job(), userId, activeWorker);
+            return dto;
+        }).toList();
+        PageDto<MyAssignmentDto> result = PageDto.of(page, summaries);
         galleryService.fillJobCovers(result.content().stream().map(MyAssignmentDto::job).toList());
         return result;
     }

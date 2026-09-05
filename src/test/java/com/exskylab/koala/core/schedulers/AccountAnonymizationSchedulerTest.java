@@ -25,12 +25,12 @@ class AccountAnonymizationSchedulerTest {
         LegalService legalService = mock(LegalService.class);
         AccountDeletionProperties properties = properties(true);
         UUID requestId = UUID.randomUUID();
-        when(legalService.findDueDeletionRequestIds(any(), any())).thenReturn(List.of(requestId));
+        when(legalService.findDueDeletionRequestIds(any(), any(), any())).thenReturn(List.of(requestId));
 
         new AccountAnonymizationScheduler(legalService, properties).processDueRequests();
 
         ArgumentCaptor<Instant> cutoff = ArgumentCaptor.forClass(Instant.class);
-        verify(legalService).findDueDeletionRequestIds(cutoff.capture(), any(Pageable.class));
+        verify(legalService).findDueDeletionRequestIds(cutoff.capture(), any(), any(Pageable.class));
         assertTrue(cutoff.getValue().isBefore(Instant.now().minus(Duration.ofDays(29))));
         verify(legalService).processDeletionRequest(requestId);
     }
@@ -41,7 +41,7 @@ class AccountAnonymizationSchedulerTest {
 
         new AccountAnonymizationScheduler(legalService, properties(false)).processDueRequests();
 
-        verify(legalService, never()).findDueDeletionRequestIds(any(), any());
+        verify(legalService, never()).findDueDeletionRequestIds(any(), any(), any());
     }
 
     private AccountDeletionProperties properties(boolean enabled) {

@@ -15,7 +15,9 @@ This inventory records logical names and controls only. It must never contain a 
 | GOOGLE_KEY_07_IOS_MAPS_DEV | iOS Maps SDK | Development | Development mobile build secret store | Development bundle identifier; only Maps SDK for iOS | Mobile | Doğrulanmadı |
 | GOOGLE_KEY_08_IOS_MAPS_STAGING | iOS Maps SDK | Staging | Staging mobile build secret store | Staging bundle identifier; only Maps SDK for iOS | Mobile | Doğrulanmadı |
 | GOOGLE_KEY_09_IOS_MAPS_PROD | iOS Maps SDK | Production | Production mobile build secret store | Production bundle identifier; only Maps SDK for iOS | Mobile release | Doğrulanmadı |
-| GOOGLE_KEY_10_WEB_MAPS_PROD | Maps JavaScript | Production | Production web build secret store | Exact HTTPS referrers; only Maps JavaScript API | Web | Doğrulanmadı |
+| GOOGLE_KEY_10_WEB_MAPS_DEV | Maps JavaScript | Development | Development web build secret store | Exact local development origins; only Maps JavaScript API | Web | Doğrulanmadı |
+| GOOGLE_KEY_11_WEB_MAPS_STAGING | Maps JavaScript | Staging | Staging web build secret store | Exact staging HTTPS referrers; only Maps JavaScript API | Web | Doğrulanmadı |
+| GOOGLE_KEY_12_WEB_MAPS_PROD | Maps JavaScript | Production | Production web build secret store | Exact production HTTPS referrers; only Maps JavaScript API | Web release | Doğrulanmadı |
 
 ### ADR-0007 binary control
 
@@ -26,6 +28,7 @@ Mobile/web Maps keys are public identifiers that may enter their intended client
 | Logical name | Purpose | Environments | Storage | Restriction | Owner | Last rotation |
 | --- | --- | --- | --- | --- | --- | --- |
 | `DB_PASSWORD` | Application database login | dev/staging/prod | Application secret store | Per-environment restricted database role | Platform | Doğrulanmadı |
+| `POSTGRES_PASSWORD` | PostgreSQL container administrator login | local/staging/prod where self-hosted | Infrastructure secret store | Database bootstrap only; never exposed to application runtime | Platform database | Doğrulanmadı |
 | `RABBITMQ_PASSWORD` | Queue broker login | dev/staging/prod | Application secret store | Per vhost/environment | Platform | Doğrulanmadı |
 | `JWT_SECRET` | Access-token signing | staging/prod | Application secret store | Backend runtime only | Backend security | Doğrulanmadı |
 | `KEYCLOAK_CLIENT_SECRET` | Admin staff OIDC client | staging/prod when enabled | Identity secret store | Confidential client and exact redirects | Identity | Doğrulanmadı |
@@ -33,11 +36,19 @@ Mobile/web Maps keys are public identifiers that may enter their intended client
 | `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY` | Media object access | staging/prod | Media secret store | Media bucket prefix only | Platform | Doğrulanmadı |
 | `BACKUP_ACCESS_KEY`, `BACKUP_SECRET_KEY` | Backup object access | staging/prod | Backup runner secret store | Separate principal; backup bucket only | Platform | Doğrulanmadı |
 | `BACKUP_KMS_KEY_ID` | Backup encryption key alias | staging/prod | Backup runner configuration | Decrypt limited to recovery role | Platform security | Doğrulanmadı |
+| `BACKUP_DATABASE_URL`, `RESTORE_DATABASE_URL` | Backup and recovery database credentials | staging/prod/recovery | Backup and recovery secret stores | Backup role has replication/read scope; restore role is isolated from application runtime | Platform database | Doğrulanmadı |
 | `MAIL_USERNAME`, `MAIL_PASSWORD` | Transactional email | staging/prod | Mail secret store | Per-environment sender | Backend | Doğrulanmadı |
 | `SMS_API_KEY`, `SMS_API_HASH` | Transactional SMS | staging/prod | Messaging secret store | Per-environment/provider scope | Backend | Doğrulanmadı |
 | `SENTRY_DSN`, `SENTRY_AUTH_TOKEN` | Error ingestion/release upload | staging/prod | Runtime/CI secret stores | DSN per project; auth token CI only | Platform | Doğrulanmadı |
-| `APPLE_CONNECT_API_KEY`, `APPLE_CONNECT_PRIVATE_KEY` | iOS release upload | production release | Mobile CI secret store | Upload scope only | Mobile release | Doğrulanmadı |
+| `KOALA_ANDROID_KEYSTORE_BASE64` | Android upload keystore | production release | Mobile CI secret store | Release workflow only; repository environments require approval | Mobile release | Doğrulanmadı |
+| `KOALA_ANDROID_KEYSTORE_PASSWORD`, `KOALA_ANDROID_KEY_PASSWORD` | Android keystore and upload-key passwords | production release | Mobile CI secret store | Release workflow only; rotate with the upload key | Mobile release | Doğrulanmadı |
+| `KOALA_ANDROID_KEY_ALIAS` | Android upload-key alias | production release | Mobile CI secret store | Release workflow only; scoped to the production keystore | Mobile release | Doğrulanmadı |
+| `KOALA_ANDROID_MAPS_API_KEY_PRODUCTION` | CI alias of `GOOGLE_KEY_06_ANDROID_MAPS_PROD` | production release | Mobile CI secret store | Production package and Play signing SHA-1; only Maps SDK for Android | Mobile release | Doğrulanmadı |
 | `PLAY_SERVICE_ACCOUNT_JSON` | Android release upload | production release | Mobile CI secret store | Play upload role only | Mobile release | Doğrulanmadı |
+| `APPLE_DISTRIBUTION_CERTIFICATE_BASE64`, `APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD` | iOS distribution signing certificate | production release | Mobile CI secret store | Release workflow only; certificate and password rotate together before expiry | Mobile release | Doğrulanmadı |
+| `APPLE_PROVISIONING_PROFILE_BASE64`, `APPLE_TEAM_ID` | iOS App Store provisioning | production release | Mobile CI secret store | Production application identifier only; profile renewed before expiry | Mobile release | Doğrulanmadı |
+| `APP_STORE_CONNECT_API_KEY_ID`, `APP_STORE_CONNECT_API_ISSUER_ID`, `APP_STORE_CONNECT_API_KEY_P8_BASE64` | iOS release upload | production release | Mobile CI secret store | App Manager upload scope only; API private key never enters the app binary | Mobile release | Doğrulanmadı |
+| `KOALA_IOS_MAPS_API_KEY_PRODUCTION` | CI alias of `GOOGLE_KEY_09_IOS_MAPS_PROD` | production release | Mobile CI secret store | Production bundle identifier; only Maps SDK for iOS | Mobile release | Doğrulanmadı |
 
 Every row requires an accountable owner, creation/last-rotation date, expiry where supported, provider resource alias and evidence link in the private operations system. Those fields are intentionally not invented in this repository.
 

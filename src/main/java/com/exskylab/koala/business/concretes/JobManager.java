@@ -347,8 +347,13 @@ public class JobManager implements JobService {
         pageableSanitizer.rejectUnknownSort(requested, SORTABLE_FIELDS);
         Pageable pageable = pageableSanitizer.sanitize(requested, SORTABLE_FIELDS, DEFAULT_SORT);
 
-        Page<Job> jobs = jobDao.findAllByCreatorId(securityService.getAuthenticatedUserId(), pageable);
-        return enrich(PageDto.of(jobs, jobMapper::toJobSummaryDto));
+        UUID viewerId = securityService.getAuthenticatedUserId();
+        Page<Job> jobs = jobDao.findAllByCreatorId(viewerId, pageable);
+        return enrich(PageDto.of(jobs, job -> {
+            JobSummaryDto summary = jobMapper.toJobSummaryDto(job);
+            addressVisibility.protect(job, summary, viewerId, false);
+            return summary;
+        }));
     }
 
     @Override

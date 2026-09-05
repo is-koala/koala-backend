@@ -7,6 +7,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -31,6 +32,31 @@ class LiquibaseMigrationIT extends AbstractIntegrationTest {
                 Integer.class);
 
         assertEquals(0, failed, "Basarisiz ya da yeniden calistirilmis changeset var.");
+    }
+
+    @Test
+    void accountDeletionSubjectExpansionRemainsCompatibleWithThePreviousBinary() {
+        String nullable = jdbcTemplate.queryForObject("""
+                select is_nullable from information_schema.columns
+                where table_schema = 'public' and table_name = 'account_deletion_requests'
+                  and column_name = 'subject_id'
+                """, String.class);
+        UUID userId = UUID.randomUUID();
+        UUID requestId = UUID.randomUUID();
+        jdbcTemplate.update("""
+                insert into users (id, first_name, username, email, is_employer, created_at, is_deleted)
+                values (?, 'Eski Binary', ?, ?, false, now(), false)
+                """, userId, "old-binary-" + userId, "old-binary-" + userId + "@example.test");
+
+        jdbcTemplate.update("""
+                insert into account_deletion_requests
+                    (id, user_id, status, requested_at, created_at, is_deleted)
+                values (?, ?, 'REQUESTED', now(), now(), false)
+                """, requestId, userId);
+
+        assertEquals("YES", nullable);
+        assertEquals(userId, jdbcTemplate.queryForObject(
+                "select subject_id from account_deletion_requests where id = ?", UUID.class, requestId));
     }
 
     @Test

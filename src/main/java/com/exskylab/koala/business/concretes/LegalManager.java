@@ -36,6 +36,8 @@ import java.util.stream.Collectors;
 @Slf4j
 public class LegalManager implements LegalService {
 
+    private static final java.time.Duration DELETION_RETRY_DELAY = java.time.Duration.ofDays(1);
+
     private static final Set<String> DELETION_SORT_FIELDS = Set.of(
             "id", "subjectId", "status", "requestedAt", "processedAt");
 
@@ -151,7 +153,9 @@ public class LegalManager implements LegalService {
         request.setStatus(AccountDeletionStatus.REQUESTED);
         request.setReason(reason);
         request.setRequestedAt(Instant.now());
-        request.setBlockedReason(findBlockedReason(user.getId()));
+        String blockedReason = findBlockedReason(user.getId());
+        request.setBlockedReason(blockedReason);
+        request.setNextAttemptAt(blockedReason == null ? null : Instant.now().plus(DELETION_RETRY_DELAY));
 
         AccountDeletionRequest saved = accountDeletionRequestDao.save(request);
         int erased = staffAuditService.eraseDetailsForResource(user.getId().toString());
@@ -191,9 +195,10 @@ public class LegalManager implements LegalService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<UUID> findDueDeletionRequestIds(Instant dueBefore, Pageable pageable) {
+    public List<UUID> findDueDeletionRequestIds(Instant dueBefore, Instant attemptBefore, Pageable pageable) {
         pageableSanitizer.rejectUnknownSort(pageable, DELETION_SORT_FIELDS);
-        return accountDeletionRequestDao.findDueIds(AccountDeletionStatus.REQUESTED, dueBefore, pageable);
+        return accountDeletionRequestDao.findDueIds(
+                AccountDeletionStatus.REQUESTED, dueBefore, attemptBefore, pageable);
     }
 
     @Override
@@ -207,6 +212,7 @@ public class LegalManager implements LegalService {
         String blockedReason = findBlockedReason(request.getUser().getId());
         request.setBlockedReason(blockedReason);
         if (blockedReason != null) {
+            request.setNextAttemptAt(Instant.now().plus(DELETION_RETRY_DELAY));
             accountDeletionRequestDao.save(request);
             return false;
         }
@@ -216,6 +222,7 @@ public class LegalManager implements LegalService {
         request.setUser(null);
         request.setReason(null);
         request.setBlockedReason(null);
+        request.setNextAttemptAt(null);
         request.setProcessedAt(Instant.now());
         accountDeletionRequestDao.save(request);
         return true;

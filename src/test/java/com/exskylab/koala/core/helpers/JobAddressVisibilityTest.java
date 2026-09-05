@@ -4,6 +4,8 @@ import com.exskylab.koala.core.dtos.address.response.AddressComponentsDto;
 import com.exskylab.koala.core.dtos.address.response.AddressDto;
 import com.exskylab.koala.core.dtos.address.response.AddressPositionDto;
 import com.exskylab.koala.core.dtos.job.response.JobDetailDto;
+import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
+import com.exskylab.koala.entities.Address;
 import com.exskylab.koala.entities.AddressPrecision;
 import com.exskylab.koala.entities.Job;
 import com.exskylab.koala.entities.JobEmployerType;
@@ -100,6 +102,24 @@ class JobAddressVisibilityTest {
 
         assertEquals(AddressPrecision.APPROXIMATE, detail.getAddressPrecision());
         assertNull(detail.getAddress().getComponents().getUnitNumber());
+    }
+
+    @Test
+    void anAuthorizedSummaryRestoresExactCoordinatesFromTheJob() {
+        Address address = new Address();
+        address.setLatitude(new BigDecimal("40.987654"));
+        address.setLongitude(new BigDecimal("29.034567"));
+        job.setAddress(address);
+        JobSummaryDto summary = new JobSummaryDto();
+        summary.setLatitude(40.99);
+        summary.setLongitude(29.03);
+        summary.setAddressPrecision(AddressPrecision.APPROXIMATE);
+
+        visibility.protect(job, summary, ownerId, false);
+
+        assertEquals(AddressPrecision.EXACT, summary.getAddressPrecision());
+        assertEquals(40.987654, summary.getLatitude());
+        assertEquals(29.034567, summary.getLongitude());
     }
 
     private JobDetailDto detail() {

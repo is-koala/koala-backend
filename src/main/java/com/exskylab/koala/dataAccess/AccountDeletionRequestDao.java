@@ -35,10 +35,13 @@ public interface AccountDeletionRequestDao extends JpaRepository<AccountDeletion
     @Query("""
             select r.id from AccountDeletionRequest r
             where r.status = :status and r.requestedAt <= :dueBefore
-            order by r.requestedAt asc
+              and (r.nextAttemptAt is null or r.nextAttemptAt <= :attemptBefore)
+            order by case when r.nextAttemptAt is null then 0 else 1 end,
+                     r.nextAttemptAt asc, r.requestedAt asc
             """)
     List<UUID> findDueIds(@Param("status") AccountDeletionStatus status,
-                          @Param("dueBefore") Instant dueBefore, Pageable pageable);
+                          @Param("dueBefore") Instant dueBefore,
+                          @Param("attemptBefore") Instant attemptBefore, Pageable pageable);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @EntityGraph(attributePaths = "user")

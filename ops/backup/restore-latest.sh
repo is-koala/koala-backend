@@ -2,8 +2,26 @@
 set -euo pipefail
 
 dry_run=false
-if [[ "${1:-}" == "--dry-run" ]]; then
-  dry_run=true
+tier="daily"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run)
+      dry_run=true
+      shift
+      ;;
+    --tier)
+      tier="${2:-}"
+      shift 2
+      ;;
+    *)
+      printf 'unknown argument: %s\n' "$1" >&2
+      exit 2
+      ;;
+  esac
+done
+if [[ "$tier" != "daily" && "$tier" != "weekly" && "$tier" != "monthly" ]]; then
+  printf 'tier must be daily, weekly or monthly\n' >&2
+  exit 2
 fi
 
 required=(RESTORE_DATABASE_URL BACKUP_S3_URI BACKUP_ENVIRONMENT)
@@ -14,7 +32,7 @@ for name in "${required[@]}"; do
   fi
 done
 
-printf 'phase=select-latest-backup environment=%s\n' "$BACKUP_ENVIRONMENT"
+printf 'phase=select-latest-backup environment=%s retention=%s\n' "$BACKUP_ENVIRONMENT" "$tier"
 printf 'phase=verify-checksum\n'
 printf 'phase=restore-and-validate\n'
 
@@ -38,8 +56,8 @@ base_prefix="${bucket_and_prefix#*/}"
 if [[ "$base_prefix" == "$bucket_and_prefix" ]]; then
   base_prefix=""
 fi
-daily_prefix="${base_prefix:+$base_prefix/}daily/$BACKUP_ENVIRONMENT/"
-latest_key="$(aws s3api list-objects-v2 --bucket "$bucket" --prefix "$daily_prefix" --query 'reverse(sort_by(Contents[?ends_with(Key, `.dump`)], &LastModified))[0].Key' --output text)"
+retention_prefix="${base_prefix:+$base_prefix/}$tier/$BACKUP_ENVIRONMENT/"
+latest_key="$(aws s3api list-objects-v2 --bucket "$bucket" --prefix "$retention_prefix" --query 'reverse(sort_by(Contents[?ends_with(Key, `.dump`)], &LastModified))[0].Key' --output text)"
 if [[ -z "$latest_key" || "$latest_key" == "None" ]]; then
   printf 'no backup was found\n' >&2
   exit 4

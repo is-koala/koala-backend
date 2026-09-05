@@ -1,8 +1,10 @@
 package com.exskylab.koala.core.privacy;
 
-import com.exskylab.koala.core.utilities.storage.StorageService;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 import java.util.UUID;
@@ -13,14 +15,16 @@ public class PostgresAccountAnonymizer implements AccountAnonymizer {
     private static final String REDACTED = "[anonymized]";
 
     private final JdbcTemplate jdbcTemplate;
-    private final StorageService storageService;
+    private final PersonalMediaDeletionOutbox mediaDeletionOutbox;
 
-    public PostgresAccountAnonymizer(JdbcTemplate jdbcTemplate, StorageService storageService) {
+    public PostgresAccountAnonymizer(JdbcTemplate jdbcTemplate,
+                                     PersonalMediaDeletionOutbox mediaDeletionOutbox) {
         this.jdbcTemplate = jdbcTemplate;
-        this.storageService = storageService;
+        this.mediaDeletionOutbox = mediaDeletionOutbox;
     }
 
     @Override
+    @Transactional
     public void anonymize(UUID userId, UUID requestId) {
         audit(requestId, "STARTED");
         removeMedia(userId);
@@ -39,26 +43,39 @@ public class PostgresAccountAnonymizer implements AccountAnonymizer {
                 select distinct m.file_url
                 from media m
                 where m.file_url is not null
-                  and (m.created_by_id = ?
-                    or m.id in (select profile_picture_id from users where id = ?)
+                  and (m.id in (select profile_picture_id from users where id = ?)
                     or m.id in (select cv_id from users where id = ?)
                     or m.id in (select verification_document_id from user_verifications where user_id = ?))
-                """, String.class, userId, userId, userId, userId);
-        keys.forEach(storageService::deleteFile);
+                """, String.class, userId, userId, userId);
         jdbcTemplate.update("""
                 update media
                    set file_name = ?, file_type = null, file_url = null, file_size = 0,
                        is_deleted = true, deleted_at = now()
-                 where created_by_id = ?
-                    or id in (select profile_picture_id from users where id = ?)
+                 where id in (select profile_picture_id from users where id = ?)
                     or id in (select cv_id from users where id = ?)
                     or id in (select verification_document_id from user_verifications where user_id = ?)
-                """, REDACTED, userId, userId, userId, userId);
+                """, REDACTED, userId, userId, userId);
+        mediaDeletionOutbox.enqueue(keys);
+        processMediaAfterCommit(keys);
     }
 
     private void scrubUserContent(UUID userId) {
         jdbcTemplate.update("update messages set body = ? where sender_id = ?", REDACTED, userId);
-        jdbcTemplate.update("update reviews set comment = null, anonymous = true where author_id = ?", userId);
+        jdbcTemplate.update("update conversations set last_message_body = null where employer_id = ? or worker_id = ?",
+                userId, userId);
+        jdbcTemplate.update("update reviews set comment = null, anonymous = true where author_id = ? or subject_id = ?",
+                userId, userId);
+        jdbcTemplate.update("update user_blocks set reason = null where blocker_id = ? or blocked_id = ?",
+                userId, userId);
+        jdbcTemplate.update("""
+                update cancellations
+                   set reason = null
+                 where cancelled_by_id = ?
+                    or job_assignment_id in (
+                       select a.id from job_assignments a
+                       join jobs j on j.id = a.job_id
+                       where a.worker_id = ? or j.creator_id = ?)
+                """, userId, userId, userId);
         jdbcTemplate.update("update reports set description = null where reporter_id = ? or reported_user_id = ?",
                 userId, userId);
         jdbcTemplate.update("update disputes set reason = ? where opened_by_id = ?", REDACTED, userId);
@@ -105,6 +122,24 @@ public class PostgresAccountAnonymizer implements AccountAnonymizer {
                 REDACTED, userId);
         jdbcTemplate.update("update job_templates set template_name = ?, title = null, description = null, sector = null, position = null, duties = null, dress_code = null, is_deleted = true, deleted_at = now() where owner_id = ?",
                 REDACTED, userId);
+        jdbcTemplate.update("update talent_pool_entries set note = null, is_deleted = true, deleted_at = now() where employer_id = ? or worker_id = ?",
+                userId, userId);
+        jdbcTemplate.update("""
+                update addresses
+                   set neighborhood = null, thoroughfare = null, site_name = null, block = null,
+                       building_name = null, building_number = null, floor = null,
+                       unit_number = null, postal_code = null, additional_directions = null,
+                       latitude = null, longitude = null, position_source = null,
+                       confirmed_at = null, needs_review = false
+                 where id in (
+                       select address_id from jobs
+                       where creator_id = ? and address_id is not null
+                         and (employer_type = 'INDIVIDUAL' or company_id is null))
+                """, userId);
+        jdbcTemplate.update("""
+                update jobs set address_public = false
+                 where creator_id = ? and (employer_type = 'INDIVIDUAL' or company_id is null)
+                """, userId);
     }
 
     private void revokeCredentials(UUID userId) {
@@ -119,6 +154,12 @@ public class PostgresAccountAnonymizer implements AccountAnonymizer {
                 userId);
         jdbcTemplate.update("update identity_challenges set challenge = id::text, is_deleted = true, deleted_at = now() where user_id = ?",
                 userId);
+        jdbcTemplate.update("""
+                update password_reset_tokens
+                   set revoked_at = coalesce(revoked_at, now()),
+                       is_deleted = true, deleted_at = coalesce(deleted_at, now())
+                 where user_id = ?
+                """, userId);
         jdbcTemplate.update("""
                 update user_verifications
                    set old_phone_number = null, new_phone_number = null, token = null,
@@ -167,5 +208,18 @@ public class PostgresAccountAnonymizer implements AccountAnonymizer {
                 values (?, ?, ?, now())
                 on conflict (request_id, step) do nothing
                 """, UUID.randomUUID(), requestId, step);
+    }
+
+    private void processMediaAfterCommit(List<String> keys) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            mediaDeletionOutbox.process(keys);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                mediaDeletionOutbox.process(keys);
+            }
+        });
     }
 }

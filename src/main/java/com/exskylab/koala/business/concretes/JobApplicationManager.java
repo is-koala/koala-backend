@@ -22,6 +22,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
+import com.exskylab.koala.core.helpers.JobAddressVisibility;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +33,10 @@ import java.util.UUID;
 @Service
 @Slf4j
 public class JobApplicationManager implements JobApplicationService {
+
+    private static final java.util.Set<AssignmentStatus> ADDRESS_VISIBLE_ASSIGNMENT_STATUSES =
+            java.util.EnumSet.of(AssignmentStatus.PENDING_CONFIRMATION, AssignmentStatus.CONFIRMED,
+                    AssignmentStatus.IN_PROGRESS);
 
     private static final java.util.Set<String> MY_APPLICATIONS_SORTABLE =
             java.util.Set.of("applicationDateTime", "answeredDateTime", "status");
@@ -48,6 +53,7 @@ public class JobApplicationManager implements JobApplicationService {
     private final ActivityNotificationService activityNotificationService;
     private final BankAccountService bankAccountService;
     private final PricingService pricingService;
+    private final JobAddressVisibility addressVisibility = new JobAddressVisibility();
 
 
     public JobApplicationManager(JobApplicationDao jobApplicationDao, JobService jobService,
@@ -299,8 +305,14 @@ public class JobApplicationManager implements JobApplicationService {
                 ? jobApplicationDao.findAllByUserId(userId, pageable)
                 : jobApplicationDao.findAllByUserIdAndStatus(userId, status, pageable);
 
-        PageDto<MyApplicationDto> result = PageDto.of(page,
-                jobApplicationMapper.toMyApplicationDtoList(page.getContent()));
+        List<MyApplicationDto> summaries = page.getContent().stream().map(application -> {
+            MyApplicationDto dto = jobApplicationMapper.toMyApplicationDto(application);
+            boolean activeAssignment = application.getAssignment() != null
+                    && ADDRESS_VISIBLE_ASSIGNMENT_STATUSES.contains(application.getAssignment().getStatus());
+            addressVisibility.protect(application.getJob(), dto.job(), userId, activeAssignment);
+            return dto;
+        }).toList();
+        PageDto<MyApplicationDto> result = PageDto.of(page, summaries);
         galleryService.fillJobCovers(result.content().stream().map(MyApplicationDto::job).toList());
         return result;
     }

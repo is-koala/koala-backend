@@ -29,9 +29,10 @@ public class AccountAnonymizationScheduler {
             return;
         }
 
-        Instant dueBefore = Instant.now().minus(properties.getWaitingPeriod());
+        Instant now = Instant.now();
+        Instant dueBefore = now.minus(properties.getWaitingPeriod());
         List<UUID> requestIds = legalService.findDueDeletionRequestIds(
-                dueBefore, PageRequest.of(0, properties.getBatchSize()));
+                dueBefore, now, PageRequest.of(0, properties.getBatchSize()));
         int processed = 0;
         for (UUID requestId : requestIds) {
             try {

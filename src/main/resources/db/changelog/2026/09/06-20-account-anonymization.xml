@@ -5,12 +5,11 @@
         xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
 
-    <changeSet id="2026-09-06-20-account-anonymization-audit" author="koala">
+    <changeSet id="2026-09-06-20-account-anonymization-expand" author="koala">
         <addColumn tableName="account_deletion_requests">
             <column name="subject_id" type="UUID"/>
+            <column name="next_attempt_at" type="TIMESTAMPTZ"/>
         </addColumn>
-        <sql>UPDATE account_deletion_requests SET subject_id = user_id WHERE subject_id IS NULL</sql>
-        <addNotNullConstraint tableName="account_deletion_requests" columnName="subject_id" columnDataType="UUID"/>
         <dropNotNullConstraint tableName="account_deletion_requests" columnName="user_id" columnDataType="UUID"/>
         <createTable tableName="account_anonymization_audit">
             <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
@@ -23,6 +22,42 @@
                                  referencedTableName="account_deletion_requests" referencedColumnNames="id"/>
         <addUniqueConstraint tableName="account_anonymization_audit" columnNames="request_id, step"
                              constraintName="uk_account_anonymization_audit_step"/>
+        <createTable tableName="account_media_deletion_outbox">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="storage_key" type="VARCHAR(1024)"><constraints nullable="false"/></column>
+            <column name="attempts" type="INTEGER" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="next_attempt_at" type="TIMESTAMPTZ"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="now()"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="account_media_deletion_outbox" columnNames="storage_key"
+                             constraintName="uk_account_media_deletion_storage_key"/>
+        <createIndex tableName="account_media_deletion_outbox" indexName="ix_account_media_deletion_due">
+            <column name="next_attempt_at"/>
+            <column name="created_at"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="2026-09-06-21-account-anonymization-subject-backfill" author="koala">
+        <sql>UPDATE account_deletion_requests SET subject_id = user_id WHERE subject_id IS NULL</sql>
+    </changeSet>
+
+    <changeSet id="2026-09-06-22-account-anonymization-subject-compatibility" author="koala">
+        <sql splitStatements="false"><![CDATA[
+            CREATE OR REPLACE FUNCTION populate_account_deletion_subject_id()
+            RETURNS trigger AS $$
+            BEGIN
+                IF NEW.subject_id IS NULL THEN
+                    NEW.subject_id := NEW.user_id;
+                END IF;
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+        ]]></sql>
+        <sql>
+            CREATE TRIGGER trg_account_deletion_subject_id
+            BEFORE INSERT OR UPDATE OF user_id, subject_id ON account_deletion_requests
+            FOR EACH ROW EXECUTE FUNCTION populate_account_deletion_subject_id()
+        </sql>
     </changeSet>
 
 </databaseChangeLog>

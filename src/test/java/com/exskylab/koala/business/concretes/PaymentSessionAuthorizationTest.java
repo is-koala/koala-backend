@@ -8,14 +8,13 @@ import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.business.abstracts.PaymentService;
-import com.exskylab.koala.core.helpers.CommissionCalculator;
 import com.exskylab.koala.business.abstracts.BadgeService;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
 import com.exskylab.koala.core.properties.AppProperties;
-import com.exskylab.koala.core.properties.CommissionProperties;
 import com.exskylab.koala.core.mappers.JobAssignmentMapper;
+import com.exskylab.koala.core.monitoring.PaymentMetrics;
 import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
 import com.exskylab.koala.entities.AssignmentStatus;
@@ -28,6 +27,7 @@ import com.exskylab.koala.entities.User;
 import org.junit.jupiter.api.BeforeEach;
 import com.exskylab.koala.business.abstracts.DisputeService;
 import org.junit.jupiter.api.Test;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -45,6 +45,8 @@ class PaymentSessionAuthorizationTest {
     private SecurityService securityService;
     private CompanyContactService companyContactService;
     private IyzicoPaymentService iyzicoPaymentService;
+    private PaymentService paymentService;
+    private SimpleMeterRegistry meterRegistry;
     private JobAssignmentManager manager;
 
     private final User employer = verifiedUser();
@@ -57,6 +59,8 @@ class PaymentSessionAuthorizationTest {
         securityService = mock(SecurityService.class);
         companyContactService = mock(CompanyContactService.class);
         iyzicoPaymentService = mock(IyzicoPaymentService.class);
+        paymentService = mock(PaymentService.class);
+        meterRegistry = new SimpleMeterRegistry();
 
         manager = new JobAssignmentManager(
                 jobAssignmentDao,
@@ -66,7 +70,7 @@ class PaymentSessionAuthorizationTest {
                 companyContactService,
                 mock(UserService.class),
                 new PricingManager(FallbackSettings.commissionCalculator()),
-                mock(PaymentService.class),
+                paymentService,
                 new PaymentStateMachine(),
                 new AppProperties("http://localhost:8080", "http://localhost:3000"),
                 mock(BankAccountService.class),
@@ -76,7 +80,8 @@ class PaymentSessionAuthorizationTest {
                 mock(com.exskylab.koala.business.abstracts.PayoutService.class),
                 new com.exskylab.koala.core.properties.AutoCompletionProperties(),
                 new com.exskylab.koala.core.properties.UnpaidExpiryProperties(), passthroughSettings(),
-                mock(com.exskylab.koala.business.abstracts.GalleryService.class), mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class), mock(org.springframework.context.ApplicationEventPublisher.class));
+                mock(com.exskylab.koala.business.abstracts.GalleryService.class), mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class), mock(org.springframework.context.ApplicationEventPublisher.class),
+                new PaymentMetrics(meterRegistry));
     }
 
     @Test
@@ -217,5 +222,54 @@ class PaymentSessionAuthorizationTest {
 
         assertNotEquals("JOB_ASSIGNMENT_EMPLOYER_IDENTITY_NOT_VERIFIED",
                 thrown instanceof com.exskylab.koala.core.exceptions.KoalaException k ? k.getErrorCode() : null);
+    }
+
+    @Test
+    void aProviderInitiationFailureIncrementsTheBoundedFailureMetric() {
+        Job job = individualJob();
+        job.setAddress(address());
+        employer.setAddress(address());
+        employer.setFirstName("Koala");
+        employer.setLastName("Employer");
+        employer.setEmail("employer@example.test");
+        employer.setPhoneNumber("+905551112233");
+        worker.setIyzicoSubmerchantKey("submerchant-key");
+        JobAssignment assignment = confirmedAssignment(job);
+        assignment.setPricingVersion("2026-09-v1");
+        assignment.setCurrency("TRY");
+        assignment.setWorkerPayout(new java.math.BigDecimal("1000.00"));
+        assignment.setCommissionAmount(new java.math.BigDecimal("75.00"));
+        assignment.setCommissionRate(new java.math.BigDecimal("0.075"));
+        assignment.setTotalCharged(new java.math.BigDecimal("1075.00"));
+        com.exskylab.koala.entities.Payment payment = new com.exskylab.koala.entities.Payment();
+        payment.setConversationId("conversation-1");
+        when(jobAssignmentDao.findById(assignment.getId())).thenReturn(Optional.of(assignment));
+        when(securityService.getAuthenticatedUser()).thenReturn(employer);
+        when(paymentService.startAttempt(any(), any())).thenReturn(payment);
+        when(iyzicoPaymentService.initiateCheckoutFormPayment(any()))
+                .thenThrow(new IllegalStateException("provider unavailable"));
+
+        assertThrows(IllegalStateException.class,
+                () -> manager.initiatePaymentSession(assignment.getId(), "127.0.0.1"));
+
+        assertEquals(1.0, meterRegistry.get("koala.payment.operations")
+                .tag("operation", "initiation")
+                .tag("outcome", "provider_error")
+                .counter()
+                .count());
+    }
+
+    private static com.exskylab.koala.entities.Address address() {
+        com.exskylab.koala.entities.Country country = new com.exskylab.koala.entities.Country();
+        country.setName("Türkiye");
+        com.exskylab.koala.entities.City city = new com.exskylab.koala.entities.City();
+        city.setName("İstanbul");
+        com.exskylab.koala.entities.Address address = new com.exskylab.koala.entities.Address();
+        address.setCountry(country);
+        address.setCity(city);
+        address.setThoroughfare("Koala Caddesi");
+        address.setBuildingNumber("1");
+        address.setPostalCode("34000");
+        return address;
     }
 }

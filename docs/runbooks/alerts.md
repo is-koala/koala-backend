@@ -5,7 +5,8 @@ All production rules route to the single backend on-call channel configured outs
 | Alert | First response | Escalate when |
 | --- | --- | --- |
 | `KoalaHighHttp5xxRate` | Compare release/environment and safe error-code rates; check health and the latest deployment. | Rate remains above 5% for ten minutes or checkout/authentication is affected. |
-| `KoalaPaymentFailureSpike` | Pause risky payment rollout, inspect provider health and count failures by safe code; never replay blindly. | A callback cannot be reconciled within five minutes or money state is ambiguous. |
+| `KoalaPaymentIntegrationFailure` | Pause risky payment rollout, inspect provider health and the bounded technical outcome; never replay blindly. A synthetic callback drill must begin only after Prometheus has scraped the pre-registered zero-valued series. | A callback cannot be reconciled within five minutes or money state is ambiguous. |
+| `KoalaPaymentFailureSpike` | Compare provider decline and fraud-rejection rates with the normal baseline; do not treat one customer decline as an integration outage. | The rate remains elevated for five minutes or multiple payment methods are affected. |
 | `KoalaRabbitConsumerLag` | Check consumer replica health, connection/channel counts and oldest queued message age. | Queue continues growing after consumer recovery or processing violates its SLA. |
 | `KoalaRabbitDeadLetterQueue` | Quarantine and classify one message using identifiers only; correct the consumer before replay. | Any payment/notification message is involved or the DLQ continues growing. |
 | `KoalaScheduledJobFailure` | Identify the failed scheduled task from bounded metric labels and inspect the latest safe log correlation. | Retry is unsafe, repeated, or affects deletion/settlement lifecycle state. |

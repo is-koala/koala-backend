@@ -8,6 +8,7 @@ import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
 import com.exskylab.koala.entities.AddressPrecision;
 import com.exskylab.koala.entities.Job;
 import com.exskylab.koala.entities.JobEmployerType;
+import org.mapstruct.Named;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -28,9 +29,9 @@ public final class JobAddressVisibility {
     public void protect(Job job, JobSummaryDto summary, UUID viewerId, boolean assignedWorker) {
         AddressPrecision precision = precision(job, viewerId, assignedWorker);
         summary.setAddressPrecision(precision);
-        if (precision == AddressPrecision.APPROXIMATE) {
-            summary.setLatitude(round(summary.getLatitude()));
-            summary.setLongitude(round(summary.getLongitude()));
+        if (precision == AddressPrecision.EXACT && job.getAddress() != null) {
+            summary.setLatitude(exactCoordinate(job.getAddress().getLatitude()));
+            summary.setLongitude(exactCoordinate(job.getAddress().getLongitude()));
         }
     }
 
@@ -78,5 +79,14 @@ public final class JobAddressVisibility {
 
     private static Double round(Double value) {
         return value == null ? null : BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).doubleValue();
+    }
+
+    @Named("approximateCoordinate")
+    public static Double approximateCoordinate(BigDecimal value) {
+        return value == null ? null : value.setScale(2, RoundingMode.HALF_UP).doubleValue();
+    }
+
+    private static Double exactCoordinate(BigDecimal value) {
+        return value == null ? null : value.doubleValue();
     }
 }

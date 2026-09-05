@@ -6,13 +6,18 @@ groups:
         for: 10m
         labels: { severity: critical, owner: backend }
         annotations: { summary: "Backend HTTP 5xx oranı yüzde 5'i aştı" }
-      - alert: KoalaPaymentFailureSpike
-        expr: sum(rate(koala_backend_errors_total{code=~"PAYMENT_.*"}[10m])) > 0.05
-        for: 5m
+      - alert: KoalaPaymentIntegrationFailure
+        expr: sum(increase(koala_payment_operations_total{operation=~"initiation|callback",outcome=~"provider_error|persistence_error|amount_mismatch"}[5m])) > 0
+        for: 1m
         labels: { severity: critical, owner: payments }
-        annotations: { summary: "Ödeme başlatma veya callback hataları yükseldi" }
+        annotations: { summary: "Ödeme başlatma veya callback entegrasyonu hata verdi" }
+      - alert: KoalaPaymentFailureSpike
+        expr: sum(rate(koala_payment_operations_total{operation="callback",outcome=~"declined|fraud_rejected"}[10m])) > 0.05
+        for: 5m
+        labels: { severity: warning, owner: payments }
+        annotations: { summary: "Ödeme reddi veya dolandırıcılık reddi yükseldi" }
       - alert: KoalaRabbitConsumerLag
-        expr: rabbitmq_queue_messages_ready{queue=~"koala.*"} > 100
+        expr: rabbitmq_queue_messages_ready{queue=~"email\\.queue|sms\\.queue|push\\.queue"} > 100
         for: 10m
         labels: { severity: warning, owner: backend }
         annotations: { summary: "RabbitMQ tüketici kuyruğu büyüyor" }

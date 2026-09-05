@@ -13,11 +13,13 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 import java.util.UUID;
+import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 
 class RateLimitBucketTest {
 
@@ -153,6 +155,33 @@ class RateLimitBucketTest {
                 "{\"tcIdentityNumber\":\"11111111110\"}", 2));
         assertEquals(1, passingAuth("/users/me/identity-verification",
                 "{\"tcIdentityNumber\":\"22222222220\"}", 1));
+    }
+
+    @Test
+    void oversizedChunkedAuthBodiesAreRejectedBeforeTheRequestIsBuffered() throws Exception {
+        byte[] body = new byte[128 * 1024];
+        Arrays.fill(body, (byte) 'a');
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/auth/login") {
+            @Override
+            public int getContentLength() {
+                return -1;
+            }
+
+            @Override
+            public long getContentLengthLong() {
+                return -1;
+            }
+        };
+        request.setRemoteAddr("10.0.0.12");
+        request.setContentType("application/json");
+        request.setContent(body);
+        FilterChain call = mock(FilterChain.class);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, call);
+
+        assertEquals(413, response.getStatus());
+        verify(call, never()).doFilter(any(), any());
     }
 
     @Test

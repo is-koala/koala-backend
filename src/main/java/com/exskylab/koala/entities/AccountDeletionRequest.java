@@ -30,7 +30,7 @@ public class AccountDeletionRequest extends BaseEntity {
     @JoinColumn(name = "user_id")
     private User user;
 
-    @Column(name = "subject_id", nullable = false, updatable = false)
+    @Column(name = "subject_id", updatable = false)
     private UUID subjectId;
 
     @Enumerated(EnumType.STRING)
@@ -48,4 +48,7 @@ public class AccountDeletionRequest extends BaseEntity {
 
     @Column(name = "blocked_reason", length = 512)
     private String blockedReason;
+
+    @Column(name = "next_attempt_at")
+    private Instant nextAttemptAt;
 }

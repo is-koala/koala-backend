@@ -27,6 +27,27 @@
       "Filter": { "Prefix": "wal/" },
       "Expiration": { "Days": 7 },
       "NoncurrentVersionExpiration": { "NoncurrentDays": 7 }
+    },
+    {
+      "ID": "pitr-daily-seven-days",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "pitr/daily/" },
+      "Expiration": { "Days": 7 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 7 }
+    },
+    {
+      "ID": "pitr-weekly-four-weeks",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "pitr/weekly/" },
+      "Expiration": { "Days": 28 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 28 }
+    },
+    {
+      "ID": "pitr-monthly-six-months",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "pitr/monthly/" },
+      "Expiration": { "Days": 183 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 183 }
     }
   ]
 }

@@ -34,7 +34,7 @@ public interface LegalService {
 
     AccountDeletionRequest rejectDeletionRequest(UUID requestId, String reason);
 
-    List<UUID> findDueDeletionRequestIds(Instant dueBefore, Pageable pageable);
+    List<UUID> findDueDeletionRequestIds(Instant dueBefore, Instant attemptBefore, Pageable pageable);
 
     boolean processDeletionRequest(UUID requestId);
 }

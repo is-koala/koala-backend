@@ -42,6 +42,7 @@ import tools.jackson.databind.ObjectMapper;
 public class RateLimitFilter extends OncePerRequestFilter {
 
     private static final PathPatternParser PARSER = PathPatternParser.defaultInstance;
+    private static final int MAX_AUTH_BODY_BYTES = 16 * 1024;
 
     private static final Set<String> AUTH_PATHS = Set.of(
             "/auth/login",
@@ -102,7 +103,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
         Bucket bucket = bucketOf(request);
         PreparedRequest prepared = bucket == Bucket.AUTH ? prepareAuthRequest(request)
-                : new PreparedRequest(request, "unknown");
+                : new PreparedRequest(request, "unknown", false);
+
+        if (prepared.tooLarge()) {
+            response.setStatus(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
+            return;
+        }
 
         if (bucket != Bucket.NONE && !rateLimiter.tryAcquire(keyOf(bucket, prepared.request(), prepared.target()),
                 settingsOf(bucket).getMaxAttempts(), settingsOf(bucket).getWindow())) {
@@ -170,9 +176,15 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private PreparedRequest prepareAuthRequest(HttpServletRequest request) throws IOException {
         if (request.getContentType() == null || !request.getContentType().startsWith("application/json")) {
-            return new PreparedRequest(request, "unknown");
+            return new PreparedRequest(request, "unknown", false);
         }
-        byte[] body = request.getInputStream().readAllBytes();
+        if (request.getContentLengthLong() > MAX_AUTH_BODY_BYTES) {
+            return new PreparedRequest(request, "unknown", true);
+        }
+        byte[] body = request.getInputStream().readNBytes(MAX_AUTH_BODY_BYTES + 1);
+        if (body.length > MAX_AUTH_BODY_BYTES) {
+            return new PreparedRequest(request, "unknown", true);
+        }
         CachedBodyRequest wrapped = new CachedBodyRequest(request, body);
         try {
             JsonNode root = objectMapper.readTree(body);
@@ -181,13 +193,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 JsonNode value = root.get(field);
                 if (value != null && value.isTextual() && !value.asText().isBlank()) {
                     String normalized = value.asText().trim().toLowerCase(Locale.ROOT);
-                    return new PreparedRequest(wrapped, digest(normalized));
+                    return new PreparedRequest(wrapped, digest(normalized), false);
                 }
             }
         } catch (RuntimeException exception) {
-            return new PreparedRequest(wrapped, "unknown");
+            return new PreparedRequest(wrapped, "unknown", false);
         }
-        return new PreparedRequest(wrapped, "unknown");
+        return new PreparedRequest(wrapped, "unknown", false);
     }
 
     private static String digest(String value) {
@@ -199,7 +211,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
     }
 
-    private record PreparedRequest(HttpServletRequest request, String target) {
+    private record PreparedRequest(HttpServletRequest request, String target, boolean tooLarge) {
     }
 
     private static final class CachedBodyRequest extends HttpServletRequestWrapper {
