@@ -190,7 +190,7 @@ Servis ve controller katmanı düz anahtar kullanır: `"{user.not.found}"`. Çö
 
 Hesap tek yerde: `core/helpers/CommissionCalculator`. Girdi doğrulaması, `HALF_UP` yuvarlama ve bileşenlerin toplamının tahsil edilen tutara eşit olması orada garanti ediliyor.
 
-**Uygulanan oran kayda yazılıyor.** `JobAssignment` artık `worker_payout`, `commission_amount`, `commission_rate` ve `total_charged` taşıyor. Oran `COMMISSION_RATE` env'inden geliyor; değiştiğinde geçmiş kayıtlar hangi oranla hesaplandığını korur — mutabakat bunsuz yapılamaz.
+**Uygulanan oran kayda yazılıyor.** `JobAssignment` artık `worker_payout`, `commission_amount`, `commission_rate` ve `total_charged` taşıyor. Oran çalışma zamanı ayarından okunuyor (§2ac); değiştiğinde geçmiş kayıtlar hangi oranla hesaplandığını korur — mutabakat bunsuz yapılamaz.
 
 ## 2f. Kimlik ve principal
 
@@ -696,6 +696,7 @@ Politika sayıları artık deploy istemiyor. `app_settings` tablosu ve `GET/PUT 
 | `cancellation.late-fee-rate` | pencere içinde iptalde kesilen oran | 0,50 |
 | `assignment.unpaid-expiry.hours-before-start` | ödenmemiş atama iş başlangıcına kaç saat kala düşer | 6 |
 | `app.minimum-version` | bu sürümün altındaki istemci 426 alır; boşsa kapı kapalı | boş |
+| `commission.rate` | işveren ücretine eklenen hizmet bedeli oranı | 0,075 |
 
 **Konfigürasyon hâlâ varsayılan.** `SettingsService` önce tabloya bakar, satır yoksa `application.yaml` değerine düşer. Yani tablo boş bir veritabanı da doğru çalışır ve env ile ilk değer verilebilir.
 
@@ -703,7 +704,11 @@ Politika sayıları artık deploy istemiyor. `app_settings` tablosu ve `GET/PUT 
 
 **Bozuk değer patlatmaz.** Tabloda sayısal olmayan bir şey varsa uyarı loglanır ve varsayılana düşülür; yanlış bir elle güncelleme iptal hesabını ya da zamanlayıcıyı durdurmaz.
 
-**Komisyon oranı bilerek dışarıda.** `commission.rate` uygulandığı anda `JobAssignment` üzerine yazılıyor (§2e) ve mutabakat ona bakıyor; canlıda değiştirilebilir yapmak geçmiş kayıtlarla bugünkü oranı karıştırma riskini artırır. Değişecekse deploy ile.
+**Komisyon oranı da bu tabloya taşındı.** Eskiden yalnızca `COMMISSION_RATE` env'iydi ve değiştirmek konteyner yeniden başlatmak demekti — ürünün en gelir-belirleyici sayısı, ondan daha az kritik olan iptal cezası oranından daha zor değişiyordu. Taşımak güvenli, çünkü ADR-0002 fiyatı ilan yayınlanırken donduruyor ve uygulanan oran `Job`, `JobAssignment` ve `Payment` satırlarına yazılıyor (§2e): oran değişse bile geçmiş kayıtlar hangi oranla hesaplandıklarını korur, mutabakat bozulmaz. `CommissionCalculator` her hesapta tabloya bakar, satır yoksa `application.yaml` değerine düşer; `COMMISSION_RATE` artık yalnızca **başlangıç değeri**.
+
+**Oran anahtarlarının aralığı doğrulanıyor.** `commission.rate` ve `cancellation.late-fee-rate` için "sayısal mı" kontrolü yetmiyordu: `1.5` kabul edilseydi işveren işçi ücretinin 2,5 katını öderdi, negatif oran komisyonu iadeye çevirirdi. İkisi de `[0, 1]` aralığında olmak zorunda; dışarısı `setting.value.out.of.range` ile 400 döner. Saat ve gün anahtarları bu kuraldan etkilenmez.
+
+**`AppSetting` artık `BaseEntity`'yi genişletiyor — elle dört alan eklenmedi.** Tablo dört sütundan ibaretti; bir ayarı kimin ne zaman değiştirdiğinin tek izi bir `log.info` satırıydı ve log döngüsü dolduğunda kayboluyordu. İki seçenek vardı: `BaseEntity`'yi genişletmek (denetim + soft delete sütunları birlikte gelir) ya da `created_at`/`updated_at`/`created_by_id`/`updated_by_id` alanlarını elle eklemek. `BaseEntity` seçildi çünkü (1) elle eklemek `@CreatedBy`/`@LastModifiedBy` + `@EntityListeners(AuditingEntityListener.class)` bloğunu kopyalamak demekti ve denetlenen her satırın aynı görünmesi kuralını bozardı, (2) `deleted_by_id` bedava geldiği için ileride bir silme ucu eklenirse hard delete kazası olmaz, (3) üç fazladan sütunun maliyeti beş satırlık bir tabloda yok. Bedeli: `@SQLDelete` + `@SQLRestriction` zorunlu oldu (§8) ve `setting_key` üzerindeki benzersizlik kısmi indeks değil — soft delete edilen bir satır anahtarı işgal etmeye devam eder. Bugün silme ucu olmadığı için bu bir sorun değil; eklenirse indeks `uk_users_email_active` gibi kısmileştirilmeli.
 
 ## 2ad. Olgunlaşma özellikleri (Faz 11C)
 
@@ -1127,6 +1132,10 @@ Kural: bu tür testlerde başlangıç zamanı `LocalDateTime.now(POLICY_ZONE)` �
 
 **Faz 21 testleri.** `GalleryRulesTest` on üç kural sabitliyor: ilk görsel kapak olur, ikincisi kapağı çalmaz, sınır aşımı 409, ilan galerisi şirket galerisinden seçebilir, yabancı görsel 404, bireysel ilanın seçecek şirket galerisi yok, kapaksız istek yine de kapak üretir, kapak silinince sıradaki devralır, listeden düşen kayıt silinir, kapak URL'leri tek sorguda toplanır, aynı görsel iki kez listelenemez, iki kapak seçilemez.
 
+**Komisyon oranı çalışma zamanı testleri.** `CommissionRateRuntimeIT` üç kural sabitliyor: tabloda satır yokken env varsayılanı uygulanır, satır yazıldığında yeni oran **yeniden başlatmadan** geçerli olur, ve oran değiştikten sonra daha önce fiyatlanmış `jobs`/`job_assignments`/`payments` satırlarının `commission_rate` sütunu değişmez — bu sonuncusu ADR-0002'yi koruyor. `SettingsAdministrationIT` altı kural: aralık dışı komisyon ve iptal cezası oranı 400 alır, aralık içi 200, ayarı değiştiren admin `updated_by_id`'ye yazılır, `updated_at` dolar ve `GET /admin/settings` bunu döndürür. `SettingsRulesTest` aralık kurallarını birim düzeyinde de sabitliyor; sınırların kendisi (0 ve 1) kabul edilir, saat anahtarları kuraldan etkilenmez.
+
+Birim testlerde `CommissionCalculator` artık `FallbackSettings.commissionCalculator(...)` ile kuruluyor — hesap `SettingsService`'e bağlı olduğu için her çağrı yerinde bir sahte kurmak yerine tek yerden veriliyor.
+
 **Faz 16/17 testleri.** `StorageKeysTest` anahtar üretimini, uzantı beyaz listesini, Türkçe ad katlamasını, yol geçişi savunmasını ve önek→URL eşlemesini sabitliyor — özgeçmişin CDN'e düşmediğini `UserProfileContractTest` doğruluyor. `SettingsRulesTest` tanımsız anahtarın reddedildiğini ve bozuk değerin varsayılana düştüğünü sabitliyor.
 
 **Faz 12B/13 testleri.** `BadgeRulesTest` artık kural veritabanından okunduğu için genişledi: pasifleştirilen rozet verilmiyor ama sahipleri koruyor, eşiksiz kural hiçbir şey vermiyor, eşiksiz kural kaydedilemiyor, kod çakışması reddediliyor ve **kodda karşılığı olmayan uydurma bir rozet yalnızca satır eklenerek veriliyor**. `PresenceRulesTest` çok cihazlı bağlantı sayımını sabitliyor.
@@ -1289,7 +1298,7 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 
 **Hiçbir denetimli kayıt fiziksel olarak silinmez.** `BaseEntity` `isDeleted` / `deletedAt` / `deletedBy` taşır; her entity `@SQLDelete` ile `DELETE`'i `UPDATE ... SET is_deleted = true`'a çevirir ve `@SQLRestriction("is_deleted = false")` ile silinmişler varsayılan sorgulardan düşer.
 
-**Kolonlar migration'da tablo adı sabitlenmeden eklendi.** `created_at` taşıyan her tablo taranıyor — `BaseEntity` alt sınıflarının tamamı bu şekilde yakalanıyor, yeni tablo eklendiğinde changelog'a elle isim yazmaya gerek yok.
+**Kolonlar migration'da tablo adı sabitlenmeden eklendi.** `created_at` taşıyan her tablo taranıyor — `BaseEntity` alt sınıflarının tamamı bu şekilde yakalanıyor, yeni tablo eklendiğinde changelog'a elle isim yazmaya gerek yok. **Ama yalnızca o migration'dan önce var olan tablolar.** `app_settings` sonradan (28-03) ve `created_at`'siz doğduğu için taramaya yakalanmamıştı; `BaseEntity`'ye taşınırken (§2ac) denetim ve soft delete sütunlarını kendi changelog'uyla (`2026/09/06-03`) aldı.
 
 **Kapsam dışı bırakılanlar ve gerekçeleri:**
 - `PendingRegistration` — **bilerek hard delete.** Kaydını hiç tamamlamamış birinin e-postasını süresiz saklamak koruma değil, gereksiz veri tutma. Kayıt akışı zaten sil-ve-yeniden-oluştur mantığıyla çalışıyor.
