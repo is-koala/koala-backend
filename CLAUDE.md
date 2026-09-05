@@ -601,6 +601,8 @@ Artık `SettlementOperation.REFUND` var ve `/payment/refund` çağrılıyor (`pa
 
 **Hâlâ sandbox'ta uçtan uca doğrulanmadı.** Yukarıdakiler dokümana karşı doğru; gerçek bir sandbox işlemiyle teyit edilmesi gereken tek şey kısmi iade + disapprove ikilisinin sıralamasıdır. `iyzico.settlementEnabled=false` ile kuyruk tümüyle kapalı tutulabilir.
 
+**Denetimin kapatmadığı bir alan kaldı: `mdStatus` hiç okunmuyor.** Iyzico'nun belgelediği `4131111111111117` test kartı `paymentStatus = SUCCESS` ile birlikte `mdStatus = 0` döndürüyor, yani 3DS doğrulaması geçmemiş bir ödeme bugün emanete açılır. Ayrıntı, kaynak ve canlı/sandbox karşılaştırması `docs/runbooks/payments.md` §6.2'de; burada tekrarlanmıyor.
+
 ## 2y. Mutabakat outbox'ı
 
 Faz 8B'de sağlayıcı çağrısı `PayoutManager` içinden **senkron** yapılıyordu ve hata durumunda tüm işlem geri alınıyordu — yani `Payout` kaydı da yazılmıyordu ve **kimse yeniden denemiyordu**. Iyzico bir dakikalığına düşse para emanette kilitli kalırdı.
