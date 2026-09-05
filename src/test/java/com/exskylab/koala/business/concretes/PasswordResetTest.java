@@ -3,20 +3,24 @@ package com.exskylab.koala.business.concretes;
 import com.exskylab.koala.business.abstracts.*;
 import com.exskylab.koala.core.dtos.auth.request.ForgotPasswordDto;
 import com.exskylab.koala.core.dtos.auth.request.ResetPasswordDto;
+import com.exskylab.koala.core.dtos.notification.request.SendEmailDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ValidationException;
+import com.exskylab.koala.core.events.PasswordResetCompletedEvent;
 import com.exskylab.koala.core.properties.AppProperties;
 import com.exskylab.koala.core.properties.SessionProperties;
 import com.exskylab.koala.core.security.JwtService;
 import com.exskylab.koala.entities.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
@@ -31,6 +35,7 @@ class PasswordResetTest {
     private JwtService jwtService;
     private PasswordEncoder passwordEncoder;
     private PasswordResetTokenService passwordResetTokenService;
+    private ApplicationEventPublisher eventPublisher;
     private AuthManager authManager;
 
     private final UUID userId = UUID.randomUUID();
@@ -43,13 +48,14 @@ class PasswordResetTest {
         jwtService = mock(JwtService.class);
         passwordEncoder = mock(PasswordEncoder.class);
         passwordResetTokenService = mock(PasswordResetTokenService.class);
+        eventPublisher = mock(ApplicationEventPublisher.class);
 
         authManager = new AuthManager(
                 userService, mock(PendingRegistrationService.class), notificationService,
                 new AppProperties("http://localhost:8080", "http://localhost:3000"),
                 jwtService, passwordEncoder, mock(DeviceService.class), sessionService,
                 mock(LoginAttemptService.class), mock(SecurityService.class), new SessionProperties(),
-                mock(LegalService.class), passwordResetTokenService);
+                mock(LegalService.class), passwordResetTokenService, eventPublisher);
     }
 
     private User user() {
@@ -78,7 +84,12 @@ class PasswordResetTest {
 
         authManager.requestPasswordReset(new ForgotPasswordDto("ada@example.com"));
 
-        verify(notificationService, times(1)).sendEmail(any(), any(), eq(true));
+        var email = org.mockito.ArgumentCaptor.forClass(SendEmailDto.class);
+        verify(notificationService).sendEmail(email.capture(), eq(com.exskylab.koala.entities.DispatchPriority.CRITICAL), eq(true));
+        assertEquals("password-reset-request-template", email.getValue().getTemplateName());
+        assertEquals("http://localhost:3000/reset-password?token=reset-token",
+                email.getValue().getTemplateParameters().get("resetLink"));
+        assertTrue(email.getValue().getSubject().contains("parola sıfırlama"));
     }
 
     @Test
@@ -93,6 +104,7 @@ class PasswordResetTest {
         assertEquals("yeni-hash", user.getPassword());
         verify(userService).save(user);
         verify(sessionService).invalidateActiveSessionsForUserIdExcludingSessionId(eq(userId), isNull());
+        verify(eventPublisher).publishEvent(new PasswordResetCompletedEvent(userId));
     }
 
     @Test

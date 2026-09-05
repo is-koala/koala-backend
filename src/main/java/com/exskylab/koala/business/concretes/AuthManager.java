@@ -14,8 +14,10 @@ import com.exskylab.koala.core.dtos.auth.response.TokenResponseDto;
 import com.exskylab.koala.core.dtos.notification.request.SendEmailDto;
 import com.exskylab.koala.core.dtos.session.response.CreatedSessionDto;
 import com.exskylab.koala.core.exceptions.*;
+import com.exskylab.koala.core.events.PasswordResetCompletedEvent;
 import com.exskylab.koala.core.security.JwtService;
 import com.exskylab.koala.entities.*;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,6 +46,7 @@ public class AuthManager implements AuthService {
     private final SessionProperties sessionProperties;
     private final LegalService legalService;
     private final PasswordResetTokenService passwordResetTokenService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public AuthManager(UserService userService,
                        PendingRegistrationService pendingRegistrationService,
@@ -57,7 +60,8 @@ public class AuthManager implements AuthService {
                        SecurityService securityService,
                        SessionProperties sessionProperties,
                        LegalService legalService,
-                       PasswordResetTokenService passwordResetTokenService) {
+                       PasswordResetTokenService passwordResetTokenService,
+                       ApplicationEventPublisher eventPublisher) {
         this.userService = userService;
         this.pendingRegistrationService = pendingRegistrationService;
         this.notificationService = notificationService;
@@ -71,6 +75,7 @@ public class AuthManager implements AuthService {
         this.sessionProperties = sessionProperties;
         this.legalService = legalService;
         this.passwordResetTokenService = passwordResetTokenService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -327,11 +332,11 @@ public class AuthManager implements AuthService {
         sendEmailDto.setCategory(NotificationCategory.ACCOUNT_SECURITY);
         sendEmailDto.setDestinationEmail(user.getEmail());
         sendEmailDto.setSubject("Koala parola sıfırlama");
-        sendEmailDto.setTemplateName("registration-verification-template");
+        sendEmailDto.setTemplateName("password-reset-request-template");
         sendEmailDto.setTemplateParameters(Map.of(
                 "firstName", user.getFirstName() == null ? "" : user.getFirstName(),
                 "lastName", user.getLastName() == null ? "" : user.getLastName(),
-                "verificationLink", resetLink));
+                "resetLink", resetLink));
 
         notificationService.sendEmail(sendEmailDto, DispatchPriority.CRITICAL, true);
         log.info("Password reset mail queued for user id: {}", user.getId());
@@ -347,6 +352,7 @@ public class AuthManager implements AuthService {
         userService.save(user);
 
         sessionService.invalidateActiveSessionsForUserIdExcludingSessionId(userId, null);
+        eventPublisher.publishEvent(new PasswordResetCompletedEvent(userId));
         log.info("Password reset completed for user id: {}, all sessions invalidated.", userId);
     }
 

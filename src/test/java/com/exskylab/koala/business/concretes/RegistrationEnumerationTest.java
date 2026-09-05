@@ -59,7 +59,8 @@ class RegistrationEnumerationTest {
                 mock(SecurityService.class),
                 new SessionProperties(),
                 mock(LegalService.class),
-                mock(com.exskylab.koala.business.abstracts.PasswordResetTokenService.class));
+                mock(com.exskylab.koala.business.abstracts.PasswordResetTokenService.class),
+                mock(org.springframework.context.ApplicationEventPublisher.class));
 
         when(pendingRegistrationService.createPendingRegistration(any())).thenReturn(pendingRegistration());
     }

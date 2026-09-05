@@ -1,6 +1,7 @@
 package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.core.producers.notification.NotificationProducerService;
+import com.exskylab.koala.core.producers.notification.EmailTaskDto;
 import com.exskylab.koala.core.security.PasswordResetTokenGenerator;
 import com.exskylab.koala.dataAccess.PasswordResetTokenDao;
 import com.exskylab.koala.dataAccess.UserDao;
@@ -15,6 +16,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.transaction.TestTransaction;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +24,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -34,6 +40,7 @@ class PasswordResetIT extends AbstractIntegrationTest {
 
     private static final String FIRST_TOKEN = "U9l3Tj9X61jWhsa83UmRY2YkylyVObchM2t69yAlU9E";
     private static final String SECOND_TOKEN = "ZSngR1DGwejs7_YkFeZaDJmDlVX1Ut6B0dLpKDUVB5o";
+    private static final String COMMIT_TOKEN = "Kj80JkZGYWeLAmGaK0rcSKyH4rj5R88k5hLjI9FHtEo";
 
     @Autowired
     private MockMvc mockMvc;
@@ -146,6 +153,29 @@ class PasswordResetIT extends AbstractIntegrationTest {
                         .content(resetBody(FIRST_TOKEN)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("AUTH_PASSWORD_RESET_TOKEN_INVALID"));
+    }
+
+    @Test
+    void successfulResetQueuesTheSecurityNoticeOnlyAfterCommit() throws Exception {
+        String email = "password-reset-notice@koala.test";
+        saveUser(email);
+        when(tokenGenerator.generate()).thenReturn(COMMIT_TOKEN);
+
+        requestResetLink(email);
+        mockMvc.perform(post("/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(resetBody(COMMIT_TOKEN)))
+                .andExpect(status().isOk());
+
+        verify(notificationProducerService, times(1)).sendEmailTask(any());
+
+        TestTransaction.flagForCommit();
+        TestTransaction.end();
+
+        var task = org.mockito.ArgumentCaptor.forClass(EmailTaskDto.class);
+        verify(notificationProducerService, times(2)).sendEmailTask(task.capture());
+        assertEquals("password-reset-request-template", task.getAllValues().get(0).templateName());
+        assertEquals("password-reset-completed-template", task.getAllValues().get(1).templateName());
     }
 
     private User saveUser(String email) {

@@ -86,6 +86,7 @@ class EmailTemplateTest {
                 Map.entry("email", "yeni@koala.test"),
                 Map.entry("verificationCode", "123456"),
                 Map.entry("verificationLink", "https://api.iskoala.com/verify"),
+                Map.entry("resetLink", "https://iskoala.com/reset-password?token=test-token"),
                 Map.entry("companyName", "Koala AS"),
                 Map.entry("companyId", "9a1c0f10-0001-4c00-8000-000000000001"),
                 Map.entry("companyEmail", "sirket@koala.test"),
