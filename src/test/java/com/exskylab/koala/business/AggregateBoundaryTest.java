@@ -62,6 +62,8 @@ class AggregateBoundaryTest {
                     "mutabakat görevi bir payout için var; PayoutManager SettlementService'e bağlı, ters yön döngü olurdu"),
             new Exemption("SettlementManager", "RefundDao",
                     "sağlayıcı yanıtı iadeyi sonlandırır; PayoutManager SettlementService'e bağlı, ters yön döngü olurdu"),
+            new Exemption("PaymentManager", "JobAssignmentDao",
+                    "salt okuma sahiplik kapisi; JobAssignmentManager PaymentService'e bagli oldugu icin ters yon dongu olurdu"),
             new Exemption("JobCategoryManager", "JobDao",
                     "salt okuma silme kapısı; JobManager JobCategoryService'e bağlı olduğu için ters yön döngü olurdu"),
             new Exemption("JobCategoryManager", "JobAlertDao",

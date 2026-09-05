@@ -2,13 +2,16 @@ package com.exskylab.koala.business.concretes;
 
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.PaymentService;
+import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.PaymentMessages;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
+import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
 import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoPaymentResultRequestDto;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoPaymentResultResponseDto;
+import com.exskylab.koala.dataAccess.JobAssignmentDao;
 import com.exskylab.koala.dataAccess.PaymentDao;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.Payment;
@@ -32,12 +35,19 @@ public class PaymentManager implements PaymentService {
     private final PaymentDao paymentDao;
     private final IyzicoPaymentService iyzicoPaymentService;
     private final PaymentStateMachine stateMachine;
+    private final SecurityService securityService;
+    private final JobAssignmentDao jobAssignmentDao;
+    private final AssignmentParticipants assignmentParticipants;
 
     public PaymentManager(PaymentDao paymentDao, IyzicoPaymentService iyzicoPaymentService,
-                          PaymentStateMachine stateMachine) {
+                          PaymentStateMachine stateMachine, SecurityService securityService,
+                          JobAssignmentDao jobAssignmentDao, AssignmentParticipants assignmentParticipants) {
         this.paymentDao = paymentDao;
         this.iyzicoPaymentService = iyzicoPaymentService;
         this.stateMachine = stateMachine;
+        this.securityService = securityService;
+        this.jobAssignmentDao = jobAssignmentDao;
+        this.assignmentParticipants = assignmentParticipants;
     }
 
     @Override
@@ -117,6 +127,13 @@ public class PaymentManager implements PaymentService {
     @Override
     @Transactional(readOnly = true)
     public List<Payment> getAttemptsForAssignment(UUID jobAssignmentId) {
+        JobAssignment assignment = jobAssignmentDao.findById(jobAssignmentId)
+                .orElseThrow(() -> new ResourceNotFoundException(PaymentMessages.ASSIGNMENT_NOT_FOUND));
+
+        if (!assignmentParticipants.isParticipant(assignment, securityService.getAuthenticatedUserId())) {
+            throw new ResourceNotFoundException(PaymentMessages.ASSIGNMENT_NOT_FOUND);
+        }
+
         return paymentDao.findAllByJobAssignmentIdOrderByCreatedAtDesc(jobAssignmentId);
     }
 

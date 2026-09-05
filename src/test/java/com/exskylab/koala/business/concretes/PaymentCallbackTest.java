@@ -6,6 +6,10 @@ import com.exskylab.koala.core.helpers.PaymentStateMachine;
 import com.exskylab.koala.core.properties.CommissionProperties;
 import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoPaymentResultResponseDto;
+import com.exskylab.koala.business.abstracts.SecurityService;
+import com.exskylab.koala.business.abstracts.CompanyContactService;
+import com.exskylab.koala.core.helpers.AssignmentParticipants;
+import com.exskylab.koala.dataAccess.JobAssignmentDao;
 import com.exskylab.koala.dataAccess.PaymentDao;
 import com.exskylab.koala.entities.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,7 +35,9 @@ class PaymentCallbackTest {
     void setUp() {
         paymentDao = mock(PaymentDao.class);
         iyzicoPaymentService = mock(IyzicoPaymentService.class);
-        paymentManager = new PaymentManager(paymentDao, iyzicoPaymentService, new PaymentStateMachine());
+        paymentManager = new PaymentManager(paymentDao, iyzicoPaymentService, new PaymentStateMachine(),
+                mock(SecurityService.class), mock(JobAssignmentDao.class),
+                new AssignmentParticipants(mock(CompanyContactService.class)));
 
         when(paymentDao.save(any())).thenAnswer(i -> i.getArgument(0));
     }
