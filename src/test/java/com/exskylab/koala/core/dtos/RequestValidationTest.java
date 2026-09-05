@@ -254,6 +254,15 @@ class RequestValidationTest {
     }
 
     @Test
+    void aCompanyContactInvitationCannotBeSwitchedOff() {
+        UpdateNotificationPreferencesDto request = new UpdateNotificationPreferencesDto();
+        request.setPreferences(List.of(
+                entry(NotificationCategory.COMPANY_UPDATES, NotificationChannel.EMAIL, false)));
+
+        assertTrue(messagesFor(request).contains("{notification.preference.not.optional}"));
+    }
+
+    @Test
     void anOptionalNotificationCanBeSwitchedOffAndBackOn() {
         UpdateNotificationPreferencesDto off = new UpdateNotificationPreferencesDto();
         off.setPreferences(List.of(entry(NotificationCategory.JOB_ALERTS, NotificationChannel.EMAIL, false)));
