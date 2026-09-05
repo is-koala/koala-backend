@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.support.FallbackSettings;
 import com.exskylab.koala.business.abstracts.CompanyContactService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.UserService;
@@ -64,7 +65,7 @@ class PaymentSessionAuthorizationTest {
                 iyzicoPaymentService,
                 companyContactService,
                 mock(UserService.class),
-                new PricingManager(new CommissionCalculator(new CommissionProperties())),
+                new PricingManager(FallbackSettings.commissionCalculator()),
                 mock(PaymentService.class),
                 new PaymentStateMachine(),
                 new AppProperties("http://localhost:8080", "http://localhost:3000"),
