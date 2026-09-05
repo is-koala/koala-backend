@@ -53,6 +53,7 @@
     <include file="db/changelog/2026/09/05-02-job-pricing-snapshot.xml"/>
     <include file="db/changelog/2026/09/05-03-qa-marketplace-seed-history.xml"/>
     <include file="db/changelog/2026/09/05-04-canonical-addresses.xml"/>
+    <include file="db/changelog/2026/09/05-05-versioned-agreement-content-urls.xml"/>
     <include file="db/changelog/2026/09/06-01-drop-qa-marketplace-seed-history.xml"/>
     <include file="db/changelog/2026/09/06-02-drop-job-category-seed.xml"/>
 </databaseChangeLog>

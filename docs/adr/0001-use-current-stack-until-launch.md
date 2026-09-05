@@ -1,6 +1,6 @@
 # Mevcut ortamı lansmana kadar test için kullan
 
-Durum: Kabul edildi. Seed'e ilişkin maddesi [ADR-0008](0008-ship-an-empty-database-without-sample-data.md) ile kısmen geçersizdir.
+Durum: [Dalga 1 staging kararı](../environments.md) ile geçersiz kılındı. Seed'e ilişkin maddesi de [ADR-0008](0008-ship-an-empty-database-without-sample-data.md) ile değiştirilmiştir.
 
 Koala henüz gerçek kullanıcılara açılmadığı için mevcut Dokploy uygulaması, PostgreSQL, RabbitMQ ve depolama ile `api.iskoala.com` şimdilik pre-production test ortamıdır; bugün ikinci bir staging altyapısı kurulmayacaktır. Lansmanda mevcut veritabanı tamamen sıfırlanıp aynı altyapı temiz production olarak kullanılacaktır; sentetik verileri ayırmak amacıyla `testData` veya `seedRunId` alanları eklenmez. Bu karar, ilk ayrı staging önerisinin yerine Q25, Q33-B ve Q36-C ile alınmıştır.
 

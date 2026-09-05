@@ -21,7 +21,7 @@ public class StorageProperties {
 
     private String publicUrl;
 
-    private int signedUrlMinutes = 15;
+    private int signedUrlMinutes = 3;
 
     private Local local = new Local();
 

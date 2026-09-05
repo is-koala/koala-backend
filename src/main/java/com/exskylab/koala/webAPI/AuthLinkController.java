@@ -2,16 +2,15 @@ package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.business.abstracts.AuthLinkService;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.util.MultiValueMap;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -34,76 +33,49 @@ public class AuthLinkController {
     }
 
     @SecurityRequirements
-    @Operation(summary = "Kayıt işlemini Koala uygulamasında aç",
-            description = "Tokenı tüketmeden, yapılandırılmış Koala uygulama scheme'ine geçiş sayfası gösterir.")
+    @Operation(summary = "Eski kayıt bağlantısını web'e yönlendir",
+            description = "Tokenı tüketmeden Koala web kayıt doğrulama sayfasına kalıcı yönlendirme yapar.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Uygulamaya geçiş sayfası",
-                    content = @Content(mediaType = MediaType.TEXT_HTML_VALUE)),
-            @ApiResponse(responseCode = "400", description = "Token eksik, boş veya birden fazla",
-                    content = @Content(mediaType = MediaType.TEXT_HTML_VALUE))
+            @ApiResponse(responseCode = "301", description = "Web kayıt doğrulama sayfası"),
+            @ApiResponse(responseCode = "400", description = "Token eksik, boş veya birden fazla")
     })
     @GetMapping("/complete-registration")
-    public String completeRegistration(@RequestParam MultiValueMap<String, String> parameters,
-                                       Model model,
-                                       HttpServletResponse response) {
+    public ResponseEntity<Void> completeRegistration(@RequestParam MultiValueMap<String, String> parameters,
+                                                     HttpServletResponse response) {
         String token = validToken(parameters);
         if (token == null) {
-            return invalidLanding(model, response);
+            return invalid(response);
         }
-        return landing(
-                "Kaydını tamamla",
-                "E-posta adresin doğrulandıktan sonra hesabını Koala uygulamasında tamamlayabilirsin.",
-                "Koala Staging'de kaydı tamamla",
-                authLinkService.registrationAppLink(token),
-                model,
-                response);
+        return redirect(authLinkService.registrationLandingLink(token), response);
     }
 
     @SecurityRequirements
-    @Operation(summary = "Parola sıfırlamayı Koala uygulamasında aç",
-            description = "Tokenı tüketmeden, yapılandırılmış Koala uygulama scheme'ine geçiş sayfası gösterir.")
+    @Operation(summary = "Eski parola bağlantısını web'e yönlendir",
+            description = "Tokenı tüketmeden Koala web parola sıfırlama sayfasına kalıcı yönlendirme yapar.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Uygulamaya geçiş sayfası",
-                    content = @Content(mediaType = MediaType.TEXT_HTML_VALUE)),
-            @ApiResponse(responseCode = "400", description = "Token eksik, boş veya birden fazla",
-                    content = @Content(mediaType = MediaType.TEXT_HTML_VALUE))
+            @ApiResponse(responseCode = "301", description = "Web parola sıfırlama sayfası"),
+            @ApiResponse(responseCode = "400", description = "Token eksik, boş veya birden fazla")
     })
     @GetMapping("/reset-password")
-    public String resetPassword(@RequestParam MultiValueMap<String, String> parameters,
-                                Model model,
-                                HttpServletResponse response) {
+    public ResponseEntity<Void> resetPassword(@RequestParam MultiValueMap<String, String> parameters,
+                                              HttpServletResponse response) {
         String token = validToken(parameters);
         if (token == null) {
-            return invalidLanding(model, response);
+            return invalid(response);
         }
-        return landing(
-                "Yeni parola belirle",
-                "Parolanı güvenli biçimde değiştirmek için Koala uygulamasına devam et.",
-                "Koala Staging'de aç",
-                authLinkService.passwordResetAppLink(token),
-                model,
-                response);
+        return redirect(authLinkService.passwordResetLandingLink(token), response);
     }
 
-    private String landing(String title, String message, String buttonLabel, String appLink,
-                           Model model, HttpServletResponse response) {
+    private ResponseEntity<Void> redirect(String location, HttpServletResponse response) {
         secure(response);
-        model.addAttribute("title", title);
-        model.addAttribute("message", message);
-        model.addAttribute("buttonLabel", buttonLabel);
-        model.addAttribute("appLink", appLink);
-        return "auth-link-landing";
+        return ResponseEntity.status(HttpStatus.MOVED_PERMANENTLY)
+                .header(HttpHeaders.LOCATION, location)
+                .build();
     }
 
-    private String invalidLanding(Model model, HttpServletResponse response) {
-        response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-        return landing(
-                "Bağlantı geçersiz",
-                "Bu bağlantı eksik veya hatalı. E-postadaki bağlantıyı yeniden açmayı deneyebilirsin.",
-                "",
-                null,
-                model,
-                response);
+    private ResponseEntity<Void> invalid(HttpServletResponse response) {
+        secure(response);
+        return ResponseEntity.badRequest().build();
     }
 
     private String validToken(MultiValueMap<String, String> parameters) {

@@ -9,7 +9,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -20,23 +19,22 @@ class AuthLinkIT extends AbstractIntegrationTest {
     private MockMvc mockMvc;
 
     @Test
-    void resetLandingIsPublicNonCacheableAndOpensOnlyTheConfiguredApp() throws Exception {
+    void resetLegacyLinkPermanentlyRedirectsToTheWebWithoutLeakingReferrerData() throws Exception {
         mockMvc.perform(get("/auth-links/reset-password").param("token", "reset-token"))
-                .andExpect(status().isOk())
-                .andExpect(content().contentTypeCompatibleWith("text/html"))
+                .andExpect(status().isMovedPermanently())
+                .andExpect(header().string("Location",
+                        "http://localhost:3000/sifre-sifirla?token=reset-token"))
                 .andExpect(header().string("Cache-Control", containsString("no-store")))
                 .andExpect(header().string("Referrer-Policy", "no-referrer"))
-                .andExpect(header().string("Content-Security-Policy", containsString("default-src 'none'")))
-                .andExpect(content().string(containsString(
-                        "koala-staging://reset-password?token=reset-token")));
+                .andExpect(header().string("X-Robots-Tag", containsString("noindex")));
     }
 
     @Test
-    void registrationLandingUsesTheRegistrationDestination() throws Exception {
+    void registrationLegacyLinkRedirectsToTheTurkishWebRoute() throws Exception {
         mockMvc.perform(get("/auth-links/complete-registration").param("token", "registration-token"))
-                .andExpect(status().isOk())
-                .andExpect(content().string(containsString(
-                        "koala-staging://complete-registration?token=registration-token")));
+                .andExpect(status().isMovedPermanently())
+                .andExpect(header().string("Location",
+                        "http://localhost:3000/hesap-dogrula?token=registration-token"));
     }
 
     @Test
@@ -50,10 +48,11 @@ class AuthLinkIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void tokenIsHtmlEscapedInsteadOfBecomingMarkup() throws Exception {
+    void tokenIsEncodedInsteadOfBecomingRedirectSyntax() throws Exception {
         mockMvc.perform(get("/auth-links/reset-password")
                         .param("token", "\"><script>alert(1)</script>"))
-                .andExpect(status().isOk())
-                .andExpect(content().string(not(containsString("<script>alert(1)</script>"))));
+                .andExpect(status().isMovedPermanently())
+                .andExpect(header().string("Location", not(containsString("<script>"))))
+                .andExpect(header().string("Location", containsString("%3Cscript%3E")));
     }
 }

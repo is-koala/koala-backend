@@ -1,6 +1,7 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.NotificationService;
+import com.exskylab.koala.core.dtos.notification.request.SendEmailDto;
 import com.exskylab.koala.core.dtos.notification.request.SendPushToUserDto;
 import com.exskylab.koala.core.helpers.MessageResolver;
 import com.exskylab.koala.entities.ApplicationStatus;
@@ -137,6 +138,19 @@ class ActivityNotificationRulesTest {
 
         verify(notificationService).sendPushToUser(any(), any(), anyBoolean());
         verify(notificationService).sendEmail(any(), any(), anyBoolean());
+    }
+
+    @Test
+    void activityEmailActionUsesTheWebBaseUrl() {
+        manager = new ActivityNotificationManager(notificationService, mock(MessageResolver.class),
+                new com.exskylab.koala.core.properties.AppProperties(
+                        "https://api.iskoala.com", "https://iskoala.com"));
+
+        manager.assignmentCompleted(assignment());
+
+        ArgumentCaptor<SendEmailDto> captor = ArgumentCaptor.forClass(SendEmailDto.class);
+        verify(notificationService).sendEmail(captor.capture(), any(), anyBoolean());
+        assertEquals("https://iskoala.com", captor.getValue().getTemplateParameters().get("actionUrl"));
     }
 
     @Test

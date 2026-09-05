@@ -17,8 +17,8 @@ import com.exskylab.koala.core.constants.PaymentMessages;
 import com.exskylab.koala.core.dtos.payment.request.PricingQuoteRequestDto;
 import com.exskylab.koala.core.dtos.payment.response.PricingBreakdownDto;
 import com.exskylab.koala.core.dtos.payment.response.PaymentAttemptDto;
+import com.exskylab.koala.core.helpers.PaymentReturnUrlBuilder;
 import com.exskylab.koala.core.mappers.PaymentMapper;
-import com.exskylab.koala.core.properties.AppProperties;
 import com.exskylab.koala.entities.Payment;
 import com.exskylab.koala.entities.PaymentAttemptStatus;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
@@ -28,8 +28,6 @@ import org.springframework.web.bind.annotation.*;
 import jakarta.validation.Valid;
 import org.springframework.web.servlet.view.RedirectView;
 
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
@@ -41,14 +39,14 @@ public class PaymentsController {
 
     private final PaymentService paymentService;
     private final PaymentMapper paymentMapper;
-    private final AppProperties appProperties;
+    private final PaymentReturnUrlBuilder paymentReturnUrlBuilder;
     private final PricingService pricingService;
 
     public PaymentsController(PaymentService paymentService, PaymentMapper paymentMapper,
-                              AppProperties appProperties, PricingService pricingService) {
+                              PaymentReturnUrlBuilder paymentReturnUrlBuilder, PricingService pricingService) {
         this.paymentService = paymentService;
         this.paymentMapper = paymentMapper;
-        this.appProperties = appProperties;
+        this.paymentReturnUrlBuilder = paymentReturnUrlBuilder;
         this.pricingService = pricingService;
     }
 
@@ -85,10 +83,8 @@ public class PaymentsController {
         Payment payment = paymentService.completeFromCallback(token);
         boolean succeeded = payment.getStatus() == PaymentAttemptStatus.SUCCEEDED;
 
-        String target = appProperties.frontendUrl() + "/payment/result"
-                + "?status=" + (succeeded ? "success" : "failed")
-                + "&assignmentId=" + URLEncoder.encode(
-                        payment.getJobAssignment().getId().toString(), StandardCharsets.UTF_8);
+        String target = paymentReturnUrlBuilder.resultUrl(
+                succeeded, payment.getJobAssignment().getId());
 
         return new RedirectView(target);
     }

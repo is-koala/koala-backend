@@ -10,6 +10,8 @@ public class AuthLinkManager implements AuthLinkService {
 
     private static final String COMPLETE_REGISTRATION = "complete-registration";
     private static final String RESET_PASSWORD = "reset-password";
+    private static final String REGISTRATION_WEB_PATH = "hesap-dogrula";
+    private static final String PASSWORD_RESET_WEB_PATH = "sifre-sifirla";
 
     private final AuthLinkProperties properties;
 
@@ -19,12 +21,12 @@ public class AuthLinkManager implements AuthLinkService {
 
     @Override
     public String registrationLandingLink(String token) {
-        return landingLink(COMPLETE_REGISTRATION, token);
+        return landingLink(REGISTRATION_WEB_PATH, token);
     }
 
     @Override
     public String passwordResetLandingLink(String token) {
-        return landingLink(RESET_PASSWORD, token);
+        return landingLink(PASSWORD_RESET_WEB_PATH, token);
     }
 
     @Override
@@ -39,7 +41,7 @@ public class AuthLinkManager implements AuthLinkService {
 
     private String landingLink(String destination, String token) {
         return UriComponentsBuilder.fromUriString(properties.getPublicBaseUrl())
-                .pathSegment("auth-links", destination)
+                .pathSegment(destination)
                 .queryParam("token", token)
                 .build()
                 .encode()

@@ -99,7 +99,7 @@ logging:
 
 springdoc:
   swagger-ui:
-    enabled: ${SPRINGDOC_ENABLED:true}
+    enabled: ${SPRINGDOC_ENABLED:false}
     path: /swagger-ui.html
     doc-expansion: none
     default-models-expand-depth: -1
@@ -107,18 +107,21 @@ springdoc:
     tags-sorter: alpha
     operations-sorter: alpha
   api-docs:
-    enabled: ${SPRINGDOC_ENABLED:true}
+    enabled: ${SPRINGDOC_ENABLED:false}
     path: /v3/api-docs
 
 app:
   minimum-version: ${APP_MINIMUM_VERSION:}
   api-url: ${API_URL:http://localhost:8080}
-  frontend-url: ${FRONTEND_URL:http://localhost:3000}
+  web-base-url: ${WEB_BASE_URL:http://localhost:3000}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
 
+payments:
+  return-base-url: ${PAYMENTS_RETURN_BASE_URL:koala-staging://}
+
 auth-links:
-  public-base-url: ${AUTH_LINK_PUBLIC_BASE_URL:${API_URL:http://localhost:8080}}
+  public-base-url: ${AUTH_LINK_PUBLIC_BASE_URL:${WEB_BASE_URL:http://localhost:3000}}
   app-scheme: ${AUTH_LINK_APP_SCHEME:koala-staging}
 
 email:
@@ -224,7 +227,7 @@ storage:
   secret-key: ${STORAGE_SECRET_KEY:}
   endpoint: ${STORAGE_ENDPOINT:}
   public-url: ${STORAGE_PUBLIC_URL:}
-  signed-url-minutes: ${STORAGE_SIGNED_URL_MINUTES:15}
+  signed-url-minutes: ${STORAGE_SIGNED_URL_MINUTES:3}
   local:
     path: ${STORAGE_LOCAL_PATH:uploads}
 
