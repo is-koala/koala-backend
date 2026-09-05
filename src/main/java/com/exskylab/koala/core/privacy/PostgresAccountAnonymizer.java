@@ -171,9 +171,15 @@ public class PostgresAccountAnonymizer implements AccountAnonymizer {
         jdbcTemplate.update("delete from users_saved_jobs where user_id = ?", userId);
         jdbcTemplate.update("update user_communication_preferences set email_enabled = false, sms_enabled = false, push_enabled = false, is_deleted = true, deleted_at = now() where user_id = ?",
                 userId);
+        jdbcTemplate.update("update notification_preferences set enabled = false, is_deleted = true, deleted_at = coalesce(deleted_at, now()) where user_id = ?",
+                userId);
         jdbcTemplate.update("update bank_accounts set iban = ?, account_holder_name = null, is_primary = false, is_active = false, is_deleted = true, deleted_at = now() where user_id = ?",
                 REDACTED, userId);
         jdbcTemplate.update("update consent_records set ip_address = null, user_agent = null where user_id = ?", userId);
+        jdbcTemplate.update("update commercial_message_consents set ip_address = null, user_agent = null where user_id = ?",
+                userId);
+        jdbcTemplate.update("update unsubscribe_tokens set is_deleted = true, deleted_at = coalesce(deleted_at, now()), expires_at = least(expires_at, now()) where user_id = ?",
+                userId);
     }
 
     private void scrubProfile(UUID userId) {

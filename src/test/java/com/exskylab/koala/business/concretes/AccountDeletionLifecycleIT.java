@@ -100,6 +100,23 @@ class AccountDeletionLifecycleIT extends AbstractIntegrationTest {
                 values (?, ?, ?, true, now(), '198.51.100.4', 'test-agent', now(), false)
                 """, UUID.randomUUID(), userId, agreementId);
         jdbcTemplate.update("""
+                insert into notification_preferences
+                    (id, user_id, category, channel, enabled, created_at, is_deleted)
+                values (?, ?, 'NEWSLETTER', 'EMAIL', true, now(), false)
+                """, UUID.randomUUID(), userId);
+        jdbcTemplate.update("""
+                insert into commercial_message_consents
+                    (id, user_id, category, channel, granted, recorded_at, ip_address,
+                     user_agent, source, created_at, is_deleted)
+                values (?, ?, 'NEWSLETTER', 'EMAIL', true, now(), '198.51.100.5',
+                        'commercial-test-agent', 'PREFERENCE_CENTRE', now(), false)
+                """, UUID.randomUUID(), userId);
+        jdbcTemplate.update("""
+                insert into unsubscribe_tokens
+                    (id, user_id, category, channel, token_digest, expires_at, created_at, is_deleted)
+                values (?, ?, 'NEWSLETTER', 'EMAIL', ?, now() + interval '1 day', now(), false)
+                """, UUID.randomUUID(), userId, "b".repeat(64));
+        jdbcTemplate.update("""
                 insert into bank_accounts
                     (id, user_id, iban, account_holder_name, is_primary, is_active, created_at, is_deleted)
                 values (?, ?, 'TR000000000000000000000001', 'Ayşe Deneme', true, true, now(), false)
@@ -222,6 +239,20 @@ class AccountDeletionLifecycleIT extends AbstractIntegrationTest {
                 "select ip_address from consent_records where user_id = ?", String.class, userId));
         assertNull(jdbcTemplate.queryForObject(
                 "select user_agent from consent_records where user_id = ?", String.class, userId));
+        assertFalse(Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                "select enabled from notification_preferences where user_id = ?", Boolean.class, userId)));
+        assertTrue(Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                "select is_deleted from notification_preferences where user_id = ?", Boolean.class, userId)));
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "select count(*) from commercial_message_consents where user_id = ?", Integer.class, userId));
+        assertNull(jdbcTemplate.queryForObject(
+                "select ip_address from commercial_message_consents where user_id = ?", String.class, userId));
+        assertNull(jdbcTemplate.queryForObject(
+                "select user_agent from commercial_message_consents where user_id = ?", String.class, userId));
+        assertTrue(Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                "select is_deleted from unsubscribe_tokens where user_id = ?", Boolean.class, userId)));
+        assertTrue(Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                "select deleted_at is not null from unsubscribe_tokens where user_id = ?", Boolean.class, userId)));
         assertEquals("ANONYMIZED", jdbcTemplate.queryForObject(
                 "select status from account_deletion_requests where id = ?", String.class, requestId));
         assertNull(jdbcTemplate.queryForObject(

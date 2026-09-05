@@ -10,9 +10,11 @@ The scheduled lifecycle is `REQUESTED` → waiting period → `ANONYMIZED`. A re
 | `experiences`, `educations`, availability, alerts, templates, applications | Remove free text/location and soft-delete user-owned profile/work-search data. | No retention requirement. |
 | `work_sessions` | Clear check-in/out coordinates. | Work duration/state may remain for settlement evidence. |
 | `sessions`, devices, password-reset tokens, login attempts, identity challenges, verifications, authorities | Revoke/delete credentials and clear identifiers/tokens. | Security access ends immediately. |
-| preferences, saved jobs, talent-pool entries, bank accounts | Disable/delete preferences and talent notes; redact IBAN/account-holder fields. | No reusable financial credential or user-linked free text remains. |
+| communication/notification preferences, saved jobs, talent-pool entries, bank accounts | Disable and soft-delete preferences, remove talent notes, and redact IBAN/account-holder fields. | No reusable financial credential or user-linked free text remains. |
 | `payments`, assignments, invoices | Retain transactional state linked only through the anonymized subject shell. | Financial/legal retention and reconciliation. |
 | `consent_records` | Retain agreement/version/decision/time; clear IP and user agent. | Legal consent evidence without readable network/device PII. |
+| `commercial_message_consents` | Retain category/channel/decision/time/source; clear IP and user agent. | Commercial-consent evidence remains without readable network/device PII. |
+| `unsubscribe_tokens` | Expire immediately and soft-delete. | Previously issued unsubscribe credentials cannot be reused after account deletion. |
 | `account_deletion_requests` | Clear user relation and free-text reason; retain opaque `subject_id`, status and timestamps. During the rolling-deploy expand phase `subject_id` stays nullable and a compatibility trigger fills it for old binaries; a later contract migration may enforce `NOT NULL` after old binaries are retired. | Lifecycle/audit evidence without breaking mixed-version writes. |
 | `account_anonymization_audit` | Append one idempotent row per completed step. | Operational proof without copied personal data. |
 | `account_media_deletion_outbox` | Persist the minimum storage key in the same transaction, try after commit, retry hourly, and delete the outbox row after storage confirms deletion. | A storage outage cannot turn an `ANONYMIZED` request into a forgotten personal object. |
