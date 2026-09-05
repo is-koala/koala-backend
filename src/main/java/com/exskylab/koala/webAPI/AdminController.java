@@ -67,6 +67,11 @@ public class AdminController {
         return ResponseEntity.ok(new SuccessResult(GalleryMessages.IMAGE_REMOVED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Şirketleri onay durumuna göre listele",
+            description = "approved=false onay bekleyen şirketleri verir.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Şirketler listelendi")
+    })
     @RequiresPermission(StaffPermission.COMPANY_APPROVE)
     @GetMapping("/companies")
     public ResponseEntity<SuccessDataResult<PageDto<CompanyDto>>> companies(
@@ -94,6 +99,11 @@ public class AdminController {
                 AdminMessages.COMPANY_APPROVED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Kullanıcıları ara",
+            description = "query verilmezse tüm kullanıcılar sayfalanarak döner.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Kullanıcılar listelendi")
+    })
     @RequiresPermission(StaffPermission.USER_READ)
     @GetMapping("/users")
     public ResponseEntity<SuccessDataResult<PageDto<SafeUserDto>>> users(
