@@ -41,7 +41,7 @@ import static org.mockito.Mockito.*;
 
 @TestPropertySource(properties = {
         "management.health.mail.enabled=false",
-        "demo.seed.enabled=false",
+        "qa.marketplace-seed.version=",
         "email.delivery.mode=ALLOWLIST",
         "email.delivery.allowed-recipients=qa-employer@example.test"
 })
