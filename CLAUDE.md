@@ -205,6 +205,41 @@ Eskiden `getAuthenticatedUserFromContext()` ve `getAuthenticatedUserFromDatabase
 
 **`AuditorAwareImpl` referans kullanır.** `getReferenceById` ile proxy alır, böylece her denetimli kayıtta fazladan `SELECT` atılmaz.
 
+## 2f2. Rol satırları — anahtar, tekillik ve rol verme kaydı
+
+`authorities` tablosu üç yapısal eksikle canlıya çıkmıştı: birincil anahtarı yoktu (ADR-0010 bunu yazmış ama düzeltmemişti), `(user_id, role)` üzerinde tekillik kısıtı yoktu ve rolü kimin ne zaman verdiği hiçbir yerde durmuyordu. `ROLE_ADMIN` şirket onaylıyor, escrow'dan para salıyor ve çalışma zamanı ayarlarını değiştiriyor; "bu kişi ne zaman ve kimin eliyle admin oldu" sorusunun veritabanında cevabı yoktu.
+
+`2026/09/06-03-authorities-key-and-grant-provenance.xml` altı changeset'te bunu kapatıyor ve **sıra kritik**: önce mükerrer temizliği, sonra kısıtlar. Java tarafı `Set<Role>` olduğu için uygulamadan bakınca tekrar görünmüyordu ama veritabanı aynı satırı iki kez kabul ediyordu; canlıda tek bir mükerrer çift varsa temizlik adımı olmadan `uk_authorities_user_role` "could not create unique index" ile patlar ve **Liquibase açılışta durduğu için uygulama hiç ayağa kalkmaz.** `AuthoritiesDuplicateMigrationIT` tam bunu sabitliyor: changeset'leri geri alıp mükerrer satır yazıyor ve changelog'u yeniden koşuyor — temizlik kısıttan sonraya alınırsa test kırmızıya döner.
+
+**Birincil anahtar `(user_id, role)` bileşiği, ayrı bir `id` sütunu değil.** Yüzey sütunu eklemek `@ElementCollection` eşlemesini bozardı; bileşik anahtar hem mevcut eşlemeyi olduğu gibi bırakıyor hem tekilliği garanti ediyor.
+
+**`granted_at` `TIMESTAMPTZ`.** Issue metni `TIMESTAMP` diyor ama §2h'nin kuralı ve `TimestampTimeZoneIT` başka türlüsüne izin vermiyor — saat dilimsiz kalan tek istisna `jobs.start_date_time`/`end_date_time`.
+
+**İkisi de null bırakılabilir.** Sistem kullanıcısının seed satırının veren kimsesi yok; `NOT NULL` yapmak o satır için uydurma bir değer yazmayı zorlardı. Mevcut satırların `granted_at` değeri migration'da `now()` ile dolduruluyor, `granted_by_id` null kalıyor.
+
+**`uk_authorities_user_role` birincil anahtarla teknik olarak fazlalık** — Postgres'te ikinci bir benzersiz indeks demek. Kısıt adıyla issue'da isteniyor ve kullanıcı başına bir-iki satır taşıyan bir tabloda maliyeti ihmal edilebilir olduğu için bırakıldı; tekilliği zaten `pk_authorities` sağlıyor, ileride sadeleştirilmek istenirse düşürülebilir.
+
+### `@ElementCollection` ölçüldü: yalnızca koleksiyon değiştirilince siliyor
+
+Issue'nun kritik doğrulaması `AuthoritiesGrantProvenanceIT` ile gerçek Postgres'te ölçüldü, sonuç ikiye ayrılıyor:
+
+| Yazma biçimi | Hibernate ne yapıyor | `granted_at` / `granted_by_id` |
+|---|---|---|
+| `user.getAuthorities().add(rol)` | yalnızca yeni satır için `INSERT` | **korunuyor** |
+| `user.setAuthorities(yeniKume)` | tüm satırlar `DELETE`, hepsi yeniden `INSERT` | **siliniyor** |
+
+Yani delete-then-insert davranışı koşulsuz değil: koleksiyon **örneği** değiştiğinde Hibernate onu dereference edilmiş sayıp toptan siliyor, yerinde mutasyonda ise satır bazlı çalışıyor.
+
+**Karar: `@ElementCollection` bölünmedi, `UserAuthority` entity'si açılmadı.** Gerekçe:
+
+1. Kayıp yalnızca toptan değiştirmede oluşuyor ve bugün ana koddaki tek `setAuthorities` çağrısı `AuthManager`'daki **yeni** kullanıcı kaydı — henüz veritabanında satırı olmadığı için kaybedecek bir kaydı yok.
+2. Ayrı entity'ye geçmek `User.authorities` tipini değiştirir; `UserPrincipal`, `UserMapper.roles` eşlemesi, `SessionDao` entity graph'i, `ImageManager` ve `CvManager` yetki kontrolleri bu tipe bakıyor. Kimlik doğrulamanın tam ortasında, rol verme ucu henüz yazılmamışken yapılacak bir değişiklik değil.
+3. Bileşik anahtar zaten `UserAuthority`'nin sağlayacağı tekilliği veriyor; kalan tek fark provenance'ın hangi yazma biçiminde hayatta kaldığı — ve bu bir kural yazarak kapanıyor.
+
+**Kural: kayıtlı bir kullanıcıya rol verirken `setAuthorities` kullanılmaz, `getAuthorities().add(...)` kullanılır.** Rol verme ucu yazılırken (ayrı issue) `granted_at`/`granted_by_id` açık bir `UPDATE` ile doldurulacak; Hibernate bu sütunları eşlemediği için kendiliğinden yazmıyor.
+
+`AuthorityGrantSafetyTest` bu kuralı yapısal olarak koruyor: ana kodda `AuthManager` dışında bir `setAuthorities` çağrısı belirirse test kırmızıya döner ve buraya yönlendirir. Muafiyet listesi de kontrol ediliyor — `AuthManager`'daki çağrı kalkarsa liste bayatlamış demektir.
+
 ## 2g. Entity kimliği
 
 `BaseEntity` UUID tabanlı `equals`/`hashCode` tanımlar ve `final`'dir; alt sınıflar ezemez. `Hibernate.getClass()` kullanılır ki proxy ile gerçek nesne eşit sayılsın. Kimliği atanmamış (henüz kaydedilmemiş) iki nesne **eşit değildir** — bu bilinçli: aksi halde bir `Set`'e eklenen iki yeni kayıt birbirini yutar.
