@@ -53,6 +53,13 @@ public class ActivityNotificationManager implements ActivityNotificationService 
     }
 
     @Override
+    public void applicationWithdrawn(JobApplication application) {
+        notify(application.getJob().getCreator(), application.getJob().getTitle(),
+                ActivityMessages.APPLICATION_WITHDRAWN, NotificationCategory.APPLICATION_UPDATES,
+                NotificationTargetType.JOB_APPLICATION, application.getId());
+    }
+
+    @Override
     public void assignmentOffered(JobAssignment assignment) {
         notify(assignment.getWorker(), assignment.getJob().getTitle(),
                 ActivityMessages.ASSIGNMENT_OFFERED, NotificationCategory.APPLICATION_UPDATES,

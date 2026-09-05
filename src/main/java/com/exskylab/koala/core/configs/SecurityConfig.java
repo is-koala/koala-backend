@@ -145,6 +145,7 @@ public class SecurityConfig {
 
                         //job-application endpoints
                         .requestMatchers(HttpMethod.POST, "/job-applications/{applicationId}/respond").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/job-applications/{applicationId}/withdraw").hasAnyRole("USER", "ADMIN")
 
 
 

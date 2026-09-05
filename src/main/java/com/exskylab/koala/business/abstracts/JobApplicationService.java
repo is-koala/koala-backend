@@ -29,6 +29,8 @@ public interface JobApplicationService {
 
     JobApplicationDetailDto respondToApplication(UUID applicationId, AnswerApplicationDto jobApplicationsApplicationIdPatchRequestDto);
 
+    JobApplicationDetailDto withdrawApplication(UUID applicationId);
+
     PageDto<MyApplicationDto> getMyApplications(ApplicationStatus status, Pageable pageable);
 
     boolean hasApplied(UUID jobId, UUID userId);
