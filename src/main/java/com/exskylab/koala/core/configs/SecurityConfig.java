@@ -72,6 +72,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/companies/{companyId}/images/{imageId}").hasAnyRole("USER", "ADMIN")
 
                         //admin endpoints
+                        .requestMatchers(HttpMethod.GET, "/admin/users/{userId}/roles").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/admin/users/{userId}/roles").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/admin/users/{userId}/roles/{role}").hasRole("ADMIN")
                         .requestMatchers("/admin/**").hasRole("ADMIN")
 
                         //image endpoints

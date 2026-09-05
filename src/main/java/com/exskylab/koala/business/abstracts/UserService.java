@@ -9,7 +9,9 @@ import com.exskylab.koala.core.dtos.user.request.UpdateProfileDto;
 import com.exskylab.koala.core.dtos.user.request.VerifyIdentityDto;
 import com.exskylab.koala.core.dtos.user.response.UserMeResponseDto;
 import com.exskylab.koala.core.dtos.user.response.UserUpdateResponseDto;
+import com.exskylab.koala.dataAccess.UserDao;
 import com.exskylab.koala.entities.Address;
+import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.entities.User;
 import jakarta.validation.Valid;
 import org.springframework.web.multipart.MultipartFile;
@@ -58,4 +60,12 @@ public interface UserService {
     Page<User> search(String query, Pageable pageable);
 
     User getReference(UUID id);
+
+    List<UserDao.RoleGrantView> getRoleGrants(UUID userId);
+
+    List<UserDao.RoleGrantView> grantRole(UUID userId, Role role);
+
+    void revokeRole(UUID userId, Role role);
+
+    boolean bootstrapAdminRole(String email);
 }
