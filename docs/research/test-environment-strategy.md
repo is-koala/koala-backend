@@ -1,6 +1,6 @@
 # Koala test ortamı stratejisi
 
-> Karar güncellemesi (5 Eylül 2026): Bu rapordaki ayrı staging/Mailpit/seçici seed temizliği önerileri Q25, Q27, Q33-B, Q34-A, Q35-A ve Q36-C cevaplarıyla değiştirilmiştir. Mevcut API lansmana kadar test ortamıdır; gerçek SMTP iki kontrollü alıcıyla kullanılır; lansmanda mevcut DB sıfırlanır. Güncel karar [ADR-0001](../adr/0001-use-current-stack-until-launch.md), uygulama sentezi [gerçek API test akışı](../plans/real-api-test-flow.md) belgesidir. Aşağıdaki metin araştırma tarihindeki alternatif ve gerekçeleri korur.
+> Karar güncellemesi (5 Eylül 2026): Bu rapordaki ayrı staging/Mailpit/seçici seed temizliği önerileri Q25, Q27, Q33-B, Q34-A, Q35-A ve Q36-C cevaplarıyla değiştirilmiştir. Mevcut API lansmana kadar test ortamıdır; gerçek SMTP iki kontrollü alıcıyla kullanılır; lansmanda mevcut DB sıfırlanır. Güncel karar [ADR-0001](../adr/0001-use-current-stack-until-launch.md), uygulama sentezi [gerçek API test akışı](../plans/real-api-test-flow.md), operasyon adımları ise [İstanbul QA marketplace veri paketi](../plans/qa-marketplace-seed.md) belgesidir. Aşağıdaki metin araştırma tarihindeki alternatif ve gerekçeleri korur.
 
 Tarih: 5 Eylül 2026
 Kapsam: Flutter mobil uygulama, Spring Boot API, PostgreSQL, RabbitMQ/e-posta, Google Maps Platform ve iyzico
@@ -37,9 +37,9 @@ Bu bölüm 5 Eylül 2026 tarihindeki yerel çalışma ağacını tarif eder. Baz
 
 1. Mobil API adresi compile-time `API_BASE_URL` ile değiştirilebiliyor, ancak değer verilmezse doğrudan `https://api.iskoala.com` kullanılıyor. Bu, debug çalıştırmada yanlışlıkla production'a yazma riskidir. [Mobil `ApiConfig`](../../../koala-mobile/lib/product/network/api_config.dart)
 2. Backend tek `application.yaml` içinde dış ortam değişkenleri kullanıyor; `JPA_DDL_AUTO` varsayılanı `validate`, demo seed varsayılanı kapalı ve iyzico base URL varsayılanı sandbox. [Backend `application.yaml`](../../src/main/resources/application.yaml) Spring Boot aynı kodun farklı ortamlarda çalışması için YAML, environment variable ve komut satırı gibi dış kaynakları destekler. [Spring Boot externalized configuration](https://docs.spring.io/spring-boot/reference/features/external-config.html)
-3. Mevcut `DemoDataSeeder`, bayrak açıldığında doğrudan PostgreSQL'e deterministik UUID'lerle 120 iş arayan, 30 işveren, 30 şirket ve 180 ilan yazıyor; başvuru, atama, konuşma, mesaj, değerlendirme, bildirim ve ödeme durumlarını da ilişkilendiriyor. [Backend `DemoDataSeeder`](../../src/main/java/com/exskylab/koala/core/demo/DemoDataSeeder.java) Entegrasyon testi seed'in idempotent olduğunu, iki rol hesabının public login API üzerinden giriş yaptığını ve temel durum kümelerinin DB'de bulunduğunu doğruluyor. [Backend `DemoDataSeedIT`](../../src/test/java/com/exskylab/koala/dataAccess/DemoDataSeedIT.java)
-4. Bu kayıtlar gerçek tablolarda bulunmasına rağmen bazı finansal satırlar iyzico çağrısından değil doğrudan SQL ile üretiliyor ve provider token/işlem kimlikleri sentetik. Dolayısıyla bu satırlar ekran durumlarını test eder, gerçek ödeme entegrasyonunun geçtiğini kanıtlamaz. [Backend `DemoDataSeeder.seedPayment`](../../src/main/java/com/exskylab/koala/core/demo/DemoDataSeeder.java)
-5. Mobil çalışma zamanı içinde compile-time role göre bilinen iki hesaba otomatik giriş yapan bir `DemoBootstrap` bulunuyor; e-posta ve parola kaynak kodda sabit. [Mobil `DemoBootstrap`](../../../koala-mobile/lib/product/bootstrap/demo_bootstrap.dart) Canlı entegrasyon testi de aynı kimlik bilgilerini kaynakta taşıyor. [Mobil canlı login testi](../../../koala-mobile/integration_test/live_demo_login_test.dart)
+3. `QaMarketplaceSeeder`, açıkça seçilen `istanbul-v1` sürümünde doğrudan PostgreSQL'e deterministik UUID'lerle 120 iş arayan, 30 işveren, 30 şirket ve 180 ilan yazıyor; başvuru, atama, konuşma, mesaj, değerlendirme, bildirim ve ödeme görünüm durumlarını da ilişkilendiriyor. [Backend `QaMarketplaceSeeder`](../../src/main/java/com/exskylab/koala/core/qa/QaMarketplaceSeeder.java) Entegrasyon testi seed'in tek seferlik olduğunu, manuel ilerlemeyi koruduğunu, iki rol hesabının public login API üzerinden giriş yaptığını ve temel durum kümelerinin DB'de bulunduğunu doğruluyor. [Backend `QaMarketplaceSeedIT`](../../src/test/java/com/exskylab/koala/dataAccess/QaMarketplaceSeedIT.java)
+4. Finansal görünüm satırları Iyzico çağrısından değil doğrudan SQL ile üretilir; provider token/işlem kimlikleri ve submerchant key alanları bilerek boş tutulur. Bu satırlar ekran durumlarını test eder, gerçek ödeme entegrasyonunun geçtiğini kanıtlamaz. Kontrollü iki QA hesabı sentetik finansal atamalara bağlanmaz. [Backend `QaMarketplaceSeeder.seedPayment`](../../src/main/java/com/exskylab/koala/core/qa/QaMarketplaceSeeder.java)
+5. Mobil runtime'da otomatik demo giriş veya kaynak koda gömülü QA parolası bulunmaz. Kontrollü hesap bilgileri kullanıcı tarafından normal giriş ekranına yazılır; test double'ları yalnız test katmanındadır.
 6. Harita anahtarı Android'de `local.properties`, iOS'ta `Secrets.xcconfig` üzerinden alınıyor; bu dosyaların repo dışında tutulması doğru yönde bir başlangıçtır. [Android build ayarı](../../../koala-mobile/android/app/build.gradle.kts) [iOS AppDelegate](../../../koala-mobile/ios/Runner/AppDelegate.swift) Buna karşılık her iki platformun uygulama kimliği hâlâ `com.example.koala`; Google'ın bundle/package kısıtları ve mağaza dağıtımı kurulmadan önce nihai kimliklere geçilmelidir. [Android application ID](../../../koala-mobile/android/app/build.gradle.kts) [iOS bundle ID](../../../koala-mobile/ios/Runner.xcodeproj/project.pbxproj)
 7. Backend workflow'u her push/PR'da test çalıştırıyor, ancak Dokploy deploy'u yalnız `v*` tag'inde tetikliyor. Staging deploy'u için bugün ayrı job veya environment yok. [Backend GitHub Actions workflow](../../.github/workflows/ci.yml)
 
@@ -158,7 +158,7 @@ Bu modelde mobil her zaman gerçek API'den okur. Seed yalnız DB'nin başlangı�
 
 ### 4.2 Mevcut seed'in korunacak tarafları
 
-Mevcut dataset talep edilen ölçeği aşıyor: 150 kullanıcı, 30 şirket, 180 ilan ve bağlı marketplace hareketleri üretir. [Backend `DemoDataSeeder`](../../src/main/java/com/exskylab/koala/core/demo/DemoDataSeeder.java) Deterministik kimlikler ve upsert yaklaşımı tekrar çalıştırmayı güvenli kılar; entegrasyon testi iki ardışık seed çalıştırmasını doğrular. [Backend `DemoDataSeedIT`](../../src/test/java/com/exskylab/koala/dataAccess/DemoDataSeedIT.java)
+Mevcut dataset talep edilen ölçeği aşıyor: 150 kullanıcı, 30 şirket, 180 ilan ve bağlı marketplace hareketleri üretir. [Backend `QaMarketplaceSeeder`](../../src/main/java/com/exskylab/koala/core/qa/QaMarketplaceSeeder.java) Deterministik kimlikler ve sürüm sahiplenme kaydı tekrar çalıştırmayı güvenli kılar; entegrasyon testi ikinci çağrının manuel ilerlemeyi değiştirmediğini doğrular. [Backend `QaMarketplaceSeedIT`](../../src/test/java/com/exskylab/koala/dataAccess/QaMarketplaceSeedIT.java)
 
 Korunması gereken senaryolar:
 
@@ -171,13 +171,13 @@ Korunması gereken senaryolar:
 
 ### 4.3 Seed'in staging öncesi sertleştirilmesi
 
-1. `DemoDataSeeder` adı ve davranışı `SyntheticMarketplaceSeeder`/tek seferlik seed komutu olarak ayrıştırılmalıdır; her uygulama restart'ında koşan startup işi olmamalıdır.
-2. `SERVICE_ENVIRONMENT=production` iken seed sınıfı bean olarak dahi oluşturulmamalı; ikinci bir startup validator da bayrağı reddetmelidir.
-3. Dataset sürümü ve seed batch kimliği kaydedilmelidir. Seed'den çıkarılan eski kayıtların ne olacağı açık olmalı; yalnız upsert yapmak artık istenmeyen eski satırları bırakır.
-4. Bulk sentetik kullanıcıların e-postaları gerçek alıcıya dönüşemeyecek bir namespace kullanmalı ve mail delivery bu hesaplar için capture/suppress edilmelidir. `.invalid` testte kesin geçersiz adlar, `example.com` ise örnek/dokümantasyon için ayrılmıştır. [RFC 2606 reserved domains](https://www.rfc-editor.org/info/rfc2606/)
-5. Yalnız iki manuel QA hesabı gerçekten kontrol edilen mailbox'lara bağlanmalıdır; diğer 148+ hesabın internete e-posta üretmesine izin verilmemelidir.
-6. Hard-coded `http://localhost:8080` asset URL'leri staging'de bozulur; seed medya URL'si backend'in ortam `API_URL` değerinden veya staging storage'dan üretilmelidir. [Backend `DemoDataSeeder.upsertMedia`](../../src/main/java/com/exskylab/koala/core/demo/DemoDataSeeder.java)
-7. Sentetik provider token, submerchant key ve payment ID alanları `SYNTHETIC` olarak açıkça ayırt edilmelidir. Bunlar ekran geçmişi için kullanılabilir, ancak iyzico reconciliation/settlement worker tarafından asla işlenmemelidir.
+1. Seed `QaMarketplaceSeeder` ve yalnız `istanbul-v1` seçiliyken oluşan `QaMarketplaceSeedRunner` olarak ayrıştırıldı; normal uygulama açılışında çalışmaz.
+2. Mevcut altyapının `SERVICE_ENVIRONMENT=production` adı lansmana kadar pre-production alanını tarif ettiği için koruma bu ada bağlanmadı. Exact seed sürümü seçimi, tek seferlik DB kaydı ve lansman reseti kullanılır.
+3. Dataset sürümü `qa_marketplace_seed_versions` tablosunda transaction içinde atomik olarak sahiplenilir. Aynı sürüm tekrarlandığında hiçbir seed kaydı güncellenmez.
+4. Bulk sentetik kullanıcıların e-postaları teslim edilemeyen `qa.iskoala.invalid` namespace'ini kullanır. `.invalid` testte kesin geçersiz adlar, `example.com` ise örnek/dokümantasyon için ayrılmıştır. [RFC 2606 reserved domains](https://www.rfc-editor.org/info/rfc2606/)
+5. Yalnız iki manuel QA hesabı gerçekten kontrol edilen mailbox'lara bağlanır; diğer 148 hesabın internete e-posta üretmesi hem geçersiz domain hem SMTP allowlist ile engellenir.
+6. Medya URL'leri ortamın `API_URL` origin'inden üretilir ve public `/qa-assets/**` uçlarından sunulur. [Backend `QaMarketplaceSeeder`](../../src/main/java/com/exskylab/koala/core/qa/QaMarketplaceSeeder.java)
+7. Finansal görünüm kayıtlarında provider token, submerchant key ve payment/transaction ID alanları boş bırakılır. Kontrollü QA hesapları bu atamalara bağlanmaz; satırlar Iyzico reconciliation/settlement kanıtı sayılmaz.
 8. “Ödeme başarılı” kabul testi yalnız gerçek iyzico Sandbox Initialize → hosted form → callback → Retrieve zincirinden gelen yeni bir kayıt üzerinde geçmelidir.
 9. Sabit TC kimlik ve IBAN değerleri yalnız sandbox/staging'de kalmalı; production'a ulaşmaları startup veya DB constraint/guard ile engellenmelidir.
 
@@ -190,7 +190,7 @@ Korunması gereken senaryolar:
 
 Adreslerin gerçekten ekip kontrolünde olup olmadığı kurulurken doğrulanmalıdır. Her hesap farklı güçlü parola kullanmalı; parola repo, issue, PR, uygulama binary'si ve bu dokümana yazılmamalıdır. İnsan testi için ekip parola yöneticisinde, otomasyon için staging GitHub Environment secret'larında tutulmalıdır. GitHub environment secret'ları ilgili job environment'a erişene kadar job'a verilmez. [GitHub Actions secrets](https://docs.github.com/en/actions/concepts/security/secrets)
 
-Mevcut `calisan.demo@example.com` ve `isveren.demo@example.com` local/capture amaçlı korunabilir, fakat bilinen kaynak-kod parolasıyla internete açık staging hesabı olmamalıdır. [Backend demo hesap sabitleri](../../src/main/java/com/exskylab/koala/core/demo/DemoDataSeeder.java) [Mobil runtime bootstrap](../../../koala-mobile/lib/product/bootstrap/demo_bootstrap.dart)
+Uygulanan modelde bilinen demo adresi veya kaynak-kod parolası korunmadı. İki kontrollü adres ve farklı güçlü parolaları yalnız Dokploy secret ayarlarından alınır; mobil runtime normal giriş ekranını kullanır.
 
 ## 5. E-posta teslimatı
 
@@ -267,7 +267,7 @@ Staging ödeme kabul kapısı:
 6. Aynı idempotency key ile tekrar çağrının ikinci tahsilat/session üretmediği doğrulanır.
 7. Ancak bu kapı yeşil olduktan sonra Live credentials production'a verilir.
 
-Seed edilmiş `demo-provider-token-*` satırları UI state testi olarak kalabilir; provider reconciliation ve finansal kabul testleri bunları dışlamalıdır. [Backend sentetik payment seed'i](../../src/main/java/com/exskylab/koala/core/demo/DemoDataSeeder.java)
+Seed edilmiş `qa-state-fixture-*` konuşma kimlikli satırlar UI state testi olarak kalabilir; provider alanları boş olduğu için reconciliation/settlement kanıtı sayılmaz ve finansal kabul testleri bunları dışlamalıdır. [Backend QA payment seed'i](../../src/main/java/com/exskylab/koala/core/qa/QaMarketplaceSeeder.java)
 
 ## 8. PostgreSQL güvenliği ve veri yaşam döngüsü
 
