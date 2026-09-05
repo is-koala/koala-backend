@@ -40,6 +40,30 @@ class LiquibaseMigrationIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void databaseShipsWithoutSampleAccounts() {
+        Integer users = jdbcTemplate.queryForObject("select count(*) from users", Integer.class);
+        assertEquals(1, users, "Veritabani yalnizca SYSTEM kullanicisiyla gelmeli.");
+
+        Integer system = jdbcTemplate.queryForObject(
+                "select count(*) from users where id = '00000000-0000-0000-0000-000000000001'",
+                Integer.class);
+        assertEquals(1, system, "Denetim icin gereken SYSTEM kullanicisi yok.");
+
+        for (String table : new String[]{"companies", "jobs", "job_applications", "job_assignments"}) {
+            Integer rows = jdbcTemplate.queryForObject("select count(*) from " + table, Integer.class);
+            assertEquals(0, rows, "Ornek veri kalmis: " + table);
+        }
+    }
+
+    @Test
+    void qaSeedHistoryTableIsDropped() {
+        Integer found = jdbcTemplate.queryForObject(
+                "select count(*) from information_schema.tables where table_schema = 'public' and table_name = ?",
+                Integer.class, "qa_marketplace_seed_versions");
+        assertEquals(0, found, "QA seed surum tablosu hala duruyor.");
+    }
+
+    @Test
     void referenceDataIsSeeded() {
         Integer countries = jdbcTemplate.queryForObject("select count(*) from countries", Integer.class);
         Integer cities = jdbcTemplate.queryForObject("select count(*) from cities", Integer.class);
