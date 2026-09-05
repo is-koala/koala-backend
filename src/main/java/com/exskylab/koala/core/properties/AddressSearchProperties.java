@@ -1,11 +1,14 @@
 package com.exskylab.koala.core.properties;
 
+import jakarta.validation.constraints.AssertTrue;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
+import org.springframework.validation.annotation.Validated;
 
 import java.time.Duration;
 
 @Component
+@Validated
 @ConfigurationProperties(prefix = "address-search")
 public class AddressSearchProperties {
     private boolean enabled;
@@ -61,5 +64,10 @@ public class AddressSearchProperties {
 
     public void setCandidateTtl(Duration candidateTtl) {
         this.candidateTtl = candidateTtl;
+    }
+
+    @AssertTrue(message = "address-search.api-key must be configured when address search is enabled")
+    public boolean isProviderSecretConfigured() {
+        return !enabled || (apiKey != null && !apiKey.isBlank());
     }
 }
