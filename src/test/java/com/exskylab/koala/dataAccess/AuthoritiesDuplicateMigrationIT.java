@@ -85,7 +85,7 @@ class AuthoritiesDuplicateMigrationIT extends AbstractIntegrationTest {
         jdbcTemplate.execute("alter table public.authorities drop constraint if exists fk_authorities_on_granted_by");
         jdbcTemplate.execute("alter table public.authorities drop column if exists granted_by_id");
         jdbcTemplate.execute("alter table public.authorities drop column if exists granted_at");
-        jdbcTemplate.update("delete from databasechangelog where id like '2026-09-06-03-%'");
+        jdbcTemplate.update("delete from databasechangelog where id like '2026-09-06-34-%'");
     }
 
     private void removeDuplicateGrants() {

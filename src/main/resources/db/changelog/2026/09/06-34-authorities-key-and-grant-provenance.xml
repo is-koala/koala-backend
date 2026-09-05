@@ -5,7 +5,7 @@
         xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
 
-    <changeSet id="2026-09-06-03-1-deduplicate-authorities" author="koala">
+    <changeSet id="2026-09-06-34-1-deduplicate-authorities" author="koala">
         <sql>
             DELETE FROM public.authorities a
             WHERE a.ctid &lt;> (
@@ -16,7 +16,7 @@
         <rollback/>
     </changeSet>
 
-    <changeSet id="2026-09-06-03-2-add-grant-provenance-columns" author="koala">
+    <changeSet id="2026-09-06-34-2-add-grant-provenance-columns" author="koala">
         <addColumn tableName="authorities">
             <column name="granted_at" type="TIMESTAMPTZ"/>
             <column name="granted_by_id" type="UUID"/>
@@ -27,14 +27,14 @@
         </rollback>
     </changeSet>
 
-    <changeSet id="2026-09-06-03-3-backfill-granted-at" author="koala">
+    <changeSet id="2026-09-06-34-3-backfill-granted-at" author="koala">
         <sql>
             UPDATE public.authorities SET granted_at = now() WHERE granted_at IS NULL;
         </sql>
         <rollback/>
     </changeSet>
 
-    <changeSet id="2026-09-06-03-4-granted-by-foreign-key" author="koala">
+    <changeSet id="2026-09-06-34-4-granted-by-foreign-key" author="koala">
         <addForeignKeyConstraint baseTableName="authorities" baseColumnNames="granted_by_id"
                                  constraintName="fk_authorities_on_granted_by"
                                  referencedTableName="users" referencedColumnNames="id"/>
@@ -43,7 +43,7 @@
         </rollback>
     </changeSet>
 
-    <changeSet id="2026-09-06-03-5-unique-user-role" author="koala">
+    <changeSet id="2026-09-06-34-5-unique-user-role" author="koala">
         <addUniqueConstraint tableName="authorities" columnNames="user_id, role"
                              constraintName="uk_authorities_user_role"/>
         <rollback>
@@ -51,7 +51,7 @@
         </rollback>
     </changeSet>
 
-    <changeSet id="2026-09-06-03-6-composite-primary-key" author="koala">
+    <changeSet id="2026-09-06-34-6-composite-primary-key" author="koala">
         <addPrimaryKey tableName="authorities" columnNames="user_id, role"
                        constraintName="pk_authorities"/>
         <rollback>
