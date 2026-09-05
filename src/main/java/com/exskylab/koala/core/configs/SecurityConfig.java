@@ -1,6 +1,7 @@
 package com.exskylab.koala.core.configs;
 
 import com.exskylab.koala.core.security.SessionAuthFilter;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -238,6 +239,14 @@ public class SecurityConfig {
                 .build();
     }
 
+
+
+    @Bean
+    public FilterRegistrationBean<SessionAuthFilter> sessionAuthFilterRegistration() {
+        FilterRegistrationBean<SessionAuthFilter> registration = new FilterRegistrationBean<>(sessionAuthFilter);
+        registration.setEnabled(false);
+        return registration;
+    }
 
 
     @Bean
