@@ -3,7 +3,9 @@ package com.exskylab.koala.business.concretes;
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.helpers.LogMasks;
 import com.exskylab.koala.business.abstracts.DeviceService;
+import com.exskylab.koala.business.abstracts.NotificationPreferenceService;
 import com.exskylab.koala.business.abstracts.NotificationService;
+import com.exskylab.koala.business.abstracts.UnsubscribeTokenService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.NotificationMessages;
 import com.exskylab.koala.core.dtos.notification.request.*;
@@ -25,6 +27,7 @@ import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -44,19 +47,37 @@ public class NotificationManager implements NotificationService {
     private final ObjectMapper objectMapper;
     private final DeviceService deviceService;
     private final SecurityService securityService;
+    private final NotificationPreferenceService notificationPreferenceService;
+    private final UnsubscribeTokenService unsubscribeTokenService;
 
     public NotificationManager(NotificationDao notificationDao,
                                 NotificationProducerService notificationProducerService,
                                DeviceService deviceService,
                                  ObjectMapper objectMapper,
                                SecurityService securityService,
-                                PageableSanitizer pageableSanitizer) {
+                                PageableSanitizer pageableSanitizer,
+                               NotificationPreferenceService notificationPreferenceService,
+                               UnsubscribeTokenService unsubscribeTokenService) {
         this.notificationDao = notificationDao;
         this.notificationProducerService = notificationProducerService;
         this.objectMapper = objectMapper;
         this.deviceService = deviceService;
         this.securityService = securityService;
             this.pageableSanitizer = pageableSanitizer;
+        this.notificationPreferenceService = notificationPreferenceService;
+        this.unsubscribeTokenService = unsubscribeTokenService;
+    }
+
+    private boolean suppressed(User recipient, NotificationCategory category, NotificationChannel channel) {
+        if (recipient == null) {
+            return false;
+        }
+        if (notificationPreferenceService.isAllowed(recipient.getId(), category, channel)) {
+            return false;
+        }
+        log.info("{} notification in category {} suppressed for user {} by preference",
+                channel, category, recipient.getId());
+        return true;
     }
 
     @Override
@@ -72,6 +93,9 @@ public class NotificationManager implements NotificationService {
 
         log.info("Sending email notification to {} destinationEmail: {}", recipientInfo, LogMasks.email(sendEmailDto.getDestinationEmail()));
 
+        if (suppressed(sendEmailDto.getRecipient(), sendEmailDto.getCategory(), NotificationChannel.EMAIL)) {
+            return null;
+        }
 
         User sender;
         if (isSystemMail) {
@@ -88,7 +112,7 @@ public class NotificationManager implements NotificationService {
 
         if (sendEmailDto.getTemplateName() != null) {
             finalTemplateName = sendEmailDto.getTemplateName();
-            finalTemplateParameters = sendEmailDto.getTemplateParameters();
+            finalTemplateParameters = withUnsubscribeLink(sendEmailDto);
             finalSubject = sendEmailDto.getSubject();
         } else if (sendEmailDto.getHtmlBody() != null && sendEmailDto.getSubject() != null) {
             finalTemplateName = "raw-html-template";
@@ -134,6 +158,21 @@ public class NotificationManager implements NotificationService {
         );
 
         return savedNotification;
+    }
+
+    private Map<String, Object> withUnsubscribeLink(SendEmailDto sendEmailDto) {
+        Map<String, Object> parameters = sendEmailDto.getTemplateParameters();
+
+        if (sendEmailDto.getRecipient() == null || sendEmailDto.getCategory() == null
+                || !sendEmailDto.getCategory().getKind().isCommercial()) {
+            return parameters;
+        }
+
+        Map<String, Object> enriched = parameters == null
+                ? new HashMap<>() : new HashMap<>(parameters);
+        enriched.put("unsubscribeUrl", unsubscribeTokenService.issueLink(
+                sendEmailDto.getRecipient(), sendEmailDto.getCategory(), NotificationChannel.EMAIL));
+        return enriched;
     }
 
     @Override
@@ -207,6 +246,11 @@ public class NotificationManager implements NotificationService {
 
         if (sendPushToUserDto.getRecipient() == null) {
             throw new ValidationException(NotificationMessages.USER_ID_CANNOT_BE_NULL);
+        }
+
+        if (suppressed(sendPushToUserDto.getRecipient(), sendPushToUserDto.getCategory(),
+                NotificationChannel.PUSH)) {
+            return;
         }
 
         User sender = isSystemPush ? securityService.getSystemUser(): securityService.getAuthenticatedUser();
@@ -357,6 +401,10 @@ public class NotificationManager implements NotificationService {
     @Override
     @Transactional
     public Notification sendInApp(SendInAppDto sendInAppDto) {
+        if (suppressed(sendInAppDto.getRecipient(), sendInAppDto.getCategory(), NotificationChannel.IN_APP)) {
+            return null;
+        }
+
         Notification notification = new Notification();
         notification.setRecipient(sendInAppDto.getRecipient());
         notification.setSender(securityService.getSystemUser());

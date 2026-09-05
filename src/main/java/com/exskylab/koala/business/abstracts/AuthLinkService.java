@@ -9,4 +9,6 @@ public interface AuthLinkService {
     String registrationAppLink(String token);
 
     String passwordResetAppLink(String token);
+
+    String unsubscribeLandingLink(String token);
 }

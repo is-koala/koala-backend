@@ -4,6 +4,7 @@ import com.exskylab.koala.business.abstracts.PasswordResetTokenService;
 import com.exskylab.koala.core.constants.AuthMessages;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.security.PasswordResetTokenGenerator;
+import com.exskylab.koala.core.security.TokenDigest;
 import com.exskylab.koala.dataAccess.PasswordResetTokenDao;
 import com.exskylab.koala.entities.PasswordResetToken;
 import com.exskylab.koala.entities.User;
@@ -11,11 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
-import java.util.HexFormat;
 import java.util.UUID;
 
 @Service
@@ -42,7 +39,7 @@ public class PasswordResetTokenManager implements PasswordResetTokenService {
         String rawToken = tokenGenerator.generate();
         PasswordResetToken token = new PasswordResetToken();
         token.setUser(user);
-        token.setTokenDigest(digest(rawToken));
+        token.setTokenDigest(TokenDigest.of(rawToken));
         token.setExpiresAt(now.plusMillis(tokenValidityMs));
         passwordResetTokenDao.save(token);
         return rawToken;
@@ -51,7 +48,7 @@ public class PasswordResetTokenManager implements PasswordResetTokenService {
     @Override
     @Transactional
     public UUID consume(String rawToken) {
-        String tokenDigest = digest(rawToken);
+        String tokenDigest = TokenDigest.of(rawToken);
         UUID userId = passwordResetTokenDao.findUserIdByTokenDigest(tokenDigest)
                 .orElseThrow(this::invalidToken);
 
@@ -65,16 +62,6 @@ public class PasswordResetTokenManager implements PasswordResetTokenService {
     @Transactional
     public void revokeActiveForUser(UUID userId) {
         passwordResetTokenDao.revokeActiveForUser(userId, Instant.now());
-    }
-
-    private String digest(String rawToken) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest(rawToken.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 is not available", exception);
-        }
     }
 
     private ValidationException invalidToken() {

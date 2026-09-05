@@ -9,6 +9,8 @@ import com.exskylab.koala.core.dtos.badge.request.SaveBadgeDto;
 import com.exskylab.koala.core.dtos.education.request.SaveEducationDto;
 import com.exskylab.koala.core.dtos.experience.request.SaveExperienceDto;
 import com.exskylab.koala.core.dtos.jobAlert.request.SaveJobAlertDto;
+import com.exskylab.koala.core.dtos.notificationPreference.request.NotificationPreferenceEntryDto;
+import com.exskylab.koala.core.dtos.notificationPreference.request.UpdateNotificationPreferencesDto;
 import com.exskylab.koala.core.dtos.report.request.CreateReportDto;
 import com.exskylab.koala.entities.*;
 import jakarta.validation.ConstraintViolation;
@@ -240,6 +242,43 @@ class RequestValidationTest {
         SaveAvailabilityDto ordered = new SaveAvailabilityDto(List.of(
                 new SaveAvailabilityDto.Slot(DayOfWeek.MONDAY, LocalTime.of(9, 0), LocalTime.of(17, 0))));
         assertTrue(isValid(ordered));
+    }
+
+    @Test
+    void aTransactionalNotificationCannotBeSwitchedOff() {
+        UpdateNotificationPreferencesDto request = new UpdateNotificationPreferencesDto();
+        request.setPreferences(List.of(
+                entry(NotificationCategory.APPLICATION_UPDATES, NotificationChannel.EMAIL, false)));
+
+        assertTrue(messagesFor(request).contains("{notification.preference.not.optional}"));
+    }
+
+    @Test
+    void anOptionalNotificationCanBeSwitchedOffAndBackOn() {
+        UpdateNotificationPreferencesDto off = new UpdateNotificationPreferencesDto();
+        off.setPreferences(List.of(entry(NotificationCategory.JOB_ALERTS, NotificationChannel.EMAIL, false)));
+        assertTrue(isValid(off));
+
+        UpdateNotificationPreferencesDto on = new UpdateNotificationPreferencesDto();
+        on.setPreferences(List.of(entry(NotificationCategory.MARKETINGS, NotificationChannel.EMAIL, true)));
+        assertTrue(isValid(on));
+    }
+
+    @Test
+    void aChannelThatCarriesNoPreferenceCannotBeSubmitted() {
+        UpdateNotificationPreferencesDto request = new UpdateNotificationPreferencesDto();
+        request.setPreferences(List.of(entry(NotificationCategory.MARKETINGS, NotificationChannel.SMS, true)));
+
+        assertTrue(messagesFor(request).contains("{notification.preference.channel.unsupported}"));
+    }
+
+    private NotificationPreferenceEntryDto entry(NotificationCategory category, NotificationChannel channel,
+                                           boolean enabled) {
+        NotificationPreferenceEntryDto entry = new NotificationPreferenceEntryDto();
+        entry.setCategory(category);
+        entry.setChannel(channel);
+        entry.setEnabled(enabled);
+        return entry;
     }
 
     @Test
