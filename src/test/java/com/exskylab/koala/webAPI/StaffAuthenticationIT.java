@@ -1,14 +1,12 @@
 package com.exskylab.koala.webAPI;
 
-import com.exskylab.koala.support.AbstractIntegrationTest;
+import com.exskylab.koala.support.AbstractStaffIntegrationTest;
 import com.exskylab.koala.support.StaffTokenIssuer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
@@ -21,20 +19,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @AutoConfigureMockMvc
-class StaffAuthenticationIT extends AbstractIntegrationTest {
+class StaffAuthenticationIT extends AbstractStaffIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
-
-    @DynamicPropertySource
-    static void staffTokenProperties(DynamicPropertyRegistry registry) {
-        registry.add("koala.staff.issuer-uri", StaffTokenIssuer::issuer);
-        registry.add("koala.staff.jwk-set-uri", StaffTokenIssuer::jwkSetUri);
-        registry.add("koala.staff.audience", StaffTokenIssuer::audience);
-    }
 
     @AfterEach
     void removeTestStaff() {
