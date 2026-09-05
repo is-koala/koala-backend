@@ -139,6 +139,9 @@ jwt:
 password-reset:
   token-validity-ms: ${PASSWORD_RESET_TOKEN_VALIDITY_MS:${JWT_PASSWORD_RESET_EXPIRATION_MS:900000}}
 
+notification-preferences:
+  unsubscribe-token-validity-ms: ${UNSUBSCRIBE_TOKEN_VALIDITY_MS:7776000000}
+
 rate-limit:
   enabled: ${RATE_LIMIT_ENABLED:true}
   max-attempts: ${RATE_LIMIT_MAX_ATTEMPTS:10}

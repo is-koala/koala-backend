@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="06-11-create-notification-preferences" author="koala">
+        <createTable tableName="notification_preferences">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="category" type="VARCHAR(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="channel" type="VARCHAR(16)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="enabled" type="BOOLEAN">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMPTZ">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
+            <column name="deleted_by_id" type="UUID"/>
+        </createTable>
+
+        <addForeignKeyConstraint baseTableName="notification_preferences" baseColumnNames="user_id"
+                                 constraintName="fk_notification_preferences_user"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+
+        <sql>
+            CREATE UNIQUE INDEX IF NOT EXISTS uk_notification_preferences_active
+                ON public.notification_preferences (user_id, category, channel)
+                WHERE is_deleted = false;
+        </sql>
+    </changeSet>
+
+    <changeSet id="06-11-create-commercial-message-consents" author="koala">
+        <createTable tableName="commercial_message_consents">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="category" type="VARCHAR(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="channel" type="VARCHAR(16)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="granted" type="BOOLEAN">
+                <constraints nullable="false"/>
+            </column>
+            <column name="recorded_at" type="TIMESTAMPTZ">
+                <constraints nullable="false"/>
+            </column>
+            <column name="ip_address" type="VARCHAR(45)"/>
+            <column name="user_agent" type="VARCHAR(512)"/>
+            <column name="source" type="VARCHAR(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMPTZ">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
+            <column name="deleted_by_id" type="UUID"/>
+        </createTable>
+
+        <addForeignKeyConstraint baseTableName="commercial_message_consents" baseColumnNames="user_id"
+                                 constraintName="fk_commercial_message_consents_user"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+
+        <createIndex tableName="commercial_message_consents" indexName="ix_commercial_consents_user_recorded">
+            <column name="user_id"/>
+            <column name="recorded_at"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="06-11-create-unsubscribe-tokens" author="koala">
+        <createTable tableName="unsubscribe_tokens">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="category" type="VARCHAR(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="channel" type="VARCHAR(16)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="token_digest" type="VARCHAR(64)">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uk_unsubscribe_tokens_digest"/>
+            </column>
+            <column name="expires_at" type="TIMESTAMPTZ">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_used_at" type="TIMESTAMPTZ"/>
+            <column name="created_at" type="TIMESTAMPTZ">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
+            <column name="deleted_by_id" type="UUID"/>
+        </createTable>
+
+        <addForeignKeyConstraint baseTableName="unsubscribe_tokens" baseColumnNames="user_id"
+                                 constraintName="fk_unsubscribe_tokens_user"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+
+        <createIndex tableName="unsubscribe_tokens" indexName="ix_unsubscribe_tokens_expires_at">
+            <column name="expires_at"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>
