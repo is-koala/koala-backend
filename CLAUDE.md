@@ -29,7 +29,7 @@ Bu dosya projeyi konu konu anlatır: mimari, alınmış kararlar ve gerekçeleri
 4. **Firebase servis hesabı** — `PushService`'in FCM uygulaması için (§2s).
 5. **SMS sağlayıcı anahtarı** — `SMS_API_KEY` boşken telefon doğrulama kodu üretilir ama teslim edilmez.
 6. **Dokploy'dan `QA_MARKETPLACE_SEED_VERSION`, `QA_WORKER_EMAIL`, `QA_WORKER_PASSWORD`, `QA_EMPLOYER_EMAIL`, `QA_EMPLOYER_PASSWORD` kaldırılmalı** — seed kaldırıldı (ADR-0008), bu değişkenler işlevsiz ve parola taşıyorlar.
-7. **İş kategorisi kataloğunun kurulması** — kategori seed'i kaldırıldı (§2m). Prod ve taze veritabanları kategorisiz; kategori ilanın zorunlu alanı olduğu için katalog `POST /admin/job-categories` ile kurulmadan **hiç ilan açılamaz**. Mobil istemcinin ikon eşlemesi `code` üzerinden gittiği için eski kodların (`PHOTOGRAPHY`, `WAITER`, `PET_CARE`, `DESIGN`, `BARISTA`) yeniden verilmesi gerekebilir.
+7. **İlk admin ve iş kategorisi kataloğu** — taze bir veritabanında ilk yönetici `ADMIN_BOOTSTRAP_EMAIL` verilip uygulama yeniden başlatılarak doğar (§2f3); değişken ilk admin oluştuktan sonra kaldırılmalı. Kategori seed'i kaldırıldı (§2m). Prod ve taze veritabanları kategorisiz; kategori ilanın zorunlu alanı olduğu için katalog `POST /admin/job-categories` ile kurulmadan **hiç ilan açılamaz**. Mobil istemcinin ikon eşlemesi `code` üzerinden gittiği için eski kodların (`PHOTOGRAPHY`, `WAITER`, `PET_CARE`, `DESIGN`, `BARISTA`) yeniden verilmesi gerekebilir.
 8. **R2'deki mevcut nesnelerin S3'e kopyalanması** (§2ab), yasal metinlerin avukattan gelmesi, ve prod'da WebSocket'in `wss://` üzerinden servis edildiğinin teyidi (§2ai).
 
 **Açık kalan kararlar** (ayrıntı §7'de):
@@ -244,6 +244,54 @@ Yani delete-then-insert davranışı koşulsuz değil: koleksiyon **örneği** d
 **Kural: kayıtlı bir kullanıcıya rol verirken `setAuthorities` kullanılmaz, `getAuthorities().add(...)` kullanılır.** Rol verme ucu yazılırken (ayrı issue) `granted_at`/`granted_by_id` açık bir `UPDATE` ile doldurulacak; Hibernate bu sütunları eşlemediği için kendiliğinden yazmıyor.
 
 `AuthorityGrantSafetyTest` bu kuralı yapısal olarak koruyor: ana kodda `AuthManager` dışında bir `setAuthorities` çağrısı belirirse test kırmızıya döner ve buraya yönlendirir. Muafiyet listesi de kontrol ediliyor — `AuthManager`'daki çağrı kalkarsa liste bayatlamış demektir.
+
+## 2f3. Rol verme uçları ve ilk admin
+
+`ROLE_ADMIN` şirket onaylıyor, escrow'dan para salıyor ve çalışma zamanı ayarlarını değiştiriyordu ama **onu veren hiçbir uç yoktu**: prod'da yeni bir admin ancak psql'e girip elle `INSERT INTO authorities` yazılarak doğuyordu. İz bırakmıyor, paylaşılan psql erişimi gerektiriyor ve yanlış `user_id` yazıldığında sessizce yanlış kişiyi admin yapıyordu.
+
+`AdminController` altında üç uç açıldı — `GET`, `POST /admin/users/{userId}/roles` ve `DELETE /admin/users/{userId}/roles/{role}`. Ayrı bir controller açılmadı: yol `/admin/users` altında ve o yüzey zaten `AdminController`'da. `SecurityConfig`'te üçü için ayrı satır var; `/admin/**` prefix'i zaten koruyor ama sözleşme açık satırı tercih ediyor (§0b).
+
+**Bu uçların ömrü ADR-0010 §Geçiş'te yazılı.** `/admin/**` bugün yalnız marketplace `ROLE_ADMIN` kabul ediyor ve bu geçici bir köprü; kesimden sonra bu üç uç **kalır**, yalnız personel kimliğiyle korunur. Gerekçenin tek kaynağı o ADR, buraya kopyalanmıyor.
+
+**Rol verme kaydı ayrı bir `UPDATE` ile yazılıyor.** §2f2'nin kuralı gereği koleksiyon yerinde mutasyona uğruyor (`getAuthorities().add(...)`), ama Hibernate `granted_at`/`granted_by_id` sütunlarını eşlemediği için onları kendiliğinden yazmıyor. `UserDao` üzerinde iki native `@Modifying` sorgusu var: veren belliyken ikisini birden yazan, bootstrap'ta yalnız zamanı yazan. İki ayrı metot olmasının nedeni teknik: native sorguda null bir `UUID` parametresi bağlandığında Hibernate parametre tipini çıkaramıyor; `granted_by_id` zaten null doğduğu için bootstrap yolunda ona hiç dokunulmuyor.
+
+**Okuma da native.** Provenance sütunları eşlenmediği için JPQL onlara uzanamıyor. `findRoleGrants` `authorities` tablosunu `users` ile `LEFT JOIN`'leyip arayüz projeksiyonu döndürüyor. **Takma adlar çift tırnak içinde**: Postgres tırnaksız takma adı küçük harfe katlar ve `grantedAt` alanı eşleşmez; tırnak bunu deterministik yapıyor.
+
+**Yazma sonrası açık `saveAndFlush`.** Rol kaldırıldığında `save` yetmiyor — `DELETE` transaction sonunda gidiyor ve aynı transaction içinden native/JDBC okuyan her şey satırı hâlâ görüyor. Verme yolunda zaten `@Modifying(flushAutomatically = true)` flush'u zorluyor; iki yolun da aynı davranması için ikisi de `saveAndFlush` kullanıyor.
+
+**Domain kuralları ve neden bu sırayla:**
+
+| Kural | Yanıt | Neden |
+|---|---|---|
+| Bilinmeyen `userId` | 404 | `getById` zaten böyle davranıyor |
+| Sistem kullanıcısı (`00000000-…-0001`) | 409 | seed satırı, kimliği yok, girişi yok |
+| `ROLE_USER` bu uçtan alınamaz | 409 | marketplace üyeliğinin taşıyıcısı o |
+| Kullanıcı rolü zaten taşımıyor | 200, sessiz | silme idempotent |
+| Admin kendi `ROLE_ADMIN`'ini alamaz | 409 | kendini kilitleme |
+| Sistemdeki son `ROLE_ADMIN` alınamaz | 409 | sıfır adminli sistem uçlardan kurtarılamaz |
+| Zaten var olan rol verilir | 200, ikinci satır yok | bileşik anahtar zaten engellerdi, kural onu 409'a düşürmüyor |
+
+**Son admin kuralı bugün HTTP üzerinden erişilemez, ve bu bilinçli.** İsteği yapan kişi `ROLE_ADMIN` taşımak zorunda; hedef başkasıysa sistemde en az iki admin var, hedef kendisiyse bir üstteki kural önce ateşliyor. Yani kural bugün ölü görünüyor. Yine de duruyor çünkü ADR-0010'un kesiminden sonra isteği yapan kişi **marketplace admini olmayacak** — personel kimliğiyle gelen biri son `ROLE_ADMIN`'i alabilir hâle gelir ve kural o gün asıl işini yapar. Bu yüzden testi birim seviyesinde (`RoleGrantRulesTest`), sayım mock'lanarak yazıldı; uç testi yalnızca kuralın yanlış ateşlemediğini doğruluyor.
+
+**Sayımdan sistem kullanıcısı düşülüyor.** `countUsersWithRole` `user_id <> '00000000-…-0001'` taşıyor. Düşülmeseydi seed satırı sayıyı daima ≥1 tutar ve kural hiçbir zaman ateşlemezdi; oysa o hesabın parolası düz metin `'N/A_PASSWORD'`, yani geçerli bir BCrypt hash'i değil ve **o hesapla giriş yapılamıyor**. Kurtarıcı bir admin değil.
+
+**Sistem kullanıcısının id'si artık tek yerde:** `core/constants/SystemUser`. Öncesinde `SecurityManager` ve `AuditorAwareImpl` aynı UUID'yi ayrı ayrı yazıyordu; üçüncü kopya yerine sabit çıkarıldı. `ID_TEXT` derleme zamanı sabiti olduğu için native sorgu metnine de aynı kaynaktan giriyor.
+
+### İlk admin — seçenek (a), açılışta çalışan runner
+
+Issue iki yol öneriyordu: **(a)** `ADMIN_BOOTSTRAP_EMAIL` verildiğinde açılışta o hesaba `ROLE_ADMIN` yazan idempotent bir `ApplicationRunner`, **(b)** `scripts/` altında parametreli bir psql runbook. **(a) seçildi.**
+
+Gerekçe: (b) elle SQL yazmayı ortadan kaldırmıyor, yalnızca kopyalanacak bir metin veriyor — yanlış `user_id` yazma riski ve paylaşılan psql erişimi ihtiyacı olduğu yerde kalır, üstelik çalıştırıldığına dair uygulama tarafında hiçbir iz kalmaz. (a)'da hedef **e-posta ile** seçiliyor, işlem loglanıyor ve idempotent olduğu için ikinci açılışta hiçbir şey yazmıyor. Kabul kriteri de bunu istiyor: taze bir veritabanında **elle SQL yazmadan, belgelenmiş tek bir adımla** ilk admin oluşturulabilmeli.
+
+**Tek adım şu:** `ADMIN_BOOTSTRAP_EMAIL` değişkenine, kayıt akışını normal biçimde tamamlamış bir hesabın e-postası yazılır ve uygulama yeniden başlatılır. Açılışta o hesap `ROLE_ADMIN` alır ve `POST /admin/job-categories` çağrılabilir hâle gelir — ADR-0009 gereği kategori kataloğu yalnız oradan kurulabildiği ve kategori ilanın zorunlu alanı olduğu için ilk admin **ürünün açılmasının önkoşulu**. İlk admin doğduktan sonra değişken kaldırılmalı; sonraki roller uçlardan veriliyor.
+
+**Kullanıcı yoksa uygulama düşmez, uyarı loglanır.** `bootstrapAdminRole` `{user.not.found.by.email}` fırlatıyor, runner onu — ve beklenmeyen her `RuntimeException`'ı — yakalayıp `WARN` yazıyor. Yanlış yazılmış bir e-posta yüzünden prod'un açılmaması, elde edilecek katılıktan pahalı. E-posta `LogMasks.email` ile maskeli loglanıyor (§2i).
+
+**`granted_by_id` null bırakılıyor.** Rolü veren bir insan yok; sistem kullanıcısını uydurma bir veren olarak yazmak kaydı yanlış yapardı. `granted_at` doluyor, yani "ne zaman" sorusunun cevabı var.
+
+**`NoStartupDataSeedingTest`'e tek muafiyet açıldı.** O test ADR-0008'in kaldırdığı QA seed runner'ının geri gelmesini engelliyor; yasağın konusu **örnek veri üretmek**. Bootstrap runner veri üretmiyor — zaten var olan bir hesaba bir rol satırı yazıyor, hem de ancak açıkça bir ortam değişkeni verildiğinde. `AuthorityGrantSafetyTest`'teki desen kopyalandı: muafiyet listesi `AdminBootstrapRunner.java` ile sınırlı ve ikinci bir test listenin bayatlamadığını doğruluyor. Yeni bir runner eklenirse test yine kırmızıya döner.
+
+**Konfigürasyon `admin.bootstrap.email`**, `AdminBootstrapProperties` ile bağlanıyor. Boş ya da yalnız boşluk içeren değer "verilmemiş" sayılıyor; e-posta aranmadan önce `trim` ediliyor.
 
 ## 2g. Entity kimliği
 
@@ -1431,6 +1479,7 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 | Bildirim akışı artık `IN_APP` döndürüyor: `NotificationDto` içinde `body`, `targetType`, `targetId` var | §2s |
 | `POST /users/me/notifications/{id}/read` tek bildirimi işaretler | §2s |
 | `ApiErrorType` HTTP kodundan değil `errorCategory` alanından okunur | §2d |
+| Rol yönetimi: `GET/POST /admin/users/{userId}/roles`, `DELETE /admin/users/{userId}/roles/{role}` | §2f3 |
 | Faz 15'in yol değişiklikleri | §0b tablosu |
 | `JobCategory.code` yorumu | kodlar artık addan türemiyor (§2m) |
 | İşlerim ekranı tek uçtan: `GET /users/me/work` | Faz 22 (§2al) |
