@@ -56,4 +56,5 @@
     <include file="db/changelog/2026/09/05-05-versioned-agreement-content-urls.xml"/>
     <include file="db/changelog/2026/09/06-01-drop-qa-marketplace-seed-history.xml"/>
     <include file="db/changelog/2026/09/06-02-drop-job-category-seed.xml"/>
+    <include file="db/changelog/2026/09/06-03-app-settings-audit.xml"/>
 </databaseChangeLog>

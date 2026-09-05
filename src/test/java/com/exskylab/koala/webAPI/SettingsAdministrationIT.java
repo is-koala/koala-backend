@@ -64,7 +64,6 @@ class SettingsAdministrationIT extends AbstractIntegrationTest {
                 set setting_value = '0.50', updated_at = null, updated_by_id = null
                 where setting_key = ?
                 """, SettingKeys.CANCELLATION_LATE_FEE_RATE);
-        jdbcTemplate.update("delete from users where email = ?", ADMIN_EMAIL);
     }
 
     @Test
