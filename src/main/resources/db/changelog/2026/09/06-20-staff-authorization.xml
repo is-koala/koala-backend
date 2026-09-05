@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-06-20-01-staff-members" author="koala">
+        <createTable tableName="staff_members">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="keycloak_subject" type="VARCHAR(64)">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uk_staff_members_subject"/>
+            </column>
+            <column name="email" type="VARCHAR(255)"><constraints nullable="false"/></column>
+            <column name="display_name" type="VARCHAR(160)"/>
+            <column name="marketplace_user_id" type="UUID"/>
+            <column name="is_active" type="BOOLEAN" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+        </createTable>
+        <createIndex tableName="staff_members" indexName="ix_staff_members_marketplace_user">
+            <column name="marketplace_user_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="2026-09-06-20-02-staff-roles" author="koala">
+        <createTable tableName="staff_roles">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="code" type="VARCHAR(64)">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uk_staff_roles_code"/>
+            </column>
+            <column name="name" type="VARCHAR(160)"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="2026-09-06-20-03-staff-role-permissions" author="koala">
+        <createTable tableName="staff_role_permissions">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="staff_role_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="permission_code" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="staff_role_permissions" baseColumnNames="staff_role_id"
+                                 constraintName="fk_staff_role_permissions_role"
+                                 referencedTableName="staff_roles" referencedColumnNames="id"/>
+        <addUniqueConstraint tableName="staff_role_permissions"
+                             columnNames="staff_role_id, permission_code"
+                             constraintName="uk_staff_role_permissions_role_code"/>
+    </changeSet>
+
+    <changeSet id="2026-09-06-20-04-staff-role-includes" author="koala">
+        <createTable tableName="staff_role_includes">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="parent_role_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="child_role_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="staff_role_includes" baseColumnNames="parent_role_id"
+                                 constraintName="fk_staff_role_includes_parent"
+                                 referencedTableName="staff_roles" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="staff_role_includes" baseColumnNames="child_role_id"
+                                 constraintName="fk_staff_role_includes_child"
+                                 referencedTableName="staff_roles" referencedColumnNames="id"/>
+        <addUniqueConstraint tableName="staff_role_includes"
+                             columnNames="parent_role_id, child_role_id"
+                             constraintName="uk_staff_role_includes_edge"/>
+        <sql>
+            ALTER TABLE staff_role_includes
+                ADD CONSTRAINT ck_staff_role_includes_no_self_edge CHECK (parent_role_id &lt;&gt; child_role_id);
+        </sql>
+    </changeSet>
+
+    <changeSet id="2026-09-06-20-05-staff-role-graph" author="koala">
+        <sql>
+            INSERT INTO staff_roles (id, code, name, created_at) VALUES
+                ('9a1c0f10-0003-4c00-8000-000000000001', 'CATALOG_EDITOR',   'Katalog editörü',     now()),
+                ('9a1c0f10-0003-4c00-8000-000000000002', 'SUPPORT_AGENT',    'Destek görevlisi',    now()),
+                ('9a1c0f10-0003-4c00-8000-000000000003', 'FINANCE_ANALYST',  'Finans analisti',     now()),
+                ('9a1c0f10-0003-4c00-8000-000000000004', 'AUDITOR',          'Denetçi',             now()),
+                ('9a1c0f10-0003-4c00-8000-000000000005', 'MODERATOR',        'Moderatör',           now()),
+                ('9a1c0f10-0003-4c00-8000-000000000006', 'DISPUTE_HANDLER',  'Uyuşmazlık uzmanı',   now()),
+                ('9a1c0f10-0003-4c00-8000-000000000007', 'COMPANY_APPROVER', 'Şirket onaylayıcısı', now()),
+                ('9a1c0f10-0003-4c00-8000-000000000008', 'TRUST_LEAD',       'Güven ekibi lideri',  now()),
+                ('9a1c0f10-0003-4c00-8000-000000000009', 'FINANCE_OFFICER',  'Finans yetkilisi',    now()),
+                ('9a1c0f10-0003-4c00-8000-000000000010', 'OWNER',            'Sahip',               now())
+            ON CONFLICT (code) DO NOTHING;
+
+            INSERT INTO staff_role_permissions (id, staff_role_id, permission_code, created_at)
+            SELECT gen_random_uuid(), r.id, grant_row.permission_code, now()
+            FROM (VALUES
+                ('CATALOG_EDITOR',   'category.manage'),
+                ('CATALOG_EDITOR',   'badge.manage'),
+                ('SUPPORT_AGENT',    'user.read'),
+                ('MODERATOR',        'content.moderate'),
+                ('DISPUTE_HANDLER',  'dispute.resolve'),
+                ('COMPANY_APPROVER', 'company.approve'),
+                ('TRUST_LEAD',       'user.read_pii'),
+                ('FINANCE_ANALYST',  'payment.read'),
+                ('FINANCE_ANALYST',  'finance.read'),
+                ('FINANCE_OFFICER',  'payout.release'),
+                ('FINANCE_OFFICER',  'payment.refund'),
+                ('AUDITOR',          'audit.read'),
+                ('OWNER',            'staff.manage'),
+                ('OWNER',            'role.manage'),
+                ('OWNER',            'settings.manage')
+            ) AS grant_row(role_code, permission_code)
+            JOIN staff_roles r ON r.code = grant_row.role_code
+            ON CONFLICT ON CONSTRAINT uk_staff_role_permissions_role_code DO NOTHING;
+
+            INSERT INTO staff_role_includes (id, parent_role_id, child_role_id, created_at)
+            SELECT gen_random_uuid(), parent.id, child.id, now()
+            FROM (VALUES
+                ('MODERATOR',        'SUPPORT_AGENT'),
+                ('DISPUTE_HANDLER',  'SUPPORT_AGENT'),
+                ('COMPANY_APPROVER', 'SUPPORT_AGENT'),
+                ('TRUST_LEAD',       'MODERATOR'),
+                ('TRUST_LEAD',       'DISPUTE_HANDLER'),
+                ('FINANCE_OFFICER',  'FINANCE_ANALYST'),
+                ('OWNER',            'CATALOG_EDITOR'),
+                ('OWNER',            'TRUST_LEAD'),
+                ('OWNER',            'COMPANY_APPROVER'),
+                ('OWNER',            'FINANCE_OFFICER'),
+                ('OWNER',            'AUDITOR')
+            ) AS edge(parent_code, child_code)
+            JOIN staff_roles parent ON parent.code = edge.parent_code
+            JOIN staff_roles child ON child.code = edge.child_code
+            ON CONFLICT ON CONSTRAINT uk_staff_role_includes_edge DO NOTHING;
+        </sql>
+        <rollback>
+            <sql>
+                DELETE FROM staff_role_includes;
+                DELETE FROM staff_role_permissions;
+                DELETE FROM staff_roles;
+            </sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>
