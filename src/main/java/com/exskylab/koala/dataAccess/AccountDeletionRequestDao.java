@@ -25,11 +25,9 @@ public interface AccountDeletionRequestDao extends JpaRepository<AccountDeletion
 
     Optional<AccountDeletionRequest> findFirstByUserIdOrderByRequestedAtDesc(UUID userId);
 
-    @EntityGraph(attributePaths = "user")
     Page<AccountDeletionRequest> findAllByStatus(AccountDeletionStatus status, Pageable pageable);
 
     @Override
-    @EntityGraph(attributePaths = "user")
     Page<AccountDeletionRequest> findAll(Pageable pageable);
 
     @Query("""

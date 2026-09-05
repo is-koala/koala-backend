@@ -8,6 +8,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -15,6 +16,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SoftDeleteBehaviourIT extends AbstractIntegrationTest {
+
+    private static final Map<String, String> HARD_DELETE_TABLE_EXEMPTIONS = Map.of(
+            "account_media_deletion_outbox",
+            "geçici operasyon kuyruğu; storage silme onayından sonra satır fiziksel olarak kaldırılır");
 
     @Autowired
     private LoginAttemptDao loginAttemptDao;
@@ -107,8 +112,23 @@ class SoftDeleteBehaviourIT extends AbstractIntegrationTest {
                     where d.table_schema = 'public' and d.table_name = c.table_name
                       and d.column_name = 'is_deleted')
                 """, String.class);
+        withoutFlag.removeAll(HARD_DELETE_TABLE_EXEMPTIONS.keySet());
 
         assertTrue(withoutFlag.isEmpty(), "is_deleted kolonu olmayan tablolar: " + withoutFlag);
+    }
+
+    @Test
+    void everyHardDeleteExemptionStillPointsAtALiveTable() {
+        List<String> stale = HARD_DELETE_TABLE_EXEMPTIONS.keySet().stream()
+                .filter(table -> Boolean.FALSE.equals(jdbcTemplate.queryForObject("""
+                        select exists (
+                            select 1 from information_schema.tables
+                            where table_schema = 'public' and table_name = ?
+                        )
+                        """, Boolean.class, table)))
+                .toList();
+
+        assertTrue(stale.isEmpty(), "artık var olmayan hard-delete tablosu muaf: " + stale);
     }
 
     @Test
