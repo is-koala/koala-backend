@@ -2,7 +2,9 @@ package com.exskylab.koala.dataAccess;
 
 import com.exskylab.koala.core.qa.QaMarketplaceSeeder;
 import com.exskylab.koala.support.AbstractIntegrationTest;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -20,8 +22,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @AutoConfigureMockMvc
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestPropertySource(properties = {
-        "qa.marketplace-seed.version=istanbul-v1",
+        "qa.marketplace-seed.version=",
         "qa.marketplace-seed.worker-email=qa-worker@example.test",
         "qa.marketplace-seed.worker-password=QaWorkerPass!2026",
         "qa.marketplace-seed.employer-email=qa-employer@example.test",
@@ -31,6 +34,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 })
 class QaMarketplaceSeedIT extends AbstractIntegrationTest {
 
+    private static final UUID EXISTING_WORKER_ID = UUID.fromString("38b3e0ef-1f95-44a1-8e86-74a5319f03cc");
+    private static final UUID EXISTING_EMPLOYER_ID = UUID.fromString("0b2098d2-b7fd-4b36-a1ac-d4612d6ef429");
     private static final String WORKER_EMAIL = "qa-worker@example.test";
     private static final String WORKER_PASSWORD = "QaWorkerPass!2026";
     private static final String EMPLOYER_EMAIL = "qa-employer@example.test";
@@ -44,6 +49,20 @@ class QaMarketplaceSeedIT extends AbstractIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @BeforeAll
+    void seedMarketplaceAroundExistingControlledAccounts() {
+        insertExistingUser(EXISTING_WORKER_ID, WORKER_EMAIL, "existing.worker", false);
+        insertExistingUser(EXISTING_EMPLOYER_ID, EMPLOYER_EMAIL, "existing.employer", true);
+
+        assertTrue(seeder.seed(credentials()));
+    }
+
+    @Test
+    void reusesControlledQaAccountsThatAlreadyExist() {
+        assertEquals(EXISTING_WORKER_ID, userIdFor(WORKER_EMAIL));
+        assertEquals(EXISTING_EMPLOYER_ID, userIdFor(EMPLOYER_EMAIL));
+    }
 
     @Test
     void createsARealisticIstanbulMarketplaceInTheRealTables() {
@@ -192,5 +211,19 @@ class QaMarketplaceSeedIT extends AbstractIntegrationTest {
 
     private long count(String sql) {
         return jdbcTemplate.queryForObject(sql, Long.class);
+    }
+
+    private UUID userIdFor(String email) {
+        return jdbcTemplate.queryForObject(
+                "select id from users where email = ? and is_deleted = false", UUID.class, email);
+    }
+
+    private void insertExistingUser(UUID id, String email, String username, boolean employer) {
+        jdbcTemplate.update("""
+                insert into users (
+                    id, created_at, username, email, password, email_verified,
+                    phone_verified, identity_verified, is_employer, is_deleted
+                ) values (?, now(), ?, ?, 'legacy-password-hash', true, false, false, ?, false)
+                """, id, username, email, employer);
     }
 }

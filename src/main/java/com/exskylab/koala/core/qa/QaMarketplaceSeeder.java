@@ -113,14 +113,17 @@ public class QaMarketplaceSeeder {
         String employerPassword = passwordEncoder.encode(credentials.employerPassword());
         String unavailablePassword = passwordEncoder.encode(UUID.randomUUID().toString());
         String assetBaseUrl = normalizedBaseUrl(credentials.publicBaseUrl());
+        SeedUserIds userIds = new SeedUserIds(
+                resolveActiveUserId(credentials.workerEmail(), id("worker", 0)),
+                resolveActiveUserId(credentials.employerEmail(), id("employer", 0)));
 
         seedWorkers(countryId, cityId, districts, credentials.workerEmail(), workerPassword,
-                unavailablePassword, assetBaseUrl);
+                unavailablePassword, assetBaseUrl, userIds);
         seedEmployers(countryId, cityId, districts, credentials.employerEmail(), employerPassword,
-                unavailablePassword, assetBaseUrl);
-        seedCompanies(countryId, cityId, districts, assetBaseUrl);
-        seedJobs(countryId, cityId, districts, assetBaseUrl);
-        seedMarketplaceActivity();
+                unavailablePassword, assetBaseUrl, userIds);
+        seedCompanies(countryId, cityId, districts, assetBaseUrl, userIds);
+        seedJobs(countryId, cityId, districts, assetBaseUrl, userIds);
+        seedMarketplaceActivity(userIds);
         log.info("QA marketplace dataset {} is ready: {} workers, {} employers, {} companies and {} jobs.",
                 credentials.version(), WORKER_COUNT, EMPLOYER_COUNT, COMPANY_COUNT, JOB_COUNT);
         return true;
@@ -128,9 +131,9 @@ public class QaMarketplaceSeeder {
 
     private void seedWorkers(UUID countryId, UUID cityId, List<District> districts,
                              String qaEmail, String qaPassword, String unavailablePassword,
-                             String assetBaseUrl) {
+                             String assetBaseUrl, SeedUserIds userIds) {
         for (int index = 0; index < WORKER_COUNT; index++) {
-            UUID userId = id("worker", index);
+            UUID userId = userIds.worker(index);
             UUID addressId = id("worker-address", index);
             UUID avatarId = id("worker-avatar", index);
             UUID cvId = id("worker-cv", index);
@@ -187,9 +190,9 @@ public class QaMarketplaceSeeder {
 
     private void seedEmployers(UUID countryId, UUID cityId, List<District> districts,
                                String qaEmail, String qaPassword, String unavailablePassword,
-                               String assetBaseUrl) {
+                               String assetBaseUrl, SeedUserIds userIds) {
         for (int index = 0; index < EMPLOYER_COUNT; index++) {
-            UUID userId = id("employer", index);
+            UUID userId = userIds.employer(index);
             UUID addressId = id("employer-address", index);
             UUID avatarId = id("employer-avatar", index);
             District district = districts.get((index * 2 + 3) % districts.size());
@@ -236,13 +239,14 @@ public class QaMarketplaceSeeder {
         }
     }
 
-    private void seedCompanies(UUID countryId, UUID cityId, List<District> districts, String assetBaseUrl) {
+    private void seedCompanies(UUID countryId, UUID cityId, List<District> districts,
+                               String assetBaseUrl, SeedUserIds userIds) {
         String[] types = {"LIMITED", "CORPORATION", "STARTUP", "AGENCY", "SOLE_PROPRIETORSHIP"};
         for (int index = 0; index < 30; index++) {
             UUID companyId = id("company", index);
             UUID addressId = id("company-address", index);
             UUID logoId = id("company-logo", index);
-            UUID employerId = id("employer", index);
+            UUID employerId = userIds.employer(index);
             District district = districts.get((index * 3 + 5) % districts.size());
 
             upsertAddress(addressId, countryId, cityId, district, index + 30, "company");
@@ -284,12 +288,13 @@ public class QaMarketplaceSeeder {
         }
     }
 
-    private void seedJobs(UUID countryId, UUID cityId, List<District> districts, String assetBaseUrl) {
+    private void seedJobs(UUID countryId, UUID cityId, List<District> districts,
+                          String assetBaseUrl, SeedUserIds userIds) {
         LocalDateTime base = LocalDate.now(ISTANBUL).atTime(9, 0).plusDays(3);
         for (int index = 0; index < 180; index++) {
             int companyIndex = index % 30;
             UUID companyId = id("company", companyIndex);
-            UUID employerId = id("employer", companyIndex);
+            UUID employerId = userIds.employer(companyIndex);
             UUID addressId = id("job-address", index);
             UUID jobId = id("job", index);
             UUID imageId = id("job-image-media", index);
@@ -359,27 +364,27 @@ public class QaMarketplaceSeeder {
         }
     }
 
-    private void seedMarketplaceActivity() {
-        seedApplications();
-        seedAssignmentsAndPayments();
-        seedFollowsAndSavedJobs();
-        seedNotifications();
-        seedRatings();
+    private void seedMarketplaceActivity(SeedUserIds userIds) {
+        seedApplications(userIds);
+        seedAssignmentsAndPayments(userIds);
+        seedFollowsAndSavedJobs(userIds);
+        seedNotifications(userIds);
+        seedRatings(userIds);
     }
 
-    private void seedApplications() {
+    private void seedApplications(SeedUserIds userIds) {
         for (int jobIndex = 0; jobIndex < 180; jobIndex++) {
             for (int slot = 0; slot < 2; slot++) {
                 int workerIndex = workerIndex(jobIndex, slot);
                 String status = isAssignedJob(jobIndex) && slot == 0
                         ? "ACCEPTED"
                         : (jobIndex + slot) % 4 == 0 ? "REJECTED" : "APPLIED";
-                upsertApplication(jobIndex, slot, workerIndex, status);
+                upsertApplication(jobIndex, slot, workerIndex, status, userIds);
             }
         }
     }
 
-    private void seedAssignmentsAndPayments() {
+    private void seedAssignmentsAndPayments(SeedUserIds userIds) {
         int[] jobIndexes = assignmentJobIndexes();
         String[] assignmentStatuses = {
                 "PENDING_CONFIRMATION", "CONFIRMED", "REJECTED", "IN_PROGRESS", "CANCELLED", "COMPLETED"
@@ -393,7 +398,7 @@ public class QaMarketplaceSeeder {
             int workerIndex = workerIndex(jobIndex, 0);
             UUID assignmentId = id("assignment", jobIndex);
             UUID jobId = id("job", jobIndex);
-            UUID workerId = id("worker", workerIndex);
+            UUID workerId = userIds.worker(workerIndex);
             UUID applicationId = id("application", jobIndex * 10);
             String assignmentStatus = assignmentStatuses[sequence / 10];
             String paymentStatus = paymentStatuses[sequence % paymentStatuses.length];
@@ -434,13 +439,13 @@ public class QaMarketplaceSeeder {
                     null, Timestamp.from(assignedAt));
 
             seedPayment(sequence, assignmentId, paymentStatus, workerPayout, commission, total);
-            seedConversation(jobIndex, workerIndex, sequence);
+            seedConversation(jobIndex, workerIndex, sequence, userIds);
 
             if (assignmentStatus.equals("IN_PROGRESS") || assignmentStatus.equals("COMPLETED")) {
                 seedWorkSession(jobIndex, assignmentId, assignmentStatus.equals("COMPLETED"));
             }
             if (assignmentStatus.equals("COMPLETED")) {
-                seedReviews(jobIndex, assignmentId, workerId);
+                seedReviews(jobIndex, assignmentId, workerId, userIds);
             }
         }
     }
@@ -480,11 +485,11 @@ public class QaMarketplaceSeeder {
                 timestamp(completedAt), Timestamp.from(CREATED_AT.plusSeconds(200_000L + sequence * 600L)));
     }
 
-    private void seedConversation(int jobIndex, int workerIndex, int sequence) {
+    private void seedConversation(int jobIndex, int workerIndex, int sequence, SeedUserIds userIds) {
         UUID conversationId = id("conversation", jobIndex);
         UUID jobId = id("job", jobIndex);
-        UUID employerId = id("employer", jobIndex % 30);
-        UUID workerId = id("worker", workerIndex);
+        UUID employerId = userIds.employer(jobIndex % 30);
+        UUID workerId = userIds.worker(workerIndex);
         Instant lastMessageAt = CREATED_AT.plusSeconds(300_000L + sequence * 900L);
         String lastBody = "Harika, görev günü görüşmek üzere.";
         jdbcTemplate.update("""
@@ -532,17 +537,17 @@ public class QaMarketplaceSeeder {
                 completed ? 480 : null, Timestamp.from(checkIn));
     }
 
-    private void seedReviews(int jobIndex, UUID assignmentId, UUID workerId) {
-        UUID employerId = id("employer", jobIndex % 30);
+    private void seedReviews(int jobIndex, UUID assignmentId, UUID workerId, SeedUserIds userIds) {
+        UUID employerId = userIds.employer(jobIndex % 30);
         upsertReview(assignmentId, employerId, workerId, jobIndex, 0,
                 4 + jobIndex % 2, "Dakik, iletişimi kuvvetli ve görev boyunca çok yardımcıydı.", false);
         upsertReview(assignmentId, workerId, employerId, jobIndex, 1,
                 4 + (jobIndex + 1) % 2, "Görev tanımı netti, ekip çok ilgiliydi. Tekrar çalışmak isterim.", jobIndex % 3 == 0);
     }
 
-    private void seedFollowsAndSavedJobs() {
+    private void seedFollowsAndSavedJobs(SeedUserIds userIds) {
         for (int workerIndex = 0; workerIndex < 120; workerIndex++) {
-            UUID workerId = id("worker", workerIndex);
+            UUID workerId = userIds.worker(workerIndex);
             for (int slot = 0; slot < 2; slot++) {
                 int companyIndex = (workerIndex * 3 + slot * 7) % 30;
                 jdbcTemplate.update("""
@@ -563,9 +568,9 @@ public class QaMarketplaceSeeder {
         }
     }
 
-    private void seedNotifications() {
+    private void seedNotifications(SeedUserIds userIds) {
         for (int index = 0; index < 20; index++) {
-            UUID recipientId = index % 2 == 0 ? id("worker", 0) : id("employer", 0);
+            UUID recipientId = index % 2 == 0 ? userIds.worker(0) : userIds.employer(0);
             UUID targetId = id("job", index);
             jdbcTemplate.update("""
                     insert into notifications (
@@ -587,22 +592,23 @@ public class QaMarketplaceSeeder {
         }
     }
 
-    private void seedRatings() {
+    private void seedRatings(SeedUserIds userIds) {
         for (int index = 0; index < 120; index++) {
-            UUID userId = id("worker", index);
+            UUID userId = userIds.worker(index);
             int reviewCount = index < 10 ? 1 : 0;
             int rating = index < 10 ? 4 + index % 2 : 0;
             upsertRating(userId, index, reviewCount, rating);
         }
         for (int index = 0; index < 30; index++) {
-            UUID userId = id("employer", index);
+            UUID userId = userIds.employer(index);
             int reviewCount = index % 3 == 0 ? 1 : 0;
             int rating = reviewCount == 1 ? 4 + index % 2 : 0;
             upsertRating(userId, 200 + index, reviewCount, rating);
         }
     }
 
-    private void upsertApplication(int jobIndex, int slot, int workerIndex, String status) {
+    private void upsertApplication(int jobIndex, int slot, int workerIndex, String status,
+                                   SeedUserIds userIds) {
         UUID applicationId = id("application", jobIndex * 10 + slot);
         Instant appliedAt = CREATED_AT.plusSeconds(50_000L + jobIndex * 300L + slot * 60L);
         jdbcTemplate.update("""
@@ -614,7 +620,7 @@ public class QaMarketplaceSeeder {
                     application_date_time = excluded.application_date_time, status = excluded.status,
                     notes = excluded.notes, answered_date_time = excluded.answered_date_time,
                     rejection_reason = excluded.rejection_reason, is_deleted = false, deleted_at = null
-                """, applicationId, Timestamp.from(appliedAt), id("job", jobIndex), id("worker", workerIndex),
+                """, applicationId, Timestamp.from(appliedAt), id("job", jobIndex), userIds.worker(workerIndex),
                 Timestamp.from(appliedAt), status,
                 slot == 0 ? "Merhaba, bu görev için uygunum ve benzer işlerde deneyimliyim." : "İlanınızla ilgileniyorum; belirtilen saatlerde müsaitim.",
                 status.equals("APPLIED") ? null : Timestamp.from(appliedAt.plusSeconds(3_600)),
@@ -725,6 +731,14 @@ public class QaMarketplaceSeeder {
                 where not exists (
                     select 1 from authorities where user_id = ? and role = 'ROLE_USER')
                 """, userId, userId);
+    }
+
+    private UUID resolveActiveUserId(String email, UUID fallbackId) {
+        List<UUID> matches = jdbcTemplate.queryForList("""
+                select id from users
+                where email = ? and is_deleted = false
+                """, UUID.class, email);
+        return matches.isEmpty() ? fallbackId : matches.getFirst();
     }
 
     private static int workerIndex(int jobIndex, int slot) {
@@ -847,6 +861,17 @@ public class QaMarketplaceSeeder {
 
     public record Credentials(String version, String workerEmail, String workerPassword,
                               String employerEmail, String employerPassword, String publicBaseUrl) {
+    }
+
+    private record SeedUserIds(UUID controlledWorkerId, UUID controlledEmployerId) {
+
+        private UUID worker(int index) {
+            return index == 0 ? controlledWorkerId : id("worker", index);
+        }
+
+        private UUID employer(int index) {
+            return index == 0 ? controlledEmployerId : id("employer", index);
+        }
     }
 
     private record District(UUID id, String name) {
