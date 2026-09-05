@@ -1,6 +1,7 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.SecurityService;
+import com.exskylab.koala.core.constants.SystemUser;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.dataAccess.UserDao;
@@ -14,8 +15,6 @@ import java.util.UUID;
 
 @Service
 public class SecurityManager implements SecurityService {
-
-    private static final UUID SYSTEM_USER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
 
     private final UserDao userDao;
 
@@ -50,7 +49,7 @@ public class SecurityManager implements SecurityService {
     @Override
     @Transactional(readOnly = true)
     public User getSystemUser() {
-        return userDao.findById(SYSTEM_USER_ID)
+        return userDao.findById(SystemUser.ID)
                 .orElseThrow(() -> new ResourceNotFoundException("{system.user.not.found}"));
     }
 }
