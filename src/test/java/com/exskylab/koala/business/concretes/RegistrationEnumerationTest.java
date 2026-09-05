@@ -1,6 +1,7 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.DeviceService;
+import com.exskylab.koala.business.abstracts.AuthLinkService;
 import com.exskylab.koala.business.abstracts.LegalService;
 import com.exskylab.koala.business.abstracts.LoginAttemptService;
 import com.exskylab.koala.business.abstracts.NotificationService;
@@ -9,7 +10,6 @@ import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.SessionService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.dtos.auth.request.AuthStartRegistrationDto;
-import com.exskylab.koala.core.properties.AppProperties;
 import com.exskylab.koala.core.properties.SessionProperties;
 import com.exskylab.koala.core.security.JwtService;
 import com.exskylab.koala.entities.PendingRegistration;
@@ -36,6 +36,7 @@ class RegistrationEnumerationTest {
     private UserService userService;
     private PendingRegistrationService pendingRegistrationService;
     private NotificationService notificationService;
+    private AuthLinkService authLinkService;
     private AuthManager authManager;
 
     @BeforeEach
@@ -43,14 +44,13 @@ class RegistrationEnumerationTest {
         userService = mock(UserService.class);
         pendingRegistrationService = mock(PendingRegistrationService.class);
         notificationService = mock(NotificationService.class);
-
-        AppProperties appProperties = new AppProperties("http://localhost:8080", "http://localhost:3000");
+        authLinkService = mock(AuthLinkService.class);
 
         authManager = new AuthManager(
                 userService,
                 pendingRegistrationService,
                 notificationService,
-                appProperties,
+                authLinkService,
                 mock(JwtService.class),
                 mock(PasswordEncoder.class),
                 mock(DeviceService.class),
@@ -62,7 +62,10 @@ class RegistrationEnumerationTest {
                 mock(com.exskylab.koala.business.abstracts.PasswordResetTokenService.class),
                 mock(org.springframework.context.ApplicationEventPublisher.class));
 
-        when(pendingRegistrationService.createPendingRegistration(any())).thenReturn(pendingRegistration());
+        PendingRegistration pending = pendingRegistration();
+        when(pendingRegistrationService.createPendingRegistration(any())).thenReturn(pending);
+        when(authLinkService.registrationLandingLink(pending.getToken().toString()))
+                .thenReturn("http://localhost:8080/auth-links/complete-registration?token=" + pending.getToken());
     }
 
     @Test

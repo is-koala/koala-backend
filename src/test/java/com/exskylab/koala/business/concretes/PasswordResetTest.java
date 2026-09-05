@@ -7,7 +7,6 @@ import com.exskylab.koala.core.dtos.notification.request.SendEmailDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.events.PasswordResetCompletedEvent;
-import com.exskylab.koala.core.properties.AppProperties;
 import com.exskylab.koala.core.properties.SessionProperties;
 import com.exskylab.koala.core.security.JwtService;
 import com.exskylab.koala.entities.User;
@@ -35,6 +34,7 @@ class PasswordResetTest {
     private JwtService jwtService;
     private PasswordEncoder passwordEncoder;
     private PasswordResetTokenService passwordResetTokenService;
+    private AuthLinkService authLinkService;
     private ApplicationEventPublisher eventPublisher;
     private AuthManager authManager;
 
@@ -48,11 +48,12 @@ class PasswordResetTest {
         jwtService = mock(JwtService.class);
         passwordEncoder = mock(PasswordEncoder.class);
         passwordResetTokenService = mock(PasswordResetTokenService.class);
+        authLinkService = mock(AuthLinkService.class);
         eventPublisher = mock(ApplicationEventPublisher.class);
 
         authManager = new AuthManager(
                 userService, mock(PendingRegistrationService.class), notificationService,
-                new AppProperties("http://localhost:8080", "http://localhost:3000"),
+                authLinkService,
                 jwtService, passwordEncoder, mock(DeviceService.class), sessionService,
                 mock(LoginAttemptService.class), mock(SecurityService.class), new SessionProperties(),
                 mock(LegalService.class), passwordResetTokenService, eventPublisher);
@@ -81,13 +82,15 @@ class PasswordResetTest {
     void aKnownAddressReceivesAResetLink() {
         when(userService.getByEmail("ada@example.com")).thenReturn(user());
         when(passwordResetTokenService.issue(any(User.class))).thenReturn("reset-token");
+        when(authLinkService.passwordResetLandingLink("reset-token"))
+                .thenReturn("http://localhost:8080/auth-links/reset-password?token=reset-token");
 
         authManager.requestPasswordReset(new ForgotPasswordDto("ada@example.com"));
 
         var email = org.mockito.ArgumentCaptor.forClass(SendEmailDto.class);
         verify(notificationService).sendEmail(email.capture(), eq(com.exskylab.koala.entities.DispatchPriority.CRITICAL), eq(true));
         assertEquals("password-reset-request-template", email.getValue().getTemplateName());
-        assertEquals("http://localhost:3000/reset-password?token=reset-token",
+        assertEquals("http://localhost:8080/auth-links/reset-password?token=reset-token",
                 email.getValue().getTemplateParameters().get("resetLink"));
         assertTrue(email.getValue().getSubject().contains("parola sıfırlama"));
     }

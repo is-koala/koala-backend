@@ -5,7 +5,6 @@ import com.exskylab.koala.core.helpers.LogMasks;
 
 import com.exskylab.koala.business.abstracts.*;
 import com.exskylab.koala.core.helpers.ClientContext;
-import com.exskylab.koala.core.properties.AppProperties;
 import com.exskylab.koala.core.properties.SessionProperties;
 import com.exskylab.koala.core.constants.AuthMessages;
 import com.exskylab.koala.core.dtos.auth.request.*;
@@ -33,7 +32,7 @@ import java.util.UUID;
 @Slf4j
 public class AuthManager implements AuthService {
 
-    private final AppProperties appProperties;
+    private final AuthLinkService authLinkService;
     private final UserService userService;
     private final PendingRegistrationService pendingRegistrationService;
     private final NotificationService notificationService;
@@ -51,7 +50,7 @@ public class AuthManager implements AuthService {
     public AuthManager(UserService userService,
                        PendingRegistrationService pendingRegistrationService,
                        NotificationService notificationService,
-                       AppProperties appProperties,
+                       AuthLinkService authLinkService,
                        JwtService jwtService,
                        PasswordEncoder passwordEncoder,
                        DeviceService deviceService,
@@ -65,7 +64,7 @@ public class AuthManager implements AuthService {
         this.userService = userService;
         this.pendingRegistrationService = pendingRegistrationService;
         this.notificationService = notificationService;
-        this.appProperties = appProperties;
+        this.authLinkService = authLinkService;
         this.jwtService = jwtService;
         this.passwordEncoder = passwordEncoder;
         this.deviceService = deviceService;
@@ -98,7 +97,8 @@ public class AuthManager implements AuthService {
                 pendingRegistrationService.createPendingRegistration(authStartRegistrationDto);
         log.info("Pending registration created with id: {}", pendingRegistration.getId());
 
-        String verificationLink = appProperties.frontendUrl()+ "/complete-registration?token=" + pendingRegistration.getToken();
+        String verificationLink = authLinkService.registrationLandingLink(
+                pendingRegistration.getToken().toString());
 
         Map<String, Object> emailParams = Map.of(
                 "firstName", authStartRegistrationDto.getFirstName(),
@@ -325,7 +325,7 @@ public class AuthManager implements AuthService {
         }
 
         String resetToken = passwordResetTokenService.issue(user);
-        String resetLink = appProperties.frontendUrl() + "/reset-password?token=" + resetToken;
+        String resetLink = authLinkService.passwordResetLandingLink(resetToken);
 
         SendEmailDto sendEmailDto = new SendEmailDto();
         sendEmailDto.setRecipient(user);

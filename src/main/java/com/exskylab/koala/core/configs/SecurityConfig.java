@@ -45,6 +45,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST,"/auth/refresh-token").permitAll()
                         .requestMatchers(HttpMethod.POST,"/auth/forgot-password").permitAll()
                         .requestMatchers(HttpMethod.POST,"/auth/reset-password").permitAll()
+                        .requestMatchers(HttpMethod.GET,"/auth-links/**").permitAll()
                         .requestMatchers(HttpMethod.POST,"/auth/logout").authenticated()
 
                         //companycontactinvitation endpoints
