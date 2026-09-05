@@ -68,6 +68,7 @@ farklı bir olay:
 | --- | --- | --- | --- |
 | `paymentStatus=<değer>` | Sağlayıcı `SUCCESS` demedi: kart reddi, vazgeçme, 3DS'in tamamlanmaması | Yok | İşveren yeniden dener. Olay değil. |
 | `{payment.fraud.review}` | `fraudStatus = -1`, sağlayıcı dolandırıcılık filtresinde reddetti | Yok | İşverene başka kart önerilir. |
+| `{payment.3ds.verification.failed}` | `mdStatus ≠ 1` ya da yanıtta hiç yok: 3DS doğrulaması geçmedi (§2x2) | **Belirsiz — para çekilmiş olabilir** | Aşağıdaki "3DS doğrulanmadı" adımı. |
 | `expected <a> but the provider collected <b>` veya `expected currency TRY but the provider used <c>` | Sağlayıcı bizim beklediğimizden farklı tahsil etti | **Belirsiz — para çekilmiş olabilir** | Aşağıdaki "tutar uyuşmazlığı" adımı. |
 | Serbest metin (HTTP hatası, `ExternalServiceException` mesajı) | Sağlayıcıya ulaşılamadı ya da yanıt okunamadı | **Belirsiz** | Aşağıdaki "sonucu bilinmeyen deneme" adımı. |
 
@@ -78,6 +79,26 @@ yapılır — bizde `SUCCEEDED` bir ödeme olmadığı için `POST /admin/job-as
 çalışmaz (`PaymentManager.getSettledPaymentFor` kayıt bulamaz). Log satırı
 `Payment {} rejected: expected ... but the provider collected ...` beklenen ve
 gerçekleşen tutarı birlikte yazar.
+
+**3DS doğrulanmadı.** `paymentStatus = SUCCESS` geldiği hâlde `mdStatus` `1` değil.
+Emanet **bilerek** açılmaz (§2x2); bu bir hata değil, güvenlik kararıdır. Sayısal
+değer yalnız logdadır:
+
+```
+Payment <id> rejected: 3-D Secure verification did not succeed, mdStatus=<değer>
+```
+
+`mdStatus=null` ise yanıtta alan hiç yoktu. iyzico "yalnız 3DS işlemlerinde
+görünür" diyor, yani ya işlem 3DS'siz geçti ya da yanıt beklediğimiz gibi değil;
+ikisi ayırt edilemediği için ödeme reddedilir. **Bu satırı canlıda görürsen
+olaydır** — Checkout Form 3DS'siz ödeme geçiriyor demektir ve karar
+(`forceThreeDS` mı, kapının gevşetilmesi mi) issue'ya yazılmalıdır. Kapıyı
+kendiliğinden gevşetme.
+
+Her iki hâlde de sağlayıcı tarafında para çekilmiş olabilir: panelde
+`conversation_id` ile kaydı bul, tahsilat gerçekleştiyse **panelden elle** iade
+et — tutar uyuşmazlığındaki yolun aynısı. İşveren yeniden deneyebilir; kayıt
+`FAILED` olduğu için atama tekrar tahsilata açıktır.
 
 **Sonucu bilinmeyen deneme.** Aynı yol: panelde `conversation_id` ile bak.
 Sağlayıcı tarafında başarılı bir işlem varsa bu bir mutabakat farkıdır, bölüm
@@ -289,12 +310,25 @@ ikincisini canlıda doğrulamadan gerçek saymayın.
 | Rapor SFTP | `sandbox-report.iyzipay.com` | `report.iyzipay.com` | `/en/advanced/sftp` — aynı sayfa "Sandbox and Production SFTP ENVs might differ in certain terms" diyor; doküman setindeki **tek** açık ortam farkı uyarısı budur |
 | Canlı hesap | sandbox kaydı kendi kendine yapılır | ayrı başvuru; "contact your account manager" | `/en/add-ons/integration-checklist` |
 
-**`mdStatus` tablosu** (`/en/payment-methods/api/3ds/3ds-implementation`):
+**`mdStatus` tablosu** (`/en/payment-methods/api/3ds/3ds-implementation` ve
+Türkçe eşi `/odeme-metotlari/api/3ds/3ds-entegrasyonu`):
 `1` başarılı, `0` 3DS imzası/doğrulaması geçersiz, `2` kart sahibi ya da banka
 3DS'e kayıtlı değil, `3` banka kayıtlı değil, `4` doğrulama yapılamadı — kart
 sahibi sonra kaydolmayı seçti, `5` doğrulama yapılamadı, `6` 3DS hatası,
 `7` sistem hatası, `8` bilinmeyen kart. Aynı sayfa "`mdStatus` yalnızca 3DS
 işlemlerinde döner" diyor.
+
+**Türkçe tabloda İngilizcede olmayan bir satır var:** `-1`, "`mdStatus = 0` ile
+aynıdır, QNB Finansbank'a özel". Aynı sayfaların `/payment/v2/3dsecure/auth`
+şeması hem `enum`'da `-1`'i sayıyor hem de kuralı `1: Başarılı`, `0,2-8:
+Başarısız` diye yazıyor — yani `-1` "başarısız" aralığı cümlesinin dışında
+kalıyor. Kodumuz bu yüzden kara liste değil beyaz liste tutuyor (§2x2).
+
+**CF sorgulama yanıtında `mdStatus` konusunda doküman kendi içinde çelişiyor.**
+`/odeme-metotlari/odeme-formu/cf-entegrasyonu/cf-sorgulama` OpenAPI şeması alanı hiç saymıyor;
+aynı doküman setindeki örnek CF yanıtı (`.../cf-ornek-entegrasyon`) ise
+`"mdStatus": 1` içeriyor ve resmî `iyzipay-java` SDK'sında `CheckoutForm`,
+`PaymentResource`'tan `getMdStatus()`'u miras alıyor. İkisi de resmî.
 
 **Sandbox'ta üretilebilen 3DS sonuçları sınırlı.** Belgelenmiş üç 3DS kartı
 (`/en/add-ons/test-cards`):
@@ -332,14 +366,14 @@ de güvenli tarafta.
 
 Canlıya geçmeden bilinmesi gereken üç boşluk:
 
-1. **`mdStatus` hiç okunmuyor.** `IyzicoPaymentResultResponseDto` bu alanı
-   taşımıyor, `IyzicoPaymentService.retrieveCheckoutFormResult` ayrıştırmıyor.
-   `completeFromCallback` kararını yalnız `paymentStatus`, `fraudStatus` ve
-   tutara bakarak veriyor. Yukarıdaki `4131111111111117` kartı tam olarak bu
-   durumu üretiyor: **`paymentStatus = SUCCESS` ama `mdStatus = 0`**, yani 3DS
-   doğrulaması geçmemiş bir ödeme bugün emanete açılır. Sandbox'ta bu tek bir
-   test kartıdır; canlıda ne sıklıkta göründüğü bilinmiyor. Ayrı bir issue
-   konusu.
+1. **`mdStatus` artık okunuyor — kapatıldı.** `retrieveCheckoutFormResult`
+   alanı ayrıştırıyor ve `completeFromCallback` yalnız `mdStatus = 1` iken
+   emanet açıyor; başka her değer ve alanın yokluğu denemeyi `FAILED` yapıyor
+   (§2x2). Yukarıdaki `4131111111111117` kartı artık emanet açmaz.
+   **Kalan boşluk kuralın kendisi değil, doğrulaması:** sandbox'ta gerçek bir
+   işlemle denenmedi ve Checkout Form'un 3DS'siz ödeme geçirip geçirmediği
+   bilinmiyor — geçiriyorsa fail-closed kapı onu da reddeder. Canlıya geçişte
+   ölçülecek ilk şey `mdStatus=null` loglarının olup olmadığıdır.
 2. **Bildirim (IFN/webhook) tüketicisi yok.** `IN_REVIEW`'dan çıkış zaten
    otomatik değil (§2x). Aynı eksik, `fraudStatus` incelemesi sonradan `-1`
    dönerse — yani iyzico ödemeyi iade edip dolandırıcılık işaretlerse — bunu hiç

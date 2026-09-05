@@ -641,7 +641,44 @@ Artık `SettlementOperation.REFUND` var ve `/payment/refund` çağrılıyor (`pa
 
 **Hâlâ sandbox'ta uçtan uca doğrulanmadı.** Yukarıdakiler dokümana karşı doğru; gerçek bir sandbox işlemiyle teyit edilmesi gereken tek şey kısmi iade + disapprove ikilisinin sıralamasıdır. `iyzico.settlementEnabled=false` ile kuyruk tümüyle kapalı tutulabilir.
 
-**Denetimin kapatmadığı bir alan kaldı: `mdStatus` hiç okunmuyor.** Iyzico'nun belgelediği `4131111111111117` test kartı `paymentStatus = SUCCESS` ile birlikte `mdStatus = 0` döndürüyor, yani 3DS doğrulaması geçmemiş bir ödeme bugün emanete açılır. Ayrıntı, kaynak ve canlı/sandbox karşılaştırması `docs/runbooks/payments.md` §6.2'de; burada tekrarlanmıyor.
+## 2x2. 3DS doğrulaması — `mdStatus` kapısı
+
+**`mdStatus` okunmuyordu ve 3DS doğrulaması geçmemiş ödeme emanet açıyordu.** `paymentStatus = SUCCESS` "sağlayıcı işlemi tamamladı" demek; kart sahibinin bankasında doğrulandığını **söylemiyor**. İkisi ayrışabilir ve iyzico bunu üretecek bir test kartı yayımlıyor: `4131111111111117` → `Success but mdStatus is 0` (`/ek-bilgiler/test-kartlari`). O ödeme bugüne kadar emanete giriyor, işçi işe başlayabiliyor, ters ibraz riski tümüyle bizde kalıyordu.
+
+Artık `completeFromCallback` yalnız `mdStatus = 1` iken emanet açıyor.
+
+**Değerlerin anlamı iyzico'nun kendi dokümantasyonundan** (`/odeme-metotlari/api/3ds/3ds-entegrasyonu` ve İngilizce eşi `/en/payment-methods/api/3ds/3ds-implementation`). Tablo başlığı bilerek "başarısızlık senaryoları" — `1` tabloda hiç yok:
+
+| `mdStatus` | iyzico'nun tanımı |
+|---|---|
+| `1` | başarılı; tabloda değil, şemada `1: Başarılı` |
+| `0` | 3-D Secure imzası geçersiz veya doğrulama |
+| `-1` | `0` ile aynı; QNB Finansbank'a özel |
+| `2` | kart sahibi veya bankası sisteme kayıtlı değil |
+| `3` | kartın bankası sisteme kayıtlı değil |
+| `4` | doğrulama denemesi; kart sahibi sonra kayıt olmayı seçmiş |
+| `5` | doğrulama yapılamıyor |
+| `6` | 3-D Secure hatası |
+| `7` | sistem hatası |
+| `8` | bilinmeyen kart no |
+
+Aynı sayfaların `/payment/v2/3dsecure/auth` şeması bunu tek cümleyle bağlıyor: `1: Başarılı`, `0,2-8: Başarısız`. `2`, `3` ve `4` bazı hazırlayıcıların "attempted" diye kabul ettiği hâller ama **iyzico kendi belgesinde üçünü de başarısız sayıyor**; biz de öyle sayıyoruz.
+
+**Kapı beyaz liste, kara liste değil.** `mdStatus == 1` yazılı; `0,2..8` dışlansaydı `-1` (yalnız Türkçe tabloda ve OpenAPI `enum`'unda geçiyor, "başarısız" aralığı yazısında geçmiyor) sessizce başarı sayılırdı. Yarın listeye bir değer eklenirse de beyaz liste kendiliğinden güvenli tarafta kalır.
+
+**Alan yoksa ödeme reddediliyor — bilinçli olarak kapalı düşülüyor.** iyzico dört ayrı sayfada "`mdStatus` parametresi sadece 3DS işlemlerinde görünecektir" diyor. Yani alanın yokluğunun iki okuması var: (a) işlem 3DS'siz geçti, (b) yanıt beklediğimiz gibi değil. İkisini ayırt edemiyoruz ve ayırt edemediğimiz durumda **parayı korumaktan yana yanılıyoruz** — §2y2'deki ortam kapısıyla aynı yön. Alan yokken başarı saymak, tam olarak kapatmaya çalıştığımız açığın yeniden açılması olurdu: doğrulanmamış bir işlem emanete girer.
+
+Bedeli açıkça yazılı olsun: **Checkout Form bir gün 3DS'siz bir ödeme geçirirse onu da reddederiz.** iyzico'nun CF'nin 3DS'i hangi kurala göre seçtiğini yazmadığı `docs/runbooks/payments.md` §6.3'te duruyor. Böyle bir işlemde sağlayıcı tarafında para çekilmiş olabilir; operasyonel karşılığı tutar uyuşmazlığıyla aynıdır — panelden `conversation_id` ile elle iade (runbook §1). Canlıya geçişte doğrulanacak ilk şey budur; kalıcı çözüm istenirse `forceThreeDS` (§6.3'te belgelenmemiş olarak işaretli) iyzico'dan yazılı teyit alındıktan sonra gönderilir.
+
+**Bir çelişki not edilmeli.** CF sorgulama yanıtının OpenAPI şeması (`/odeme-metotlari/odeme-formu/cf-entegrasyonu/cf-sorgulama`) `mdStatus`'u **saymıyor**; ama aynı doküman setindeki CF örnek yanıtı (`.../cf-ornek-entegrasyon`) `"mdStatus": 1` içeriyor ve resmî `iyzipay-java` SDK'sında `CheckoutForm`, `PaymentResource`'tan `getMdStatus()`'u miras alıyor. İkisi de iyzico. Alanın geleceğini varsayıyoruz ama şema garanti etmediği için okuma null'a dayanıklı ve karar fail-closed.
+
+**Kapı dolandırıcılık dalından önce.** `mdStatus != 1` ve `fraudStatus == 0` birlikte gelirse ödeme `IN_REVIEW`'da beklemez, `FAILED` olur: `IN_REVIEW`'dan çıkış zaten otomatik değil ve doğrulanmamış bir işlemi "belki sonra onaylanır" diye tutmanın anlamı yok.
+
+**Ret sebebi mesaj anahtarı, ham değer değil.** `payments.failure_reason` istemciye `GET /job-assignments/{id}/payments` ile aynen dönüyor (`PaymentAttemptDto`), yani sağlayıcı detayı için uygun bir yer değil. Kayda `{payment.3ds.verification.failed}` yazılıyor; sayısal `mdStatus` yalnız log satırında (`Payment {} rejected: 3-D Secure verification did not succeed, mdStatus={}`). Operatör için korelasyon yine `conversation_id`.
+
+**Reddedilen deneme sıradan bir başarısız denemedir.** `payments.status = FAILED`, `completed_at` damgalı, atama `PENDING_COLLECTION`/`FAILED` → `FAILED`; emanet açılmaz, atamaya kırılım yazılmaz, `JobAssignmentDao`'ya hiç dokunulmaz. İşveren yeniden deneyebilir. Zaten `SUCCEEDED` olan ödemede idempotanlık kısa devresi önce çalıştığı için ikinci callback sağlayıcıya hiç gitmez (§2k); reddedilen denemede ise kısa devre yok, tekrar sorulur ve sonuç yine `FAILED` olur.
+
+**Sandbox'ta doğrulanmadı.** `4131111111111117` ile gerçek bir sandbox işlemi yapılmadı; kural iyzico dokümantasyonuna ve sahte sağlayıcı yanıtlarına karşı sabitlendi (`PaymentCallbackTest`, `IyzicoProtocolTest`).
 
 ## 2y. Mutabakat outbox'ı
 
