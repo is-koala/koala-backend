@@ -30,6 +30,16 @@ class AuthLinkManagerTest {
     }
 
     @Test
+    void theUnsubscribeLandingLinkKeepsItsPathSeparatorReadable() {
+        AuthLinkManager links = new AuthLinkManager(properties(
+                "https://iskoala.com", "koala-staging"));
+
+        assertEquals(
+                "https://iskoala.com/bildirim-tercihleri/cikis?token=unsubscribe-token",
+                links.unsubscribeLandingLink("unsubscribe-token"));
+    }
+
+    @Test
     void encodesTokenCharactersInsteadOfTreatingThemAsUriSyntax() {
         AuthLinkManager links = new AuthLinkManager(properties(
                 "https://iskoala.com", "koala-staging"));

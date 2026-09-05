@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.support.FallbackSettings;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
 import com.exskylab.koala.core.properties.CommissionProperties;
 import com.exskylab.koala.entities.Job;
@@ -16,7 +17,7 @@ class PricingSnapshotTest {
     void publishedPriceIsCopiedThroughAssignmentWithoutFollowingLaterRateChanges() {
         CommissionProperties properties = new CommissionProperties();
         properties.setRate(new BigDecimal("0.075"));
-        PricingManager pricing = new PricingManager(new CommissionCalculator(properties));
+        PricingManager pricing = new PricingManager(FallbackSettings.commissionCalculator(properties));
 
         Job job = new Job();
         job.setSalary(new BigDecimal("1000"));
@@ -42,7 +43,7 @@ class PricingSnapshotTest {
     void quoteUsesDecimalStringsSoMobileNeverRecalculatesMoneyWithDouble() {
         CommissionProperties properties = new CommissionProperties();
         properties.setRate(new BigDecimal("0.075"));
-        PricingManager pricing = new PricingManager(new CommissionCalculator(properties));
+        PricingManager pricing = new PricingManager(FallbackSettings.commissionCalculator(properties));
 
         var quote = pricing.quote(new BigDecimal("3.33"));
 

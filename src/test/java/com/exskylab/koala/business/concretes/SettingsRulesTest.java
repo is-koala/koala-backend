@@ -86,4 +86,42 @@ class SettingsRulesTest {
     void aDecimalRateIsAccepted() {
         assertEquals("0.35", manager.update(SettingKeys.CANCELLATION_LATE_FEE_RATE, " 0.35 ").getValue());
     }
+
+    @Test
+    void aCommissionRateAboveOneIsRejected() {
+        assertThrows(ValidationException.class, () -> manager.update(SettingKeys.COMMISSION_RATE, "1.5"));
+        verify(appSettingDao, never()).save(any());
+    }
+
+    @Test
+    void aNegativeCommissionRateIsRejected() {
+        assertThrows(ValidationException.class, () -> manager.update(SettingKeys.COMMISSION_RATE, "-0.1"));
+        verify(appSettingDao, never()).save(any());
+    }
+
+    @Test
+    void aCommissionRateInsideTheRangeIsAccepted() {
+        assertEquals("0.10", manager.update(SettingKeys.COMMISSION_RATE, "0.10").getValue());
+    }
+
+    @Test
+    void theCancellationLateFeeRateObeysTheSameRange() {
+        assertThrows(ValidationException.class,
+                () -> manager.update(SettingKeys.CANCELLATION_LATE_FEE_RATE, "1.5"));
+        assertThrows(ValidationException.class,
+                () -> manager.update(SettingKeys.CANCELLATION_LATE_FEE_RATE, "-0.1"));
+        assertEquals("0.90", manager.update(SettingKeys.CANCELLATION_LATE_FEE_RATE, "0.90").getValue());
+    }
+
+    @Test
+    void theBoundariesThemselvesAreAccepted() {
+        assertEquals("0", manager.update(SettingKeys.COMMISSION_RATE, "0").getValue());
+        assertEquals("1", manager.update(SettingKeys.COMMISSION_RATE, "1").getValue());
+    }
+
+    @Test
+    void theRangeGuardDoesNotReachTheHourSettings() {
+        assertEquals("24", manager.update(SettingKeys.CANCELLATION_FREE_WINDOW_HOURS, "24").getValue());
+        assertEquals("6", manager.update(SettingKeys.UNPAID_EXPIRY_HOURS_BEFORE_START, "6").getValue());
+    }
 }

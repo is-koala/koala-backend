@@ -11,6 +11,7 @@ import com.exskylab.koala.core.dtos.jobAlert.request.SaveJobAlertDto;
 import com.exskylab.koala.core.dtos.jobTemplate.request.CreateJobTemplateDto;
 import com.exskylab.koala.core.dtos.talent.request.SaveTalentPoolEntryDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
+import com.exskylab.koala.core.dtos.notification.request.SendPushToUserDto;
 import com.exskylab.koala.core.properties.JobAlertProperties;
 import com.exskylab.koala.dataAccess.*;
 import com.exskylab.koala.entities.*;
@@ -20,6 +21,7 @@ import com.exskylab.koala.business.abstracts.JobService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.business.abstracts.JobCategoryService;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
@@ -31,6 +33,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.*;
 
 class WorkerToolsRulesTest {
@@ -44,6 +47,7 @@ class WorkerToolsRulesTest {
     private JobService jobService;
     private SecurityService securityService;
     private JobAlertProperties alertProperties;
+    private NotificationService alertNotifications;
 
     private ExperienceManager experienceManager;
     private AvailabilityManager availabilityManager;
@@ -75,8 +79,9 @@ class WorkerToolsRulesTest {
                 mock(CompanyService.class), securityService,
                 new com.exskylab.koala.core.helpers.PageableSanitizer());
         jobTemplateManager = new JobTemplateManager(jobTemplateDao, jobService, contacts, securityService);
+        alertNotifications = mock(NotificationService.class);
         jobAlertManager = new JobAlertManager(jobAlertDao, mock(JobCategoryService.class),
-                mock(NotificationService.class), securityService, alertProperties);
+                alertNotifications, securityService, alertProperties);
 
         when(securityService.getAuthenticatedUser()).thenReturn(me);
         when(securityService.getAuthenticatedUserId()).thenReturn(me.getId());
@@ -251,5 +256,32 @@ class WorkerToolsRulesTest {
         request.setType(JobType.values()[0]);
 
         assertThrows(ValidationException.class, () -> jobAlertManager.createAlert(request));
+    }
+
+    @Test
+    void aMatchingAlertIsHandedToTheNotificationServiceAsAJobAlertPush() {
+        alertProperties.setEnabled(true);
+
+        JobAlert alert = new JobAlert();
+        alert.setId(UUID.randomUUID());
+        alert.setUser(me);
+        alert.setAlertName("Barista alarmı");
+        alert.setActive(true);
+        alert.setType(JobType.ONE_TIME);
+        when(jobAlertDao.findAllByActiveTrue()).thenReturn(List.of(alert));
+
+        Job job = new Job();
+        job.setId(UUID.randomUUID());
+        job.setTitle("Barista aranıyor");
+        job.setStatus(JobStatus.OPEN);
+        job.setType(JobType.ONE_TIME);
+
+        jobAlertManager.notifyMatching(job);
+
+        ArgumentCaptor<SendPushToUserDto> captor = ArgumentCaptor.forClass(SendPushToUserDto.class);
+        verify(alertNotifications).sendPushToUser(captor.capture(), any(), anyBoolean());
+
+        assertEquals(NotificationCategory.JOB_ALERTS, captor.getValue().getCategory());
+        assertEquals(me, captor.getValue().getRecipient());
     }
 }

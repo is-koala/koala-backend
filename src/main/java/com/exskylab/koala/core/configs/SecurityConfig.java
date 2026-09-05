@@ -1,6 +1,7 @@
 package com.exskylab.koala.core.configs;
 
 import com.exskylab.koala.core.security.SessionAuthFilter;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -100,6 +101,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/users/me/notifications").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/users/me/notifications/read").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/users/me/notifications/{notificationId}/read").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/users/me/notification-preferences").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/users/me/notification-preferences").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/notification-preferences/unsubscribe").permitAll()
                         .requestMatchers(HttpMethod.GET, "/users/me/work").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/users/me/devices/push-token").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/users/me/devices/push-token").hasAnyRole("USER", "ADMIN")
@@ -148,6 +152,7 @@ public class SecurityConfig {
 
                         //job-application endpoints
                         .requestMatchers(HttpMethod.POST, "/job-applications/{applicationId}/respond").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/job-applications/{applicationId}/withdraw").hasAnyRole("USER", "ADMIN")
 
 
 
@@ -238,6 +243,14 @@ public class SecurityConfig {
                 .build();
     }
 
+
+
+    @Bean
+    public FilterRegistrationBean<SessionAuthFilter> sessionAuthFilterRegistration() {
+        FilterRegistrationBean<SessionAuthFilter> registration = new FilterRegistrationBean<>(sessionAuthFilter);
+        registration.setEnabled(false);
+        return registration;
+    }
 
 
     @Bean

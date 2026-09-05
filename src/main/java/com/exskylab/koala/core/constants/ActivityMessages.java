@@ -3,6 +3,7 @@ package com.exskylab.koala.core.constants;
 public class ActivityMessages {
     public static final String APPLICATION_ACCEPTED = "{activity.application.accepted}";
     public static final String APPLICATION_REJECTED = "{activity.application.rejected}";
+    public static final String APPLICATION_WITHDRAWN = "{activity.application.withdrawn}";
     public static final String ASSIGNMENT_OFFERED = "{activity.assignment.offered}";
     public static final String ASSIGNMENT_ACCEPTED = "{activity.assignment.accepted}";
     public static final String ASSIGNMENT_REJECTED = "{activity.assignment.rejected}";

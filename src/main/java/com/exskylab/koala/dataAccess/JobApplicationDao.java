@@ -19,6 +19,8 @@ public interface JobApplicationDao extends JpaRepository<JobApplication, UUID> {
 
     boolean existsByJobIdAndUserId(UUID jobId, UUID userId);
 
+    boolean existsByJobIdAndUserIdAndStatusNot(UUID jobId, UUID userId, ApplicationStatus status);
+
     boolean existsByUserIdAndJobCreatorId(UUID userId, UUID creatorId);
 
     @Query("select a.job.id as jobId, count(a) as total from JobApplication a "

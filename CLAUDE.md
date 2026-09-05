@@ -47,6 +47,7 @@ Bu dosya projeyi konu konu anlatır: mimari, alınmış kararlar ve gerekçeleri
 Faz 15'te yüzey baştan geçirildi. Bunlar **kural**, `ApiConventionTest` bunları derleme zamanında değil test zamanında koruyor:
 
 - **Yönetim işlemleri `/admin/**` altında, istisnasız.** `@PreAuthorize` kullanılmadığı, tüm yetki `SecurityConfig`'te path matcher olduğu için prefix tek satırlık koruma sağlıyor: `.requestMatchers("/admin/**").hasRole("ADMIN")`. Prefix olmasaydı her yeni admin ucunu tek tek korumayı hatırlamak gerekirdi ve unutulan uç sessizce her `USER`'a açık kalırdı. **Test, `hasRole("ADMIN")` taşıyan her kuralın yolunun `/admin` ile başladığını doğruluyor.**
+  - **Bu kapının hangi token'ı kabul ettiği ayrı bir sorudur** ve cevabı tek yerde yazılıdır: [ADR-0010](docs/adr/0010-split-staff-identity-from-koala-authorization.md) §Geçiş. Marketplace `ROLE_ADMIN` ile Keycloak `koala-staff` kimliğinin hangi aşamada geçerli olduğunu, `ROLE_ADMIN` yolunun ömrünü ve kesim koşullarını orada oku — buraya kopyalama.
 - **İç içelik daima üst kaynaktan aşağı.** `/job-assignments/{id}/reviews`, `/users/{id}/badges` — asla `/reviews/job-assignments/{id}` değil.
 - **Durum değiştiren işlem kendi POST ucunu alır.** `/respond`, `/complete`, `/cancel`, `/confirm`. Tek bir `PATCH .../status` ucuna hepsini yığmak yerine, her geçişin `SecurityConfig`'te kendi satırı olsun diye.
 - **Uç yolları sondaki eğik çizgi taşımaz** (§4'teki tuzak), **aynı fiil+yol iki handler'da olamaz.**
@@ -190,7 +191,7 @@ Servis ve controller katmanı düz anahtar kullanır: `"{user.not.found}"`. Çö
 
 Hesap tek yerde: `core/helpers/CommissionCalculator`. Girdi doğrulaması, `HALF_UP` yuvarlama ve bileşenlerin toplamının tahsil edilen tutara eşit olması orada garanti ediliyor.
 
-**Uygulanan oran kayda yazılıyor.** `JobAssignment` artık `worker_payout`, `commission_amount`, `commission_rate` ve `total_charged` taşıyor. Oran `COMMISSION_RATE` env'inden geliyor; değiştiğinde geçmiş kayıtlar hangi oranla hesaplandığını korur — mutabakat bunsuz yapılamaz.
+**Uygulanan oran kayda yazılıyor.** `JobAssignment` artık `worker_payout`, `commission_amount`, `commission_rate` ve `total_charged` taşıyor. Oran çalışma zamanı ayarından okunuyor (§2ac); değiştiğinde geçmiş kayıtlar hangi oranla hesaplandığını korur — mutabakat bunsuz yapılamaz.
 
 ## 2f. Kimlik ve principal
 
@@ -204,6 +205,10 @@ Hesap tek yerde: `core/helpers/CommissionCalculator`. Girdi doğrulaması, `HALF
 Eskiden `getAuthenticatedUserFromContext()` ve `getAuthenticatedUserFromDatabase()` diye iki metot vardı ve **farklı gerçeklikler döndürüyorlardı**: biri istek başında SecurityContext'e konmuş detached nesneyi, diğeri veritabanındakini. `userDao.save(contextUser)` körlemesine merge ettiği için araya giren güncelleme sessizce eziliyordu. İki metot tek metoda indirildi; bu sınıf hata artık yapısal olarak mümkün değil.
 
 **`AuditorAwareImpl` referans kullanır.** `getReferenceById` ile proxy alır, böylece her denetimli kayıtta fazladan `SELECT` atılmaz.
+
+**Back-office personeli bu principal'in dışındadır.** `UserPrincipal` marketplace kimliğidir; personel kendi kimlik sağlayıcısında ve kendi principal tipinde yaşar. `/admin/**`'ın hangi token'ı kabul ettiği ve personel aktörünün servis katmanına nasıl geçirildiği [ADR-0010](docs/adr/0010-split-staff-identity-from-koala-authorization.md) §Geçiş'te.
+
+**`SessionAuthFilter` servlet konteynerine kaydedilmez.** `@Component` olduğu için Spring Boot onu güvenlik zincirinin dışında bir kez daha kaydediyordu; `SecurityConfig` bunu kapalı bir `FilterRegistrationBean` ile iptal ediyor. Bugün davranış farkı yok — `OncePerRequestFilter` ikinci çalıştırmayı zaten atlıyordu. Gerekçe ve `/admin/**` ikinci zinciri geldiğinde neyi patlatacağı ADR-0010 §Geçiş'te; `SessionAuthFilterRegistrationIT` sabitliyor.
 
 ## 2f2. Rol satırları — anahtar, tekillik ve rol verme kaydı
 
@@ -542,7 +547,7 @@ Uyuşmazlık yalnızca **emanette para varken** açılabilir, atama başına ayn
 
 `COMPANY_UPDATES` bu ayrım için eklendi.
 
-**`AgreementType.COMMERCIAL_MESSAGE` rızası toplanıyor ama hiç okunmuyor.** Kayıtta ticari ileti onayı `ConsentRecord`'a yazılıyor, ancak `MARKETINGS`/`NEWSLETTER` kategorisinde hiç gönderim yok ve gönderim olsa da rıza kontrol edilmiyor. İYS entegrasyonu Faz 9B'de.
+**`AgreementType.COMMERCIAL_MESSAGE` rızası hâlâ ayrı bir şey.** Kayıtta toplanan bu onay `ConsentRecord`'a yazılıyor ve **kanal tercihine dönüşmüyor**: `MARKETINGS`/`NEWSLETTER` kayıt sırasında sözleşme onaylansa bile **kapalı** kalıyor ve kullanıcı bildirim tercihlerinden açana kadar gönderim yapılamıyor. Bu bilinçli — sözleşme onayı şemsiye izin, kanal bazlı açma ayrı ve açık bir eylem olmalı (§2at). Gönderim kapısı ve rıza kaydı §2at'de. İYS entegrasyonu yapılmadı — kapsamı `docs/research/iys-commercial-message-integration.md` içinde.
 
 **SMS ve push tüketicileri yazıldı (Faz 28).** Öncesinde `RabbitMQConfig` üç kuyruk tanımlıyordu ama yalnızca `EmailConsumer` vardı; SMS ve push mesajları kuyruğa yazılıp orada birikiyordu. Sonuç: telefon doğrulama kodu, iş alarmı, şirket takibi bildirimi ve ilan iptali duyurusu kullanıcıya hiç ulaşmıyordu.
 
@@ -684,6 +689,8 @@ Artık `SettlementOperation.REFUND` var ve `/payment/refund` çağrılıyor (`pa
 
 **Hâlâ sandbox'ta uçtan uca doğrulanmadı.** Yukarıdakiler dokümana karşı doğru; gerçek bir sandbox işlemiyle teyit edilmesi gereken tek şey kısmi iade + disapprove ikilisinin sıralamasıdır. `iyzico.settlementEnabled=false` ile kuyruk tümüyle kapalı tutulabilir.
 
+**Denetimin kapatmadığı bir alan kaldı: `mdStatus` hiç okunmuyor.** Iyzico'nun belgelediği `4131111111111117` test kartı `paymentStatus = SUCCESS` ile birlikte `mdStatus = 0` döndürüyor, yani 3DS doğrulaması geçmemiş bir ödeme bugün emanete açılır. Ayrıntı, kaynak ve canlı/sandbox karşılaştırması `docs/runbooks/payments.md` §6.2'de; burada tekrarlanmıyor.
+
 ## 2y. Mutabakat outbox'ı
 
 Faz 8B'de sağlayıcı çağrısı `PayoutManager` içinden **senkron** yapılıyordu ve hata durumunda tüm işlem geri alınıyordu — yani `Payout` kaydı da yazılmıyordu ve **kimse yeniden denemiyordu**. Iyzico bir dakikalığına düşse para emanette kilitli kalırdı.
@@ -701,6 +708,48 @@ Bir süre bu yarım kaldı: `markPayoutProcessing` yalnızca `APPROVE` için ça
 **`PayoutStatus.COMPLETED` bilerek kullanılmıyor.** Sağlayıcı `approve` çağrısı yalnızca talimatın kabul edildiğini söyler; paranın işçinin banka hesabına geçtiğini söyleyen bir geri bildirim yok. O geçiş Iyzico ödeme raporuyla mutabakat gerektiriyor, Faz 11B'nin kalan parçası.
 
 **Bu entegrasyon hâlâ sandbox'ta uçtan uca doğrulanmadı** (protokol denetimi §2x'te yapıldı, dört blocker düzeltildi). `iyzico.settlementEnabled=false` iken hiç kuyruğa girilmez, `iyzico.settlement-retry.enabled=false` iken kuyruk işlenmez — ikisi de prod'a kademeli geçiş için.
+
+## 2y2. Sandbox/canlı ayrımı — açılış kapısı
+
+Sandbox ile canlı arasındaki tek fark `IYZICO_BASE_URL` ve anahtar çiftiydi;
+ikisi de serbest metindi. Staging'e yanlışlıkla canlı anahtar yüklemek hiçbir
+şey kırmıyordu — test amaçlı bir ilan gerçek parayla ödenirdi ve bunu fark
+etmenin yolu ekstreye bakmaktı.
+
+`IyzicoProperties` artık ortamı biliyor. `iyzico.deployment`, `docs/environments.md`
+sözleşmesindeki `SERVICE_ENVIRONMENT` değerine bağlı; `@AssertTrue` ikisinin
+eşleşmesini açılış şartı yapıyor:
+
+| `SERVICE_ENVIRONMENT` | İzin verilen sağlayıcı ortamı |
+|---|---|
+| `production` | yalnız `https://api.iyzipay.com` |
+| `staging` | yalnız `https://sandbox-api.iyzipay.com` |
+| `local` / tanımsız | sandbox veya loopback (`localhost`, `127.0.0.1`, `::1`) |
+
+Dört karar açıklama istiyor:
+
+**Yeni bir değişken uydurulmadı.** Ortam adı zaten `SERVICE_ENVIRONMENT`'ta
+duruyordu ve `docs/environments.md` onu staging zorunluluğu olarak yazıyor.
+İkinci bir "hangi ortamdayız" değişkeni açmak ikisinin ayrışabileceği bir
+gelecek üretirdi.
+
+**Tanınmayan host her ortamda reddediliyor.** Yalnız "canlı mı sandbox mı" diye
+bakmak yetmez; `https://api.iyzipay.com.saldirgan.test` iki listeye de girmez ve
+sessizce kabul edilirdi. Host tam eşleşme, şema `https` zorunlu. Loopback bunun
+istisnası: `IyzicoProtocolTest` sahte bir HTTP sunucusuna konuşuyor ve testler
+`local` sayılıyor.
+
+**Tanınmayan ortam adı açılışı düşürüyor.** `SERVICE_ENVIRONMENT=prod` yazılırsa
+enum bağlanamaz ve uygulama açılmaz. Alternatifi — bilinmeyeni "production
+değil" saymak — production'ı sessizce sandbox'a düşürürdü.
+
+**Tanımsız ortam `local` sayılıyor, `production` değil.** Değişken hiç
+verilmezse en dar hak kazanılır: canlı `baseUrl` reddedilir. Yanılma yönü her
+zaman parayı korumaktan yana.
+
+`IyzicoProperties.baseUrl` alanının Java varsayılanı da sandbox; yapılandırma
+tümüyle kaybolsa bile canlıya düşülmez. Kuralı `IyzicoEnvironmentSplitTest`
+on iki kuralla sabitliyor. Operasyon tarafı `docs/runbooks/payments.md`'de.
 
 ## 2z. Gerçek zamanlı katman
 
@@ -779,6 +828,7 @@ Politika sayıları artık deploy istemiyor. `app_settings` tablosu ve `GET/PUT 
 | `cancellation.late-fee-rate` | pencere içinde iptalde kesilen oran | 0,50 |
 | `assignment.unpaid-expiry.hours-before-start` | ödenmemiş atama iş başlangıcına kaç saat kala düşer | 6 |
 | `app.minimum-version` | bu sürümün altındaki istemci 426 alır; boşsa kapı kapalı | boş |
+| `commission.rate` | işveren ücretine eklenen hizmet bedeli oranı | 0,075 |
 
 **Konfigürasyon hâlâ varsayılan.** `SettingsService` önce tabloya bakar, satır yoksa `application.yaml` değerine düşer. Yani tablo boş bir veritabanı da doğru çalışır ve env ile ilk değer verilebilir.
 
@@ -786,7 +836,11 @@ Politika sayıları artık deploy istemiyor. `app_settings` tablosu ve `GET/PUT 
 
 **Bozuk değer patlatmaz.** Tabloda sayısal olmayan bir şey varsa uyarı loglanır ve varsayılana düşülür; yanlış bir elle güncelleme iptal hesabını ya da zamanlayıcıyı durdurmaz.
 
-**Komisyon oranı bilerek dışarıda.** `commission.rate` uygulandığı anda `JobAssignment` üzerine yazılıyor (§2e) ve mutabakat ona bakıyor; canlıda değiştirilebilir yapmak geçmiş kayıtlarla bugünkü oranı karıştırma riskini artırır. Değişecekse deploy ile.
+**Komisyon oranı da bu tabloya taşındı.** Eskiden yalnızca `COMMISSION_RATE` env'iydi ve değiştirmek konteyner yeniden başlatmak demekti — ürünün en gelir-belirleyici sayısı, ondan daha az kritik olan iptal cezası oranından daha zor değişiyordu. Taşımak güvenli, çünkü ADR-0002 fiyatı ilan yayınlanırken donduruyor ve uygulanan oran `Job`, `JobAssignment` ve `Payment` satırlarına yazılıyor (§2e): oran değişse bile geçmiş kayıtlar hangi oranla hesaplandıklarını korur, mutabakat bozulmaz. `CommissionCalculator` her hesapta tabloya bakar, satır yoksa `application.yaml` değerine düşer; `COMMISSION_RATE` artık yalnızca **başlangıç değeri**.
+
+**Oran anahtarlarının aralığı doğrulanıyor.** `commission.rate` ve `cancellation.late-fee-rate` için "sayısal mı" kontrolü yetmiyordu: `1.5` kabul edilseydi işveren işçi ücretinin 2,5 katını öderdi, negatif oran komisyonu iadeye çevirirdi. İkisi de `[0, 1]` aralığında olmak zorunda; dışarısı `setting.value.out.of.range` ile 400 döner. Saat ve gün anahtarları bu kuraldan etkilenmez.
+
+**`AppSetting` artık `BaseEntity`'yi genişletiyor — elle dört alan eklenmedi.** Tablo dört sütundan ibaretti; bir ayarı kimin ne zaman değiştirdiğinin tek izi bir `log.info` satırıydı ve log döngüsü dolduğunda kayboluyordu. İki seçenek vardı: `BaseEntity`'yi genişletmek (denetim + soft delete sütunları birlikte gelir) ya da `created_at`/`updated_at`/`created_by_id`/`updated_by_id` alanlarını elle eklemek. `BaseEntity` seçildi çünkü (1) elle eklemek `@CreatedBy`/`@LastModifiedBy` + `@EntityListeners(AuditingEntityListener.class)` bloğunu kopyalamak demekti ve denetlenen her satırın aynı görünmesi kuralını bozardı, (2) `deleted_by_id` bedava geldiği için ileride bir silme ucu eklenirse hard delete kazası olmaz, (3) üç fazladan sütunun maliyeti beş satırlık bir tabloda yok. Bedeli: `@SQLDelete` + `@SQLRestriction` zorunlu oldu (§8) ve `setting_key` üzerindeki benzersizlik kısmi indeks değil — soft delete edilen bir satır anahtarı işgal etmeye devam eder. Bugün silme ucu olmadığı için bu bir sorun değil; eklenirse indeks `uk_users_email_active` gibi kısmileştirilmeli.
 
 ## 2ad. Olgunlaşma özellikleri (Faz 11C)
 
@@ -1146,6 +1200,28 @@ KOALA_CHIP_DIR=/tmp/chip KOALA_CSCA_DIR=/opt/koala/csca ./mvnw test -Dtest=RealC
 
 **Önizleme bağlayıcı değil.** Kutu açıkken cezasız pencere kapanırsa gösterilen tutar ile kesilen tutar farklı olabilir. Bunu kilitlemek için önizlemeye bir geçerlilik süresi ve iptalde doğrulama gerekirdi; fark saniyeler mertebesinde olduğu için yapılmadı.
 
+## 2ar2. Başvurunun geri çekilmesi
+
+`POST /job-applications/{applicationId}/withdraw`. Öncesinde `JobApplicationsController` tek uç barındırıyordu ve o da **işverenin** cevabıydı; başvuran tarafında hiçbir çıkış yolu yoktu. İşi başka yerden alan ya da yanlış ilana başvuran kullanıcı `APPLIED` durumunda asılı kalıyor, işveren de aslında müsait olmayan bir adayı kabul edebiliyordu — kabul anında `JobAssignment` doğduğu ve işveren ödeme oturumu açtığı için boşluk doğrudan ödeme akışına dokunuyordu.
+
+**Geri çekme bir durum değişikliğidir, soft delete değil.** `JobApplication` `@SQLDelete` + `@SQLRestriction` taşıyor (§8); geri çekme bunlara hiç dokunmaz, yalnızca `status`'ü `WITHDRAWN` yapar. Kayıt tabloda kalır, `is_deleted` `false` kalır, işverenin başvuru listesinde `WITHDRAWN` olarak görünmeye devam eder. `ApplicationWithdrawalIT` bunu gerçek Postgres'te satır sayısı ve `is_deleted` üzerinden doğruluyor — ikisi karıştırılırsa başvuru geçmişi sessizce kaybolurdu.
+
+**Yalnızca sahibi, yalnızca `APPLIED` durumundan.** Başkasının başvurusu **404** alır (403 değil — kaynağın varlığı sızmaz, §0b). `ACCEPTED` geri çekilemez: orada artık bir `JobAssignment` var ve iptalin kendi akışı, kendi ceza politikası işliyor (§2p). `ACCEPTED` / `REJECTED` / `WITHDRAWN` için **409**.
+
+**Geri çekilmiş başvuru artık kabul edilemez.** `respondToApplication` `WITHDRAWN` durumunda `ConflictException` ile **409** döner ve bunun kendi anahtarı var (`job.application.already.withdrawn`); "zaten yanıtlanmış" mesajı burada yalan olurdu. Bu kapı olmadan geri çekme yalnızca bir etiket olurdu — işveren yine kabul eder, atama ve ödeme oturumu yine doğardı.
+
+**Yeniden başvuru kararı: `WITHDRAWN` bir başvuru yeniden başvuruyu engellemez.** Mükerrer başvuru kapısı `existsByJobIdAndUserId`'den `existsByJobIdAndUserIdAndStatusNot(jobId, userId, WITHDRAWN)`'a daraltıldı. Gerekçe: engelleseydi geri çekme kullanıcı için tek yönlü bir kapı olurdu — fikrini değiştiren ya da yanlışlıkla geri çeken kişi ilan hâlâ `OPEN` iken bir daha başvuramaz, tek çaresi işverene mesaj atmak olurdu; bu da geri çekme düğmesini kullanılmaz derecede korkutucu yapardı. Kötüye kullanım riski (başvur–geri çek–başvur döngüsü) düşük: her yeni başvuru yeni bir satır, yani işverenin gördüğü geçmiş bozulmuyor ve gerekirse ileride sayıya bağlı bir kural eklenebilir. Karar `ApplicationWithdrawalTest` ve `ApplicationWithdrawalIT` içinde iki yönlü test edildi: `WITHDRAWN` engellemiyor, `APPLIED` engellemeye devam ediyor.
+
+**`hasApplied` bilerek daraltılmadı.** O metot mesajlaşma kapısını besliyor (`MessagingManager.assertMayConverse`): "bu ilanla ilişkisi var mı?" sorusunun cevabı. Daraltılsaydı başvurusunu geri çeken kullanıcı ile işveren arasındaki mevcut sohbet aniden **403** dönerdi — oysa geri çekmenin sebebini konuşmak tam da o anda gerekiyor. İki kontrol farklı soruları soruyor: biri "şu an canlı bir başvurusu var mı", diğeri "bu ilana hiç dokundu mu".
+
+**`answeredDateTime` geri çekme anını da taşıyor.** Ayrı bir `withdrawnDateTime` kolonu açılmadı; alan başvurunun terminal duruma geçtiği anı ifade ediyor ve `MyApplicationDto` üzerinden zaten dönüyor. Yeni kolon migration gerektirir, sıralama kümesine (`MY_APPLICATIONS_SORTABLE`) ikinci bir zaman alanı sokar ve istemcide iki alanın hangisine bakılacağı sorusunu doğururdu.
+
+**Migration gerekmedi.** `job_applications.status` `VARCHAR(255)` ve check constraint taşımıyor; enum'a değer eklemek şema değişikliği istemiyor.
+
+**İşverene bildirim gidiyor.** `ActivityNotificationService.applicationWithdrawn` mevcut altyapıyı kullanıyor (in-app + push + e-posta, hepsi ayrı ayrı try/catch içinde). Alıcı `job.getCreator()` — `assignmentAnswered` ile aynı işveren tanımı.
+
+**Mobil istemci bu ucu kullanmadan önce enum'unu genişletmeli.** `koala-mobile` `ApplicationStatus.values.firstWhere` ile ayrıştırıyor; `WITHDRAWN` bilinmeyen bir değerken sunucu bunu döndürürse istemci düşer. Sıra: önce istemcide enum, sonra düğme.
+
 ## 2as. Asgari istemci sürümü kapısı
 
 `/v1` bilerek eklenmedi (§9). Yerine `MinimumAppVersionFilter`: istemci `X-App-Version` gönderir, eşiğin altındaysa **426 Upgrade Required** alır ve `errorCategory: CLIENT_TOO_OLD` ile birlikte `X-Minimum-App-Version` başlığı döner — istemci kullanıcıya hangi sürüme çıkması gerektiğini söyleyebilsin diye.
@@ -1159,6 +1235,91 @@ KOALA_CHIP_DIR=/tmp/chip KOALA_CSCA_DIR=/opt/koala/csca ./mvnw test -Dtest=RealC
 **Üç durumda kapı hiç çalışmaz:** başlık gelmemişse, başlık ayrıştırılamıyorsa, ya da yol muaf listesinde. Muaflar: sağlık uçları, **`/payments/callback`** (iyzico başlık göndermez, engellemek ödemeyi düşürürdü), `/uploads/**`, takip pikseli ve Swagger. Başlıksız isteğin geçmesi bilinçli — web istemcisi ve `curl` ile yapılan operasyon çağrıları kırılmasın.
 
 **Filtre güvenlik zincirinin dışında** (`HIGHEST_PRECEDENCE + 15`), hız sınırından önce: eski istemcinin isteği kimlik doğrulamaya kadar hiç gitmemeli.
+
+## 2at. Bildirim tercihleri ve ticari ileti izni
+
+§2s'de "Faz 9B'de gelecek" diye işaretlenen kanal bazlı tercih burada. Öncesinde `notification-preferences`
+araması hiç sonuç vermiyordu: kullanıcı hiçbir e-postayı ya da push'u kapatamıyordu.
+
+**Kapatılabilirlik kategorinin kendisinde, dağınık `if`'lerde değil.** `NotificationCategoryKind` üç
+değer taşıyor ve üç soruyu birden cevaplıyor: kapatılabilir mi, varsayılanı ne, ticari ileti mi.
+
+| Kind | Kategoriler | Kapatılabilir | Varsayılan | Ticari |
+|---|---|---|---|---|
+| `TRANSACTIONAL` | `ACCOUNT_SECURITY`, `APPLICATION_UPDATES`, `IDENTITY_VERIFICATION` | **hayır** | açık | hayır |
+| `ALERT` | `JOB_ALERTS`, `COMPANY_UPDATES` | evet | **açık** | hayır |
+| `COMMERCIAL` | `MARKETINGS`, `NEWSLETTER` | evet | **kapalı** | evet |
+
+Yeni bir kategori eklendiğinde tek karar `kind` seçmek; varsayılanı, kapatılabilirliği ve rıza kaydı
+gerekip gerekmediği oradan türüyor. §2s'deki tablo bu enum'a taşındı, artık dokümantasyon değil kod.
+
+**Satırlar override, tam matris değil.** `notification_preferences` yalnızca kullanıcının *değiştirdiği*
+kombinasyonu tutar; satırı olmayan kombinasyon `kind`'ın varsayılanına düşer. Yeni bir kategori eklendiğinde
+mevcut kullanıcılar için veri göçü gerekmiyor — kayıt anında 21 satır açan tasarımın tersi.
+
+**İşlemsel bildirimin kapatılamaması iki yerde, ikisi de bilinçli.** `UpdateNotificationPrefsDto` üzerindeki
+`@AssertTrue` istemciye 400 + alan mesajı döndürür (§2ah'nin çapraz alan kuralı); `isAllowed` ise
+`kind.isOptional()` değilse **satıra hiç bakmadan** `true` döner. Birincisi API sözleşmesi, ikincisi garanti:
+veritabanına elle yazılmış ya da göçten kalmış bir satır bile ödeme bildirimini susturamaz.
+
+**Kapı tek yerde: `NotificationManager`.** `sendEmail`, `sendPushToUser` ve `sendInApp` gönderimden önce
+`notificationPreferenceService.isAllowed(...)` soruyor. `ActivityNotificationManager`, `JobAlertManager`,
+`CompanyFollowManager` — hepsi zaten buradan geçtiği için tek bir kontrol hepsini kapsıyor ve yeni bir
+gönderim noktası eklendiğinde tercihi kontrol etmeyi hatırlamak gerekmiyor. Bastırılan gönderim `null`
+döner, `Notification` satırı **açılmaz** ve kuyruğa girmez.
+
+**Alıcısı olmayan e-posta hiçbir zaman bastırılmaz.** Şirket daveti gibi akışlar henüz Koala kullanıcısı
+olmayan bir adrese gidiyor; `recipient == null` olduğunda tercih sorulmaz.
+
+**Abonelikten çıkma bağlantısı e-postaya kendiliğinden biniyor, ama yalnızca ticari iletide.** `sendEmail`,
+kategori `COMMERCIAL` ise `unsubscribeUrl`'i template parametrelerine ekler ve `emails/layout.html` altbilgisi
+onu çizer. Gönderen tarafın bağlantıyı eklemeyi hatırlaması gerekmiyor.
+
+**Neden `optional` değil de `COMMERCIAL`:** ilk hâli kapatılabilir her kategoriye bağlantı koyuyordu ve bu
+`COMPANY_UPDATES`'i de kapsıyordu — o kategorinin taşıdığı tek şey şirket kurulumu ve **yetkili daveti**
+(`CompanyContactInvitationManager`, `DispatchPriority.CRITICAL`). Eyleme çağıran bir davetin altına "tek tıkla
+çıkabilirsin" yazmak yanlış: davet pazarlama değil. Issue #31 de bağlantıyı "pazarlama e-postalarında" diye
+istiyor. `JOB_ALERTS` bugün yalnızca push gönderiyor, yani pratikte kaybedilen bir şey yok; iş alarmı
+e-postası yazıldığında bu sınır yeniden değerlendirilmeli.
+
+**Açık kalan gerilim:** `COMPANY_UPDATES` kapatılabilir (§2s'deki tablo öyle diyor) ama içinde yetkili daveti
+var; kullanıcı bu kategoriyi kapatırsa davetten e-postayla haberdar olmaz. Kategorinin "şirket haberi"
+(kapatılabilir) ve "üyelik eylemi" (işlemsel) diye ikiye ayrılması gerekiyor — bu issue'nun kapsamı dışında,
+takip issue'su açıldı.
+
+**Token mekanizması parola sıfırlamanın aynısı** (§ `PasswordResetTokenManager`): 32 bayt rastgele,
+URL-safe; veritabanında yalnız SHA-256 özeti. `PasswordResetTokenGenerator` **yeniden kullanıldı** — sınıf
+`core/security` altında duran, parola sıfırlamaya özgü hiçbir mantık taşımayan genel bir üreteç; ikinci bir
+kopya çıkarmak asıl kötü olurdu. Adı tarihsel.
+
+**Ama tek kullanımlık değil, süreli.** Parola sıfırlamadan ayrıldığı tek nokta bu. Gerekçe: eylem idempotent
+(bir kanalı kapatmak), ayrıcalık vermiyor ve token **yalnızca kapatabiliyor, hiçbir şeyi açamıyor**. Tek
+kullanımlık yapılsaydı bağlantıya ikinci kez tıklayan kullanıcı hata görürdü; sızan bir token'ın yapabileceği
+en kötü şey ise zaten kapalı olan bir kanalı tekrar kapatmak. Sızma penceresini süre sınırlıyor:
+`UNSUBSCRIBE_TOKEN_VALIDITY_MS`, varsayılan 90 gün — pazarlama e-postası geç okunur.
+
+**Uç `POST`, `GET` değil.** §0b'nin "durum değiştiren işlem kendi POST ucunu alır" kuralı burada da geçerli;
+ayrıca e-posta istemcilerinin bağlantı ön-tarayıcıları GET atıyor ve kullanıcı adına abonelikten çıkarırdı.
+E-postadaki bağlantı web uygulamasının `/bildirim-tercihleri/cikis?token=...` sayfasına gidiyor, sayfa
+açılışta `POST /notification-preferences/unsubscribe` çağırıyor — parola sıfırlama bağlantısının şekliyle
+aynı. Kullanıcı için hâlâ tek tık ve giriş gerekmiyor.
+
+**Ticari ileti izni `consent_records`'a yazılmıyor, kendi tablosunda.** `ConsentRecord` bir
+`AgreementVersion`'a **zorunlu** olarak bağlı; ADR-0008 sonrası boş veritabanında hiç sözleşme satırı yok ve
+tercih ekranını sözleşme kataloğunun kurulmuş olmasına bağlamak kırılgan olurdu. `commercial_message_consents`
+`ConsentRecord`'un alanlarını birebir taşıyor (`granted`, `recorded_at`, `ip_address`, `user_agent`) ve
+üstüne `channel` ile `source` ekliyor — İYS kanal bazında soruyor. İlişki şu: sözleşmeye verilen onay
+şemsiye (`AgreementType.COMMERCIAL_MESSAGE`), kanal bazlı açma/kapama kanıtı bu tablo.
+
+**Çekilen izin de kaydediliyor**, verilen izinle aynı özenle — §2n'deki "sormadık ile sorduk-reddetti ayrımı"
+gerekçesinin aynısı. Abonelikten çıkma bağlantısıyla gelen kayıt `source = UNSUBSCRIBE_LINK` taşıyor.
+
+**SMS tercih yüzeyinde yok, bilerek.** `NotificationChannel.SMS` `preferable = false`; issue #31 kanal
+listesini `EMAIL`/`PUSH`/`IN_APP` olarak veriyor ve ticari SMS İYS'nin asıl konusu. Bayrağın açılması İYS
+dilimine ait (`docs/research/iys-commercial-message-integration.md`).
+
+**İYS entegrasyonu bu dilimde yapılmadı.** Kapsam, zamanlama, gerekçe ve açık kalan hukuk sorusu
+`docs/research/iys-commercial-message-integration.md` içinde; takip issue'su Dalga 7 altında.
 
 ## 3. Testler
 
@@ -1210,6 +1371,10 @@ Kural: bu tür testlerde başlangıç zamanı `LocalDateTime.now(POLICY_ZONE)` �
 
 **Faz 21 testleri.** `GalleryRulesTest` on üç kural sabitliyor: ilk görsel kapak olur, ikincisi kapağı çalmaz, sınır aşımı 409, ilan galerisi şirket galerisinden seçebilir, yabancı görsel 404, bireysel ilanın seçecek şirket galerisi yok, kapaksız istek yine de kapak üretir, kapak silinince sıradaki devralır, listeden düşen kayıt silinir, kapak URL'leri tek sorguda toplanır, aynı görsel iki kez listelenemez, iki kapak seçilemez.
 
+**Komisyon oranı çalışma zamanı testleri.** `CommissionRateRuntimeIT` üç kural sabitliyor: tabloda satır yokken env varsayılanı uygulanır, satır yazıldığında yeni oran **yeniden başlatmadan** geçerli olur, ve oran değiştikten sonra daha önce fiyatlanmış `jobs`/`job_assignments`/`payments` satırlarının `commission_rate` sütunu değişmez — bu sonuncusu ADR-0002'yi koruyor. `SettingsAdministrationIT` altı kural: aralık dışı komisyon ve iptal cezası oranı 400 alır, aralık içi 200, ayarı değiştiren admin `updated_by_id`'ye yazılır, `updated_at` dolar ve `GET /admin/settings` bunu döndürür. `SettingsRulesTest` aralık kurallarını birim düzeyinde de sabitliyor; sınırların kendisi (0 ve 1) kabul edilir, saat anahtarları kuraldan etkilenmez.
+
+Birim testlerde `CommissionCalculator` artık `FallbackSettings.commissionCalculator(...)` ile kuruluyor — hesap `SettingsService`'e bağlı olduğu için her çağrı yerinde bir sahte kurmak yerine tek yerden veriliyor.
+
 **Faz 16/17 testleri.** `StorageKeysTest` anahtar üretimini, uzantı beyaz listesini, Türkçe ad katlamasını, yol geçişi savunmasını ve önek→URL eşlemesini sabitliyor — özgeçmişin CDN'e düşmediğini `UserProfileContractTest` doğruluyor. `SettingsRulesTest` tanımsız anahtarın reddedildiğini ve bozuk değerin varsayılana düştüğünü sabitliyor.
 
 **Faz 12B/13 testleri.** `BadgeRulesTest` artık kural veritabanından okunduğu için genişledi: pasifleştirilen rozet verilmiyor ama sahipleri koruyor, eşiksiz kural hiçbir şey vermiyor, eşiksiz kural kaydedilemiyor, kod çakışması reddediliyor ve **kodda karşılığı olmayan uydurma bir rozet yalnızca satır eklenerek veriliyor**. `PresenceRulesTest` çok cihazlı bağlantı sayımını sabitliyor.
@@ -1234,7 +1399,15 @@ Kural: bu tür testlerde başlangıç zamanı `LocalDateTime.now(POLICY_ZONE)` �
 
 **`ErrorContractIT` HTTP sözleşmesini koruyor.** Yetkisiz erişimin 403, eksik Authorization başlığının 401 döndüğünü doğrular. İkisi de eskiden 500 dönüyordu — biri yanlış `AccessDeniedException` import'u yüzünden, diğeri null başlıkta `substring(7)` çağrıldığı için.
 
+**Başvuru geri çekme testleri.** `ApplicationWithdrawalTest` on üç kural sabitliyor (§2ar2): sahibi `APPLIED` başvurusunu geri çeker, başkasınınki **404**, bilinmeyen kimlik 404, `ACCEPTED` ve `REJECTED` **409**, iki kez geri çekme 409, kayıt silinmez ve `delete` hiç çağrılmaz, işverene bildirim gider, geri çekilmiş başvuru kabul de red de **edilemez**, `WITHDRAWN` yeniden başvuruyu engellemez ama `APPLIED` engeller, `hasApplied` daraltılmadığı için mesajlaşma kapısı açık kalır. `ApplicationWithdrawalIT` aynı davranışı gerçek Postgres'te dört kuralla doğruluyor: satır tabloda kalır ve `is_deleted` `false`'tur, `APPLIED` süzgecinden düşüp `WITHDRAWN` süzgecinde görünür, işverenin listesinde durur, mükerrer başvuru kapısı yalnızca canlı başvuruda kapanır.
+
 **`EntityGraphPathsIT` neden var.** `@EntityGraph` içindeki `attributePaths` derleyicinin denetlemediği düz metin; yanlış bir yol ancak o sorgu çalıştırıldığında patlıyor. `JobAssignmentDao` içinde `job.creator.addresses` yazıyordu, oysa `User.address` tekil — `PATCH /job-assignments/{id}/status` her çağrıda çöküyordu ve kimse fark etmemişti. Test tüm DAO'ları tarayıp her yolu JPA metamodel'ine karşı doğruluyor. Yeni bir entity graph eklerken bu test bedava koruma sağlıyor.
+
+**Bildirim tercihi testleri (§2at).** `NotificationPreferenceRulesTest` on dört kural: işlemsel kategori satır ne derse desin açık kalır, alarm kullanıcı kapatana kadar açık, ticari kullanıcı açana kadar kapalı, bir kanalı kapatmak diğerlerine dokunmaz, alıcısı bilinmeyen gönderim susturulmaz, karar yazılır ve çözümlenmiş görünüme yansır, işlemsel satırlar `editable=false` gelir, tercih taşımayan kanal görünümde hiç yok, aynı kanala ikinci karar yeni satır açmaz, ticari izin an/kanal/IP ile kaydedilir, izin çekilişi de kaydedilir, ticari olmayan kategori rıza kaydı bırakmaz, çıkış bağlantısı yalnız kendi kanalını kapatır, çıkış bağlantısı oturum istemez. `NotificationUnsubscribeRulesTest` altı kural: bağlantı token'ı taşır ve veritabanı yalnız özeti, satır hangi kanalı kapatacağını bilir, tanınmayan token reddedilir, süresi dolmuş bağlantı çalışmaz, canlı bağlantı hedefine çözümlenir, aynı bağlantıya ikinci tık zararsız. `NotificationSuppressionTest` on bir kural gönderim kapısını sabitliyor: kapatılan kanal ne kuyruğa girer ne kayıt açar, e-postayı kapatmak push'u susturmaz, ödeme bildirimi tercihe rağmen gider, hesabı olmayan adrese giden e-posta susturulmaz, ticari e-posta çıkış bağlantısı taşır, işlemsel e-posta taşımaz, yetkili daveti taşımaz, iş alarmı taşımaz, bağlantı bindiği e-postanın kategori ve kanalını adlandırır, bastırılan e-posta token bile istemez.
+
+`WorkerToolsRulesTest` bir kural kazandı: eşleşen iş alarmı `NotificationService`'e `JOB_ALERTS` kategorisiyle push olarak veriliyor — yani üretimdeki alarm yolu da kapıdan geçiyor.
+
+**`NotificationPreferenceIT` kabul kriterlerini gerçek Postgres üzerinde kanıtlıyor.** Sekiz kural: iş alarmı e-postasını kapatan kullanıcı gerçekten almıyor (kapatmayan alıyor), kapatma yalnız o kanalı etkiliyor, işlemsel kategoriyi kapatma denemesi 400 dönüyor ve o bildirim yine gidiyor, **e-postanın içindeki çıkış bağlantısı giriş yapmadan çalışıyor ve yalnız kendi kanalını kapatıyor**, uydurma token reddediliyor, ticari izin an/kanal/IP ile iz bırakıyor, ticari ileti kullanıcı istemeden gitmiyor, tercih yüzeyi anonime kapalı.
 
 ## 4. Bilinen tuzaklar
 
@@ -1330,6 +1503,8 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 | Bireysel ilanda sigorta alanı **olmayacak** | ürün kuralı, §2ap |
 | İlan formuna isteğe bağlı `headcount`, kartta `hiredCount`/`headcount` göstergesi | §2ao2 — sunucu kotayı zorlamaz, gösterge istemcide |
 | Atama `CANCELLED` + iptal sebebi `{cancellation.payment.not.collected}` ise "ödeme yapılmadı" olarak göster | §2u2 |
+| Bildirim tercihleri ekranı: `GET/PUT /users/me/notification-preferences`; `editable=false` satırlar kapatılamaz | §2at |
+| Web'de `/bildirim-tercihleri/cikis?token=...` sayfası açılışta `POST /notification-preferences/unsubscribe` çağırmalı — giriş istemez | §2at |
 | Sohbet listesi `/user/queue/messages`'a abone olur | tek akış, 20 topic yerine (§2z) |
 | Presence aboneliği `/topic/presence/{userId}` | global `/topic/presence` **kaldırıldı** (§2z) |
 | Aynı mesaj iki kanaldan gelebilir, `message.id` ile tekilleştir | sohbet açıkken hem topic hem kişisel kuyruk (§2z) |
@@ -1373,7 +1548,7 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 
 **Hiçbir denetimli kayıt fiziksel olarak silinmez.** `BaseEntity` `isDeleted` / `deletedAt` / `deletedBy` taşır; her entity `@SQLDelete` ile `DELETE`'i `UPDATE ... SET is_deleted = true`'a çevirir ve `@SQLRestriction("is_deleted = false")` ile silinmişler varsayılan sorgulardan düşer.
 
-**Kolonlar migration'da tablo adı sabitlenmeden eklendi.** `created_at` taşıyan her tablo taranıyor — `BaseEntity` alt sınıflarının tamamı bu şekilde yakalanıyor, yeni tablo eklendiğinde changelog'a elle isim yazmaya gerek yok.
+**Kolonlar migration'da tablo adı sabitlenmeden eklendi.** `created_at` taşıyan her tablo taranıyor — `BaseEntity` alt sınıflarının tamamı bu şekilde yakalanıyor, yeni tablo eklendiğinde changelog'a elle isim yazmaya gerek yok. **Ama yalnızca o migration'dan önce var olan tablolar.** `app_settings` sonradan (28-03) ve `created_at`'siz doğduğu için taramaya yakalanmamıştı; `BaseEntity`'ye taşınırken (§2ac) denetim ve soft delete sütunlarını kendi changelog'uyla (`2026/09/06-03`) aldı.
 
 **Kapsam dışı bırakılanlar ve gerekçeleri:**
 - `PendingRegistration` — **bilerek hard delete.** Kaydını hiç tamamlamamış birinin e-postasını süresiz saklamak koruma değil, gereksiz veri tutma. Kayıt akışı zaten sil-ve-yeniden-oluştur mantığıyla çalışıyor.
