@@ -19,7 +19,7 @@ import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
 import org.springframework.data.domain.Pageable;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.web.PageableDefault;
-import com.exskylab.koala.core.dtos.address.request.CreateAddressRequestDto;
+import com.exskylab.koala.core.dtos.address.request.AddressWriteDto;
 import com.exskylab.koala.core.dtos.address.response.AddressDto;
 import com.exskylab.koala.core.dtos.job.request.CreateIndividualJobDto;
 import com.exskylab.koala.core.dtos.job.response.IndividualJobDto;
@@ -235,7 +235,7 @@ public class UsersController {
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PutMapping("/me/address")
-    public ResponseEntity<SuccessDataResult<AddressDto>> updateAddressForCurrentUser(@RequestBody @Valid CreateAddressRequestDto addressDto){
+    public ResponseEntity<SuccessDataResult<AddressDto>> updateAddressForCurrentUser(@RequestBody @Valid AddressWriteDto addressDto){
 
         AddressDto updatedAddress = userService.updateAddressForCurrentUser(addressDto);
 

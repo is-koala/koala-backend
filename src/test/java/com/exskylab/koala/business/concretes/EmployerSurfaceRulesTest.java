@@ -53,7 +53,10 @@ class EmployerSurfaceRulesTest {
         Address address = new Address();
         address.setCity(city);
         address.setDistrict(district);
-        address.setAddressLine("Barbaros Bulvarı No 12 Daire 4");
+        address.setNeighborhood("Sinanpaşa Mahallesi");
+        address.setThoroughfare("Barbaros Bulvarı");
+        address.setBuildingNumber("12");
+        address.setUnitNumber("4");
 
         File cv = new File();
         cv.setFileUrl("files/" + UUID.randomUUID() + ".pdf");

@@ -1,7 +1,7 @@
 package com.exskylab.koala.business.abstracts;
 
 
-import com.exskylab.koala.core.dtos.address.request.CreateAddressRequestDto;
+import com.exskylab.koala.core.dtos.address.request.AddressWriteDto;
 import com.exskylab.koala.core.dtos.address.response.AddressDto;
 import com.exskylab.koala.core.dtos.user.request.UpdateUserDto;
 import com.exskylab.koala.core.dtos.user.request.ChangePasswordDto;
@@ -53,7 +53,7 @@ public interface UserService {
 
     UserMeResponseDto getCurrentUserFromDatabaseDto();
 
-    AddressDto updateAddressForCurrentUser(@Valid CreateAddressRequestDto addressDto);
+    AddressDto updateAddressForCurrentUser(@Valid AddressWriteDto addressDto);
 
     Page<User> search(String query, Pageable pageable);
 

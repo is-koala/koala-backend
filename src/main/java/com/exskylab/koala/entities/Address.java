@@ -8,6 +8,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.UUID;
 
 @SQLDelete(sql = "UPDATE addresses SET is_deleted = true, deleted_at = now() WHERE id = ?")
@@ -26,26 +28,63 @@ public class Address extends BaseEntity{
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "country_id")
+    @JoinColumn(name = "country_id", nullable = false)
     private Country country;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "city_id")
+    @JoinColumn(name = "city_id", nullable = false)
     private City city;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "district_id")
+    @JoinColumn(name = "district_id", nullable = false)
     private District district;
 
-    @Column(name = "address_line")
-    private String addressLine;
+    @Column(name = "neighborhood", length = 120)
+    private String neighborhood;
 
-    @Column(name = "postal_code")
+    @Column(name = "thoroughfare", length = 160)
+    private String thoroughfare;
+
+    @Column(name = "site_name", length = 120)
+    private String siteName;
+
+    @Column(name = "block", length = 40)
+    private String block;
+
+    @Column(name = "building_name", length = 120)
+    private String buildingName;
+
+    @Column(name = "building_number", length = 30)
+    private String buildingNumber;
+
+    @Column(name = "floor", length = 20)
+    private String floor;
+
+    @Column(name = "unit_number", length = 30)
+    private String unitNumber;
+
+    @Column(name = "postal_code", length = 5)
     private String postalCode;
 
-    @Column(name = "latitude")
-    private double latitude;
+    @Column(name = "additional_directions", length = 500)
+    private String additionalDirections;
 
-    @Column(name = "longitude")
-    private double longitude;
+    @Column(name = "latitude", precision = 9, scale = 6)
+    private BigDecimal latitude;
+
+    @Column(name = "longitude", precision = 10, scale = 6)
+    private BigDecimal longitude;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "position_source", length = 40)
+    private AddressPositionSource positionSource;
+
+    @Column(name = "confirmed_at")
+    private Instant confirmedAt;
+
+    @Column(name = "canonical_version", nullable = false)
+    private int canonicalVersion;
+
+    @Column(name = "needs_review", nullable = false)
+    private boolean needsReview;
 }

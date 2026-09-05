@@ -1,7 +1,7 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.*;
-import com.exskylab.koala.core.dtos.address.request.CreateAddressRequestDto;
+import com.exskylab.koala.core.dtos.address.request.AddressWriteDto;
 import com.exskylab.koala.core.dtos.job.request.CreateIndividualJobDto;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.helpers.MessageResolver;
@@ -80,7 +80,7 @@ class EmployerIdentityGateTest {
         dto.setMinAge(18);
         dto.setMaxAge(60);
         dto.setExperienceRequired(false);
-        dto.setAddress(new CreateAddressRequestDto());
+        dto.setAddress(new AddressWriteDto());
         return dto;
     }
 

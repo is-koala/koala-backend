@@ -1,6 +1,10 @@
 package com.exskylab.koala.core.dtos;
 
 import com.exskylab.koala.core.dtos.availability.request.SaveAvailabilityDto;
+import com.exskylab.koala.core.dtos.address.request.AddressComponentsRequestDto;
+import com.exskylab.koala.core.dtos.address.request.AddressPositionRequestDto;
+import com.exskylab.koala.core.dtos.address.request.AddressWriteDto;
+import com.exskylab.koala.core.dtos.address.request.ConfirmedPositionSource;
 import com.exskylab.koala.core.dtos.badge.request.SaveBadgeDto;
 import com.exskylab.koala.core.dtos.education.request.SaveEducationDto;
 import com.exskylab.koala.core.dtos.experience.request.SaveExperienceDto;
@@ -42,6 +46,84 @@ class RequestValidationTest {
 
     private boolean isValid(Object dto) {
         return validator.validate(dto).isEmpty();
+    }
+
+    @Test
+    void anAddressAcceptsStableReferenceIdsAndRejectsPartialSelection() {
+        AddressWriteDto address = new AddressWriteDto();
+        address.setCountryId(UUID.randomUUID());
+        address.setComponents(components());
+        address.setPosition(position());
+
+        assertTrue(messagesFor(address).contains("{address.city.notNull}"));
+        assertTrue(messagesFor(address).contains("{address.district.notNull}"));
+
+        address.setCityId(UUID.randomUUID());
+        assertTrue(messagesFor(address).contains("{address.district.notNull}"));
+
+        address.setDistrictId(UUID.randomUUID());
+        assertTrue(isValid(address));
+    }
+
+    @Test
+    void anIstanbulAddressRequiresStructuredPostalComponents() {
+        AddressWriteDto address = validAddress();
+        address.setComponents(new AddressComponentsRequestDto());
+
+        Set<String> messages = messagesFor(address);
+
+        assertTrue(messages.contains("{address.neighborhood.notBlank}"));
+        assertTrue(messages.contains("{address.thoroughfare.notBlank}"));
+        assertTrue(messages.contains("{address.postalCode.invalid}"));
+        assertTrue(messages.contains("{address.locationDetail.required}"));
+    }
+
+    @Test
+    void aSiteNameCanReplaceABuildingNumberForNumberlessWorkplaces() {
+        AddressWriteDto address = validAddress();
+        address.getComponents().setBuildingNumber(null);
+        address.getComponents().setSiteName("İstanbul Kongre Merkezi");
+
+        assertTrue(isValid(address));
+    }
+
+    @Test
+    void anAddressRejectsCoordinatesOutsideWorldBounds() {
+        AddressWriteDto address = validAddress();
+        address.getPosition().setLatitude(new BigDecimal("90.000001"));
+        address.getPosition().setLongitude(new BigDecimal("-180.000001"));
+
+        Set<String> messages = messagesFor(address);
+
+        assertTrue(messages.contains("{address.latitude.range}"));
+        assertTrue(messages.contains("{address.longitude.range}"));
+    }
+
+    private static AddressWriteDto validAddress() {
+        AddressWriteDto address = new AddressWriteDto();
+        address.setCountryId(UUID.randomUUID());
+        address.setCityId(UUID.randomUUID());
+        address.setDistrictId(UUID.randomUUID());
+        address.setComponents(components());
+        address.setPosition(position());
+        return address;
+    }
+
+    private static AddressComponentsRequestDto components() {
+        AddressComponentsRequestDto components = new AddressComponentsRequestDto();
+        components.setNeighborhood("Caferağa Mahallesi");
+        components.setThoroughfare("Moda Caddesi");
+        components.setBuildingNumber("12");
+        components.setPostalCode("34710");
+        return components;
+    }
+
+    private static AddressPositionRequestDto position() {
+        AddressPositionRequestDto position = new AddressPositionRequestDto();
+        position.setLatitude(new BigDecimal("40.982512"));
+        position.setLongitude(new BigDecimal("29.025411"));
+        position.setSource(ConfirmedPositionSource.USER_CONFIRMED_PIN);
+        return position;
     }
 
     @Test

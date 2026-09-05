@@ -3,6 +3,7 @@ package com.exskylab.koala.core.producers.user;
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.configs.RabbitMQConfig;
 import com.exskylab.koala.business.abstracts.BankAccountService;
+import com.exskylab.koala.core.helpers.AddressFormatter;
 import com.exskylab.koala.entities.User;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
@@ -44,12 +45,7 @@ public class UserProducerService {
     private UserUpdatedEventDto convertToEventDto(User updatedUser) {
         String fullAddress = "";
         if (updatedUser.getAddress() != null) {
-            fullAddress = String.format("%s, %s, %s, %s, %s",
-                    updatedUser.getAddress().getAddressLine(),
-                    updatedUser.getAddress().getCity().getName(),
-                    updatedUser.getAddress().getDistrict().getName(),
-                    updatedUser.getAddress().getCountry().getName(),
-                    updatedUser.getAddress().getPostalCode());
+            fullAddress = AddressFormatter.displayAddress(updatedUser.getAddress());
         }
 
 

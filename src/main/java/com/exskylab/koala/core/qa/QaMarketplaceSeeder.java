@@ -100,7 +100,7 @@ public class QaMarketplaceSeeder {
         UUID cityId = jdbcTemplate.queryForObject(
                 "select id from cities where country_id = ? and name = 'İSTANBUL'", UUID.class, countryId);
         List<District> districts = jdbcTemplate.query(
-                "select id, name from districts where city_id = ? order by name",
+                "select id, name from districts where city_id = ? and is_deleted = false order by name",
                 (resultSet, rowNumber) -> new District(
                         resultSet.getObject("id", UUID.class), resultSet.getString("name")),
                 cityId);
@@ -686,18 +686,22 @@ public class QaMarketplaceSeeder {
         double longitude = 28.67 + (index % 31) * 0.018;
         jdbcTemplate.update("""
                 insert into addresses (
-                    id, created_at, country_id, city_id, district_id, address_line,
-                    postal_code, latitude, longitude, is_deleted
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, false)
+                    id, created_at, country_id, city_id, district_id, neighborhood,
+                    thoroughfare, building_number, postal_code, latitude, longitude,
+                    position_source, confirmed_at, canonical_version, needs_review, is_deleted
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'USER_CONFIRMED_PIN', ?, 1, false, false)
                 on conflict (id) do update set country_id = excluded.country_id,
                     city_id = excluded.city_id, district_id = excluded.district_id,
-                    address_line = excluded.address_line, postal_code = excluded.postal_code,
+                    neighborhood = excluded.neighborhood, thoroughfare = excluded.thoroughfare,
+                    building_number = excluded.building_number, postal_code = excluded.postal_code,
                     latitude = excluded.latitude, longitude = excluded.longitude,
+                    position_source = excluded.position_source, confirmed_at = excluded.confirmed_at,
+                    canonical_version = excluded.canonical_version, needs_review = false,
                     is_deleted = false, deleted_at = null
                 """, addressId, Timestamp.from(CREATED_AT), countryId, cityId, district.id(),
-                "%s Mahallesi, %d. Sokak No: %d, %s/İstanbul"
-                        .formatted(titleCase(district.name()), 1 + index % 24, 2 + index % 90, titleCase(district.name())),
-                "%05d".formatted(34000 + index % 900), latitude, longitude);
+                titleCase(district.name()) + " Mahallesi", (1 + index % 24) + ". Sokak",
+                Integer.toString(2 + index % 90), "%05d".formatted(34000 + index % 900),
+                latitude, longitude, Timestamp.from(CREATED_AT));
     }
 
     private void upsertMedia(UUID mediaId, String type, String fileName,

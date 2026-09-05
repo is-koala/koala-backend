@@ -2,7 +2,8 @@ package com.exskylab.koala.core.dtos.job.request;
 
 
 import com.exskylab.koala.core.constants.JobMessages;
-import com.exskylab.koala.core.dtos.address.request.CreateAddressRequestDto;
+import com.exskylab.koala.core.dtos.address.request.AddressWriteDto;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -40,7 +41,8 @@ public class CreateIndividualJobDto {
     private String duties;
 
     @NotNull(message = JobMessages.ADDRESS_NOT_NULL)
-    private CreateAddressRequestDto address;
+    @Valid
+    private AddressWriteDto address;
 
     @NotBlank(message = JobMessages.TYPE_NOT_BLANK)
     private String type;

@@ -71,6 +71,27 @@ class QaMarketplaceSeedIT extends AbstractIntegrationTest {
                 where email like '%@qa.iskoala.invalid'
                    or email in ('qa-worker@example.test', 'qa-employer@example.test')
                 """));
+
+        assertEquals(0, count("""
+                select count(*) from addresses
+                where neighborhood is null
+                   or thoroughfare is null
+                   or building_number is null
+                   or postal_code !~ '^[0-9]{5}$'
+                   or position_source <> 'USER_CONFIRMED_PIN'
+                   or canonical_version <> 1
+                   or needs_review = true
+                """));
+        assertEquals(39, count("""
+                select count(*) from districts d
+                join cities c on c.id = d.city_id
+                where c.name = 'İSTANBUL' and d.is_deleted = false
+                """));
+        assertEquals(0, count("""
+                select count(*) from addresses a
+                join districts d on d.id = a.district_id
+                where d.name = 'EMİNÖNÜ'
+                """));
         assertEquals(30, count("select count(*) from companies where email like '%@qa.iskoala.invalid'"));
         assertEquals(180, count("""
                 select count(*) from jobs j

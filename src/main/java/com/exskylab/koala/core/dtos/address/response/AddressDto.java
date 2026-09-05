@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Getter
@@ -15,20 +16,30 @@ public class AddressDto {
 
     private UUID id;
 
+    private UUID countryId;
+
     private String countryName;
 
     private String countryCode;
 
+    private UUID cityId;
+
     private String cityName;
+
+    private UUID districtId;
 
     private String districtName;
 
-    private String addressLine;
+    private AddressComponentsDto components;
 
-    private String postalCode;
+    private AddressPositionDto position;
 
-    private double latitude;
+    private String displayAddress;
 
-    private double longitude;
+    private Instant confirmedAt;
+
+    private int canonicalVersion;
+
+    private boolean needsReview;
 
 }

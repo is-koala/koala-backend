@@ -6,7 +6,7 @@ import com.exskylab.koala.core.helpers.LogMasks;
 
 import com.exskylab.koala.business.abstracts.*;
 import com.exskylab.koala.core.constants.UserMessages;
-import com.exskylab.koala.core.dtos.address.request.CreateAddressRequestDto;
+import com.exskylab.koala.core.dtos.address.request.AddressWriteDto;
 import com.exskylab.koala.core.dtos.address.response.AddressDto;
 import com.exskylab.koala.core.dtos.user.request.UpdateUserDto;
 import com.exskylab.koala.core.dtos.user.request.ChangePasswordDto;
@@ -500,7 +500,7 @@ public class UserManager implements UserService {
 
     @Override
     @Transactional
-    public AddressDto updateAddressForCurrentUser(CreateAddressRequestDto addressDto) {
+    public AddressDto updateAddressForCurrentUser(AddressWriteDto addressDto) {
         log.info("Updating address for current user.");
         var currentUser = securityService.getAuthenticatedUser();
         log.info("Updating address for user with ID: {}", currentUser.getId());

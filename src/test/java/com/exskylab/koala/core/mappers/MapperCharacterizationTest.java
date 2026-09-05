@@ -23,6 +23,7 @@ import com.exskylab.koala.core.helpers.StorageUrlResolver;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.UUID;
 
@@ -80,8 +81,10 @@ class MapperCharacterizationTest {
         assertEquals("TR", dto.getCountryCode());
         assertEquals("Istanbul", dto.getCityName());
         assertEquals("Kadikoy", dto.getDistrictName());
-        assertEquals("Moda Cad. 1", dto.getAddressLine());
-        assertEquals("34710", dto.getPostalCode());
+        assertEquals("Moda", dto.getComponents().getNeighborhood());
+        assertEquals("Moda Caddesi", dto.getComponents().getThoroughfare());
+        assertEquals("1", dto.getComponents().getBuildingNumber());
+        assertEquals("34710", dto.getComponents().getPostalCode());
     }
 
     @Test
@@ -282,10 +285,12 @@ class MapperCharacterizationTest {
         address.setCity(city);
         address.setDistrict(district);
         address.setCountry(country);
-        address.setAddressLine("Moda Cad. 1");
+        address.setNeighborhood("Moda");
+        address.setThoroughfare("Moda Caddesi");
+        address.setBuildingNumber("1");
         address.setPostalCode("34710");
-        address.setLatitude(40.98);
-        address.setLongitude(29.02);
+        address.setLatitude(new BigDecimal("40.980000"));
+        address.setLongitude(new BigDecimal("29.020000"));
         return address;
     }
 

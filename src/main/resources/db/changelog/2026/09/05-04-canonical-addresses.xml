@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-05-04-01-address-components" author="codex">
+        <addColumn tableName="addresses">
+            <column name="neighborhood" type="VARCHAR(120)"/>
+            <column name="thoroughfare" type="VARCHAR(160)"/>
+            <column name="site_name" type="VARCHAR(120)"/>
+            <column name="block" type="VARCHAR(40)"/>
+            <column name="building_name" type="VARCHAR(120)"/>
+            <column name="building_number" type="VARCHAR(30)"/>
+            <column name="floor" type="VARCHAR(20)"/>
+            <column name="unit_number" type="VARCHAR(30)"/>
+            <column name="additional_directions" type="VARCHAR(500)"/>
+            <column name="position_source" type="VARCHAR(40)"/>
+            <column name="confirmed_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="canonical_version" type="INTEGER" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="needs_review" type="BOOLEAN" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <update tableName="addresses">
+            <column name="additional_directions" valueComputed="address_line"/>
+            <column name="position_source" value="LEGACY_UNVERIFIED"/>
+            <where>address_line IS NOT NULL OR latitude IS NOT NULL OR longitude IS NOT NULL</where>
+        </update>
+        <modifyDataType tableName="addresses" columnName="postal_code" newDataType="VARCHAR(5)"/>
+        <modifyDataType tableName="addresses" columnName="latitude" newDataType="NUMERIC(9,6)"/>
+        <modifyDataType tableName="addresses" columnName="longitude" newDataType="NUMERIC(10,6)"/>
+        <dropColumn tableName="addresses" columnName="address_line"/>
+        <rollback>
+            <addColumn tableName="addresses">
+                <column name="address_line" type="VARCHAR(255)"/>
+            </addColumn>
+            <update tableName="addresses">
+                <column name="address_line" valueComputed="additional_directions"/>
+            </update>
+            <modifyDataType tableName="addresses" columnName="postal_code" newDataType="VARCHAR(255)"/>
+            <modifyDataType tableName="addresses" columnName="latitude" newDataType="DOUBLE"/>
+            <modifyDataType tableName="addresses" columnName="longitude" newDataType="DOUBLE"/>
+            <dropColumn tableName="addresses" columnName="neighborhood"/>
+            <dropColumn tableName="addresses" columnName="thoroughfare"/>
+            <dropColumn tableName="addresses" columnName="site_name"/>
+            <dropColumn tableName="addresses" columnName="block"/>
+            <dropColumn tableName="addresses" columnName="building_name"/>
+            <dropColumn tableName="addresses" columnName="building_number"/>
+            <dropColumn tableName="addresses" columnName="floor"/>
+            <dropColumn tableName="addresses" columnName="unit_number"/>
+            <dropColumn tableName="addresses" columnName="additional_directions"/>
+            <dropColumn tableName="addresses" columnName="position_source"/>
+            <dropColumn tableName="addresses" columnName="confirmed_at"/>
+            <dropColumn tableName="addresses" columnName="canonical_version"/>
+            <dropColumn tableName="addresses" columnName="needs_review"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-05-04-02-eminonu-to-fatih" author="codex" dbms="postgresql">
+        <createTable tableName="address_reference_migration_audit">
+            <column name="address_id" type="UUID">
+                <constraints nullable="false" primaryKey="true" primaryKeyName="pk_address_reference_migration_audit"/>
+            </column>
+            <column name="previous_district_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="replacement_district_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="reason" type="VARCHAR(120)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="migrated_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <sql>
+            INSERT INTO address_reference_migration_audit
+                (address_id, previous_district_id, replacement_district_id, reason, migrated_at)
+            SELECT id,
+                   '9b43a8a6-f165-460d-80b1-e711a2db5714'::uuid,
+                   'a058819e-e2db-41d9-b7ae-245f1ec7b8b9'::uuid,
+                   'EMINONU_MERGED_INTO_FATIH',
+                   now()
+            FROM addresses
+            WHERE district_id = '9b43a8a6-f165-460d-80b1-e711a2db5714'::uuid;
+
+            UPDATE addresses
+            SET district_id = 'a058819e-e2db-41d9-b7ae-245f1ec7b8b9'::uuid,
+                needs_review = true
+            WHERE district_id = '9b43a8a6-f165-460d-80b1-e711a2db5714'::uuid;
+
+            UPDATE districts
+            SET is_deleted = true,
+                deleted_at = now()
+            WHERE id = '9b43a8a6-f165-460d-80b1-e711a2db5714'::uuid;
+        </sql>
+        <rollback>
+            <sql>
+                UPDATE addresses a
+                SET district_id = audit.previous_district_id
+                FROM address_reference_migration_audit audit
+                WHERE a.id = audit.address_id;
+
+                UPDATE districts
+                SET is_deleted = false,
+                    deleted_at = null
+                WHERE id = '9b43a8a6-f165-460d-80b1-e711a2db5714'::uuid;
+            </sql>
+            <dropTable tableName="address_reference_migration_audit"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-05-04-03-district-alias" author="codex">
+        <createTable tableName="district_aliases">
+            <column name="id" type="UUID">
+                <constraints nullable="false" primaryKey="true" primaryKeyName="pk_district_aliases"/>
+            </column>
+            <column name="alias" type="VARCHAR(120)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="district_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="reason" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="deleted_by_id" type="UUID"/>
+        </createTable>
+        <addUniqueConstraint tableName="district_aliases" columnNames="alias"
+                             constraintName="uk_district_aliases_alias"/>
+        <addForeignKeyConstraint baseTableName="district_aliases" baseColumnNames="district_id"
+                                 constraintName="fk_district_aliases_district"
+                                 referencedTableName="districts" referencedColumnNames="id"/>
+        <insert tableName="district_aliases">
+            <column name="id" value="d3b71b1b-6d6c-4f41-bc31-1c7354d0f89e"/>
+            <column name="alias" value="EMİNÖNÜ"/>
+            <column name="district_id" value="a058819e-e2db-41d9-b7ae-245f1ec7b8b9"/>
+            <column name="reason" value="EMINONU_MERGED_INTO_FATIH"/>
+            <column name="created_at" valueComputed="CURRENT_TIMESTAMP"/>
+        </insert>
+        <rollback>
+            <dropTable tableName="district_aliases"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

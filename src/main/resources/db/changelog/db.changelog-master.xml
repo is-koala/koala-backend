@@ -52,4 +52,5 @@
     <include file="db/changelog/2026/09/05-01-password-reset-token.xml"/>
     <include file="db/changelog/2026/09/05-02-job-pricing-snapshot.xml"/>
     <include file="db/changelog/2026/09/05-03-qa-marketplace-seed-history.xml"/>
+    <include file="db/changelog/2026/09/05-04-canonical-addresses.xml"/>
 </databaseChangeLog>

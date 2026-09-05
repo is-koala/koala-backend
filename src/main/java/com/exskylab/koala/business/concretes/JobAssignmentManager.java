@@ -15,6 +15,7 @@ import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.business.abstracts.PaymentService;
 import com.exskylab.koala.business.abstracts.PricingService;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
+import com.exskylab.koala.core.helpers.AddressFormatter;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
 import com.exskylab.koala.core.properties.AppProperties;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
@@ -276,7 +277,7 @@ public class JobAssignmentManager implements JobAssignmentService {
         IyzicoAddressDto shippingAddress = new IyzicoAddressDto();
 
         if (job.getAddress() != null){
-            shippingAddress.setAddress(job.getAddress().getAddressLine());
+            shippingAddress.setAddress(AddressFormatter.displayAddress(job.getAddress()));
             shippingAddress.setCity(job.getAddress().getCity().getName());
             shippingAddress.setCountry(job.getAddress().getCountry().getName());
             shippingAddress.setZipCode(job.getAddress().getPostalCode());
@@ -296,7 +297,7 @@ public class JobAssignmentManager implements JobAssignmentService {
             buyer.setIdentityNumber(company.getTaxNumber()); //VKN
 
             if (company.getAddress() != null) {
-                billingAddress.setAddress(company.getAddress().getAddressLine());
+                billingAddress.setAddress(AddressFormatter.displayAddress(company.getAddress()));
                 billingAddress.setCity(company.getAddress().getCity().getName());
                 billingAddress.setCountry(company.getAddress().getCountry().getName());
                 billingAddress.setZipCode(company.getAddress().getPostalCode());
@@ -318,7 +319,7 @@ public class JobAssignmentManager implements JobAssignmentService {
 
             Address employerAddress = individualEmployer.getAddress();
             if (employerAddress != null) {
-                billingAddress.setAddress(employerAddress.getAddressLine());
+                billingAddress.setAddress(AddressFormatter.displayAddress(employerAddress));
                 billingAddress.setCity(employerAddress.getCity().getName());
                 billingAddress.setCountry(employerAddress.getCountry().getName());
                 billingAddress.setZipCode(employerAddress.getPostalCode());
@@ -346,7 +347,7 @@ public class JobAssignmentManager implements JobAssignmentService {
         merchantDto.setEmail(worker.getEmail());
         merchantDto.setGsmNumber(worker.getPhoneNumber());
         if (worker.getAddress() != null) {
-            merchantDto.setAddress(worker.getAddress().getAddressLine()+", "+ worker.getAddress().getCity().getName()+", "+worker.getAddress().getCountry().getName()+ ", "+ worker.getAddress().getPostalCode());
+            merchantDto.setAddress(AddressFormatter.displayAddress(worker.getAddress()));
         }else {
             throw new ValidationException(JobAssignmentMessages.ADDRESS_NOT_PROVIDED_FOR_WORKER);
         }

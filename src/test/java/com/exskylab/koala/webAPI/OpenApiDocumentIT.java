@@ -54,4 +54,18 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.components.schemas.ErrorResult.properties.errorCategory").exists())
                 .andExpect(jsonPath("$.components.schemas.ErrorResult.properties.errorCode").exists());
     }
+
+    @Test
+    void addressWritesExposeOnlyTheCanonicalV2Contract() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath("$.components.schemas.AddressWriteV2.properties.countryId").exists())
+                .andExpect(jsonPath("$.components.schemas.AddressWriteV2.properties.cityId").exists())
+                .andExpect(jsonPath("$.components.schemas.AddressWriteV2.properties.districtId").exists())
+                .andExpect(jsonPath("$.components.schemas.AddressWriteV2.properties.components").exists())
+                .andExpect(jsonPath("$.components.schemas.AddressWriteV2.properties.position").exists())
+                .andExpect(jsonPath("$.components.schemas.AddressWriteV2.properties.countryCode").doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.AddressWriteV2.properties.cityName").doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.AddressWriteV2.properties.districtName").doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.AddressWriteV2.properties.addressLine").doesNotExist());
+    }
 }

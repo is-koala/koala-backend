@@ -47,4 +47,33 @@ class LiquibaseMigrationIT extends AbstractIntegrationTest {
         assertTrue(countries != null && countries > 0, "Ulke verisi yuklenmemis.");
         assertTrue(cities != null && cities > 0, "Sehir verisi yuklenmemis.");
     }
+
+    @Test
+    void canonicalAddressSchemaAndIstanbulReferencesAreReady() {
+        Integer legacyColumn = jdbcTemplate.queryForObject("""
+                select count(*) from information_schema.columns
+                where table_schema = 'public' and table_name = 'addresses' and column_name = 'address_line'
+                """, Integer.class);
+        Integer canonicalColumns = jdbcTemplate.queryForObject("""
+                select count(*) from information_schema.columns
+                where table_schema = 'public' and table_name = 'addresses'
+                  and column_name in ('neighborhood', 'thoroughfare', 'building_number',
+                                      'position_source', 'confirmed_at', 'canonical_version', 'needs_review')
+                """, Integer.class);
+        Integer activeIstanbulDistricts = jdbcTemplate.queryForObject("""
+                select count(*) from districts d
+                join cities c on c.id = d.city_id
+                where c.name = 'İSTANBUL' and d.is_deleted = false
+                """, Integer.class);
+        String replacement = jdbcTemplate.queryForObject("""
+                select d.name from district_aliases a
+                join districts d on d.id = a.district_id
+                where a.alias = 'EMİNÖNÜ'
+                """, String.class);
+
+        assertEquals(0, legacyColumn);
+        assertEquals(7, canonicalColumns);
+        assertEquals(39, activeIstanbulDistricts);
+        assertEquals("FATİH", replacement);
+    }
 }
