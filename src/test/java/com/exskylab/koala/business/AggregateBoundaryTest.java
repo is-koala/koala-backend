@@ -110,8 +110,8 @@ class AggregateBoundaryTest {
         foreignDaosByManager().forEach((manager, daos) -> daos.stream()
                 .filter(dao -> !allowed.contains(manager + "#" + dao))
                 .forEach(dao -> failures.add(
-                        "%s kendi olmayan %s'yu kullanıyor. Diğer aggregate'e erişim onun Service'i üzerinden olmalı; "
-                                + "servis üzerinden gitmek bean döngüsü yaratıyorsa EXEMPTIONS listesine gerekçesiyle eklenmeli."
+                        ("%s kendi olmayan %s'yu kullanıyor. Diğer aggregate'e erişim onun Service'i üzerinden olmalı; "
+                                + "servis üzerinden gitmek bean döngüsü yaratıyorsa EXEMPTIONS listesine gerekçesiyle eklenmeli.")
                                 .formatted(manager, dao))));
 
         assertTrue(failures.isEmpty(), String.join("\n", failures));
