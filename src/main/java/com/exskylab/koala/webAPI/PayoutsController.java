@@ -1,6 +1,7 @@
 package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.core.security.RequiresPermission;
+import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.entities.StaffPermission;
 import com.exskylab.koala.core.utilities.results.ErrorResult;
 import io.swagger.v3.oas.annotations.Operation;
@@ -12,6 +13,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.business.abstracts.SecurityService;
+import com.exskylab.koala.business.abstracts.StaffPayoutService;
 import com.exskylab.koala.core.constants.PayoutMessages;
 import com.exskylab.koala.core.dtos.payout.request.RefundRequestDto;
 import com.exskylab.koala.core.dtos.payout.response.PayoutDto;
@@ -21,6 +23,7 @@ import com.exskylab.koala.core.utilities.results.SuccessResult;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -32,12 +35,14 @@ import java.util.UUID;
 public class PayoutsController {
 
     private final PayoutService payoutService;
+    private final StaffPayoutService staffPayoutService;
     private final PayoutMapper payoutMapper;
     private final SecurityService securityService;
 
-    public PayoutsController(PayoutService payoutService, PayoutMapper payoutMapper,
-                             SecurityService securityService) {
+    public PayoutsController(PayoutService payoutService, StaffPayoutService staffPayoutService,
+                             PayoutMapper payoutMapper, SecurityService securityService) {
         this.payoutService = payoutService;
+        this.staffPayoutService = staffPayoutService;
         this.payoutMapper = payoutMapper;
         this.securityService = securityService;
     }
@@ -66,8 +71,9 @@ public class PayoutsController {
     })
     @RequiresPermission(value = StaffPermission.PAYOUT_RELEASE, action = "payout.release")
     @PostMapping("/admin/job-assignments/{assignmentId}/release")
-    public ResponseEntity<SuccessDataResult<PayoutDto>> release(@PathVariable UUID assignmentId) {
-        PayoutDto payout = payoutMapper.toPayoutDto(payoutService.releaseToWorker(assignmentId));
+    public ResponseEntity<SuccessDataResult<PayoutDto>> release(@PathVariable UUID assignmentId,
+                                                                @AuthenticationPrincipal StaffPrincipal actor) {
+        PayoutDto payout = payoutMapper.toPayoutDto(staffPayoutService.releaseToWorker(actor, assignmentId));
 
         return ResponseEntity.status(HttpStatus.OK).body(new SuccessDataResult<>(
                 payout, PayoutMessages.RELEASED, HttpStatus.OK));
@@ -85,8 +91,9 @@ public class PayoutsController {
     @RequiresPermission(value = StaffPermission.PAYMENT_REFUND, action = "payment.refund")
     @PostMapping("/admin/job-assignments/{assignmentId}/refund")
     public ResponseEntity<SuccessResult> refund(@PathVariable UUID assignmentId,
-                                                @RequestBody @Valid RefundRequestDto request) {
-        payoutService.refundEmployer(assignmentId, request.getAmount(), request.getReason());
+                                                @RequestBody @Valid RefundRequestDto request,
+                                                @AuthenticationPrincipal StaffPrincipal actor) {
+        staffPayoutService.refundEmployer(actor, assignmentId, request.getAmount(), request.getReason());
 
         return ResponseEntity.status(HttpStatus.OK).body(new SuccessResult(
                 PayoutMessages.REFUNDED, HttpStatus.OK));
