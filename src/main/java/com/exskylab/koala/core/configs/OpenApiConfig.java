@@ -45,9 +45,19 @@ public class OpenApiConfig {
                                 Erişim token'ı `Authorization: Bearer <token>` başlığıyla gönderilir. Süresi dolduğunda
                                 `POST /auth/refresh-token` çağrılır; bu uç süresi dolmuş bir erişim token'ıyla da çalışır.
 
-                                **Cihaz kimliği.** Her istek `X-Device-Id` başlığı taşımalıdır. İstemci kurulum başına
-                                sabit bir değer üretir; biçim `[A-Za-z0-9._:-]{8,128}`. Başlık yoksa cihaz User-Agent'tan
-                                türetilir ve aynı kullanıcının iki cihazı tek cihaz sayılabilir.
+                                **Cihaz kimliği.** Web BFF her istekte `X-Client-Platform: web` ve tarayıcı profiline
+                                ait `[A-Za-z0-9._:-]{8,128}` biçimindeki sabit `X-Device-Id` değerini gönderir. Web
+                                login ve refresh çağrılarında bu kimlik zorunludur; User-Agent yalnız okunabilir cihaz
+                                etiketidir. Başlıksız eski mobil istemciler geçiş süresince User-Agent eşleşmesini kullanır.
+
+                                **İstemci sürümü.** `X-App-Version`, `X-Client-Platform` için tanımlanan iOS, Android
+                                veya web eşiğiyle karşılaştırılır. Web eşiği varsayılan olarak kapalıdır; başlıksız eski
+                                mobil çağrılar `app.minimum-version` eşiğini kullanır. Eski istemci 426 ve
+                                `X-Minimum-App-Version` alır.
+
+                                **Web ve istemci IP'si.** Tarayıcı REST API'ye doğrudan bağlanmaz. BFF, gelen istemci
+                                başlıklarını güven sınırı saymadan bağlantı IP'sini `X-Forwarded-For` olarak yeniden
+                                yazar. Backend bu başlığı yalnız `app.trusted-proxies` içindeki doğrudan vekilden kabul eder.
 
                                 **Dil.** `Accept-Language: tr` ya da `en`. Başlık yoksa Türkçe varsayılır; hem başarı
                                 hem hata mesajları bu başlığa göre çözümlenir.

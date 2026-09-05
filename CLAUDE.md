@@ -315,7 +315,7 @@ Gerekçe: (b) elle SQL yazmayı ortadan kaldırmıyor, yalnızca kopyalanacak bi
 
 **Okuma yolu DEBUG.** `Getting/Fetching/Retrieving/Listing` ile başlayan 18 manager logu DEBUG'a indirildi — erişim logu geldikten sonra bunlar gürültüydü. Yazma işlemleri INFO kalır, denetim izi onlar.
 
-**Erişim logu istemci IP'sini taşır.** Öncesinde satırda metot, yol, durum, süre ve kullanıcı vardı ama IP yoktu — kötüye kullanım araştırılamıyor, hız sınırı isabetleri eşleştirilemiyordu. İstemci IP'si tek yerden geliyor: `ClientIpResolver`. Öncesinde `RateLimitFilter` ve `ClientContext` `X-Forwarded-For`'u ayrı ayrı ayrıştırıyordu; oysa `forward-headers-strategy: framework` açık olduğu için Spring'in `ForwardedHeaderFilter`'ı zincirin en dışında başlığı tüketip kaldırıyor — **o kod hiç çalışmıyordu.** Artık üç yer de `getRemoteAddr()` okuyor.
+**Erişim logu istemci IP'sini taşır.** İstemci IP'si tek yerden gelir: `ClientIpResolver`. Doğrudan bağlantı `getRemoteAddr()` değeridir; `Forwarded` veya `X-Forwarded-For` yalnız doğrudan kaynak `app.trusted-proxies` içindeki bir IP/CIDR ise okunur. Güvenilmeyen istemcinin başlığı yok sayılır. Spring'in başlığı güven sınırı bilmeden tüketmemesi için `forward-headers-strategy: none`; zinciri yalnız bu çözücü işler. BFF gelen yönlendirme başlıklarını kopyalamaz, bağlantı IP'siyle tek değer yazar.
 
 **PII maskelenir.** `core/helpers/LogMasks`: e-posta yerel kısmı maskeli (`y***@gmail.com`, alan adı kalır ki başarısız giriş takip edilebilsin), telefonun son dört hanesi, IBAN'ın baş ve sonu, TCKN hiç. Kimlik gerektiğinde kullanıcı **id**'si yazılır.
 
@@ -329,22 +329,23 @@ Gerekçe: (b) elle SQL yazmayı ortadan kaldırmıyor, yalnızca kopyalanacak bi
 
 ## 2j. Hız sınırı
 
-**Dört kova var, yazma uçlarının hepsi kapsanıyor.** İlk sürümde yalnızca altı uç listeliydi; mesaj gönderme, ilan açma, başvuru ve dosya yükleme tümüyle sınırsızdı — yükleme en pahalısı, her istek kod çözme + metadata temizleme + S3 yazma yapıyor.
+**Beş kova var, yazma ve pahalı genel uçların hepsi kapsanıyor.**
 
 | Kova | Kapsam | Varsayılan | Anahtar |
 |---|---|---|---|
-| `AUTH` | giriş, kayıt akışı, şifre sıfırlama, kimlik doğrulama | 10 / 1 dk | yol + IP |
+| `AUTH` | giriş, kayıt akışı, şifre sıfırlama, kimlik doğrulama | 10 / 1 dk | yol + IP + hedef özeti |
 | `UPLOAD` | görsel, özgeçmiş, profil fotoğrafı, logo, rozet görseli | 20 / 1 dk | kova + IP |
 | `MESSAGE` | mesaj gönderme | 30 / 1 dk | kova + IP |
+| `PUBLIC` | ilan listesi/detayı/görselleri ve adres ağ geçidi | 120 / 1 dk | kova + IP |
 | `WRITE` | **diğer tüm** POST/PUT/PATCH/DELETE | 60 / 1 dk | kova + IP |
 
 **`WRITE` bilerek yakalayıcı.** Yeni bir yazma ucu eklendiğinde listeye yazılması gerekmez, kendiliğinden kapsanır — `SecurityConfig`'teki `anyRequest().authenticated()` ile aynı mantık: unutulan uç açıkta kalmaz.
 
-**Yazma kovalarının anahtarında yol yok.** `AUTH` yol bazlı kalıyor (giriş ve kayıt ayrı bütçeler), ama yükleme ve yazmada anahtar yalnızca kova + IP: aksi hâlde her ilan kimliği kendi bütçesini alır ve kaynaklar arasında gezinen bir bot hiç sınıra takılmaz.
+**Yazma kovalarının anahtarında yol yok.** `AUTH` yol bazlı kalır ve gövdedeki e-posta/telefon/token gibi hedefin SHA-256 özeti IP'ye eklenir; aynı BFF IP'sindeki bir hesabın başarısız denemesi diğer hesabı kilitlemez ve ham PII sayaç anahtarına girmez. Yükleme, genel okuma ve yazmada anahtar yalnızca kova + IP'dir.
 
 **Anahtar IP, kullanıcı değil.** `RateLimitFilter` güvenlik zincirinin dışında (`HIGHEST_PRECEDENCE + 20`) çalıştığı için o noktada principal henüz yok. Kullanıcı bazlı sınır istenirse filtrenin `SessionAuthFilter`'dan sonraya, güvenlik zincirinin içine taşınması gerekir.
 
-**Okuma uçları sınırlanmıyor.** Sayfa boyutu zaten 100 ile sınırlı (§2l) ve mobil istemci açılışta seri istek atıyor; yanlış pozitif riski kazancından büyük.
+**Diğer okuma uçları sınırlanmıyor.** Genel ilan korpusu ve adres sağlayıcı ağ geçidi `PUBLIC` kovasındadır; kimlikli profil okumaları sınır dışıdır.
 
 Aşıldığında 429 ve `TOO_MANY_REQUESTS` döner.
 
@@ -398,9 +399,9 @@ Testlerde `rate-limit.enabled=false`; açıkça test eden sınıflar `@TestPrope
 
 ## 2m. İstemci sözleşmesi
 
-**Cihaz kimliği `X-Device-Id` başlığından gelir.** User-Agent'a bağlı eşleme kaldırıldı: Dart/Flutter varsayılan olarak `Dart/3.x (dart:io)` gönderdiği için aynı kullanıcının iki telefonu tek cihaz sayılıyor, Dart sürümü değişince **tüm oturumlar düşüyordu**. İstemci kurulum başına sabit bir id üretip her istekte bu başlıkla gönderir. Başlık yoksa eski User-Agent türetmesine düşülür — web istemcileri bu yüzden bozulmadı. Biçim `[A-Za-z0-9._:-]{8,128}`; uymayan değer yok sayılır.
+**Cihaz kimliği `X-Device-Id` başlığından gelir.** Web BFF `X-Client-Platform: web` gönderdiğinde biçimi `[A-Za-z0-9._:-]{8,128}` olan cihaz kimliği login ve refresh için zorunludur; User-Agent yalnız okunabilir etikettir ve `WEB_BROWSER` eşleşmesine katılmaz. Cookie silinirse yeni tarayıcı cihazı oluşur, eski oturum kullanıcı tarafından oturum yüzeyinden kapatılır. Platform başlığı göndermeyen eski mobil sürümlerde User-Agent geçiş davranışı korunur.
 
-`ClientContext.from(request)` ip, User-Agent ve cihaz kimliğini tek nesnede toplar; auth imzalarında üç ayrı parametre taşınmaz.
+`ClientContext.from(request, clientIpResolver)` güvenilir istemci IP'si, User-Agent, cihaz kimliği ve platformu tek nesnede toplar.
 
 **`GET /users/me` istemcinin yönlendirme kararı için gerekeni döner:** `employer`, `emailVerified`, `phoneVerified`, `identityVerified`, `roles` ve `companies[{companyId, companyName, role, approved}]`. Öncesinde `isEmployer` yalnızca tek seferlik kayıt akışında dönüyordu, giriş sonrası kullanıcının işveren mi çalışan mı olduğu öğrenilemiyordu.
 
@@ -426,7 +427,7 @@ Testlerde `rate-limit.enabled=false`; açıkça test eden sınıflar `@TestPrope
 
 **`ConversationDto` liste için gerekeni taşıyor.** Sohbet listesi son mesaj metnini ve okunmamış sayısını çiziyordu, ikisi de yoktu; istemci satır başına ayrı istek atmak zorunda kalıyordu. `lastMessageBody` `Conversation` üzerine **denormalize edildi** (mesaj gönderilirken yazılıyor), `unreadCount` ise sayfadaki tüm konuşmalar için `countUnreadByConversationIds` ile **tek sorguda** toplanıyor. Yani liste iki sorgu: konuşmalar + sayaçlar.
 
-**İki ayrı ilan DTO'su var.** `JobSummaryDto` liste ve harita için — enlem/boylam taşır. `JobDetailDto` detay sayfası için — açıklama, görevler, yaş aralığı, kıyafet kuralı, tam adres, ilan sahibi ve şirket. `GET /jobs/{id}` özet değil detay döner.
+**İki ayrı ilan DTO'su var.** `JobSummaryDto` liste ve harita için, `JobDetailDto` detay sayfası için. İkisi de `addressPrecision` taşır. Tam adres ve gerçek koordinat yalnız ilan sahibi, etkin ataması (`PENDING_CONFIRMATION`/`CONFIRMED`/`IN_PROGRESS`) bulunan işçi veya `addressPublic=true` olan şirket ilanında döner. Tamamlanan/iptal edilen atamalarda adres yeniden gizlenir ve bireysel ilanlarda `addressPublic` değeri dikkate alınmaz. Diğer çağrılarda sokak, bina, kapı, posta kodu ve yön tarifi temizlenir; koordinat iki ondalığa yuvarlanır. `JobAddressVisibility` bu kararı ve maskelemeyi tek yerde tutar. `GET /jobs/{id}` özet değil detay döner.
 
 **Yenileme ucu süresi dolmuş erişim token'ıyla çalışır.** `/auth/refresh-token` zaten *token süresi dolduğu için* çağrılıyor; iki yerde birden reddediliyordu:
 1. `SessionAuthFilter` `permitAll` uçlarda bile başlığı ayrıştırıp `ExpiredJwtException` fırlatıyordu → filtre artık `shouldNotFilter` ile bu ucu atlıyor. Uç kendi kimlik doğrulamasını yapıyor, filtrenin katacağı bir şey yok.
@@ -859,6 +860,9 @@ Politika sayıları artık deploy istemiyor. `app_settings` tablosu ve `GET/PUT 
 | `assignment.unpaid-expiry.hours-before-start` | ödenmemiş atama iş başlangıcına kaç saat kala düşer | 6 |
 | `app.minimum-version` | bu sürümün altındaki istemci 426 alır; boşsa kapı kapalı | boş |
 | `commission.rate` | işveren ücretine eklenen hizmet bedeli oranı | 0,075 |
+| `app.minimum-version.ios` | iOS eşiği; yoksa tekil eşiğe düşer | boş |
+| `app.minimum-version.android` | Android eşiği; yoksa tekil eşiğe düşer | boş |
+| `app.minimum-version.web` | bağımsız web eşiği; boşsa yalnız web kapısı kapalı | boş |
 
 **Konfigürasyon hâlâ varsayılan.** `SettingsService` önce tabloya bakar, satır yoksa `application.yaml` değerine düşer. Yani tablo boş bir veritabanı da doğru çalışır ve env ile ilk değer verilebilir.
 
@@ -1258,11 +1262,11 @@ KOALA_CHIP_DIR=/tmp/chip KOALA_CSCA_DIR=/opt/koala/csca ./mvnw test -Dtest=RealC
 
 **Eşik `app_settings` içinde, yani deploy'suz değişir.** Eski bir istemciyi aniden engellemek tam da deploy beklemeden yapılmak istenen şey. Ama §2ac'deki ayar yüzeyi sayısal değer zorunlu tutuyordu; `app.minimum-version` için doğrulama sürüm biçimine göre yapılıyor (`AppVersion.isParsable`), diğer anahtarlarda sayısal kuralı aynen duruyor.
 
-**Boş eşik kapıyı tümüyle kapatır** ve varsayılan boş. Yani özellik yazıldı ama kimseyi engellemiyor; engellemek bilinçli bir `PUT /admin/settings` çağrısı gerektiriyor.
+**Eşik platforma göre seçilir.** iOS ve Android kendi eşiği yoksa tekil `app.minimum-version` değerine düşer. Başlıksız eski mobil çağrı da tekil eşiği kullanır. Web kendi eşiğini kullanır ve boş web eşiği yalnız web kapısını kapatır; böylece mobil zorunlu sürümü web'i düşürmez.
 
 **Karşılaştırma sayısal, alfabetik değil.** `1.10.0` `1.9.0`'dan büyüktür — string karşılaştırması bunu ters çevirirdi. `+build7` gibi ekler ve eksik bileşenler (`1.4` = `1.4.0`) tolere ediliyor.
 
-**Üç durumda kapı hiç çalışmaz:** başlık gelmemişse, başlık ayrıştırılamıyorsa, ya da yol muaf listesinde. Muaflar: sağlık uçları, **`/payments/callback`** (iyzico başlık göndermez, engellemek ödemeyi düşürürdü), `/uploads/**`, takip pikseli ve Swagger. Başlıksız isteğin geçmesi bilinçli — web istemcisi ve `curl` ile yapılan operasyon çağrıları kırılmasın.
+**Platform eşiği varken bozuk sürüm kapıyı atlayamaz.** Parse edilemeyen veya eksik web/iOS/Android sürümü 426 alır. Başlıksız eski mobil çağrı geriye uyumluluk için geçer. Muaflar: sağlık uçları, **`/payments/callback`**, `/uploads/**`, takip pikseli ve Swagger; tüm platformlarda geçer.
 
 **Filtre güvenlik zincirinin dışında** (`HIGHEST_PRECEDENCE + 15`), hız sınırından önce: eski istemcinin isteği kimlik doğrulamaya kadar hiç gitmemeli.
 

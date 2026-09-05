@@ -8,12 +8,18 @@ import com.exskylab.koala.core.constants.LegalMessages;
 import com.exskylab.koala.core.dtos.legal.request.ConsentDecisionDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.ClientContext;
+import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.dataAccess.AccountDeletionRequestDao;
 import com.exskylab.koala.dataAccess.AgreementVersionDao;
 import com.exskylab.koala.dataAccess.ConsentRecordDao;
 import com.exskylab.koala.entities.*;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
+import com.exskylab.koala.business.abstracts.DisputeService;
+import com.exskylab.koala.business.abstracts.PaymentService;
+import com.exskylab.koala.core.privacy.AccountAnonymizer;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,21 +36,32 @@ import java.util.stream.Collectors;
 @Slf4j
 public class LegalManager implements LegalService {
 
+    private static final Set<String> DELETION_SORT_FIELDS = Set.of(
+            "id", "subjectId", "status", "requestedAt", "processedAt");
+
     private final AgreementVersionDao agreementVersionDao;
     private final ConsentRecordDao consentRecordDao;
     private final AccountDeletionRequestDao accountDeletionRequestDao;
     private final JobAssignmentService jobAssignmentService;
     private final StaffAuditService staffAuditService;
+    private final DisputeService disputeService;
+    private final PaymentService paymentService;
+    private final AccountAnonymizer accountAnonymizer;
+    private final PageableSanitizer pageableSanitizer = new PageableSanitizer();
 
     public LegalManager(AgreementVersionDao agreementVersionDao, ConsentRecordDao consentRecordDao,
                         AccountDeletionRequestDao accountDeletionRequestDao,
-                        JobAssignmentService jobAssignmentService,
+                        JobAssignmentService jobAssignmentService, DisputeService disputeService,
+                        PaymentService paymentService, AccountAnonymizer accountAnonymizer,
                         StaffAuditService staffAuditService) {
         this.agreementVersionDao = agreementVersionDao;
         this.consentRecordDao = consentRecordDao;
         this.accountDeletionRequestDao = accountDeletionRequestDao;
         this.jobAssignmentService = jobAssignmentService;
         this.staffAuditService = staffAuditService;
+        this.disputeService = disputeService;
+        this.paymentService = paymentService;
+        this.accountAnonymizer = accountAnonymizer;
     }
 
     @Override
@@ -128,13 +145,13 @@ public class LegalManager implements LegalService {
                     throw new ConflictException(LegalMessages.DELETION_ALREADY_REQUESTED);
                 });
 
-        assertNoOpenObligations(user.getId());
-
         AccountDeletionRequest request = new AccountDeletionRequest();
         request.setUser(user);
+        request.setSubjectId(user.getId());
         request.setStatus(AccountDeletionStatus.REQUESTED);
         request.setReason(reason);
         request.setRequestedAt(Instant.now());
+        request.setBlockedReason(findBlockedReason(user.getId()));
 
         AccountDeletionRequest saved = accountDeletionRequestDao.save(request);
         int erased = staffAuditService.eraseDetailsForResource(user.getId().toString());
@@ -143,18 +160,94 @@ public class LegalManager implements LegalService {
         return saved;
     }
 
-    private void assertNoOpenObligations(UUID userId) {
+    @Override
+    @Transactional(readOnly = true)
+    public AccountDeletionRequest getCurrentDeletionRequest(UUID userId) {
+        return accountDeletionRequestDao.findFirstByUserIdOrderByRequestedAtDesc(userId)
+                .orElseThrow(() -> new ResourceNotFoundException(LegalMessages.DELETION_NOT_FOUND));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<AccountDeletionRequest> getDeletionRequests(AccountDeletionStatus status, Pageable pageable) {
+        pageableSanitizer.rejectUnknownSort(pageable, DELETION_SORT_FIELDS);
+        return status == null
+                ? accountDeletionRequestDao.findAll(pageable)
+                : accountDeletionRequestDao.findAllByStatus(status, pageable);
+    }
+
+    @Override
+    @Transactional
+    public AccountDeletionRequest rejectDeletionRequest(UUID requestId, String reason) {
+        AccountDeletionRequest request = lockedRequest(requestId);
+        if (request.getStatus() != AccountDeletionStatus.REQUESTED) {
+            throw new ConflictException(LegalMessages.DELETION_ALREADY_PROCESSED);
+        }
+        request.setStatus(AccountDeletionStatus.REJECTED);
+        request.setBlockedReason(reason);
+        request.setProcessedAt(Instant.now());
+        return accountDeletionRequestDao.save(request);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UUID> findDueDeletionRequestIds(Instant dueBefore, Pageable pageable) {
+        pageableSanitizer.rejectUnknownSort(pageable, DELETION_SORT_FIELDS);
+        return accountDeletionRequestDao.findDueIds(AccountDeletionStatus.REQUESTED, dueBefore, pageable);
+    }
+
+    @Override
+    @Transactional
+    public boolean processDeletionRequest(UUID requestId) {
+        AccountDeletionRequest request = lockedRequest(requestId);
+        if (request.getStatus() != AccountDeletionStatus.REQUESTED) {
+            return false;
+        }
+
+        String blockedReason = findBlockedReason(request.getUser().getId());
+        request.setBlockedReason(blockedReason);
+        if (blockedReason != null) {
+            accountDeletionRequestDao.save(request);
+            return false;
+        }
+
+        accountAnonymizer.anonymize(request.getUser().getId(), request.getId());
+        request.setStatus(AccountDeletionStatus.ANONYMIZED);
+        request.setUser(null);
+        request.setReason(null);
+        request.setBlockedReason(null);
+        request.setProcessedAt(Instant.now());
+        accountDeletionRequestDao.save(request);
+        return true;
+    }
+
+    private AccountDeletionRequest lockedRequest(UUID requestId) {
+        return accountDeletionRequestDao.findByIdForUpdate(requestId)
+                .orElseThrow(() -> new ResourceNotFoundException(LegalMessages.DELETION_NOT_FOUND));
+    }
+
+    private String findBlockedReason(UUID userId) {
+        if (paymentService.hasPendingPaymentForUser(userId)) {
+            return LegalMessages.DELETION_BLOCKED_BY_PENDING_PAYMENT;
+        }
+
         boolean hasEscrowedMoney = jobAssignmentService.hasMoneyInEscrowFor(userId);
 
         if (hasEscrowedMoney) {
-            throw new ConflictException(LegalMessages.DELETION_BLOCKED_BY_ESCROW);
+            return LegalMessages.DELETION_BLOCKED_BY_ESCROW;
         }
 
         boolean hasActiveWork = jobAssignmentService.hasActiveWorkFor(userId);
 
         if (hasActiveWork) {
-            throw new ConflictException(LegalMessages.DELETION_BLOCKED_BY_ACTIVE_WORK);
+            return LegalMessages.DELETION_BLOCKED_BY_ACTIVE_WORK;
         }
+
+        if (disputeService.hasActiveDisputeForUser(userId)) {
+            return LegalMessages.DELETION_BLOCKED_BY_DISPUTE;
+        }
+
+        return null;
     }
 
     private String truncate(String value) {

@@ -45,6 +45,7 @@ class JobRequestPrimitiveContractTest {
 
         assertNull(dto.getExperienceRequired());
         assertNull(dto.getInsuranceRequired());
+        assertFalse(dto.isAddressPublic(), "addressPublic omitted from legacy clients must default to false");
         assertTrue(violatedFields(dto).containsAll(
                 Set.of("experienceRequired", "insuranceRequired", "minAge", "maxAge")));
     }

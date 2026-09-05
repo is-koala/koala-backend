@@ -40,6 +40,8 @@ import com.exskylab.koala.entities.JobApplication;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import com.exskylab.koala.core.security.UserPrincipal;
 
 import java.util.List;
 
@@ -74,24 +76,27 @@ public class JobsController {
     @GetMapping
     public ResponseEntity<SuccessDataResult<PageDto<JobSummaryDto>>> searchJobs(
             JobSearchCriteriaDto criteria,
-            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable,
+            @AuthenticationPrincipal UserPrincipal viewer) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
-                jobService.search(criteria, pageable), JobMessages.JOBS_LISTED, HttpStatus.OK));
+                jobService.search(criteria, pageable, viewer == null ? null : viewer.id()),
+                JobMessages.JOBS_LISTED, HttpStatus.OK));
     }
 
     @SecurityRequirements
     @Operation(summary = "İlan detayı",
-            description = "Özet değil detay döner: açıklama, görevler, yaş aralığı, kıyafet kuralı, tam adres, ilan sahibi, şirket ve görsel galerisi.")
+            description = "Özet değil detay döner. Tam adres yalnız ilan sahibi, etkin ataması bulunan işçi veya adresi herkese açılmış şirket ilanı için verilir; tamamlanan/iptal edilen atamalarda adres yeniden gizlenir. Diğer çağrılarda il/ilçe/mahalle ve yaklaşık koordinat döner. addressPrecision alanı kesinliği belirtir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "İlan döndürüldü"),
             @ApiResponse(responseCode = "404", description = "İlan bulunamadı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @GetMapping("/{jobId}")
-    public ResponseEntity<SuccessDataResult<JobDetailDto>> getJob(@PathVariable UUID jobId) {
+    public ResponseEntity<SuccessDataResult<JobDetailDto>> getJob(@PathVariable UUID jobId,
+                                                                  @AuthenticationPrincipal UserPrincipal viewer) {
         return ResponseEntity.ok(new SuccessDataResult<>(
-                jobService.getJobDetail(jobId),
+                jobService.getJobDetail(jobId, viewer == null ? null : viewer.id()),
                 JobMessages.JOB_RETRIEVED, HttpStatus.OK));
     }
 

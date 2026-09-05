@@ -23,6 +23,7 @@ import com.exskylab.koala.business.abstracts.DeviceService;
 import com.exskylab.koala.core.constants.DeviceMessages;
 import com.exskylab.koala.core.dtos.device.request.SavePushTokenDto;
 import com.exskylab.koala.core.helpers.ClientContext;
+import com.exskylab.koala.core.helpers.ClientIpResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import com.exskylab.koala.core.constants.CompanyMessages;
@@ -58,11 +59,13 @@ public class UserProfileController {
     private final JobMapper jobMapper;
     private final EducationMapper educationMapper;
     private final MediaUrlResolver mediaUrlResolver;
+    private final ClientIpResolver clientIpResolver;
 
     public UserProfileController(CompanyService companyService, DeviceService deviceService,
                                  SavedJobService savedJobService, CvService cvService,
                                  EducationService educationService, JobMapper jobMapper,
-                                 EducationMapper educationMapper, MediaUrlResolver mediaUrlResolver) {
+                                 EducationMapper educationMapper, MediaUrlResolver mediaUrlResolver,
+                                 ClientIpResolver clientIpResolver) {
         this.companyService = companyService;
         this.deviceService = deviceService;
         this.savedJobService = savedJobService;
@@ -71,6 +74,7 @@ public class UserProfileController {
         this.jobMapper = jobMapper;
         this.educationMapper = educationMapper;
         this.mediaUrlResolver = mediaUrlResolver;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @Operation(summary = "Push bildirim token'ını kaydet",
@@ -86,7 +90,7 @@ public class UserProfileController {
     public ResponseEntity<Result> savePushToken(@RequestBody @Valid SavePushTokenDto request,
                                                 HttpServletRequest httpRequest) {
 
-        ClientContext client = ClientContext.from(httpRequest);
+        ClientContext client = ClientContext.from(httpRequest, clientIpResolver);
         deviceService.savePushToken(client.userAgent(), client.deviceId(), request.getPushToken());
 
         return ResponseEntity.ok(new SuccessResult(DeviceMessages.PUSH_TOKEN_SAVED, HttpStatus.OK));
@@ -99,7 +103,7 @@ public class UserProfileController {
     })
     @DeleteMapping("/devices/push-token")
     public ResponseEntity<Result> clearPushToken(HttpServletRequest httpRequest) {
-        ClientContext client = ClientContext.from(httpRequest);
+        ClientContext client = ClientContext.from(httpRequest, clientIpResolver);
         deviceService.clearPushToken(client.userAgent(), client.deviceId());
 
         return ResponseEntity.ok(new SuccessResult(DeviceMessages.PUSH_TOKEN_CLEARED, HttpStatus.OK));

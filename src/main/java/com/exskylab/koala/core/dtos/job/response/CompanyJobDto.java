@@ -49,6 +49,8 @@ public class CompanyJobDto {
 
     private AddressDto address;
 
+    private boolean addressPublic;
+
     private JobType type;
 
     private LocalDateTime startDateTime;

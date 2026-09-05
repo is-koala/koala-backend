@@ -6,6 +6,7 @@ import com.exskylab.koala.business.abstracts.SessionService;
 import com.exskylab.koala.core.configs.RequestLoggingFilter;
 import com.exskylab.koala.core.constants.AuthMessages;
 import com.exskylab.koala.core.helpers.DeviceIdentity;
+import com.exskylab.koala.core.helpers.ClientPlatform;
 import com.exskylab.koala.core.exceptions.UnauthorizedException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.entities.Device;
@@ -88,7 +89,8 @@ public class SessionAuthFilter extends OncePerRequestFilter {
             }
 
             Device currentDevice = deviceService.findDevice(
-                    user, request.getHeader("User-Agent"), DeviceIdentity.fromRequest(request)).orElse(null);
+                    user, request.getHeader("User-Agent"), DeviceIdentity.fromRequest(request),
+                    ClientPlatform.from(request.getHeader(ClientPlatform.HEADER))).orElse(null);
 
             if (currentDevice == null || !session.getDevice().getId().equals(currentDevice.getId())){
                 session.setActive(false);

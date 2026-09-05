@@ -1,0 +1,38 @@
+groups:
+  - name: koala-backend
+    rules:
+      - alert: KoalaHighHttp5xxRate
+        expr: sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count[5m])), 0.001) > 0.05
+        for: 10m
+        labels: { severity: critical, owner: backend }
+        annotations: { summary: "Backend HTTP 5xx oranı yüzde 5'i aştı" }
+      - alert: KoalaPaymentFailureSpike
+        expr: sum(rate(koala_backend_errors_total{code=~"PAYMENT_.*"}[10m])) > 0.05
+        for: 5m
+        labels: { severity: critical, owner: payments }
+        annotations: { summary: "Ödeme başlatma veya callback hataları yükseldi" }
+      - alert: KoalaRabbitConsumerLag
+        expr: rabbitmq_queue_messages_ready{queue=~"koala.*"} > 100
+        for: 10m
+        labels: { severity: warning, owner: backend }
+        annotations: { summary: "RabbitMQ tüketici kuyruğu büyüyor" }
+      - alert: KoalaRabbitDeadLetterQueue
+        expr: rabbitmq_queue_messages_ready{queue=~".*(dlq|dead-letter).*"} > 0
+        for: 5m
+        labels: { severity: critical, owner: backend }
+        annotations: { summary: "Dead-letter kuyruğunda mesaj var" }
+      - alert: KoalaScheduledJobFailure
+        expr: increase(tasks_scheduled_execution_seconds_count{outcome="ERROR"}[15m]) > 0
+        for: 1m
+        labels: { severity: critical, owner: backend }
+        annotations: { summary: "Zamanlanmış görev başarısız oldu" }
+      - alert: KoalaBackupStale
+        expr: time() - koala_backup_last_success_timestamp_seconds > 93600
+        for: 15m
+        labels: { severity: critical, owner: platform }
+        annotations: { summary: "Başarılı veritabanı yedeği 26 saati geçti" }
+      - alert: KoalaCertificateExpiring
+        expr: probe_ssl_earliest_cert_expiry - time() < 1209600
+        for: 1h
+        labels: { severity: warning, owner: platform }
+        annotations: { summary: "TLS sertifikasının bitmesine 14 günden az kaldı" }

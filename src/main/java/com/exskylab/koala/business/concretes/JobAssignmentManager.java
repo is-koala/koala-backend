@@ -494,14 +494,14 @@ public class JobAssignmentManager implements JobAssignmentService {
 
     @Override
     @Transactional(readOnly = true)
-    public boolean hasMoneyInEscrowFor(UUID workerId) {
-        return jobAssignmentDao.existsByWorkerIdAndPaymentStatus(workerId, PaymentStatus.HELD_IN_ESCROW);
+    public boolean hasMoneyInEscrowFor(UUID userId) {
+        return jobAssignmentDao.existsMoneyForUser(userId, PaymentStatus.HELD_IN_ESCROW);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public boolean hasActiveWorkFor(UUID workerId) {
-        return jobAssignmentDao.existsByWorkerIdAndStatusIn(workerId,
+    public boolean hasActiveWorkFor(UUID userId) {
+        return jobAssignmentDao.existsActiveForUser(userId,
                 List.of(AssignmentStatus.CONFIRMED, AssignmentStatus.IN_PROGRESS));
     }
 }

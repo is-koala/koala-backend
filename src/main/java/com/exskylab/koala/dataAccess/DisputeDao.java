@@ -7,6 +7,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -18,6 +20,14 @@ public interface DisputeDao extends JpaRepository<Dispute, UUID> {
     Optional<Dispute> findByJobAssignmentIdAndStatusIn(UUID jobAssignmentId, List<DisputeStatus> statuses);
 
     boolean existsByJobAssignmentIdAndStatusIn(UUID jobAssignmentId, List<DisputeStatus> statuses);
+
+    @Query("""
+            select (count(d) > 0) from Dispute d
+            where d.status in :statuses
+              and (d.jobAssignment.worker.id = :userId or d.jobAssignment.job.creator.id = :userId)
+            """)
+    boolean existsActiveForUser(@Param("userId") UUID userId,
+                                @Param("statuses") List<DisputeStatus> statuses);
 
     @EntityGraph(attributePaths = {"openedBy", "openedBy.profilePicture", "jobAssignment"})
     Page<Dispute> findAllByStatusIn(List<DisputeStatus> statuses, Pageable pageable);

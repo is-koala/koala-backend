@@ -1,0 +1,32 @@
+{
+  "Rules": [
+    {
+      "ID": "daily-seven-days",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "daily/" },
+      "Expiration": { "Days": 7 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 7 }
+    },
+    {
+      "ID": "weekly-four-weeks",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "weekly/" },
+      "Expiration": { "Days": 28 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 28 }
+    },
+    {
+      "ID": "monthly-six-months",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "monthly/" },
+      "Expiration": { "Days": 183 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 183 }
+    },
+    {
+      "ID": "wal-seven-days",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "wal/" },
+      "Expiration": { "Days": 7 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 7 }
+    }
+  ]
+}

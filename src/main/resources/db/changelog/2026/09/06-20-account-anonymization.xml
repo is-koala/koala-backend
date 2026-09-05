@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-06-20-account-anonymization-audit" author="koala">
+        <addColumn tableName="account_deletion_requests">
+            <column name="subject_id" type="UUID"/>
+        </addColumn>
+        <sql>UPDATE account_deletion_requests SET subject_id = user_id WHERE subject_id IS NULL</sql>
+        <addNotNullConstraint tableName="account_deletion_requests" columnName="subject_id" columnDataType="UUID"/>
+        <dropNotNullConstraint tableName="account_deletion_requests" columnName="user_id" columnDataType="UUID"/>
+        <createTable tableName="account_anonymization_audit">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="request_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="step" type="VARCHAR(48)"><constraints nullable="false"/></column>
+            <column name="occurred_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="account_anonymization_audit" baseColumnNames="request_id"
+                                 constraintName="fk_account_anonymization_audit_request"
+                                 referencedTableName="account_deletion_requests" referencedColumnNames="id"/>
+        <addUniqueConstraint tableName="account_anonymization_audit" columnNames="request_id, step"
+                             constraintName="uk_account_anonymization_audit_step"/>
+    </changeSet>
+
+</databaseChangeLog>

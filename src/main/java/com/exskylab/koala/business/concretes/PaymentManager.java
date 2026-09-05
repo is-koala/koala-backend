@@ -32,6 +32,8 @@ public class PaymentManager implements PaymentService {
 
     private static final String CURRENCY = "TRY";
     private static final Integer VERIFIED_BY_THREE_D_SECURE = 1;
+    private static final List<PaymentAttemptStatus> PENDING_STATUSES =
+            List.of(PaymentAttemptStatus.INITIATED, PaymentAttemptStatus.IN_REVIEW);
 
     private final PaymentDao paymentDao;
     private final IyzicoPaymentService iyzicoPaymentService;
@@ -209,5 +211,11 @@ public class PaymentManager implements PaymentService {
                 .filter(payment -> payment.getStatus() == PaymentAttemptStatus.SUCCEEDED)
                 .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException(PayoutMessages.NO_SETTLED_PAYMENT));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasPendingPaymentForUser(UUID userId) {
+        return paymentDao.existsPendingForUser(userId, PENDING_STATUSES);
     }
 }

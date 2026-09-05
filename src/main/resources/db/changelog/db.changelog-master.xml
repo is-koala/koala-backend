@@ -57,7 +57,9 @@
     <include file="db/changelog/2026/09/06-01-drop-qa-marketplace-seed-history.xml"/>
     <include file="db/changelog/2026/09/06-02-drop-job-category-seed.xml"/>
     <include file="db/changelog/2026/09/06-03-app-settings-audit.xml"/>
+    <include file="db/changelog/2026/09/06-03-job-address-visibility.xml"/>
     <include file="db/changelog/2026/09/06-11-notification-preferences.xml"/>
+    <include file="db/changelog/2026/09/06-20-account-anonymization.xml"/>
     <include file="db/changelog/2026/09/06-20-staff-authorization.xml"/>
     <include file="db/changelog/2026/09/06-34-authorities-key-and-grant-provenance.xml"/>
     <include file="db/changelog/2026/09/06-40-admin-audit-log.xml"/>

@@ -172,7 +172,7 @@ public class AuthManager implements AuthService {
         pendingRegistrationService.deleteById(pendingRegistrationId);
 
         Device device = deviceService.findOrCreateDevice(
-                savedUser, client.ipAddress(), client.userAgent(), client.deviceId());
+                savedUser, client.ipAddress(), client.userAgent(), client.deviceId(), client.platform());
 
         log.info("Device created or found for user ID: {}", savedUser.getId());
 
@@ -199,6 +199,7 @@ public class AuthManager implements AuthService {
 
     @Override
     public TokenResponseDto login(AuthLoginDto authLoginDto, ClientContext client) {
+        client.requireWebDeviceId();
         log.info("Login attempt for {}", LogMasks.email(authLoginDto.getEmail()));
 
         var user = userService.getByEmail(authLoginDto.getEmail());
@@ -218,7 +219,7 @@ public class AuthManager implements AuthService {
         }
 
         Device device = deviceService.findOrCreateDevice(
-                user, client.ipAddress(), client.userAgent(), client.deviceId());
+                user, client.ipAddress(), client.userAgent(), client.deviceId(), client.platform());
 
         log.info("Device found or created for user ID: {}", user.getId());
 
@@ -249,6 +250,7 @@ public class AuthManager implements AuthService {
 
     @Override
     public TokenResponseDto refreshToken(RefreshTokenDto refreshTokenDto, UUID sessionId, ClientContext client) {
+        client.requireWebDeviceId();
         log.info("Refreshing token for session ID: {}", sessionId);
         var session = sessionService.findActiveSessionById(sessionId);
 
@@ -267,7 +269,7 @@ public class AuthManager implements AuthService {
         }
 
         Device currentDevice = deviceService.findDevice(
-                session.getDevice().getUser(), client.userAgent(), client.deviceId()).orElse(null);
+                session.getDevice().getUser(), client.userAgent(), client.deviceId(), client.platform()).orElse(null);
 
         if (currentDevice == null || !session.getDevice().getId().equals(currentDevice.getId())){
             session.setActive(false);
