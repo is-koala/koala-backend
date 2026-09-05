@@ -56,4 +56,27 @@ public class JobApplicationsController {
         );
 
     }
+
+    @Operation(summary = "Başvuruyu geri çek",
+            description = "Yalnızca başvurunun sahibi geri çekebilir. Yalnızca APPLIED durumundan geçilebilir; kabul edilmiş başvurunun kendi iptal akışı vardır. Yetkisiz kullanıcı 404 alır, başvurunun varlığı sızmaz. Kayıt silinmez, durumu WITHDRAWN olur ve işverenin listesinde görünmeye devam eder.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Başvuru geri çekildi"),
+            @ApiResponse(responseCode = "404", description = "Başvuru bulunamadı ya da yetki yok",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "Başvuru APPLIED durumunda değil",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @PostMapping("/{applicationId}/withdraw")
+    public ResponseEntity<SuccessDataResult<JobApplicationDetailDto>> withdrawApplication(@PathVariable UUID applicationId) {
+
+        JobApplicationDetailDto dto = jobApplicationService.withdrawApplication(applicationId);
+
+        return ResponseEntity.status(HttpStatus.OK).body(new SuccessDataResult<JobApplicationDetailDto>(
+                dto,
+                JobApplicationMessages.JOB_APPLICATION_WITHDRAWN_SUCCESS,
+                HttpStatus.OK
+                )
+        );
+
+    }
 }

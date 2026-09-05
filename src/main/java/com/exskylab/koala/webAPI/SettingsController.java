@@ -47,10 +47,12 @@ public class SettingsController {
     }
 
     @Operation(summary = "Ayarı güncelle",
-            description = "Yalnızca tanımlı anahtarlar yazılabilir; serbest anahtar deposu değildir. Değer sayısal olmak zorundadır.")
+            description = "Yalnızca tanımlı anahtarlar yazılabilir; serbest anahtar deposu değildir. "
+                    + "Değer sayısal olmak zorundadır; oran anahtarları 0 ile 1 arasında olmalıdır.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Ayar güncellendi"),
-            @ApiResponse(responseCode = "400", description = "Tanımsız anahtar ya da sayısal olmayan değer",
+            @ApiResponse(responseCode = "400",
+                    description = "Tanımsız anahtar, sayısal olmayan değer ya da aralık dışı oran",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PutMapping("/{key}")

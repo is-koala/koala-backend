@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.support.FallbackSettings;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
@@ -158,7 +159,7 @@ class PaymentCallbackTest {
         assignment.setId(UUID.randomUUID());
         assignment.setPricingVersion("2026-09-v1");
         assignment.setCurrency("TRY");
-        CommissionCalculator calculator = new CommissionCalculator(new CommissionProperties());
+        CommissionCalculator calculator = FallbackSettings.commissionCalculator();
         var breakdown = calculator.calculate(new BigDecimal("1000.00"));
 
         Payment first = paymentManager.startAttempt(assignment, breakdown);
