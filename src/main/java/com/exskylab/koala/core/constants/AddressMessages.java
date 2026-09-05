@@ -41,4 +41,6 @@ public class AddressMessages {
     public static final String SEARCH_SESSION_CREATED = "{address.searchSession.created}";
     public static final String SEARCH_SUGGESTIONS_LISTED = "{address.searchSuggestions.listed}";
     public static final String SEARCH_CANDIDATE_RESOLVED = "{address.searchCandidate.resolved}";
+    public static final String REVERSE_NO_RESULT = "{address.reverse.noResult}";
+    public static final String REVERSE_RESOLVED = "{address.reverse.resolved}";
 }

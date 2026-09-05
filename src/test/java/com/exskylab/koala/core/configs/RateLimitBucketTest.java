@@ -64,6 +64,15 @@ class RateLimitBucketTest {
     }
 
     @Test
+    void reverseGeocodingSharesTheCostControlBucket() throws Exception {
+        properties.getAddressSearch().setMaxAttempts(2);
+
+        assertEquals(1, passing("GET", "/locations/address-search-sessions/"
+                + UUID.randomUUID() + "/suggestions", "10.0.0.10", 1));
+        assertEquals(1, passing("POST", "/locations/address-candidates/reverse", "10.0.0.10", 3));
+    }
+
+    @Test
     void uploadsShareOneAllowanceAcrossDifferentResources() throws Exception {
         properties.getUpload().setMaxAttempts(3);
 

@@ -167,6 +167,7 @@ address-search:
   enabled: ${ADDRESS_SEARCH_ENABLED:false}
   api-key: ${GOOGLE_PLACES_API_KEY:}
   places-base-url: ${GOOGLE_PLACES_BASE_URL:https://places.googleapis.com}
+  geocoding-base-url: ${GOOGLE_GEOCODING_BASE_URL:https://maps.googleapis.com}
   session-ttl: ${ADDRESS_SEARCH_SESSION_TTL:5m}
   candidate-ttl: ${ADDRESS_CANDIDATE_TTL:10m}
 

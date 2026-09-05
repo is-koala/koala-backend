@@ -9,11 +9,13 @@ import com.exskylab.koala.core.dtos.address.request.ConfirmedPositionSource;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.properties.AddressSearchProperties;
 import com.exskylab.koala.core.utilities.location.AddressSearchProvider;
+import com.exskylab.koala.core.utilities.location.AddressReverseGeocoder;
 import com.exskylab.koala.core.utilities.location.ProviderAddressCandidate;
 import com.exskylab.koala.core.utilities.location.ProviderAddressSuggestion;
 import com.exskylab.koala.entities.City;
 import com.exskylab.koala.entities.Country;
 import com.exskylab.koala.entities.District;
+import com.exskylab.koala.entities.AddressPositionSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,6 +29,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -48,6 +51,9 @@ class AddressSearchManagerTest {
     private AddressSearchProvider provider;
 
     @Mock
+    private AddressReverseGeocoder reverseGeocoder;
+
+    @Mock
     private SecurityService securityService;
 
     @Mock
@@ -63,7 +69,7 @@ class AddressSearchManagerTest {
         AddressSearchProperties properties = new AddressSearchProperties();
         properties.setSessionTtl(Duration.ofMinutes(5));
         properties.setCandidateTtl(Duration.ofMinutes(10));
-        manager = new AddressSearchManager(provider, securityService, locationService, properties,
+        manager = new AddressSearchManager(provider, reverseGeocoder, securityService, locationService, properties,
                 Clock.fixed(NOW, ZoneOffset.UTC), new SecureRandom());
         country = new Country();
         country.setId(UUID.randomUUID());
@@ -151,6 +157,25 @@ class AddressSearchManagerTest {
         request.getPosition().setSource(ConfirmedPositionSource.USER_CONFIRMED_PIN);
 
         assertDoesNotThrow(() -> manager.verifyAndConsume(USER_ID, request));
+    }
+
+    @Test
+    void reverseGeocodingReturnsAUserBoundProofForTheSelectedPin() {
+        authenticatedAs(USER_ID);
+        when(reverseGeocoder.reverse(new BigDecimal("40.982512"), new BigDecimal("29.025411")))
+                .thenReturn(Optional.of(new ProviderAddressCandidate(
+                        "TR", "İstanbul", "Kadıköy", "Caferağa Mahallesi", "Moda Caddesi",
+                        null, "12", "34710", new BigDecimal("40.982500"), new BigDecimal("29.025400"))));
+        referencesAreAvailable();
+
+        var candidate = manager.reverse(new com.exskylab.koala.core.dtos.address.request.ReverseGeocodeRequestDto(
+                new BigDecimal("40.982512"), new BigDecimal("29.025411")));
+
+        assertEquals(AddressPositionSource.REVERSE_GEOCODE_CONFIRMED, candidate.position().getSource());
+        assertEquals(new BigDecimal("40.982512"), candidate.position().getLatitude());
+        AddressWriteDto write = write(candidate.candidateToken());
+        write.getPosition().setSource(ConfirmedPositionSource.REVERSE_GEOCODE_CONFIRMED);
+        assertDoesNotThrow(() -> manager.verifyAndConsume(USER_ID, write));
     }
 
     private void referencesAreAvailable() {

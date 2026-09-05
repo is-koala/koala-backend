@@ -11,6 +11,7 @@ public class AddressSearchProperties {
     private boolean enabled;
     private String apiKey = "";
     private String placesBaseUrl = "https://places.googleapis.com";
+    private String geocodingBaseUrl = "https://maps.googleapis.com";
     private Duration sessionTtl = Duration.ofMinutes(5);
     private Duration candidateTtl = Duration.ofMinutes(10);
 
@@ -36,6 +37,14 @@ public class AddressSearchProperties {
 
     public void setPlacesBaseUrl(String placesBaseUrl) {
         this.placesBaseUrl = placesBaseUrl;
+    }
+
+    public String getGeocodingBaseUrl() {
+        return geocodingBaseUrl;
+    }
+
+    public void setGeocodingBaseUrl(String geocodingBaseUrl) {
+        this.geocodingBaseUrl = geocodingBaseUrl;
     }
 
     public Duration getSessionTtl() {

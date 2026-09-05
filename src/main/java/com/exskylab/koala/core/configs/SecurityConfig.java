@@ -127,6 +127,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/reference/**").permitAll()
 
                         .requestMatchers("/locations/address-search-sessions/**").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/locations/address-candidates/reverse").hasAnyRole("USER", "ADMIN")
 
                         //job endpoints
                         .requestMatchers(HttpMethod.GET, "/jobs").permitAll()

@@ -76,6 +76,7 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.paths['/locations/address-search-sessions'].post").exists())
                 .andExpect(jsonPath("$.paths['/locations/address-search-sessions/{sessionId}/suggestions'].get").exists())
                 .andExpect(jsonPath("$.paths['/locations/address-search-sessions/{sessionId}/candidates/{candidateId}/resolve'].post").exists())
+                .andExpect(jsonPath("$.paths['/locations/address-candidates/reverse'].post").exists())
                 .andExpect(jsonPath("$.components.schemas.AddressCandidateDto.properties.candidateToken").exists())
                 .andExpect(jsonPath("$.components.schemas.AddressSuggestionDto.properties.placeId").doesNotExist());
     }

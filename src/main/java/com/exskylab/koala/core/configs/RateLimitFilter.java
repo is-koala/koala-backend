@@ -55,6 +55,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private static final PathPattern ADDRESS_SEARCH_PATH =
             PARSER.parse("/locations/address-search-sessions/**");
+    private static final PathPattern ADDRESS_REVERSE_PATH =
+            PARSER.parse("/locations/address-candidates/reverse");
 
     private static final Set<String> WRITE_METHODS = Set.of("POST", "PUT", "PATCH", "DELETE");
 
@@ -101,7 +103,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
         PathContainer container = PathContainer.parsePath(path);
 
-        if (ADDRESS_SEARCH_PATH.matches(container)) {
+        if (ADDRESS_SEARCH_PATH.matches(container) || ADDRESS_REVERSE_PATH.matches(container)) {
             return Bucket.ADDRESS_SEARCH;
         }
 

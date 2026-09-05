@@ -7,6 +7,7 @@ import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.AddressMessages;
 import com.exskylab.koala.core.dtos.address.request.AddressWriteDto;
 import com.exskylab.koala.core.dtos.address.request.ConfirmedPositionSource;
+import com.exskylab.koala.core.dtos.address.request.ReverseGeocodeRequestDto;
 import com.exskylab.koala.core.dtos.address.response.AddressComponentsDto;
 import com.exskylab.koala.core.dtos.address.response.AddressPositionDto;
 import com.exskylab.koala.core.dtos.address.response.AddressCandidateDto;
@@ -15,6 +16,7 @@ import com.exskylab.koala.core.dtos.address.response.AddressSuggestionDto;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.properties.AddressSearchProperties;
 import com.exskylab.koala.core.utilities.location.AddressSearchProvider;
+import com.exskylab.koala.core.utilities.location.AddressReverseGeocoder;
 import com.exskylab.koala.core.utilities.location.ProviderAddressCandidate;
 import com.exskylab.koala.core.utilities.location.IstanbulServiceArea;
 import com.exskylab.koala.entities.AddressPositionSource;
@@ -43,6 +45,7 @@ public class AddressSearchManager implements AddressSearchService, AddressCandid
     private static final int MAXIMUM_SUGGESTIONS = 5;
 
     private final AddressSearchProvider provider;
+    private final AddressReverseGeocoder reverseGeocoder;
     private final SecurityService securityService;
     private final LocationService locationService;
     private final AddressSearchProperties properties;
@@ -52,15 +55,19 @@ public class AddressSearchManager implements AddressSearchService, AddressCandid
     private final Map<String, CandidateProof> candidateProofs = new ConcurrentHashMap<>();
 
     @Autowired
-    public AddressSearchManager(AddressSearchProvider provider, SecurityService securityService,
+    public AddressSearchManager(AddressSearchProvider provider, AddressReverseGeocoder reverseGeocoder,
+                                SecurityService securityService,
                                 LocationService locationService, AddressSearchProperties properties) {
-        this(provider, securityService, locationService, properties, Clock.systemUTC(), new SecureRandom());
+        this(provider, reverseGeocoder, securityService, locationService, properties,
+                Clock.systemUTC(), new SecureRandom());
     }
 
-    AddressSearchManager(AddressSearchProvider provider, SecurityService securityService,
+    AddressSearchManager(AddressSearchProvider provider, AddressReverseGeocoder reverseGeocoder,
+                         SecurityService securityService,
                          LocationService locationService, AddressSearchProperties properties,
                          Clock clock, SecureRandom secureRandom) {
         this.provider = provider;
+        this.reverseGeocoder = reverseGeocoder;
         this.securityService = securityService;
         this.locationService = locationService;
         this.properties = properties;
@@ -126,18 +133,45 @@ public class AddressSearchManager implements AddressSearchService, AddressCandid
             }
             throw exception;
         }
-        String candidateToken = randomToken();
         BigDecimal latitude = coordinate(providerCandidate.latitude());
         BigDecimal longitude = coordinate(providerCandidate.longitude());
-        candidateProofs.put(candidateToken, new CandidateProof(
-                session.userId, latitude, longitude, ConfirmedPositionSource.AUTOCOMPLETE_CONFIRMED,
-                clock.instant().plus(properties.getCandidateTtl())));
 
         synchronized (session) {
             session.completed = true;
             session.resolving = false;
         }
         sessions.remove(session.id, session);
+
+        return candidate(providerCandidate, references, session.userId,
+                ConfirmedPositionSource.AUTOCOMPLETE_CONFIRMED, latitude, longitude);
+    }
+
+    @Override
+    public AddressCandidateDto reverse(ReverseGeocodeRequestDto request) {
+        purgeExpired();
+        BigDecimal latitude = coordinate(request.getLatitude());
+        BigDecimal longitude = coordinate(request.getLongitude());
+        if (!IstanbulServiceArea.contains(latitude, longitude)) {
+            throw new ValidationException(AddressMessages.SEARCH_OUTSIDE_SERVICE_AREA);
+        }
+        ProviderAddressCandidate providerCandidate = reverseGeocoder.reverse(latitude, longitude)
+                .orElseThrow(() -> new ValidationException(AddressMessages.REVERSE_NO_RESULT));
+        ResolvedReferences references = resolveReferences(providerCandidate);
+        return candidate(providerCandidate, references, securityService.getAuthenticatedUserId(),
+                ConfirmedPositionSource.REVERSE_GEOCODE_CONFIRMED, latitude, longitude);
+    }
+
+    private AddressCandidateDto candidate(ProviderAddressCandidate providerCandidate,
+                                          ResolvedReferences references, UUID userId,
+                                          ConfirmedPositionSource source,
+                                          BigDecimal latitude, BigDecimal longitude) {
+        if (!IstanbulServiceArea.contains(latitude, longitude)) {
+            throw new ValidationException(AddressMessages.SEARCH_OUTSIDE_SERVICE_AREA);
+        }
+        String candidateToken = randomToken();
+        candidateProofs.put(candidateToken, new CandidateProof(
+                userId, latitude, longitude, source,
+                clock.instant().plus(properties.getCandidateTtl())));
 
         AddressComponentsDto components = new AddressComponentsDto(
                 valueOrEmpty(providerCandidate.neighborhood()),
@@ -155,7 +189,7 @@ public class AddressSearchManager implements AddressSearchService, AddressCandid
                 references.city.getId(), references.city.getName(),
                 references.district.getId(), references.district.getName(),
                 components,
-                new AddressPositionDto(latitude, longitude, AddressPositionSource.AUTOCOMPLETE_CONFIRMED),
+                new AddressPositionDto(latitude, longitude, AddressPositionSource.valueOf(source.name())),
                 candidateToken, needsReview, "Google Maps");
     }
 
