@@ -17,6 +17,10 @@
             <column name="is_active" type="BOOLEAN" defaultValueBoolean="true">
                 <constraints nullable="false"/>
             </column>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
             <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
             <column name="updated_at" type="TIMESTAMPTZ"/>
         </createTable>
@@ -32,6 +36,10 @@
                 <constraints nullable="false" unique="true" uniqueConstraintName="uk_staff_roles_code"/>
             </column>
             <column name="name" type="VARCHAR(160)"><constraints nullable="false"/></column>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
             <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
             <column name="updated_at" type="TIMESTAMPTZ"/>
         </createTable>
@@ -42,6 +50,10 @@
             <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
             <column name="staff_role_id" type="UUID"><constraints nullable="false"/></column>
             <column name="permission_code" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
             <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
             <column name="updated_at" type="TIMESTAMPTZ"/>
         </createTable>
@@ -58,6 +70,10 @@
             <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
             <column name="parent_role_id" type="UUID"><constraints nullable="false"/></column>
             <column name="child_role_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
             <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
             <column name="updated_at" type="TIMESTAMPTZ"/>
         </createTable>
