@@ -58,7 +58,7 @@ class IyzicoProtocolTest {
 
     private static String successBody() {
         return """
-                {"status":"success","paymentStatus":"SUCCESS","fraudStatus":1,
+                {"status":"success","paymentStatus":"SUCCESS","fraudStatus":1,"mdStatus":1,
                  "paymentId":"pay-1","conversationId":"conv-1","price":"1075.00",
                  "paidPrice":"1075.00","currency":"TRY","basketId":"basket-1",
                  "itemTransactions":[{"paymentTransactionId":"txn-1","paidPrice":"1075.00"}]}
@@ -147,7 +147,34 @@ class IyzicoProtocolTest {
         assertEquals(0, new BigDecimal("1075.00").compareTo(result.getItemPaidPrice()));
         assertEquals(0, new BigDecimal("1075.00").compareTo(result.getPaidPrice()));
         assertEquals(1, result.getFraudStatus());
+        assertEquals(1, result.getMdStatus());
         assertEquals("TRY", result.getCurrency());
+    }
+
+    @Test
+    void theThreeDSecureVerificationResultIsReadFromTheResponse() {
+        server.expect(requestTo(BASE_URL + IyzicoEndpoints.CHECKOUT_FORM_RETRIEVE))
+                .andRespond(withSuccess("""
+                        {"status":"success","paymentStatus":"SUCCESS","fraudStatus":1,"mdStatus":0,
+                         "paymentId":"pay-1","conversationId":"conv-1","paidPrice":"1075.00","currency":"TRY"}
+                        """, MediaType.APPLICATION_JSON));
+
+        IyzicoPaymentResultResponseDto result = service.retrieveCheckoutFormResult(retrieveRequest());
+
+        assertEquals(0, result.getMdStatus());
+    }
+
+    @Test
+    void anAbsentMdStatusStaysEmptyInsteadOfBecomingZero() {
+        server.expect(requestTo(BASE_URL + IyzicoEndpoints.CHECKOUT_FORM_RETRIEVE))
+                .andRespond(withSuccess("""
+                        {"status":"success","paymentStatus":"SUCCESS","fraudStatus":1,
+                         "paymentId":"pay-1","conversationId":"conv-1","paidPrice":"1075.00","currency":"TRY"}
+                        """, MediaType.APPLICATION_JSON));
+
+        IyzicoPaymentResultResponseDto result = service.retrieveCheckoutFormResult(retrieveRequest());
+
+        assertNull(result.getMdStatus());
     }
 
     @Test
