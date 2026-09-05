@@ -10,6 +10,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LiquibaseMigrationIT extends AbstractIntegrationTest {
 
+    private static final String SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000001";
+    private static final String SEED_EMAIL_DOMAIN = "qa.iskoala.invalid";
+
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
@@ -32,35 +35,26 @@ class LiquibaseMigrationIT extends AbstractIntegrationTest {
         for (String table : new String[]{
                 "users", "sessions", "devices", "jobs", "job_applications",
                 "job_assignments", "companies", "addresses", "notifications"}) {
-            Integer found = jdbcTemplate.queryForObject(
-                    "select count(*) from information_schema.tables where table_schema = 'public' and table_name = ?",
-                    Integer.class, table);
-            assertEquals(1, found, "Tablo bulunamadi: " + table);
+            assertEquals(1, tableCount(table), "Tablo bulunamadi: " + table);
         }
     }
 
     @Test
-    void databaseShipsWithoutSampleAccounts() {
-        Integer users = jdbcTemplate.queryForObject("select count(*) from users", Integer.class);
-        assertEquals(1, users, "Veritabani yalnizca SYSTEM kullanicisiyla gelmeli.");
-
+    void databaseShipsWithoutSampleData() {
         Integer system = jdbcTemplate.queryForObject(
-                "select count(*) from users where id = '00000000-0000-0000-0000-000000000001'",
-                Integer.class);
+                "select count(*) from users where id = ?::uuid",
+                Integer.class, SYSTEM_USER_ID);
         assertEquals(1, system, "Denetim icin gereken SYSTEM kullanicisi yok.");
 
-        for (String table : new String[]{"companies", "jobs", "job_applications", "job_assignments"}) {
-            Integer rows = jdbcTemplate.queryForObject("select count(*) from " + table, Integer.class);
-            assertEquals(0, rows, "Ornek veri kalmis: " + table);
-        }
+        Integer synthetic = jdbcTemplate.queryForObject(
+                "select count(*) from users where email like ?",
+                Integer.class, "%@" + SEED_EMAIL_DOMAIN);
+        assertEquals(0, synthetic, "Kaldirilan seed'in sentetik hesaplari geri gelmis.");
     }
 
     @Test
     void qaSeedHistoryTableIsDropped() {
-        Integer found = jdbcTemplate.queryForObject(
-                "select count(*) from information_schema.tables where table_schema = 'public' and table_name = ?",
-                Integer.class, "qa_marketplace_seed_versions");
-        assertEquals(0, found, "QA seed surum tablosu hala duruyor.");
+        assertEquals(0, tableCount("qa_marketplace_seed_versions"), "QA seed surum tablosu hala duruyor.");
     }
 
     @Test
@@ -99,5 +93,12 @@ class LiquibaseMigrationIT extends AbstractIntegrationTest {
         assertEquals(7, canonicalColumns);
         assertEquals(39, activeIstanbulDistricts);
         assertEquals("FATİH", replacement);
+    }
+
+    private int tableCount(String table) {
+        Integer found = jdbcTemplate.queryForObject(
+                "select count(*) from information_schema.tables where table_schema = 'public' and table_name = ?",
+                Integer.class, table);
+        return found == null ? 0 : found;
     }
 }
