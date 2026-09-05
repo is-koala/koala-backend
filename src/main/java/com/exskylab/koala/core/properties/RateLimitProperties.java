@@ -16,6 +16,7 @@ public class RateLimitProperties {
     private Bucket upload = new Bucket(20, Duration.ofMinutes(1));
     private Bucket message = new Bucket(30, Duration.ofMinutes(1));
     private Bucket write = new Bucket(60, Duration.ofMinutes(1));
+    private Bucket addressSearch = new Bucket(60, Duration.ofMinutes(1));
 
     public static class Bucket {
 
@@ -65,6 +66,14 @@ public class RateLimitProperties {
 
     public Bucket getWrite() {
         return write;
+    }
+
+    public Bucket getAddressSearch() {
+        return addressSearch;
+    }
+
+    public void setAddressSearch(Bucket addressSearch) {
+        this.addressSearch = addressSearch;
     }
 
     public void setWrite(Bucket write) {

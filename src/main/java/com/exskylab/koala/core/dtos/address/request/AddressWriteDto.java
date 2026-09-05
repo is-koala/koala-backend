@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonAnySetter;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -35,6 +36,9 @@ public class AddressWriteDto {
     @Valid
     @NotNull(message = AddressMessages.POSITION_NOT_NULL)
     private AddressPositionRequestDto position;
+
+    @Size(max = 128, message = AddressMessages.CANDIDATE_TOKEN_MAX_LENGTH)
+    private String candidateToken;
 
     @JsonAnySetter
     public void rejectUnknownField(String fieldName, Object ignoredValue) {

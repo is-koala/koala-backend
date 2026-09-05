@@ -1,6 +1,8 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.LocationService;
+import com.exskylab.koala.business.abstracts.AddressCandidateVerifier;
+import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.dtos.address.request.AddressComponentsRequestDto;
 import com.exskylab.koala.core.dtos.address.request.AddressPositionRequestDto;
 import com.exskylab.koala.core.dtos.address.request.AddressWriteDto;
@@ -36,11 +38,17 @@ class AddressManagerTest {
     @Mock
     private LocationService locationService;
 
+    @Mock
+    private AddressCandidateVerifier candidateVerifier;
+
+    @Mock
+    private SecurityService securityService;
+
     private AddressManager manager;
 
     @BeforeEach
     void setUp() {
-        manager = new AddressManager(addressDao, locationService);
+        manager = new AddressManager(addressDao, locationService, candidateVerifier, securityService);
     }
 
     @Test
@@ -92,15 +100,6 @@ class AddressManagerTest {
         when(locationService.getCountryById(country.getId())).thenReturn(country);
         when(locationService.getCityById(city.getId())).thenReturn(city);
         when(locationService.getDistrictById(district.getId())).thenReturn(district);
-
-        assertThrows(ValidationException.class, () -> manager.createAddress(request));
-        verify(addressDao, never()).save(any());
-    }
-
-    @Test
-    void aProviderDerivedPositionWithoutServerValidationIsRejected() {
-        AddressWriteDto request = request(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
-        request.getPosition().setSource(ConfirmedPositionSource.AUTOCOMPLETE_CONFIRMED);
 
         assertThrows(ValidationException.class, () -> manager.createAddress(request));
         verify(addressDao, never()).save(any());

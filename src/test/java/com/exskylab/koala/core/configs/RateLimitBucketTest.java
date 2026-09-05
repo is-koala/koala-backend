@@ -55,6 +55,15 @@ class RateLimitBucketTest {
     }
 
     @Test
+    void addressAutocompleteHasItsOwnAllowanceIncludingReads() throws Exception {
+        properties.getAddressSearch().setMaxAttempts(3);
+        properties.getWrite().setMaxAttempts(50);
+
+        assertEquals(3, passing("GET", "/locations/address-search-sessions/"
+                + UUID.randomUUID() + "/suggestions", "10.0.0.9", 7));
+    }
+
+    @Test
     void uploadsShareOneAllowanceAcrossDifferentResources() throws Exception {
         properties.getUpload().setMaxAttempts(3);
 

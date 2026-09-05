@@ -2,9 +2,10 @@ package com.exskylab.koala.business.concretes;
 
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.AddressService;
+import com.exskylab.koala.business.abstracts.AddressCandidateVerifier;
+import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.AddressMessages;
 import com.exskylab.koala.core.dtos.address.request.AddressWriteDto;
-import com.exskylab.koala.core.dtos.address.request.ConfirmedPositionSource;
 import com.exskylab.koala.dataAccess.AddressDao;
 import com.exskylab.koala.entities.Address;
 import com.exskylab.koala.entities.City;
@@ -21,16 +22,21 @@ public class AddressManager implements AddressService {
 
     private final AddressDao addressDao;
     private final LocationService locationService;
+    private final AddressCandidateVerifier candidateVerifier;
+    private final SecurityService securityService;
 
-    public AddressManager(AddressDao addressDao, LocationService locationService) {
+    public AddressManager(AddressDao addressDao, LocationService locationService,
+                          AddressCandidateVerifier candidateVerifier, SecurityService securityService) {
         this.addressDao = addressDao;
         this.locationService = locationService;
+        this.candidateVerifier = candidateVerifier;
+        this.securityService = securityService;
     }
 
     @Override
     public Address createAddress(AddressWriteDto addressWriteDto) {
         log.debug("Creating address");
-        validatePositionSource(addressWriteDto);
+        candidateVerifier.verifyAndConsume(securityService.getAuthenticatedUserId(), addressWriteDto);
         var references = resolveReferences(addressWriteDto);
         var components = addressWriteDto.getComponents();
         var position = addressWriteDto.getPosition();
@@ -61,12 +67,6 @@ public class AddressManager implements AddressService {
         log.info("Saved address with id: {}", savedAddress.getId());
 
         return savedAddress;
-    }
-
-    private static void validatePositionSource(AddressWriteDto request) {
-        if (request.getPosition().getSource() != ConfirmedPositionSource.USER_CONFIRMED_PIN) {
-            throw new ValidationException(AddressMessages.POSITION_SOURCE_UNVERIFIED);
-        }
     }
 
     private static String normalize(String value) {

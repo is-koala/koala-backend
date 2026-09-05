@@ -53,6 +53,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final PathPattern MESSAGE_PATH =
             PARSER.parse("/conversations/{conversationId}/messages");
 
+    private static final PathPattern ADDRESS_SEARCH_PATH =
+            PARSER.parse("/locations/address-search-sessions/**");
+
     private static final Set<String> WRITE_METHODS = Set.of("POST", "PUT", "PATCH", "DELETE");
 
     private final RateLimiter rateLimiter;
@@ -67,7 +70,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     private enum Bucket {
-        AUTH, UPLOAD, MESSAGE, WRITE, NONE
+        AUTH, UPLOAD, MESSAGE, ADDRESS_SEARCH, WRITE, NONE
     }
 
     @Override
@@ -96,11 +99,15 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return Bucket.AUTH;
         }
 
+        PathContainer container = PathContainer.parsePath(path);
+
+        if (ADDRESS_SEARCH_PATH.matches(container)) {
+            return Bucket.ADDRESS_SEARCH;
+        }
+
         if (!WRITE_METHODS.contains(request.getMethod())) {
             return Bucket.NONE;
         }
-
-        PathContainer container = PathContainer.parsePath(path);
 
         if (MESSAGE_PATH.matches(container)) {
             return Bucket.MESSAGE;
@@ -118,6 +125,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             case AUTH -> properties.getAuth();
             case UPLOAD -> properties.getUpload();
             case MESSAGE -> properties.getMessage();
+            case ADDRESS_SEARCH -> properties.getAddressSearch();
             default -> properties.getWrite();
         };
     }

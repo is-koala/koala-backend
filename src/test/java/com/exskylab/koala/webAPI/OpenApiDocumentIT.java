@@ -63,9 +63,20 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.components.schemas.AddressWriteV2.properties.districtId").exists())
                 .andExpect(jsonPath("$.components.schemas.AddressWriteV2.properties.components").exists())
                 .andExpect(jsonPath("$.components.schemas.AddressWriteV2.properties.position").exists())
+                .andExpect(jsonPath("$.components.schemas.AddressWriteV2.properties.candidateToken").exists())
                 .andExpect(jsonPath("$.components.schemas.AddressWriteV2.properties.countryCode").doesNotExist())
                 .andExpect(jsonPath("$.components.schemas.AddressWriteV2.properties.cityName").doesNotExist())
                 .andExpect(jsonPath("$.components.schemas.AddressWriteV2.properties.districtName").doesNotExist())
                 .andExpect(jsonPath("$.components.schemas.AddressWriteV2.properties.addressLine").doesNotExist());
+    }
+
+    @Test
+    void addressSearchDocumentsTheOpaqueSessionAndCandidateFlow() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath("$.paths['/locations/address-search-sessions'].post").exists())
+                .andExpect(jsonPath("$.paths['/locations/address-search-sessions/{sessionId}/suggestions'].get").exists())
+                .andExpect(jsonPath("$.paths['/locations/address-search-sessions/{sessionId}/candidates/{candidateId}/resolve'].post").exists())
+                .andExpect(jsonPath("$.components.schemas.AddressCandidateDto.properties.candidateToken").exists())
+                .andExpect(jsonPath("$.components.schemas.AddressSuggestionDto.properties.placeId").doesNotExist());
     }
 }

@@ -31,4 +31,14 @@ public class AddressMessages {
     public static final String LONGITUDE_PRECISION = "{address.longitude.precision}";
     public static final String POSITION_SOURCE_NOT_NULL = "{address.positionSource.notNull}";
     public static final String POSITION_SOURCE_UNVERIFIED = "{address.positionSource.unverified}";
+    public static final String CANDIDATE_TOKEN_MAX_LENGTH = "{address.candidateToken.maxLength}";
+    public static final String CANDIDATE_TOKEN_INVALID = "{address.candidateToken.invalid}";
+    public static final String SEARCH_SESSION_INVALID = "{address.searchSession.invalid}";
+    public static final String SEARCH_QUERY_INVALID = "{address.searchQuery.invalid}";
+    public static final String SEARCH_CANDIDATE_INVALID = "{address.searchCandidate.invalid}";
+    public static final String SEARCH_OUTSIDE_SERVICE_AREA = "{address.searchCandidate.outsideServiceArea}";
+    public static final String SEARCH_PROVIDER_UNAVAILABLE = "{address.searchProvider.unavailable}";
+    public static final String SEARCH_SESSION_CREATED = "{address.searchSession.created}";
+    public static final String SEARCH_SUGGESTIONS_LISTED = "{address.searchSuggestions.listed}";
+    public static final String SEARCH_CANDIDATE_RESOLVED = "{address.searchCandidate.resolved}";
 }

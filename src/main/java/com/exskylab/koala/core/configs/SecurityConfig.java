@@ -126,6 +126,8 @@ public class SecurityConfig {
                         //reference data (public)
                         .requestMatchers(HttpMethod.GET, "/reference/**").permitAll()
 
+                        .requestMatchers("/locations/address-search-sessions/**").hasAnyRole("USER", "ADMIN")
+
                         //job endpoints
                         .requestMatchers(HttpMethod.GET, "/jobs").permitAll()
                         .requestMatchers(HttpMethod.GET, "/jobs/{jobId}").permitAll()

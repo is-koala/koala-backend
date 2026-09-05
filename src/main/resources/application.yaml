@@ -149,6 +149,9 @@ rate-limit:
   write:
     max-attempts: ${RATE_LIMIT_WRITE_MAX_ATTEMPTS:60}
     window: ${RATE_LIMIT_WRITE_WINDOW:1m}
+  address-search:
+    max-attempts: ${RATE_LIMIT_ADDRESS_SEARCH_MAX_ATTEMPTS:60}
+    window: ${RATE_LIMIT_ADDRESS_SEARCH_WINDOW:1m}
 
 commission:
   rate: ${COMMISSION_RATE:0.075}
@@ -159,6 +162,13 @@ messaging:
 
 job-search:
   zone-id: ${JOB_SEARCH_ZONE_ID:Europe/Istanbul}
+
+address-search:
+  enabled: ${ADDRESS_SEARCH_ENABLED:false}
+  api-key: ${GOOGLE_PLACES_API_KEY:}
+  places-base-url: ${GOOGLE_PLACES_BASE_URL:https://places.googleapis.com}
+  session-ttl: ${ADDRESS_SEARCH_SESSION_TTL:5m}
+  candidate-ttl: ${ADDRESS_CANDIDATE_TTL:10m}
 
 job-alert:
   enabled: ${JOB_ALERT_ENABLED:true}
