@@ -25,6 +25,8 @@ import com.exskylab.koala.entities.Country;
 import com.exskylab.koala.entities.District;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -37,6 +39,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Service
 public class AddressSearchManager implements AddressSearchService, AddressCandidateVerifier {
@@ -207,14 +210,43 @@ public class AddressSearchManager implements AddressSearchService, AddressCandid
             throw new ValidationException(AddressMessages.CANDIDATE_TOKEN_INVALID);
         }
 
-        CandidateProof proof = candidateProofs.remove(token);
+        purgeExpired();
         BigDecimal latitude = coordinate(request.getPosition().getLatitude());
         BigDecimal longitude = coordinate(request.getPosition().getLongitude());
-        if (proof == null || !proof.userId.equals(userId) || !proof.expiresAt.isAfter(clock.instant())
-                || proof.source != source || proof.latitude.compareTo(latitude) != 0
-                || proof.longitude.compareTo(longitude) != 0) {
+        CandidateProof proof = consumeMatchingProof(token, userId, source, latitude, longitude);
+        if (proof == null) {
             throw new ValidationException(AddressMessages.CANDIDATE_TOKEN_INVALID);
         }
+        restoreProofAfterRollback(token, proof);
+    }
+
+    private CandidateProof consumeMatchingProof(String token, UUID userId, ConfirmedPositionSource source,
+                                                 BigDecimal latitude, BigDecimal longitude) {
+        AtomicReference<CandidateProof> consumed = new AtomicReference<>();
+        candidateProofs.compute(token, (ignored, current) -> {
+            if (current != null && current.userId.equals(userId) && current.source == source
+                    && current.latitude.compareTo(latitude) == 0
+                    && current.longitude.compareTo(longitude) == 0) {
+                consumed.set(current);
+                return null;
+            }
+            return current;
+        });
+        return consumed.get();
+    }
+
+    private void restoreProofAfterRollback(String token, CandidateProof proof) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status != STATUS_COMMITTED && proof.expiresAt.isAfter(clock.instant())) {
+                    candidateProofs.putIfAbsent(token, proof);
+                }
+            }
+        });
     }
 
     private SearchSession requireSession(UUID sessionId) {

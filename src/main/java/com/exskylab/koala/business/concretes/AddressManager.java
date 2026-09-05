@@ -37,7 +37,6 @@ public class AddressManager implements AddressService {
     @Override
     public Address createAddress(AddressWriteDto addressWriteDto) {
         log.debug("Creating address");
-        candidateVerifier.verifyAndConsume(securityService.getAuthenticatedUserId(), addressWriteDto);
         var references = resolveReferences(addressWriteDto);
         var components = addressWriteDto.getComponents();
         var position = addressWriteDto.getPosition();
@@ -68,6 +67,7 @@ public class AddressManager implements AddressService {
         address.setCanonicalVersion(1);
         address.setNeedsReview(false);
 
+        candidateVerifier.verifyAndConsume(securityService.getAuthenticatedUserId(), addressWriteDto);
         Address savedAddress = addressDao.save(address);
 
         log.info("Saved address with id: {}", savedAddress.getId());

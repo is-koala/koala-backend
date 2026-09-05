@@ -21,6 +21,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.security.SecureRandom;
@@ -149,6 +151,33 @@ class AddressSearchManagerTest {
         assertTrue(candidate.needsUserReview());
         assertThrows(ValidationException.class, () ->
                 manager.verifyAndConsume(UUID.randomUUID(), write(candidate.candidateToken())));
+        assertDoesNotThrow(() -> manager.verifyAndConsume(USER_ID, write(candidate.candidateToken())));
+    }
+
+    @Test
+    void providerProofIsRestoredWhenTheOwningTransactionRollsBack() {
+        authenticatedAs(USER_ID);
+        when(reverseGeocoder.reverse(new BigDecimal("40.982512"), new BigDecimal("29.025411")))
+                .thenReturn(Optional.of(new ProviderAddressCandidate(
+                        "TR", "İstanbul", "Kadıköy", "Caferağa Mahallesi", "Moda Caddesi",
+                        null, "12", "34710", new BigDecimal("40.982512"), new BigDecimal("29.025411"))));
+        referencesAreAvailable();
+        var candidate = manager.reverse(new com.exskylab.koala.core.dtos.address.request.ReverseGeocodeRequestDto(
+                new BigDecimal("40.982512"), new BigDecimal("29.025411")));
+        AddressWriteDto write = write(candidate.candidateToken());
+        write.getPosition().setSource(ConfirmedPositionSource.REVERSE_GEOCODE_CONFIRMED);
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            assertDoesNotThrow(() -> manager.verifyAndConsume(USER_ID, write));
+            assertThrows(ValidationException.class, () -> manager.verifyAndConsume(USER_ID, write));
+            TransactionSynchronizationManager.getSynchronizations().forEach(
+                    synchronization -> synchronization.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+
+        assertDoesNotThrow(() -> manager.verifyAndConsume(USER_ID, write));
     }
 
     @Test

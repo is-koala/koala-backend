@@ -88,6 +88,7 @@ class AddressManagerTest {
 
         assertThrows(ValidationException.class, () -> manager.createAddress(request));
         verify(addressDao, never()).save(any());
+        verify(candidateVerifier, never()).verifyAndConsume(any(), any());
     }
 
     @Test
@@ -103,6 +104,7 @@ class AddressManagerTest {
 
         assertThrows(ValidationException.class, () -> manager.createAddress(request));
         verify(addressDao, never()).save(any());
+        verify(candidateVerifier, never()).verifyAndConsume(any(), any());
     }
 
     @Test
@@ -120,6 +122,7 @@ class AddressManagerTest {
 
         assertThrows(ValidationException.class, () -> manager.createAddress(request));
         verify(addressDao, never()).save(any());
+        verify(candidateVerifier, never()).verifyAndConsume(any(), any());
     }
 
     private static AddressWriteDto request(UUID countryId, UUID cityId, UUID districtId) {
