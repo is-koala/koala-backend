@@ -5,6 +5,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -72,6 +75,33 @@ class LiquibaseMigrationIT extends AbstractIntegrationTest {
 
         assertTrue(countries != null && countries > 0, "Ulke verisi yuklenmemis.");
         assertTrue(cities != null && cities > 0, "Sehir verisi yuklenmemis.");
+    }
+
+    @Test
+    void everyAgreementTypeHasAVersionedWebContentUrl() {
+        Map<String, String> contentUrls = new HashMap<>();
+        jdbcTemplate.queryForList(
+                        "select type, content_url from agreement_versions where version = '1.0' and locale = 'tr'")
+                .forEach(row -> contentUrls.put(
+                        (String) row.get("type"), (String) row.get("content_url")));
+
+        assertEquals(Map.of(
+                "TERMS_OF_SERVICE", "https://iskoala.com/kullanim-kosullari/v/1.0",
+                "PRIVACY_POLICY", "https://iskoala.com/gizlilik-politikasi/v/1.0",
+                "DISTANCE_SERVICE_CONTRACT", "https://iskoala.com/mesafeli-hizmet-sozlesmesi/v/1.0",
+                "EXPLICIT_CONSENT", "https://iskoala.com/kvkk-aydinlatma/v/1.0#acik-riza",
+                "COMMERCIAL_MESSAGE", "https://iskoala.com/kvkk-aydinlatma/v/1.0#ticari-ileti"),
+                contentUrls);
+
+    }
+
+    @Test
+    void distanceServiceContractIsPublishedWithoutBecomingARegistrationGate() {
+        Boolean distanceContractMandatory = jdbcTemplate.queryForObject("""
+                select mandatory from agreement_versions
+                where type = 'DISTANCE_SERVICE_CONTRACT' and version = '1.0' and locale = 'tr'
+                """, Boolean.class);
+        assertEquals(false, distanceContractMandatory);
     }
 
     @Test

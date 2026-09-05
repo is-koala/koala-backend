@@ -16,6 +16,9 @@ class ConfigurationBindingIT extends AbstractIntegrationTest {
     private AppProperties appProperties;
 
     @Autowired
+    private PaymentReturnProperties paymentReturnProperties;
+
+    @Autowired
     private SessionProperties sessionProperties;
 
     @Autowired
@@ -33,9 +36,11 @@ class ConfigurationBindingIT extends AbstractIntegrationTest {
     @Test
     void appPropertiesAreBound() {
         assertNotNull(appProperties.apiUrl());
-        assertNotNull(appProperties.frontendUrl());
+        assertNotNull(appProperties.webBaseUrl());
         assertFalse(appProperties.apiUrl().isBlank());
-        assertFalse(appProperties.frontendUrl().isBlank());
+        assertFalse(appProperties.webBaseUrl().isBlank());
+        assertNotNull(paymentReturnProperties.getReturnBaseUrl());
+        assertFalse(paymentReturnProperties.getReturnBaseUrl().isBlank());
     }
 
     @Test

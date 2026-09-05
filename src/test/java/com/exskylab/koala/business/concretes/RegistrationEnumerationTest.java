@@ -65,7 +65,7 @@ class RegistrationEnumerationTest {
         PendingRegistration pending = pendingRegistration();
         when(pendingRegistrationService.createPendingRegistration(any())).thenReturn(pending);
         when(authLinkService.registrationLandingLink(pending.getToken().toString()))
-                .thenReturn("http://localhost:8080/auth-links/complete-registration?token=" + pending.getToken());
+                .thenReturn("https://iskoala.com/hesap-dogrula?token=" + pending.getToken());
     }
 
     @Test

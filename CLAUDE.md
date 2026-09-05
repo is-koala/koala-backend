@@ -13,9 +13,9 @@ Bu dosya projeyi konu konu anlatır: mimari, alınmış kararlar ve gerekçeleri
 
 **Sıradaki fazlar:** 7C (Iyzico kalanları), 20 (referans veri), 9B (yasal kalanlar), 11D (çok örneklilik). Ayrıntı §7'de.
 
-**Çalışma kuralları — bu oturumda kararlaştırıldı:**
-- Her şey `main` üzerinde yapılır, ayrı branch açılmaz.
-- **Commit atma.** Kullanıcı kendi commit'liyor.
+**Çalışma kuralları:**
+- Değişiklikler feature branch'te küçük Conventional Commit'lerle gönderilir ve PR açılır;
+  doğrudan `main` dalına push edilmez ve alakasız değişiklikler commit'e alınmaz.
 - Koda **yorum satırı yazma** (bkz. §1). Gerekçe buraya yazılır.
 - Her değişiklikten sonra test yazılır; düzeltmeden **önce** kırmızıya döndüğü görülür.
 - Ana kodda imza değiştirdiysen `rm -rf target/test-classes` — Maven bayat test sınıfını yeniden derlemez, `NoSuchMethodError` alırsın.
@@ -23,7 +23,7 @@ Bu dosya projeyi konu konu anlatır: mimari, alınmış kararlar ve gerekçeleri
 **Prod durumu (30.08.2026):** Dokploy üzerinde Postgres 17, RabbitMQ ve uygulama ayakta. `api.iskoala.com`. Son etiket `v0.4.9` — kimlik doğrulama, SMS/push tüketicileri, sürüm kapısı ve çip doğrulaması dahil. Ayrıntı §9'da.
 
 **Kullanıcı tarafında bekleyen işler:**
-1. **`SPRINGDOC_ENABLED=false`** prod ortam değişkenlerine eklenmeli — eklenmediyse 155 ucun tamamı, DTO şemaları ve zorunlu alanlar herkese açık.
+1. **Springdoc varsayılanı kapalıdır.** `.env.example` yerel geliştirme için bilinçli olarak `SPRINGDOC_ENABLED=true` verir; production'da dokümantasyon gerekiyorsa aynı değer açıkça eklenir, verilmezse Swagger UI ve API docs açılmaz.
 2. **Gerçek kartla çip dökümü** — kimlik kartının hangi CSCA'ya zincirlendiği, DG11 ve DG15'in varlığı yalnızca böyle öğrenilir (§2aq2).
 3. **Iyzico sandbox anahtarları** — ödeme akışı uçtan uca hiç denenmedi (§2x, Faz 7C).
 4. **Firebase servis hesabı** — `PushService`'in FCM uygulaması için (§2s).
@@ -1083,7 +1083,7 @@ KOALA_CHIP_DIR=/tmp/chip KOALA_CSCA_DIR=/opt/koala/csca ./mvnw test -Dtest=RealC
 
 - `jwt.secret` — `JwtService` açılışta Base64 çözülmüş anahtarı HS256 için en az 32 bayt bekliyor, kısa anahtarda context düşer.
 - ~~`r2.*`~~ — **artık gerekmiyor.** `storage.type=local` varsayılanı sayesinde testler hiçbir bulut ayarı istemiyor (§2ab).
-- `app.api-url` / `app.frontend-url` — `AppProperties` `@Validated` + `@NotBlank`, boş bırakılamaz.
+- `app.api-url` / `app.web-base-url` ve `payments.return-base-url` — doğrulanmış yapılandırmalardır, boş bırakılamaz.
 - `spring.mail.*` — `EmailConsumer` constructor'ında `JavaMailSender` istiyor. Bu değerler yoksa Boot mail bean'ini hiç oluşturmaz ve context "No qualifying bean of type JavaMailSender" ile düşer. Testlerde gerçek SMTP'ye bağlanılmaz.
 - `spring.rabbitmq.listener.*.auto-startup=false` — testlerde RabbitMQ'ya bağlanılmıyor.
 

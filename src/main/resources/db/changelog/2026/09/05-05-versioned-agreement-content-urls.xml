@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-05-05-publish-five-agreement-types-with-distance-contract-outside-registration-gate"
+               author="koala"
+               labels="legal,web-registry,distance-contract-transaction-consent-not-registration-gate">
+        <preConditions onFail="HALT">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM agreement_versions
+                WHERE type = 'DISTANCE_SERVICE_CONTRACT' AND version = '1.0' AND locale = 'tr'
+            </sqlCheck>
+        </preConditions>
+
+        <update tableName="agreement_versions">
+            <column name="content_url" value="https://iskoala.com/kullanim-kosullari/v/1.0"/>
+            <where>type = 'TERMS_OF_SERVICE' AND version = '1.0' AND locale = 'tr'</where>
+        </update>
+        <update tableName="agreement_versions">
+            <column name="content_url" value="https://iskoala.com/gizlilik-politikasi/v/1.0"/>
+            <where>type = 'PRIVACY_POLICY' AND version = '1.0' AND locale = 'tr'</where>
+        </update>
+        <update tableName="agreement_versions">
+            <column name="content_url" value="https://iskoala.com/kvkk-aydinlatma/v/1.0#acik-riza"/>
+            <where>type = 'EXPLICIT_CONSENT' AND version = '1.0' AND locale = 'tr'</where>
+        </update>
+        <update tableName="agreement_versions">
+            <column name="content_url" value="https://iskoala.com/kvkk-aydinlatma/v/1.0#ticari-ileti"/>
+            <where>type = 'COMMERCIAL_MESSAGE' AND version = '1.0' AND locale = 'tr'</where>
+        </update>
+        <insert tableName="agreement_versions">
+            <column name="id" valueComputed="gen_random_uuid()"/>
+            <column name="type" value="DISTANCE_SERVICE_CONTRACT"/>
+            <column name="version" value="1.0"/>
+            <column name="locale" value="tr"/>
+            <column name="content_url" value="https://iskoala.com/mesafeli-hizmet-sozlesmesi/v/1.0"/>
+            <column name="mandatory" valueBoolean="false"/>
+            <column name="effective_from" valueComputed="now()"/>
+            <column name="created_at" valueComputed="now()"/>
+        </insert>
+
+        <rollback>
+            <delete tableName="agreement_versions">
+                <where>type = 'DISTANCE_SERVICE_CONTRACT' AND version = '1.0' AND locale = 'tr'</where>
+            </delete>
+            <sql>
+                UPDATE agreement_versions
+                SET content_url = NULL
+                WHERE version = '1.0' AND locale = 'tr'
+                  AND type IN ('TERMS_OF_SERVICE', 'PRIVACY_POLICY', 'EXPLICIT_CONSENT', 'COMMERCIAL_MESSAGE');
+            </sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

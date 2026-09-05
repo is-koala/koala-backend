@@ -175,7 +175,7 @@ class PasswordResetIT extends AbstractIntegrationTest {
         var task = org.mockito.ArgumentCaptor.forClass(EmailTaskDto.class);
         verify(notificationProducerService, times(2)).sendEmailTask(task.capture());
         assertEquals("password-reset-request-template", task.getAllValues().get(0).templateName());
-        assertEquals("http://localhost:8080/auth-links/reset-password?token=" + COMMIT_TOKEN,
+        assertEquals("http://localhost:3000/sifre-sifirla?token=" + COMMIT_TOKEN,
                 task.getAllValues().get(0).templateParameters().get("resetLink"));
         assertEquals("password-reset-completed-template", task.getAllValues().get(1).templateName());
     }

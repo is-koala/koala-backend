@@ -8,5 +8,5 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "app")
 public record AppProperties (
     @NotBlank String apiUrl,
-    @NotBlank String frontendUrl
+    @NotBlank String webBaseUrl
 ) {}

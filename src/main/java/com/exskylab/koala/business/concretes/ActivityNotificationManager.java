@@ -223,7 +223,7 @@ public class ActivityNotificationManager implements ActivityNotificationService 
             parameters.put("firstName", recipient.getFirstName());
             parameters.put("message", message);
             parameters.put("jobTitle", jobTitle);
-            parameters.put("actionUrl", appProperties.frontendUrl());
+            parameters.put("actionUrl", appProperties.webBaseUrl());
             dto.setTemplateParameters(parameters);
 
             notificationService.sendEmail(dto, DispatchPriority.NORMAL, true);

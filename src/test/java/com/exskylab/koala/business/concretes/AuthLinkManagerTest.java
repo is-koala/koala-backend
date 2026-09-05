@@ -11,22 +11,28 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AuthLinkManagerTest {
 
     @Test
-    void buildsEnvironmentControlledLandingAndAppLinks() {
+    void buildsTurkishWebLandingLinksWithoutChangingAppDestinations() {
         AuthLinkManager links = new AuthLinkManager(properties(
-                "https://api.iskoala.com", "koala-staging"));
+                "https://iskoala.com", "koala-staging"));
 
         assertEquals(
-                "https://api.iskoala.com/auth-links/reset-password?token=reset-token",
+                "https://iskoala.com/sifre-sifirla?token=reset-token",
                 links.passwordResetLandingLink("reset-token"));
+        assertEquals(
+                "https://iskoala.com/hesap-dogrula?token=registration-token",
+                links.registrationLandingLink("registration-token"));
         assertEquals(
                 "koala-staging://complete-registration?token=registration-token",
                 links.registrationAppLink("registration-token"));
+        assertEquals(
+                "koala-staging://reset-password?token=reset-token",
+                links.passwordResetAppLink("reset-token"));
     }
 
     @Test
     void encodesTokenCharactersInsteadOfTreatingThemAsUriSyntax() {
         AuthLinkManager links = new AuthLinkManager(properties(
-                "https://api.iskoala.com", "koala-staging"));
+                "https://iskoala.com", "koala-staging"));
 
         String link = links.passwordResetAppLink("\"><script>alert(1)</script>");
 
@@ -41,9 +47,9 @@ class AuthLinkManagerTest {
 
             assertFalse(validator.validate(properties("http://example.com", "koala-staging")).isEmpty());
             assertFalse(validator.validate(properties(
-                    "https://api.iskoala.com/path?redirect=evil", "koala-staging")).isEmpty());
+                    "https://iskoala.com/path?redirect=evil", "koala-staging")).isEmpty());
             assertTrue(validator.validate(properties("http://localhost:8080", "koala-dev")).isEmpty());
-            assertTrue(validator.validate(properties("https://api.iskoala.com", "koala")).isEmpty());
+            assertTrue(validator.validate(properties("https://iskoala.com", "koala")).isEmpty());
         }
     }
 

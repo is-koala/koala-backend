@@ -83,14 +83,14 @@ class PasswordResetTest {
         when(userService.getByEmail("ada@example.com")).thenReturn(user());
         when(passwordResetTokenService.issue(any(User.class))).thenReturn("reset-token");
         when(authLinkService.passwordResetLandingLink("reset-token"))
-                .thenReturn("http://localhost:8080/auth-links/reset-password?token=reset-token");
+                .thenReturn("https://iskoala.com/sifre-sifirla?token=reset-token");
 
         authManager.requestPasswordReset(new ForgotPasswordDto("ada@example.com"));
 
         var email = org.mockito.ArgumentCaptor.forClass(SendEmailDto.class);
         verify(notificationService).sendEmail(email.capture(), eq(com.exskylab.koala.entities.DispatchPriority.CRITICAL), eq(true));
         assertEquals("password-reset-request-template", email.getValue().getTemplateName());
-        assertEquals("http://localhost:8080/auth-links/reset-password?token=reset-token",
+        assertEquals("https://iskoala.com/sifre-sifirla?token=reset-token",
                 email.getValue().getTemplateParameters().get("resetLink"));
         assertTrue(email.getValue().getSubject().contains("parola sıfırlama"));
     }
