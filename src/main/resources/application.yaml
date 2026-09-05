@@ -235,14 +235,6 @@ upload:
   max-job-images: ${UPLOAD_MAX_JOB_IMAGES:10}
   max-image-megapixels: ${UPLOAD_MAX_IMAGE_MEGAPIXELS:50}
 
-qa:
-  marketplace-seed:
-    version: ${QA_MARKETPLACE_SEED_VERSION:}
-    worker-email: ${QA_WORKER_EMAIL:}
-    worker-password: ${QA_WORKER_PASSWORD:}
-    employer-email: ${QA_EMPLOYER_EMAIL:}
-    employer-password: ${QA_EMPLOYER_PASSWORD:}
-
 company-follow:
   enabled: ${COMPANY_FOLLOW_ENABLED:true}
 

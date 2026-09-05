@@ -176,7 +176,6 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/uploads/images/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/uploads/public/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/uploads/files/**").hasAnyRole("USER", "ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/qa-assets/**").permitAll()
 
                         //realtime endpoints
                         .requestMatchers("/ws/**").permitAll()

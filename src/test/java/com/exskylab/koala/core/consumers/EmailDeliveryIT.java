@@ -31,7 +31,6 @@ import static org.mockito.ArgumentMatchers.any;
 
 @TestPropertySource(properties = {
         "management.health.mail.enabled=false",
-        "qa.marketplace-seed.version=",
         "email.delivery.mode=ALLOWLIST",
         "email.delivery.allowed-recipients=qa-employer@example.test,qa-worker@example.test"
 })
