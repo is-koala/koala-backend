@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.support.FallbackSettings;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.*;
 import com.exskylab.koala.core.helpers.*;
@@ -48,7 +49,7 @@ class AutoCompletionRulesTest {
 
         manager = new JobAssignmentManager(jobAssignmentDao, mock(SecurityService.class),
                 mock(JobAssignmentMapper.class), mock(IyzicoPaymentService.class), contacts,
-                mock(UserService.class), new PricingManager(new CommissionCalculator(new CommissionProperties())),
+                mock(UserService.class), new PricingManager(FallbackSettings.commissionCalculator()),
                 mock(PaymentService.class), new PaymentStateMachine(),
                 new AppProperties("http://localhost:8080", "http://localhost:3000"),
                 mock(BankAccountService.class), new PageableSanitizer(),
