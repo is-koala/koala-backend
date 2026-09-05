@@ -1082,6 +1082,34 @@ KOALA_CHIP_DIR=/tmp/chip KOALA_CSCA_DIR=/opt/koala/csca ./mvnw test -Dtest=RealC
 
 **Filtre güvenlik zincirinin dışında** (`HIGHEST_PRECEDENCE + 15`), hız sınırından önce: eski istemcinin isteği kimlik doğrulamaya kadar hiç gitmemeli.
 
+## 2at. Personel yetkilendirmesi — `/admin/**` ikinci zinciri
+
+`/admin/**`'ın hangi kimliği kabul ettiği burada değil, [ADR-0010](docs/adr/0010-split-staff-identity-from-koala-authorization.md) §Geçiş'te yazılıdır. Burada yalnız mekanizma anlatılır.
+
+**İki zincir var, ikisi de `SecurityFilterChain` bean'i.** `StaffSecurityConfig` `@Order(1)` ile `/admin/**`'ı alır, `SecurityConfig` `@Order(2)` ile geri kalanı. Sıralama açıkça verilmek zorunda: iki zincirli bir uygulamada bean tanım sırası güvenilir değildir. `SecurityConfig`'teki `/admin/**` → `hasRole("ADMIN")` satırı duruyor ama artık erişilmiyor; kesim o satırın silinmesidir ve `ApiConventionTest` onu bugün hâlâ arıyor.
+
+**Kimlik ayrımı bearer token çözücüsünde yapılır.** Marketplace token'ı bir OAuth2 bearer JWT değil; `iss` doğrulanmıyor, geçerliliği `sessions` satırına bağlı. `StaffBearerTokenResolver` token'ın `iss` claim'ini **doğrulamadan** okur ve güvenilen issuer listesinde değilse token'ı resource server'a hiç vermez — istek `SessionAuthFilter`'a düşer. Doğrulama `JwtIssuerAuthenticationManagerResolver` üzerinden yapılır; allow-list orada, `iss`'e körü körüne güvenilmez.
+
+**Resource server kendi `ProviderManager`'ını kullanır.** `HttpSecurity`'nin paylaşılan yöneticisi kullanılsaydı, başarısız bir JWT doğrulaması `ProviderManager`'ın parent'ına düşer, parent global `authenticationManager` bean'i olduğu için kendine döner ve **süresi dolmuş her token `StackOverflowError` üretirdi**. Süresi geçerli token'larda bu hata görünmez; testte yakalandı.
+
+**JWKS tembel çekilir.** `NimbusJwtDecoder.withJwkSetUri(...)` açılışta ağa çıkmaz; `withIssuerLocation(...)` çıkardı ve `auth.iskoala.com` çözülmediği için uygulama açılmazdı. `koala.staff.issuer-uri` boşken zincir OAuth2 bloğunu hiç kurmaz.
+
+**Anotasyon yoksa reddedilir.** `StaffPermissionAuthorizationManager` isteği `RequestMappingHandlerMapping` üzerinden handler'a bağlar ve `@RequiresPermission` arar; yoksa reddeder. Bu yüzden eşleşmeyen bir `/admin/...` yolu 404 değil 403 döner — güvenlik kararı fail-closed verilir. `RequestMappingHandlerMapping` `ObjectProvider` ile alınır; doğrudan enjekte edilseydi güvenlik zinciriyle bean döngüsü çıkardı.
+
+**İzinler token'a girmez.** Token yalnız `realm_access.roles` taşır; rol→izin çözümü her istekte veritabanından, DAG aşağı gezilerek yapılır. Tanınmayan rol adı ve tanınmayan izin kodu **loglanıp atlanır** — bilinmeyen bir kod yüzünden uygulamanın açılmaması rollback'i imkânsızlaştırırdı. Bunu `StaffRoleGraphSeedTest` CI'da yakalar.
+
+**`StaffPermission` metadata taşır.** Her sabit `code`, `mutating` ve `sensitivity` (`NORMAL`/`PERSONAL_DATA`/`FINANCIAL`) verir; denetim kaydı (#15) saklama süresini ve maskelemeyi bunlardan okuyacak. `@RequiresPermission` ayrıca non-GET uçlarda bir `action` adı ister. `AdminPermissionMappingIT` dört şeyi birden sabitliyor: her `/admin` mapping'i anotasyon taşır, adı geçen her izin gerçek bir sabittir, her non-GET bir eylem adı verir ve **bir yazma ucu okuma izniyle korunamaz**. İzin adı vermeyen tek anotasyon `/admin/me`'dedir; test bunun başka yerde kullanılmamasını da kontrol eder.
+
+**Roller ADR-0010 gereği Keycloak'ta, izinler Koala'da.** Rol grafiği `06-20-staff-authorization.xml` ile seed'lenir çünkü Keycloak kapısı açıldığı anda arkası boş olmamalıdır. Grafik `koala-admin/docs/keycloak-setup.md` §3'teki composite rollerle birebir aynıdır ve görev ayrılığı (OWNER dışında hiçbir rol hem trust hem finans dalını kapsayamaz) testle sabitlenir.
+
+**Bilinen 12 izne üç tane eklendi.** `content.moderate` (şikayet incelemesi ve görsel kaldırma), `badge.manage`, `settings.manage`. Sebep: `AdminPermissionMappingIT` her yönetim ucunun bir izin adı vermesini şart koşuyor ve bu üç yüzey listedeki hiçbir izne düşmüyordu. Alternatif, şikayet incelemesini `dispute.resolve` ile korumak olurdu; o da `DISPUTE_HANDLER`'a görsel silme yetkisi verirdi.
+
+**Personel tabloları `BaseEntity`'yi genişletmez.** `BaseEntity` `created_by_id`/`updated_by_id` üzerinden `users`'a yabancı anahtar kurar; ADR-0010 iki yönde de bağ kurulmamasını şart koşuyor.
+
+**Para taşıyan metotlara anotasyon konmaz.** `PayoutService`/`PayoutManager` metotlarını otomatik tamamlama zamanlayıcısı boş bir `SecurityContext` ile çağırıyor; anotasyon konsaydı zamanlayıcı sessizce dururdu. Personel tarafı `StaffPayoutManager` facade'ından geçer: aktörü parametre olarak alır, izni denetler, sonra korumasız iç metodu çağırır. Aktör `null` ise istek köprü aşamasındaki marketplace `ROLE_ADMIN`'dendir.
+
+---
+
 ## 3. Testler
 
 `src/test/resources/application.properties` testlerin ayağa kalkması için gereken minimum değerleri sağlar. Buradan bir satır silmeden önce neye yaradığını bil:
