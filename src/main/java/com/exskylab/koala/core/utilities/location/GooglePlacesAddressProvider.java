@@ -22,10 +22,6 @@ import java.util.Map;
 
 @Component
 public class GooglePlacesAddressProvider implements AddressSearchProvider {
-    private static final double ISTANBUL_SOUTH = 40.80;
-    private static final double ISTANBUL_WEST = 28.55;
-    private static final double ISTANBUL_NORTH = 41.35;
-    private static final double ISTANBUL_EAST = 29.50;
     private static final String AUTOCOMPLETE_FIELD_MASK =
             "suggestions.placePrediction.placeId,suggestions.placePrediction.structuredFormat.mainText.text," +
                     "suggestions.placePrediction.structuredFormat.secondaryText.text";
@@ -54,8 +50,10 @@ public class GooglePlacesAddressProvider implements AddressSearchProvider {
                 "includeQueryPredictions", false,
                 "locationRestriction", Map.of(
                         "rectangle", Map.of(
-                                "low", Map.of("latitude", ISTANBUL_SOUTH, "longitude", ISTANBUL_WEST),
-                                "high", Map.of("latitude", ISTANBUL_NORTH, "longitude", ISTANBUL_EAST))));
+                                "low", Map.of("latitude", IstanbulServiceArea.SOUTH,
+                                        "longitude", IstanbulServiceArea.WEST),
+                                "high", Map.of("latitude", IstanbulServiceArea.NORTH,
+                                        "longitude", IstanbulServiceArea.EAST))));
         JsonNode root = call(HttpMethod.POST, "/v1/places:autocomplete", body, AUTOCOMPLETE_FIELD_MASK);
         List<ProviderAddressSuggestion> suggestions = new ArrayList<>();
         for (JsonNode item : root.path("suggestions")) {

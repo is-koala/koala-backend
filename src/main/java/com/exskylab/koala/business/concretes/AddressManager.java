@@ -14,6 +14,7 @@ import com.exskylab.koala.entities.District;
 import com.exskylab.koala.entities.AddressPositionSource;
 import com.exskylab.koala.business.abstracts.LocationService;
 import com.exskylab.koala.core.exceptions.ValidationException;
+import com.exskylab.koala.core.utilities.location.IstanbulServiceArea;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -40,6 +41,11 @@ public class AddressManager implements AddressService {
         var references = resolveReferences(addressWriteDto);
         var components = addressWriteDto.getComponents();
         var position = addressWriteDto.getPosition();
+        if (!IstanbulServiceArea.supportsCountry(references.country().getCode())
+                || !IstanbulServiceArea.supportsCity(references.city().getName())
+                || !IstanbulServiceArea.contains(position.getLatitude(), position.getLongitude())) {
+            throw new ValidationException(AddressMessages.SEARCH_OUTSIDE_SERVICE_AREA);
+        }
 
         Address address = new Address();
         address.setCountry(references.country());

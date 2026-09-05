@@ -105,6 +105,23 @@ class AddressManagerTest {
         verify(addressDao, never()).save(any());
     }
 
+    @Test
+    void aManualPinOutsideTheIstanbulServiceAreaIsRejected() {
+        Country country = country();
+        City city = city(country);
+        District district = district(city);
+        AddressWriteDto request = request(country.getId(), city.getId(), district.getId());
+        request.getPosition().setLatitude(new BigDecimal("39.925533"));
+        request.getPosition().setLongitude(new BigDecimal("32.866287"));
+
+        when(locationService.getCountryById(country.getId())).thenReturn(country);
+        when(locationService.getCityById(city.getId())).thenReturn(city);
+        when(locationService.getDistrictById(district.getId())).thenReturn(district);
+
+        assertThrows(ValidationException.class, () -> manager.createAddress(request));
+        verify(addressDao, never()).save(any());
+    }
+
     private static AddressWriteDto request(UUID countryId, UUID cityId, UUID districtId) {
         AddressWriteDto request = new AddressWriteDto();
         request.setCountryId(countryId);

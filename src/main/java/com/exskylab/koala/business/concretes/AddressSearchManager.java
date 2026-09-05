@@ -16,6 +16,7 @@ import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.properties.AddressSearchProperties;
 import com.exskylab.koala.core.utilities.location.AddressSearchProvider;
 import com.exskylab.koala.core.utilities.location.ProviderAddressCandidate;
+import com.exskylab.koala.core.utilities.location.IstanbulServiceArea;
 import com.exskylab.koala.entities.AddressPositionSource;
 import com.exskylab.koala.entities.City;
 import com.exskylab.koala.entities.Country;
@@ -26,13 +27,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.security.SecureRandom;
-import java.text.Normalizer;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -42,7 +41,6 @@ public class AddressSearchManager implements AddressSearchService, AddressCandid
     private static final int MINIMUM_QUERY_LENGTH = 3;
     private static final int MAXIMUM_QUERY_LENGTH = 160;
     private static final int MAXIMUM_SUGGESTIONS = 5;
-    private static final String ISTANBUL = "ISTANBUL";
 
     private final AddressSearchProvider provider;
     private final SecurityService securityService;
@@ -197,7 +195,7 @@ public class AddressSearchManager implements AddressSearchService, AddressCandid
     }
 
     private ResolvedReferences resolveReferences(ProviderAddressCandidate candidate) {
-        if (!"TR".equalsIgnoreCase(candidate.countryCode())) {
+        if (!IstanbulServiceArea.supportsCountry(candidate.countryCode())) {
             throw new ValidationException(AddressMessages.SEARCH_OUTSIDE_SERVICE_AREA);
         }
         Country country = locationService.getAllCountries().stream()
@@ -205,17 +203,17 @@ public class AddressSearchManager implements AddressSearchService, AddressCandid
                 .findFirst()
                 .orElseThrow(() -> new ValidationException(AddressMessages.SEARCH_OUTSIDE_SERVICE_AREA));
         City city = locationService.getCitiesByCountryId(country.getId()).stream()
-                .filter(item -> ISTANBUL.equals(canonical(item.getName())))
-                .filter(item -> ISTANBUL.equals(canonical(candidate.city())))
+                .filter(item -> IstanbulServiceArea.supportsCity(item.getName()))
+                .filter(item -> IstanbulServiceArea.supportsCity(candidate.city()))
                 .findFirst()
                 .orElseThrow(() -> new ValidationException(AddressMessages.SEARCH_OUTSIDE_SERVICE_AREA));
-        String districtName = canonical(candidate.district());
+        String districtName = IstanbulServiceArea.canonicalName(candidate.district());
         if ("EMINONU".equals(districtName)) {
             districtName = "FATIH";
         }
         String expectedDistrict = districtName;
         District district = locationService.getDistrictsByCityId(city.getId()).stream()
-                .filter(item -> expectedDistrict.equals(canonical(item.getName())))
+                .filter(item -> expectedDistrict.equals(IstanbulServiceArea.canonicalName(item.getName())))
                 .findFirst()
                 .orElseThrow(() -> new ValidationException(AddressMessages.SEARCH_OUTSIDE_SERVICE_AREA));
         return new ResolvedReferences(country, city, district);
@@ -235,18 +233,6 @@ public class AddressSearchManager implements AddressSearchService, AddressCandid
 
     private static BigDecimal coordinate(BigDecimal value) {
         return value.setScale(6, RoundingMode.HALF_UP);
-    }
-
-    private static String canonical(String value) {
-        if (value == null) {
-            return "";
-        }
-        String decomposed = Normalizer.normalize(value.trim(), Normalizer.Form.NFD)
-                .replaceAll("\\p{M}+", "")
-                .toUpperCase(Locale.ROOT)
-                .replace('İ', 'I')
-                .replace('ı', 'I');
-        return decomposed.replaceAll("\\s+ILCESI$", "").trim();
     }
 
     private static String valueOrEmpty(String value) {
