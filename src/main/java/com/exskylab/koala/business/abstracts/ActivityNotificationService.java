@@ -11,6 +11,8 @@ public interface ActivityNotificationService {
 
     void applicationAnswered(JobApplication application);
 
+    void applicationWithdrawn(JobApplication application);
+
     void assignmentOffered(JobAssignment assignment);
 
     void assignmentAnswered(JobAssignment assignment);
