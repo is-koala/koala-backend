@@ -1,12 +1,12 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.support.FallbackSettings;
 import com.exskylab.koala.business.abstracts.CompanyContactService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
 import com.exskylab.koala.core.monitoring.PaymentMetrics;
-import com.exskylab.koala.core.properties.CommissionProperties;
 import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
 import com.exskylab.koala.dataAccess.PaymentDao;
@@ -53,7 +53,7 @@ class PaymentMonitoringTest {
         JobAssignment assignment = new JobAssignment();
         assignment.setId(UUID.randomUUID());
         assignment.setPricingVersion("2026-09-v1");
-        CommissionCalculator calculator = new CommissionCalculator(new CommissionProperties());
+        CommissionCalculator calculator = FallbackSettings.commissionCalculator();
         when(paymentDao.save(any())).thenThrow(new IllegalStateException("database unavailable"));
 
         org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
