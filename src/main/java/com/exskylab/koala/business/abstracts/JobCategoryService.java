@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.abstracts;
 
+import com.exskylab.koala.core.dtos.jobCategory.request.SaveJobCategoryDto;
 import com.exskylab.koala.entities.JobCategory;
 
 import java.util.List;
@@ -11,4 +12,10 @@ public interface JobCategoryService {
     List<JobCategory> getAllCategories();
 
     JobCategory getById(UUID categoryId);
+
+    JobCategory createCategory(SaveJobCategoryDto request);
+
+    JobCategory updateCategory(UUID categoryId, SaveJobCategoryDto request);
+
+    void deleteCategory(UUID categoryId);
 }

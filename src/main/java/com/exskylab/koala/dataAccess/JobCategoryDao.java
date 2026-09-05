@@ -8,4 +8,8 @@ import java.util.UUID;
 
 @Repository
 public interface JobCategoryDao extends JpaRepository<JobCategory, UUID> {
+
+    boolean existsByCode(String code);
+
+    boolean existsByCodeAndIdNot(String code, UUID id);
 }

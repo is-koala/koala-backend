@@ -53,6 +53,14 @@ class LiquibaseMigrationIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void theJobCategorySeedIsGone() {
+        Integer categories = jdbcTemplate.queryForObject(
+                "select count(*) from job_categories", Integer.class);
+
+        assertEquals(0, categories, "Kaldirilan is kategorisi seed'i hala duruyor.");
+    }
+
+    @Test
     void qaSeedHistoryTableIsDropped() {
         assertEquals(0, tableCount("qa_marketplace_seed_versions"), "QA seed surum tablosu hala duruyor.");
     }

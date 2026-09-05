@@ -79,4 +79,8 @@ public interface JobDao extends JpaRepository<Job, UUID> {
 
     @EntityGraph(attributePaths = {"category", "company", "address", "address.city", "address.district"})
     Page<Job> findAllByCompanyId(UUID companyId, Pageable pageable);
+
+    @Query(value = "select exists(select 1 from jobs where job_category_id = :categoryId)",
+            nativeQuery = true)
+    boolean existsAnyByCategoryId(@Param("categoryId") UUID categoryId);
 }

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-06-02-drop-job-category-seed" author="koala">
+        <preConditions onFail="MARK_RAN">
+            <tableExists tableName="job_categories"/>
+        </preConditions>
+        <sql>
+            DELETE FROM job_categories c
+            WHERE c.code IN ('PHOTOGRAPHY', 'WAITER', 'PET_CARE', 'DESIGN', 'BARISTA')
+              AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.job_category_id = c.id)
+              AND NOT EXISTS (SELECT 1 FROM job_alerts a WHERE a.job_category_id = c.id)
+              AND NOT EXISTS (SELECT 1 FROM job_templates t WHERE t.job_category_id = c.id);
+        </sql>
+        <rollback>
+            <sql>
+                INSERT INTO job_categories (id, code, name, requires_insurance) VALUES
+                    ('9a1c0f10-0001-4c00-8000-000000000001', 'PHOTOGRAPHY', 'Fotoğrafçılık', false),
+                    ('9a1c0f10-0001-4c00-8000-000000000002', 'WAITER',      'Garsonluk',     false),
+                    ('9a1c0f10-0001-4c00-8000-000000000003', 'PET_CARE',    'Hayvan Bakımı', false),
+                    ('9a1c0f10-0001-4c00-8000-000000000004', 'DESIGN',      'Tasarım',       false),
+                    ('9a1c0f10-0001-4c00-8000-000000000005', 'BARISTA',     'Barista',       false)
+                ON CONFLICT (code) DO NOTHING;
+            </sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

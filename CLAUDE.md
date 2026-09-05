@@ -29,7 +29,8 @@ Bu dosya projeyi konu konu anlatır: mimari, alınmış kararlar ve gerekçeleri
 4. **Firebase servis hesabı** — `PushService`'in FCM uygulaması için (§2s).
 5. **SMS sağlayıcı anahtarı** — `SMS_API_KEY` boşken telefon doğrulama kodu üretilir ama teslim edilmez.
 6. **Dokploy'dan `QA_MARKETPLACE_SEED_VERSION`, `QA_WORKER_EMAIL`, `QA_WORKER_PASSWORD`, `QA_EMPLOYER_EMAIL`, `QA_EMPLOYER_PASSWORD` kaldırılmalı** — seed kaldırıldı (ADR-0008), bu değişkenler işlevsiz ve parola taşıyorlar.
-7. **R2'deki mevcut nesnelerin S3'e kopyalanması** (§2ab), yasal metinlerin avukattan gelmesi, ve prod'da WebSocket'in `wss://` üzerinden servis edildiğinin teyidi (§2ai).
+7. **İş kategorisi kataloğunun kurulması** — kategori seed'i kaldırıldı (§2m). Prod ve taze veritabanları kategorisiz; kategori ilanın zorunlu alanı olduğu için katalog `POST /admin/job-categories` ile kurulmadan **hiç ilan açılamaz**. Mobil istemcinin ikon eşlemesi `code` üzerinden gittiği için eski kodların (`PHOTOGRAPHY`, `WAITER`, `PET_CARE`, `DESIGN`, `BARISTA`) yeniden verilmesi gerekebilir.
+8. **R2'deki mevcut nesnelerin S3'e kopyalanması** (§2ab), yasal metinlerin avukattan gelmesi, ve prod'da WebSocket'in `wss://` üzerinden servis edildiğinin teyidi (§2ai).
 
 **Açık kalan kararlar** (ayrıntı §7'de):
 - **Rozet eşikleri** yer tutucu (5 / 25 tamamlanmış iş). Yapı hazır, sayı ürün kararı.
@@ -315,19 +316,17 @@ Testlerde `rate-limit.enabled=false`; açıkça test eden sınıflar `@TestPrope
 
 **`JobCategory` sabit bir `code` taşır.** İstemci ikon/pin/renk eşlemesini UUID'ye ya da görünen ada değil bu koda bağlar.
 
-**Kodlar artık İngilizce ve addan bağımsız.** İlk sürüm kodu Türkçe `name`'den türetiyordu (`Fotoğrafçılık` → `FOTOGRAFCILIK`); görünen ad değişince ya da İngilizce dil desteği gelince kod da değişecekti ve mobildeki bütün ikon eşlemeleri kırılacaktı. `27-10` migration'ı bilinen Türkçe kodları İngilizceye çeviriyor, sonra beş kategoriyi **sabit UUID'lerle** yüklüyor:
+**Kodlar İngilizce ve addan bağımsız.** İlk sürüm kodu Türkçe `name`'den türetiyordu (`Fotoğrafçılık` → `FOTOGRAFCILIK`); görünen ad değişince ya da İngilizce dil desteği gelince kod da değişecekti ve mobildeki bütün ikon eşlemeleri kırılacaktı. `27-10` migration'ı bilinen Türkçe kodları İngilizceye çeviriyor. Kural yerinde: kod `[A-Z][A-Z0-9_]{1,63}` biçiminde, ASCII ve görünen addan bağımsızdır; artık `SaveJobCategoryDto` üzerindeki `@Pattern` ile yazma yolunda zorlanıyor.
 
-| `code` | `name` | id |
-|---|---|---|
-| `PHOTOGRAPHY` | Fotoğrafçılık | `…0001` |
-| `WAITER` | Garsonluk | `…0002` |
-| `PET_CARE` | Hayvan Bakımı | `…0003` |
-| `DESIGN` | Tasarım | `…0004` |
-| `BARISTA` | Barista | `…0005` |
+**Kategori seed'i kaldırıldı, katalog yönetimden kuruluyor.** `27-10`'un yüklediği beş kategori (`PHOTOGRAPHY`, `WAITER`, `PET_CARE`, `DESIGN`, `BARISTA`) `2026/09/06-02-drop-job-category-seed.xml` ile düşürüldü; veritabanı ADR-0008 doğrultusunda kategorisiz geliyor. Kategori ilanın zorunlu alanı olduğu için katalog kurulmadan ilan açılamaz: **boş bir veritabanında ilk iş, `POST /admin/job-categories` ile kategorileri yaratmaktır.** Yüzey `webAPI/JobCategoriesController` altında, `/admin/**` prefix kuralıyla ADMIN'e kısıtlı (§0b).
 
-(Tam önek: `9a1c0f10-0001-4c00-8000-0000000000NN`.)
+**Silme changeset'i referans veren satırlara dokunmuyor.** `DELETE`, `jobs`, `job_alerts` ve `job_templates` üzerinde `NOT EXISTS` ile korunuyor. Koşulsuz silinseydi, canlı veritabanında bir ilan bu kategorilerden birine bakıyorken migration yabancı anahtar ihlaliyle düşer ve **Liquibase açılışta patladığı için uygulama hiç ayağa kalkmazdı**. Koşullu silme her iki durumda da doğru: ADR-0008'in teslim ettiği boş veritabanında beşi de gider, veri olan bir veritabanında kullanımdaki kategori kalır ve ilanlar bittiğinde yönetimden silinebilir. `27-10`'un kendisine dokunulmadı — uygulanmış bir changeSet'i değiştirmek mevcut veritabanlarında checksum'ı bozar; taze veritabanı beşini yazıp hemen siliyor, net sonuç aynı.
 
-UUID'ler sabit çünkü istemci ilan oluştururken `categoryId` gönderiyor; `gen_random_uuid()` ile geliştirme/test/üretim veritabanları farklı id üretiyordu. `INSERT … ON CONFLICT (code) DO NOTHING` kullanılıyor: kodu zaten var olan bir satır varsa kendi id'siyle kalır. **Bu koddaki değerler bir daha değiştirilmez** — `JobCategorySeedIT` hem varlıklarını hem id'lerini sabitliyor, ayrıca hiçbir kodun ASCII dışına çıkmadığını doğruluyor.
+**Kullanımdaki kategori silinemez ve bu kontrol soft delete'i görmek zorunda.** `DELETE /admin/job-categories/{id}`, üç referans tablosunu tarayıp doluysa 409 (`job.category.in.use`) döner. Kontrol **native** sorgu: `Job`, `JobAlert` ve `JobTemplate` üzerinde `@SQLRestriction("is_deleted = false")` var, dolayısıyla türetilmiş bir `existsByCategoryId` soft delete edilmiş satırı görmez — ama yabancı anahtar o satırı hâlâ tutar ve silme `DataIntegrityViolationException`'a, oradan da 500'e düşerdi. `JobCategoryAdministrationIT` tam bu senaryoyu sabitliyor; sorgu türetilmişe çevrilirse test kırmızıya döner.
+
+**Kod benzersizliği ham veritabanı hatasına bırakılmıyor.** `uk_job_categories_code` ihlali istemciye sızmasın diye `JobCategoryManager` yazmadan önce `existsByCode` / `existsByCodeAndIdNot` ile bakar ve `ConflictException` (409, `job.category.code.already.exists`) fırlatır — `BadgeManager`'daki desenin aynısı.
+
+**ADR-0008 ile bir tutarsızlık kaldı.** ADR metni "yalnız referans verisiyle gelir" listesinde **iş kategorilerini** sayıyor; bu slice o maddeyi geçersiz kılıyor. ADR'ler düzeltilmiyor, üstüne yazılıyor (ADR-0008 de ADR-0001'in seed maddesinin yerine geçmişti) — maddeyi devralacak bir ADR yazılması bekliyor.
 
 **Profil yüzeyi `/users/me` üzerinden okunur.** Yazılıp geri okunamayan üç alan kapatıldı: `experiences`, `maskedIban` (`TR33***4444` — tam IBAN dönmüyor) ve yeni `cvUrl`. Ayrıca `jobTitle` (meslek/ünvan) eklendi ve `educations` yanıta girdi.
 
@@ -1144,7 +1143,7 @@ Kural: bu tür testlerde başlangıç zamanı `LocalDateTime.now(POLICY_ZONE)` �
 
 **Faz 12 testleri.** `BadgeRulesTest` rozet monotonluğunu (kazanılan geri alınmaz), idempotansı, eşik konfigüre değilken hiçbir şey verilmediğini ve seed satırı eksikken çökmediğini sabitliyor. İş tamamlama yetkisi `AssignmentOperationsAuthorizationTest` içinde.
 
-**Faz 8B/8D testleri.** `MyWorkRulesTest` (oturum sahipliği ve kendi oturumunu koruma), `CompanyAdministrationRulesTest` (şirket yetkisi, son admin, onay), `ProfileEndpointRulesTest` (eğitim sahipliği, kaydedilen ilan), `UserPatchRulesTest` (telefon doğrulama akışı), `UserProfileContractTest` (`/users/me` alanları), `JobRequestPrimitiveContractTest` (eksik primitive alanlar) ve `JobCategorySeedIT` (kategori kodları/id'leri).
+**Faz 8B/8D testleri.** `MyWorkRulesTest` (oturum sahipliği ve kendi oturumunu koruma), `CompanyAdministrationRulesTest` (şirket yetkisi, son admin, onay), `ProfileEndpointRulesTest` (eğitim sahipliği, kaydedilen ilan), `UserPatchRulesTest` (telefon doğrulama akışı), `UserProfileContractTest` (`/users/me` alanları), `JobRequestPrimitiveContractTest` (eksik primitive alanlar). `JobCategorySeedIT` kaldırıldı: seed gittikten sonra beş kategoriyi sabitlemek yanlış gerçeği koruyordu; yerine `LiquibaseMigrationIT.theJobCategorySeedIsGone` boşluğu, `JobCategoryAdministrationRulesTest` (on bir kural) ve `JobCategoryAdministrationIT` (üç kural) yönetim yüzeyini sabitliyor.
 
 **`JobRequestPrimitiveContractTest` yazıldığında derlenmiyordu** — `getExperienceRequired()` yoktu çünkü alan primitive `boolean`'dı. Bu, `isEmployer` tuzağının aynısıydı: `@NotNull` primitive üzerinde hiçbir şey yapmaz, eksik alan sessizce `false` olur. `experienceRequired`, `insuranceRequired`, `minAge`, `maxAge` sarmalayıcı tipe çevrildi ve `salary` `@NotNull` kazandı; `maxAge < minAge` da artık 400.
 
