@@ -1,6 +1,7 @@
 # Veritabanını örnek veri olmadan teslim et
 
 Durum: Kabul edildi — 5 Eylül 2026. ADR-0001'in seed'e ilişkin maddesinin yerine geçer.
+Referans verisi listesindeki "iş kategorileri" maddesi [ADR-0009](0009-manage-job-categories-from-the-admin-api.md) ile geçersizdir.
 
 ## Karar
 
