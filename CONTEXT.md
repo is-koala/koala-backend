@@ -60,6 +60,30 @@ _Avoid_: Dönüş URL'si durumu, WebView sonucu
 
 ## Konum
 
+**Adres Adayı**:
+Adres sağlayıcısından veya manuel pin seçiminden gelen, kullanıcı henüz onaylamadığı için kalıcı iş verisi sayılmayan kısa ömürlü öneri.
+_Avoid_: Kayıtlı adres, doğrulanmış adres
+
+**Adres Arama Oturumu**:
+Tek bir autocomplete seçimini ve sağlayıcı oturumunu backend içinde kısa süreyle ilişkilendiren, kullanıcıya bağlı opaque kimlik.
+_Avoid_: Google session token, oturum açma belirteci
+
+**Adres Bileşenleri**:
+Ülke/il/ilçe referansları ile mahalle, cadde/sokak, dış/iç kapı ve posta kodu gibi ayrı tutulan kanonik alanlar.
+_Avoid_: Provider formatted address, tek serbest adres satırı
+
+**Onaylı Adres**:
+Kullanıcının yapılandırılmış alanları ve harita konumunu birlikte görüp onayladığı kalıcı adres.
+_Avoid_: Google sonucu, adres adayı
+
+**Konum Kaynağı**:
+Onaylanan pinin autocomplete, ters geocoding veya manuel seçim yolundan hangisiyle oluştuğunu belirten veri soyu.
+_Avoid_: Adres doğruluk garantisi, provider kimliği
+
+**İş Konumu**:
+İlan yayımlanırken onaylı adresten alınan ve profil ya da şirket adresi sonradan değişse de ilanla birlikte sabit kalan konum snapshot'ı.
+_Avoid_: Güncel profil adresi, şirketin varsayılan adresi
+
 **Yaklaşık Konum**:
 İlan herkese açıkken gösterilen ilçe veya hassasiyeti azaltılmış bölge bilgisi.
 _Avoid_: Tam adres, kesin koordinat
