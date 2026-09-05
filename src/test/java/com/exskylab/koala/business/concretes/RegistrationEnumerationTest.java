@@ -58,7 +58,8 @@ class RegistrationEnumerationTest {
                 mock(LoginAttemptService.class),
                 mock(SecurityService.class),
                 new SessionProperties(),
-                mock(LegalService.class));
+                mock(LegalService.class),
+                mock(com.exskylab.koala.business.abstracts.PasswordResetTokenService.class));
 
         when(pendingRegistrationService.createPendingRegistration(any())).thenReturn(pendingRegistration());
     }

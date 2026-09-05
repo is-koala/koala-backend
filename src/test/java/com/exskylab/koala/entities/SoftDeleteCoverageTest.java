@@ -18,7 +18,8 @@ class SoftDeleteCoverageTest {
 
     private static final Pattern ENTITY = Pattern.compile("^@Entity", Pattern.MULTILINE);
 
-    private static final Set<String> HARD_DELETE_BY_DESIGN = Set.of("PendingRegistration");
+    private static final Set<String> HARD_DELETE_BY_DESIGN = Set.of(
+            "PasswordResetToken", "PendingRegistration");
 
     private static final Set<String> INHERITS_FROM_ROOT = Set.of(
             "File", "Image", "VerificationDocument",

@@ -128,8 +128,9 @@ jwt:
     expiration-ms: ${JWT_ACCESS_TOKEN_EXPIRATION_MS:43200000}
   password-set:
     expiration-ms: ${JWT_PASSWORD_SET_EXPIRATION_MS:600000}
-  password-reset:
-    expiration-ms: ${JWT_PASSWORD_RESET_EXPIRATION_MS:900000}
+
+password-reset:
+  token-validity-ms: ${PASSWORD_RESET_TOKEN_VALIDITY_MS:${JWT_PASSWORD_RESET_EXPIRATION_MS:900000}}
 
 rate-limit:
   enabled: ${RATE_LIMIT_ENABLED:true}

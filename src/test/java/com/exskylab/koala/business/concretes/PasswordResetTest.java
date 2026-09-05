@@ -1,10 +1,10 @@
 package com.exskylab.koala.business.concretes;
 
-import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.business.abstracts.*;
 import com.exskylab.koala.core.dtos.auth.request.ForgotPasswordDto;
 import com.exskylab.koala.core.dtos.auth.request.ResetPasswordDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
+import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.properties.AppProperties;
 import com.exskylab.koala.core.properties.SessionProperties;
 import com.exskylab.koala.core.security.JwtService;
@@ -30,6 +30,7 @@ class PasswordResetTest {
     private SessionService sessionService;
     private JwtService jwtService;
     private PasswordEncoder passwordEncoder;
+    private PasswordResetTokenService passwordResetTokenService;
     private AuthManager authManager;
 
     private final UUID userId = UUID.randomUUID();
@@ -41,13 +42,14 @@ class PasswordResetTest {
         sessionService = mock(SessionService.class);
         jwtService = mock(JwtService.class);
         passwordEncoder = mock(PasswordEncoder.class);
+        passwordResetTokenService = mock(PasswordResetTokenService.class);
 
         authManager = new AuthManager(
                 userService, mock(PendingRegistrationService.class), notificationService,
                 new AppProperties("http://localhost:8080", "http://localhost:3000"),
                 jwtService, passwordEncoder, mock(DeviceService.class), sessionService,
                 mock(LoginAttemptService.class), mock(SecurityService.class), new SessionProperties(),
-                mock(LegalService.class));
+                mock(LegalService.class), passwordResetTokenService);
     }
 
     private User user() {
@@ -72,7 +74,7 @@ class PasswordResetTest {
     @Test
     void aKnownAddressReceivesAResetLink() {
         when(userService.getByEmail("ada@example.com")).thenReturn(user());
-        when(jwtService.generatePasswordResetToken(userId)).thenReturn("reset-token");
+        when(passwordResetTokenService.issue(any(User.class))).thenReturn("reset-token");
 
         authManager.requestPasswordReset(new ForgotPasswordDto("ada@example.com"));
 
@@ -82,7 +84,7 @@ class PasswordResetTest {
     @Test
     void resettingReplacesTheHashAndClosesEverySession() {
         User user = user();
-        when(jwtService.extractPasswordResetUserId("reset-token")).thenReturn(userId);
+        when(passwordResetTokenService.consume("reset-token")).thenReturn(userId);
         when(userService.getById(userId)).thenReturn(user);
         when(passwordEncoder.encode("YeniParola1")).thenReturn("yeni-hash");
 
@@ -94,12 +96,12 @@ class PasswordResetTest {
     }
 
     @Test
-    void aTokenOfTheWrongKindIsRejectedBeforeAnythingChanges() {
-        when(jwtService.extractPasswordResetUserId("yanlis-tur"))
+    void anInvalidTokenIsRejectedBeforeAnythingChanges() {
+        when(passwordResetTokenService.consume("gecersiz-token"))
                 .thenThrow(new ValidationException("{invalid.token}"));
 
         org.junit.jupiter.api.Assertions.assertThrows(ValidationException.class,
-                () -> authManager.resetPassword(new ResetPasswordDto("yanlis-tur", "YeniParola1")));
+                () -> authManager.resetPassword(new ResetPasswordDto("gecersiz-token", "YeniParola1")));
 
         verify(userService, never()).save(any());
     }

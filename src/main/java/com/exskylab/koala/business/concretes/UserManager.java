@@ -74,6 +74,7 @@ public class UserManager implements UserService {
     private final BadgeService badgeService;
     private final BadgeMapper badgeMapper;
     private final ActivityNotificationService activityNotificationService;
+    private final PasswordResetTokenService passwordResetTokenService;
 
     public UserManager(UserDao userDao,
                        EmailVerificationService emailVerificationService,
@@ -90,8 +91,9 @@ public class UserManager implements UserService {
                        IdentityChallengeService identityChallengeService,
                        PhoneVerificationService phoneVerificationService,
                        BadgeService badgeService, BadgeMapper badgeMapper,
-                                PageableSanitizer pageableSanitizer,
-                       ActivityNotificationService activityNotificationService) {
+                       PageableSanitizer pageableSanitizer,
+                       ActivityNotificationService activityNotificationService,
+                       PasswordResetTokenService passwordResetTokenService) {
         this.userDao = userDao;
         this.emailVerificationService = emailVerificationService;
         this.userMapper = userMapper;
@@ -109,8 +111,9 @@ public class UserManager implements UserService {
         this.phoneVerificationService = phoneVerificationService;
         this.badgeService = badgeService;
         this.badgeMapper = badgeMapper;
-            this.pageableSanitizer = pageableSanitizer;
-                this.activityNotificationService = activityNotificationService;
+        this.pageableSanitizer = pageableSanitizer;
+        this.activityNotificationService = activityNotificationService;
+        this.passwordResetTokenService = passwordResetTokenService;
     }
 
     @Override
@@ -301,6 +304,7 @@ public class UserManager implements UserService {
         currentUser.setPassword(encodedNewPassword);
 
         userDao.save(currentUser);
+        passwordResetTokenService.revokeActiveForUser(currentUser.getId());
 
         sessionService.invalidateActiveSessionsForUserIdExcludingSessionId(currentUser.getId(), currentSessionId);
         log.info("Password updated successfully for user with ID: {}", currentUser.getId());

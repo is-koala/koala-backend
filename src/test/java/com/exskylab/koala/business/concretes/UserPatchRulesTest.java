@@ -51,7 +51,8 @@ class UserPatchRulesTest {
                 new com.exskylab.koala.core.utilities.identity.CscaTrustStore(new com.exskylab.koala.core.properties.IdentityVerificationProperties()),
                 mock(com.exskylab.koala.business.abstracts.IdentityChallengeService.class),
                 phoneVerificationService, mock(BadgeService.class), mock(BadgeMapper.class),
-                new com.exskylab.koala.core.helpers.PageableSanitizer(), mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class));
+                new com.exskylab.koala.core.helpers.PageableSanitizer(), mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class),
+                mock(com.exskylab.koala.business.abstracts.PasswordResetTokenService.class));
 
         when(securityService.getAuthenticatedUser()).thenReturn(me);
         when(userDao.save(any())).thenAnswer(i -> i.getArgument(0));

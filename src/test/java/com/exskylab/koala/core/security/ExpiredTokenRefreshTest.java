@@ -31,7 +31,6 @@ class ExpiredTokenRefreshTest {
         ReflectionTestUtils.setField(jwtService, "SECRET", SECRET);
         ReflectionTestUtils.setField(jwtService, "ACCESS_TOKEN_EXPIRATION_MS", 43_200_000L);
         ReflectionTestUtils.setField(jwtService, "PASSWORD_SET_EXPIRATION_MS", 600_000L);
-        ReflectionTestUtils.setField(jwtService, "PASSWORD_RESET_EXPIRATION_MS", 900_000L);
     }
 
     private SecretKey key() {

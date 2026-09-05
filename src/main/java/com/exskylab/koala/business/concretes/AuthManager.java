@@ -43,6 +43,7 @@ public class AuthManager implements AuthService {
     private final SecurityService securityService;
     private final SessionProperties sessionProperties;
     private final LegalService legalService;
+    private final PasswordResetTokenService passwordResetTokenService;
 
     public AuthManager(UserService userService,
                        PendingRegistrationService pendingRegistrationService,
@@ -55,7 +56,8 @@ public class AuthManager implements AuthService {
                        LoginAttemptService loginAttemptService,
                        SecurityService securityService,
                        SessionProperties sessionProperties,
-                       LegalService legalService) {
+                       LegalService legalService,
+                       PasswordResetTokenService passwordResetTokenService) {
         this.userService = userService;
         this.pendingRegistrationService = pendingRegistrationService;
         this.notificationService = notificationService;
@@ -68,6 +70,7 @@ public class AuthManager implements AuthService {
         this.securityService = securityService;
         this.sessionProperties = sessionProperties;
         this.legalService = legalService;
+        this.passwordResetTokenService = passwordResetTokenService;
     }
 
     @Override
@@ -311,12 +314,12 @@ public class AuthManager implements AuthService {
         User user;
         try {
             user = userService.getByEmail(forgotPasswordDto.getEmail());
-        } catch (RuntimeException e) {
+        } catch (ResourceNotFoundException exception) {
             log.info("Password reset requested for an unknown address. Responding without disclosing it.");
             return;
         }
 
-        String resetToken = jwtService.generatePasswordResetToken(user.getId());
+        String resetToken = passwordResetTokenService.issue(user);
         String resetLink = appProperties.frontendUrl() + "/reset-password?token=" + resetToken;
 
         SendEmailDto sendEmailDto = new SendEmailDto();
@@ -337,7 +340,7 @@ public class AuthManager implements AuthService {
     @Override
     @Transactional
     public void resetPassword(ResetPasswordDto resetPasswordDto) {
-        UUID userId = jwtService.extractPasswordResetUserId(resetPasswordDto.getResetToken());
+        UUID userId = passwordResetTokenService.consume(resetPasswordDto.getResetToken());
 
         User user = userService.getById(userId);
         user.setPassword(passwordEncoder.encode(resetPasswordDto.getNewPassword()));

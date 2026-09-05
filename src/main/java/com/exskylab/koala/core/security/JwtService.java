@@ -1,6 +1,5 @@
 package com.exskylab.koala.core.security;
 
-import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.entities.User;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
@@ -22,9 +21,6 @@ public class JwtService {
 
     @Value("${jwt.password-set.expiration-ms}")
     private Long PASSWORD_SET_EXPIRATION_MS;
-
-    @Value("${jwt.password-reset.expiration-ms}")
-    private Long PASSWORD_RESET_EXPIRATION_MS;
 
     @Value("${jwt.access-token.expiration-ms}")
     private Long ACCESS_TOKEN_EXPIRATION_MS;
@@ -48,25 +44,6 @@ public class JwtService {
               throw new IllegalArgumentException("Invalid token type");
        }
        return UUID.fromString(claims.getSubject());
-    }
-
-    public String generatePasswordResetToken(UUID userId) {
-        return Jwts.builder()
-                .subject(userId.toString())
-                .issuer("iskoala.com")
-                .audience().add("password-reset")
-                .and().issuedAt(new Date(System.currentTimeMillis()))
-                .expiration(new Date(System.currentTimeMillis() + PASSWORD_RESET_EXPIRATION_MS))
-                .signWith(getSignKey(), Jwts.SIG.HS256)
-                .compact();
-    }
-
-    public UUID extractPasswordResetUserId(String token) {
-        Claims claims = extractAllClaims(token);
-        if (!Set.of("password-reset").equals(claims.getAudience())) {
-            throw new ValidationException("{invalid.token}");
-        }
-        return UUID.fromString(claims.getSubject());
     }
 
     public String extractSubject(String token) {
