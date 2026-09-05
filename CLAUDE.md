@@ -1109,8 +1109,29 @@ veritabanına elle yazılmış ya da göçten kalmış bir satır bile ödeme bi
 gönderim noktası eklendiğinde tercihi kontrol etmeyi hatırlamak gerekmiyor. Bastırılan gönderim `null`
 döner, `Notification` satırı **açılmaz** ve kuyruğa girmez.
 
-**Alıcısı olmayan e-posta hiçbir zaman bastırılmaz.** Şirket daveti gibi akışlar henüz Koala kullanıcısı
-olmayan bir adrese gidiyor; `recipient == null` olduğunda tercih sorulmaz.
+**Alıcısı olmayan e-posta hiçbir zaman bastırılmaz.** `recipient == null` olduğunda tercih sorulmaz — henüz
+Koala kullanıcısı olmayan bir adrese gönderim yapan akışlar için. Bu boşluk **iki** yerde geçerli:
+`AuthManager.startRegistration` (kayıt doğrulaması; `User` satırı henüz yok, ortada yalnızca
+`PendingRegistration` var) ve `CompanyManager.sendCompanyCreatedMail`'in şirket adresine giden ilk postası
+(aşağıda). **Yetkili daveti bu listede değil:** `CompanyContactInvitationManager` alıcıyı `userService.getByEmail`
+ile buluyor, bulamazsa `ResourceNotFoundException` atıyor — davet her zaman kayıtlı bir kullanıcıya gider ve
+`setRecipient` çağırır. Bir gönderim noktası eklerken ölçüt "adres kayıtlı bir kullanıcıya ait olabilir mi",
+"bu akış davet gibi mi görünüyor" değil.
+
+**`sendCompanyCreatedMail` iki posta gönderiyor ve yalnızca birinin alıcısı var — bilinçli.** İlki
+`company.email` adresine gidiyor: bu adres `CreateCompanyRequestDto` üzerinden serbest metin olarak geliyor,
+yalnızca `@Email` ile doğrulanıyor ve hiçbir yerde `User` tablosuyla eşleştirilmiyor (`updateCompany` ile de
+değiştirilebiliyor). Tipik değeri `info@sirket.com` gibi bir kurum adresi; arkasında bir Koala hesabı olması
+gerekmiyor, olsa bile o hesabın sahibi olduğunu gösteren bir kanıt yok. Bu yüzden `recipient` boş bırakıldı:
+doldurmak için adresi `User` tablosunda aramak gerekirdi ve rastlantısal bir eşleşme postayı **başkasının**
+tercihine tabi kılardı. İkincisi kurucunun kendi adresine gidiyor; `contact.getUser()` oturum sahibinin ta
+kendisi, yani her zaman bilinen bir `User` — orada `setRecipient` **çağrılır**. Asimetri budur ve hata değildir:
+ayrım "postanın konusu ne" değil, "hedefin arkasında kimliğini doğrulayabildiğimiz bir kullanıcı var mı".
+
+Kurucuya giden posta bir süre alıcısız gidiyordu; sonucu `notifications.recipient_id`'nin boş kalması ve
+`COMPANY_UPDATES` kapatılmış olsa bile postanın gönderilmesiydi. `CompanyCreationNotificationTest` üç kuralı da
+sabitliyor — kurucunun postasında alıcı var, şirket adresine gidende yok, ve şirket adresi kurucunun adresiyle
+birebir aynı olsa bile yok (adresin eşleşmesi kimlik kanıtı değil).
 
 **Abonelikten çıkma bağlantısı e-postaya kendiliğinden biniyor, ama yalnızca ticari iletide.** `sendEmail`,
 kategori `COMMERCIAL` ise `unsubscribeUrl`'i template parametrelerine ekler ve `emails/layout.html` altbilgisi
