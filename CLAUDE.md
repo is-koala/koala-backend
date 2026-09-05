@@ -641,6 +641,8 @@ Artık `SettlementOperation.REFUND` var ve `/payment/refund` çağrılıyor (`pa
 
 **Hâlâ sandbox'ta uçtan uca doğrulanmadı.** Yukarıdakiler dokümana karşı doğru; gerçek bir sandbox işlemiyle teyit edilmesi gereken tek şey kısmi iade + disapprove ikilisinin sıralamasıdır. `iyzico.settlementEnabled=false` ile kuyruk tümüyle kapalı tutulabilir.
 
+**Denetimin kapatmadığı bir alan kaldı: `mdStatus` hiç okunmuyor.** Iyzico'nun belgelediği `4131111111111117` test kartı `paymentStatus = SUCCESS` ile birlikte `mdStatus = 0` döndürüyor, yani 3DS doğrulaması geçmemiş bir ödeme bugün emanete açılır. Ayrıntı, kaynak ve canlı/sandbox karşılaştırması `docs/runbooks/payments.md` §6.2'de; burada tekrarlanmıyor.
+
 ## 2y. Mutabakat outbox'ı
 
 Faz 8B'de sağlayıcı çağrısı `PayoutManager` içinden **senkron** yapılıyordu ve hata durumunda tüm işlem geri alınıyordu — yani `Payout` kaydı da yazılmıyordu ve **kimse yeniden denemiyordu**. Iyzico bir dakikalığına düşse para emanette kilitli kalırdı.
@@ -658,6 +660,48 @@ Bir süre bu yarım kaldı: `markPayoutProcessing` yalnızca `APPROVE` için ça
 **`PayoutStatus.COMPLETED` bilerek kullanılmıyor.** Sağlayıcı `approve` çağrısı yalnızca talimatın kabul edildiğini söyler; paranın işçinin banka hesabına geçtiğini söyleyen bir geri bildirim yok. O geçiş Iyzico ödeme raporuyla mutabakat gerektiriyor, Faz 11B'nin kalan parçası.
 
 **Bu entegrasyon hâlâ sandbox'ta uçtan uca doğrulanmadı** (protokol denetimi §2x'te yapıldı, dört blocker düzeltildi). `iyzico.settlementEnabled=false` iken hiç kuyruğa girilmez, `iyzico.settlement-retry.enabled=false` iken kuyruk işlenmez — ikisi de prod'a kademeli geçiş için.
+
+## 2y2. Sandbox/canlı ayrımı — açılış kapısı
+
+Sandbox ile canlı arasındaki tek fark `IYZICO_BASE_URL` ve anahtar çiftiydi;
+ikisi de serbest metindi. Staging'e yanlışlıkla canlı anahtar yüklemek hiçbir
+şey kırmıyordu — test amaçlı bir ilan gerçek parayla ödenirdi ve bunu fark
+etmenin yolu ekstreye bakmaktı.
+
+`IyzicoProperties` artık ortamı biliyor. `iyzico.deployment`, `docs/environments.md`
+sözleşmesindeki `SERVICE_ENVIRONMENT` değerine bağlı; `@AssertTrue` ikisinin
+eşleşmesini açılış şartı yapıyor:
+
+| `SERVICE_ENVIRONMENT` | İzin verilen sağlayıcı ortamı |
+|---|---|
+| `production` | yalnız `https://api.iyzipay.com` |
+| `staging` | yalnız `https://sandbox-api.iyzipay.com` |
+| `local` / tanımsız | sandbox veya loopback (`localhost`, `127.0.0.1`, `::1`) |
+
+Dört karar açıklama istiyor:
+
+**Yeni bir değişken uydurulmadı.** Ortam adı zaten `SERVICE_ENVIRONMENT`'ta
+duruyordu ve `docs/environments.md` onu staging zorunluluğu olarak yazıyor.
+İkinci bir "hangi ortamdayız" değişkeni açmak ikisinin ayrışabileceği bir
+gelecek üretirdi.
+
+**Tanınmayan host her ortamda reddediliyor.** Yalnız "canlı mı sandbox mı" diye
+bakmak yetmez; `https://api.iyzipay.com.saldirgan.test` iki listeye de girmez ve
+sessizce kabul edilirdi. Host tam eşleşme, şema `https` zorunlu. Loopback bunun
+istisnası: `IyzicoProtocolTest` sahte bir HTTP sunucusuna konuşuyor ve testler
+`local` sayılıyor.
+
+**Tanınmayan ortam adı açılışı düşürüyor.** `SERVICE_ENVIRONMENT=prod` yazılırsa
+enum bağlanamaz ve uygulama açılmaz. Alternatifi — bilinmeyeni "production
+değil" saymak — production'ı sessizce sandbox'a düşürürdü.
+
+**Tanımsız ortam `local` sayılıyor, `production` değil.** Değişken hiç
+verilmezse en dar hak kazanılır: canlı `baseUrl` reddedilir. Yanılma yönü her
+zaman parayı korumaktan yana.
+
+`IyzicoProperties.baseUrl` alanının Java varsayılanı da sandbox; yapılandırma
+tümüyle kaybolsa bile canlıya düşülmez. Kuralı `IyzicoEnvironmentSplitTest`
+on iki kuralla sabitliyor. Operasyon tarafı `docs/runbooks/payments.md`'de.
 
 ## 2z. Gerçek zamanlı katman
 
