@@ -72,6 +72,12 @@ public class JobAssignment extends BaseEntity{
     @Column(name = "total_charged", precision = 19, scale = 2)
     private BigDecimal totalCharged;
 
+    @Column(name = "pricing_version", length = 32)
+    private String pricingVersion;
+
+    @Column(name = "currency", length = 3)
+    private String currency;
+
     @Column(name = "notes")
     private String notes;
 

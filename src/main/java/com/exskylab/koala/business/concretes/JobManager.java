@@ -65,13 +65,15 @@ public class JobManager implements JobService {
     private final NotificationService notificationService;
     private final MessageResolver messageResolver;
     private final JobSearchProperties searchProperties;
+    private final PricingService pricingService;
 
     public JobManager(JobDao jobDao, SecurityService securityService, JobCategoryService jobCategoryService, AddressService addressService, CompanyService companyService, JobMapper jobMapper,
                       PageableSanitizer pageableSanitizer, CompanyContactService companyContactService,
                       JobAlertService jobAlertService, GalleryService galleryService,
                       CompanyFollowService companyFollowService, JobApplicationDao jobApplicationDao,
                       JobAssignmentDao jobAssignmentDao, NotificationService notificationService,
-                      MessageResolver messageResolver, JobSearchProperties searchProperties) {
+                      MessageResolver messageResolver, JobSearchProperties searchProperties,
+                      PricingService pricingService) {
         this.jobDao = jobDao;
         this.securityService = securityService;
         this.jobCategoryService = jobCategoryService;
@@ -88,6 +90,7 @@ public class JobManager implements JobService {
         this.notificationService = notificationService;
         this.messageResolver = messageResolver;
         this.searchProperties = searchProperties;
+        this.pricingService = pricingService;
     }
 
     @Override
@@ -158,6 +161,7 @@ public class JobManager implements JobService {
         job.setDressCode(usersMeJobsPostRequestDto.getDressCode());
         job.setHeadcount(usersMeJobsPostRequestDto.getHeadcount());
         job.setStatus(JobStatus.OPEN);
+        pricingService.snapshot(job);
 
         Job savedJob = jobDao.save(job);
         jobAlertService.notifyMatching(savedJob);
@@ -234,6 +238,7 @@ public class JobManager implements JobService {
         job.setDressCode(companiesCompanyIdJobsPostRequestDto.getDressCode());
         job.setHeadcount(companiesCompanyIdJobsPostRequestDto.getHeadcount());
         job.setStatus(JobStatus.OPEN);
+        pricingService.snapshot(job);
 
 
         Job savedJob = jobDao.save(job);

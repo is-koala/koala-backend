@@ -23,6 +23,7 @@ public class PaymentAttemptDto {
     private BigDecimal commissionAmount;
     private BigDecimal commissionRate;
     private BigDecimal totalCharged;
+    private PricingBreakdownDto pricing;
     private String failureReason;
     private Instant completedAt;
     private Instant createdAt;

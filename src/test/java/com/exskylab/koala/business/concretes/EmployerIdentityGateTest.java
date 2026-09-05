@@ -6,7 +6,9 @@ import com.exskylab.koala.core.dtos.job.request.CreateIndividualJobDto;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.helpers.MessageResolver;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
+import com.exskylab.koala.core.helpers.CommissionCalculator;
 import com.exskylab.koala.core.mappers.JobMapper;
+import com.exskylab.koala.core.properties.CommissionProperties;
 import com.exskylab.koala.core.properties.JobSearchProperties;
 import com.exskylab.koala.dataAccess.JobApplicationDao;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
@@ -58,7 +60,8 @@ class EmployerIdentityGateTest {
                 mock(JobMapper.class), new PageableSanitizer(), mock(CompanyContactService.class),
                 mock(JobAlertService.class), mock(GalleryService.class), mock(CompanyFollowService.class),
                 mock(JobApplicationDao.class), mock(JobAssignmentDao.class), mock(NotificationService.class),
-                mock(MessageResolver.class), new JobSearchProperties());
+                mock(MessageResolver.class), new JobSearchProperties(),
+                new PricingManager(new CommissionCalculator(new CommissionProperties())));
 
         when(jobDao.save(any())).thenAnswer(i -> i.getArgument(0));
     }
@@ -84,7 +87,12 @@ class EmployerIdentityGateTest {
     @Test
     void aVerifiedIndividualEmployerCanOpenAJob() {
         assertDoesNotThrow(() -> jobManager.createIndividualJob(jobRequest()));
-        verify(jobDao).save(any(Job.class));
+        var jobCaptor = org.mockito.ArgumentCaptor.forClass(Job.class);
+        verify(jobDao).save(jobCaptor.capture());
+        Job saved = jobCaptor.getValue();
+        assertEquals("2026-09-v1", saved.getPricingVersion());
+        assertEquals(new BigDecimal("75.00"), saved.getCommissionAmount());
+        assertEquals(new BigDecimal("1075.00"), saved.getTotalCharged());
     }
 
     @Test

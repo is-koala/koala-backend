@@ -13,6 +13,7 @@ import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentDto;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.business.abstracts.PaymentService;
+import com.exskylab.koala.business.abstracts.PricingService;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
 import com.exskylab.koala.core.properties.AppProperties;
@@ -68,7 +69,7 @@ public class JobAssignmentManager implements JobAssignmentService {
     private final IyzicoPaymentService iyzicoPaymentService;
     private final CompanyContactService companyContactService;
     private final UserService userService;
-    private final CommissionCalculator commissionCalculator;
+    private final PricingService pricingService;
     private final PaymentService paymentService;
     private final PaymentStateMachine paymentStateMachine;
     private final AppProperties appProperties;
@@ -86,7 +87,7 @@ public class JobAssignmentManager implements JobAssignmentService {
 
 
     public JobAssignmentManager(JobAssignmentDao jobAssignmentDao, SecurityService securityService, JobAssignmentMapper jobAssignmentMapper, IyzicoPaymentService iyzicoPaymentService, CompanyContactService companyContactService, UserService userService,
-                               CommissionCalculator commissionCalculator, PaymentService paymentService,
+                               PricingService pricingService, PaymentService paymentService,
                                PaymentStateMachine paymentStateMachine, AppProperties appProperties,
                                BankAccountService bankAccountService, PageableSanitizer pageableSanitizer,
                                AssignmentParticipants participants, BadgeService badgeService,
@@ -102,7 +103,7 @@ public class JobAssignmentManager implements JobAssignmentService {
         this.iyzicoPaymentService = iyzicoPaymentService;
         this.companyContactService = companyContactService;
         this.userService = userService;
-        this.commissionCalculator = commissionCalculator;
+        this.pricingService = pricingService;
         this.paymentService = paymentService;
         this.paymentStateMachine = paymentStateMachine;
         this.appProperties = appProperties;
@@ -234,7 +235,7 @@ public class JobAssignmentManager implements JobAssignmentService {
         }
 
 
-        CommissionCalculator.Breakdown breakdown = commissionCalculator.calculate(job.getSalary());
+        CommissionCalculator.Breakdown breakdown = pricingService.breakdown(assignment);
         Payment payment = paymentService.startAttempt(assignment, breakdown);
 
         PaymentSessionRequestDto iyzicoRequest = new PaymentSessionRequestDto();
@@ -261,7 +262,10 @@ public class JobAssignmentManager implements JobAssignmentService {
         paymentService.attachProviderToken(payment, paymentSession.getToken());
 
         log.info("Payment session initiated for job assignment with id {} and payment {}", assignmentId, payment.getId());
-        return jobAssignmentMapper.tojobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto(paymentSession);
+        PaymentSessionDto response = jobAssignmentMapper
+                .tojobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto(paymentSession);
+        response.setPricing(pricingService.describe(assignment));
+        return response;
 
     }
 

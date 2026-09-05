@@ -53,7 +53,7 @@ class ApplicationReadinessTest {
                 mock(CompanyContactService.class), mock(JobAssignmentService.class),
                 mock(JobApplicationMapper.class), new PageableSanitizer(),
                 mock(GalleryService.class), mock(ActivityNotificationService.class),
-                bankAccountService);
+                bankAccountService, mock(PricingService.class));
 
         when(jobApplicationDao.save(any())).thenAnswer(i -> i.getArgument(0));
     }

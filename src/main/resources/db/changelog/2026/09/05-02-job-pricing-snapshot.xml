@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-05-02-job-pricing-snapshot" author="koala">
+        <addColumn tableName="jobs">
+            <column name="pricing_version" type="VARCHAR(32)"/>
+            <column name="currency" type="VARCHAR(3)"/>
+            <column name="worker_payout" type="NUMERIC(19,2)"/>
+            <column name="commission_amount" type="NUMERIC(19,2)"/>
+            <column name="commission_rate" type="NUMERIC(6,4)"/>
+            <column name="total_charged" type="NUMERIC(19,2)"/>
+        </addColumn>
+
+        <sql>
+            UPDATE jobs
+            SET pricing_version = '2026-09-v1',
+                currency = 'TRY',
+                worker_payout = ROUND(salary, 2),
+                commission_rate = 0.0750,
+                commission_amount = ROUND(ROUND(salary, 2) * 0.0750, 2),
+                total_charged = ROUND(salary, 2) + ROUND(ROUND(salary, 2) * 0.0750, 2)
+            WHERE salary IS NOT NULL
+        </sql>
+
+        <addColumn tableName="job_assignments">
+            <column name="pricing_version" type="VARCHAR(32)"/>
+            <column name="currency" type="VARCHAR(3)"/>
+        </addColumn>
+
+        <sql>
+            UPDATE job_assignments
+            SET pricing_version = (SELECT jobs.pricing_version FROM jobs WHERE jobs.id = job_assignments.job_id),
+                currency = (SELECT jobs.currency FROM jobs WHERE jobs.id = job_assignments.job_id),
+                worker_payout = COALESCE(worker_payout,
+                    (SELECT jobs.worker_payout FROM jobs WHERE jobs.id = job_assignments.job_id)),
+                commission_rate = COALESCE(commission_rate,
+                    (SELECT jobs.commission_rate FROM jobs WHERE jobs.id = job_assignments.job_id)),
+                commission_amount = COALESCE(commission_amount,
+                    (SELECT jobs.commission_amount FROM jobs WHERE jobs.id = job_assignments.job_id)),
+                total_charged = COALESCE(total_charged,
+                    (SELECT jobs.total_charged FROM jobs WHERE jobs.id = job_assignments.job_id))
+        </sql>
+
+        <addColumn tableName="payments">
+            <column name="pricing_version" type="VARCHAR(32)"/>
+        </addColumn>
+
+        <sql>
+            UPDATE payments
+            SET pricing_version = (SELECT job_assignments.pricing_version
+                                   FROM job_assignments
+                                   WHERE job_assignments.id = payments.job_assignment_id)
+        </sql>
+
+        <rollback>
+            <dropColumn tableName="payments" columnName="pricing_version"/>
+            <dropColumn tableName="job_assignments" columnName="currency"/>
+            <dropColumn tableName="job_assignments" columnName="pricing_version"/>
+            <dropColumn tableName="jobs" columnName="total_charged"/>
+            <dropColumn tableName="jobs" columnName="commission_rate"/>
+            <dropColumn tableName="jobs" columnName="commission_amount"/>
+            <dropColumn tableName="jobs" columnName="worker_payout"/>
+            <dropColumn tableName="jobs" columnName="currency"/>
+            <dropColumn tableName="jobs" columnName="pricing_version"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

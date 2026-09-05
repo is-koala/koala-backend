@@ -14,12 +14,14 @@ import java.util.List;
 
 @Mapper(componentModel = "spring",
         uses = {UserMapper.class, JobCategoryMapper.class, AddressMapper.class, CompanyMapper.class,
-                GalleryMapper.class},
+                GalleryMapper.class, PricingDtoMapper.class},
         injectionStrategy = InjectionStrategy.CONSTRUCTOR)
 public interface JobMapper {
 
+    @Mapping(target = "pricing", source = "job")
     IndividualJobDto toUsersMeJobsPostResponseDto(Job job);
 
+    @Mapping(target = "pricing", source = "job")
     CompanyJobDto toCompaniesCompanyIdJobsPostResponseDto(Job job);
 
     ShortJobDto toShortJobDto(Job job);
@@ -32,9 +34,11 @@ public interface JobMapper {
     @Mapping(target = "coverImageUrl", ignore = true)
     @Mapping(target = "applicationCount", ignore = true)
     @Mapping(target = "hiredCount", ignore = true)
+    @Mapping(target = "pricing", source = "job")
     JobSummaryDto toJobSummaryDto(Job job);
 
     @Mapping(target = "hiredCount", ignore = true)
+    @Mapping(target = "pricing", source = "job")
     JobDetailDto toJobDetailDto(Job job);
 
     List<JobSummaryDto> toJobSummaryDtoList(List<Job> jobs);

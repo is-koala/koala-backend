@@ -44,6 +44,9 @@ public class Payment extends BaseEntity {
     @Column(name = "currency", nullable = false, length = 3)
     private String currency;
 
+    @Column(name = "pricing_version", length = 32)
+    private String pricingVersion;
+
     @Column(name = "worker_payout", precision = 19, scale = 2)
     private BigDecimal workerPayout;
 

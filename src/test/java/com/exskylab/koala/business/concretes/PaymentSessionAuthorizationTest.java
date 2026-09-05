@@ -64,7 +64,7 @@ class PaymentSessionAuthorizationTest {
                 iyzicoPaymentService,
                 companyContactService,
                 mock(UserService.class),
-                new CommissionCalculator(new CommissionProperties()),
+                new PricingManager(new CommissionCalculator(new CommissionProperties())),
                 mock(PaymentService.class),
                 new PaymentStateMachine(),
                 new AppProperties("http://localhost:8080", "http://localhost:3000"),

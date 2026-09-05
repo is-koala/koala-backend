@@ -47,7 +47,8 @@ public class PaymentManager implements PaymentService {
         payment.setJobAssignment(jobAssignment);
         payment.setConversationId(UUID.randomUUID().toString());
         payment.setStatus(PaymentAttemptStatus.INITIATED);
-        payment.setCurrency(CURRENCY);
+        payment.setPricingVersion(jobAssignment.getPricingVersion());
+        payment.setCurrency(jobAssignment.getCurrency() == null ? CURRENCY : jobAssignment.getCurrency());
         payment.setWorkerPayout(breakdown.workerPayout());
         payment.setCommissionAmount(breakdown.commission());
         payment.setCommissionRate(breakdown.rate());

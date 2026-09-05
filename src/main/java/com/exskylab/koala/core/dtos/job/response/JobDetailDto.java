@@ -9,6 +9,7 @@ import com.exskylab.koala.entities.JobEmployerType;
 import com.exskylab.koala.entities.JobStatus;
 import com.exskylab.koala.entities.JobType;
 import com.exskylab.koala.entities.SalaryType;
+import com.exskylab.koala.core.dtos.payment.response.PricingBreakdownDto;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -38,6 +39,7 @@ public class JobDetailDto {
     private JobType type;
     private SalaryType salaryType;
     private BigDecimal salary;
+    private PricingBreakdownDto pricing;
     private int minAge;
     private int maxAge;
     private boolean insuranceRequired;

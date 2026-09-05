@@ -78,7 +78,7 @@ class AssignmentOperationsAuthorizationTest {
                 mock(com.exskylab.koala.core.mappers.JobAssignmentMapper.class),
                 mock(com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService.class),
                 mock(CompanyContactService.class), mock(com.exskylab.koala.business.abstracts.UserService.class),
-                new com.exskylab.koala.core.helpers.CommissionCalculator(new com.exskylab.koala.core.properties.CommissionProperties()),
+                new PricingManager(new com.exskylab.koala.core.helpers.CommissionCalculator(new com.exskylab.koala.core.properties.CommissionProperties())),
                 mock(com.exskylab.koala.business.abstracts.PaymentService.class),
                 new com.exskylab.koala.core.helpers.PaymentStateMachine(),
                 new com.exskylab.koala.core.properties.AppProperties("http://localhost:8080", "http://localhost:3000"),

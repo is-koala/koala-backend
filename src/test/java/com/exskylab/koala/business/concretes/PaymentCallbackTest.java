@@ -150,6 +150,8 @@ class PaymentCallbackTest {
     void everyAttemptGetsItsOwnConversationId() {
         JobAssignment assignment = new JobAssignment();
         assignment.setId(UUID.randomUUID());
+        assignment.setPricingVersion("2026-09-v1");
+        assignment.setCurrency("TRY");
         CommissionCalculator calculator = new CommissionCalculator(new CommissionProperties());
         var breakdown = calculator.calculate(new BigDecimal("1000.00"));
 
@@ -160,6 +162,8 @@ class PaymentCallbackTest {
                 "Her deneme kendi conversationId'sini almali; aksi halde mutabakat yapilamaz.");
         assertNotEquals(assignment.getId().toString(), first.getConversationId(),
                 "conversationId assignmentId ile esitlenmemeli.");
+        assertEquals("2026-09-v1", first.getPricingVersion());
+        assertEquals("TRY", first.getCurrency());
     }
 
     @Test

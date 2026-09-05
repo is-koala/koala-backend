@@ -46,6 +46,7 @@ public class JobApplicationManager implements JobApplicationService {
     private final GalleryService galleryService;
     private final ActivityNotificationService activityNotificationService;
     private final BankAccountService bankAccountService;
+    private final PricingService pricingService;
 
 
     public JobApplicationManager(JobApplicationDao jobApplicationDao, JobService jobService,
@@ -53,7 +54,8 @@ public class JobApplicationManager implements JobApplicationService {
                                  JobAssignmentService jobAssignmentService, JobApplicationMapper jobApplicationMapper,
                                  PageableSanitizer pageableSanitizer, GalleryService galleryService,
                                  ActivityNotificationService activityNotificationService,
-                                 BankAccountService bankAccountService) {
+                                 BankAccountService bankAccountService,
+                                 PricingService pricingService) {
         this.jobApplicationDao = jobApplicationDao;
         this.jobService = jobService;
         this.securityService = securityService;
@@ -64,6 +66,7 @@ public class JobApplicationManager implements JobApplicationService {
         this.galleryService = galleryService;
         this.activityNotificationService = activityNotificationService;
         this.bankAccountService = bankAccountService;
+        this.pricingService = pricingService;
     }
 
     @Override
@@ -166,6 +169,7 @@ public class JobApplicationManager implements JobApplicationService {
             jobAssignment.setApplication(jobApplication);
             jobAssignment.setStatus(AssignmentStatus.PENDING_CONFIRMATION);
             jobAssignment.setPaymentStatus(null);
+            pricingService.copy(jobApplication.getJob(), jobAssignment);
 
             assignmentToReturn = jobAssignmentService.save(jobAssignment);
             log.info("Job application with id: {} accepted", applicationId);

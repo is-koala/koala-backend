@@ -10,4 +10,5 @@ public class PaymentMessages {
     public static final String PROVIDER_REJECTED = "{payment.provider.rejected}";
     public static final String AMOUNT_MISMATCH = "{payment.amount.mismatch}";
     public static final String FRAUD_REVIEW = "{payment.fraud.review}";
+    public static final String QUOTE_CALCULATED = "{payment.quote.calculated}";
 }

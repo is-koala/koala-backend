@@ -8,6 +8,7 @@ import com.exskylab.koala.entities.JobEmployerType;
 import com.exskylab.koala.entities.JobStatus;
 import com.exskylab.koala.entities.JobType;
 import com.exskylab.koala.entities.SalaryType;
+import com.exskylab.koala.core.dtos.payment.response.PricingBreakdownDto;
 import java.math.BigDecimal;
 
 import lombok.AllArgsConstructor;
@@ -55,6 +56,8 @@ public class IndividualJobDto {
     private SalaryType salaryType;
 
     private BigDecimal salary;
+
+    private PricingBreakdownDto pricing;
 
     private int minAge;
 

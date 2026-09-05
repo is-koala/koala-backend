@@ -48,7 +48,7 @@ class AutoCompletionRulesTest {
 
         manager = new JobAssignmentManager(jobAssignmentDao, mock(SecurityService.class),
                 mock(JobAssignmentMapper.class), mock(IyzicoPaymentService.class), contacts,
-                mock(UserService.class), new CommissionCalculator(new CommissionProperties()),
+                mock(UserService.class), new PricingManager(new CommissionCalculator(new CommissionProperties())),
                 mock(PaymentService.class), new PaymentStateMachine(),
                 new AppProperties("http://localhost:8080", "http://localhost:3000"),
                 mock(BankAccountService.class), new PageableSanitizer(),

@@ -151,6 +151,7 @@ public class SecurityConfig {
 
 
                         //payment endpoints
+                        .requestMatchers(HttpMethod.POST, "/payment-quotes").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/payments/callback").permitAll()
                         .requestMatchers(HttpMethod.GET, "/job-assignments/{assignmentId}/payments").hasAnyRole("USER", "ADMIN")
 

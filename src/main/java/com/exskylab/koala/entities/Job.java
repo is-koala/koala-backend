@@ -79,6 +79,24 @@ public class Job extends BaseEntity{
     @Column(name = "salary", precision = 19, scale = 2)
     private BigDecimal salary;
 
+    @Column(name = "pricing_version", length = 32)
+    private String pricingVersion;
+
+    @Column(name = "currency", length = 3)
+    private String currency;
+
+    @Column(name = "worker_payout", precision = 19, scale = 2)
+    private BigDecimal workerPayout;
+
+    @Column(name = "commission_amount", precision = 19, scale = 2)
+    private BigDecimal commissionAmount;
+
+    @Column(name = "commission_rate", precision = 6, scale = 4)
+    private BigDecimal commissionRate;
+
+    @Column(name = "total_charged", precision = 19, scale = 2)
+    private BigDecimal totalCharged;
+
     @Column(name = "min_age")
     private int minAge;
 

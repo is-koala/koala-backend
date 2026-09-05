@@ -11,7 +11,7 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 @Mapper(componentModel = "spring",
-        uses = {JobMapper.class, UserMapper.class, CompanyMapper.class},
+        uses = {JobMapper.class, UserMapper.class, CompanyMapper.class, PricingDtoMapper.class},
         injectionStrategy = InjectionStrategy.CONSTRUCTOR)
 public interface JobAssignmentMapper {
 
@@ -21,10 +21,12 @@ public interface JobAssignmentMapper {
     JobAssignmentDto toJobAssignmentsAssignmentIdStatusPatchResponseDto(
             JobAssignment jobAssignment);
 
+    @Mapping(target = "pricing", ignore = true)
     PaymentSessionDto
             tojobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto(
             PaymentSessionResponseDto paymentSessionResponseDto);
 
+    @Mapping(target = "pricing", source = "jobAssignment")
     MyAssignmentDto toMyAssignmentDto(JobAssignment jobAssignment);
 
     java.util.List<MyAssignmentDto> toMyAssignmentDtoList(java.util.List<JobAssignment> assignments);
