@@ -1,5 +1,7 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.core.security.RequiresPermission;
+import com.exskylab.koala.entities.StaffPermission;
 import com.exskylab.koala.business.abstracts.JobCategoryService;
 import com.exskylab.koala.core.constants.JobCategoryMessages;
 import com.exskylab.koala.core.dtos.jobCategory.request.SaveJobCategoryDto;
@@ -42,6 +44,7 @@ public class JobCategoriesController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Kategoriler listelendi")
     })
+    @RequiresPermission(StaffPermission.CATEGORY_MANAGE)
     @GetMapping
     public ResponseEntity<SuccessDataResult<List<JobCategoryDto>>> categories() {
         return ResponseEntity.ok(new SuccessDataResult<>(
@@ -58,6 +61,7 @@ public class JobCategoriesController {
             @ApiResponse(responseCode = "409", description = "Kod zaten kullanılıyor",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
+    @RequiresPermission(value = StaffPermission.CATEGORY_MANAGE, action = "job.category.create")
     @PostMapping
     public ResponseEntity<SuccessDataResult<JobCategoryDto>> createCategory(
             @RequestBody @Valid SaveJobCategoryDto request) {
@@ -78,6 +82,7 @@ public class JobCategoriesController {
             @ApiResponse(responseCode = "409", description = "Kod başka bir kategoride kullanılıyor",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
+    @RequiresPermission(value = StaffPermission.CATEGORY_MANAGE, action = "job.category.update")
     @PutMapping("/{categoryId}")
     public ResponseEntity<SuccessDataResult<JobCategoryDto>> updateCategory(
             @PathVariable UUID categoryId, @RequestBody @Valid SaveJobCategoryDto request) {
@@ -96,6 +101,7 @@ public class JobCategoriesController {
             @ApiResponse(responseCode = "409", description = "Kategori kullanımda",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
+    @RequiresPermission(value = StaffPermission.CATEGORY_MANAGE, action = "job.category.delete")
     @DeleteMapping("/{categoryId}")
     public ResponseEntity<Result> deleteCategory(@PathVariable UUID categoryId) {
         jobCategoryService.deleteCategory(categoryId);

@@ -1,5 +1,7 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.core.security.RequiresPermission;
+import com.exskylab.koala.entities.StaffPermission;
 import com.exskylab.koala.core.utilities.results.ErrorResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -43,6 +45,7 @@ public class DisputesController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Uyuşmazlıklar listelendi")
     })
+    @RequiresPermission(StaffPermission.DISPUTE_RESOLVE)
     @GetMapping
     public ResponseEntity<SuccessDataResult<PageDto<DisputeDto>>> pending(
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
@@ -62,6 +65,7 @@ public class DisputesController {
             @ApiResponse(responseCode = "409", description = "Uyuşmazlık zaten çözülmüş",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
+    @RequiresPermission(value = StaffPermission.DISPUTE_RESOLVE, action = "dispute.resolve")
     @PostMapping("/{disputeId}/resolve")
     public ResponseEntity<SuccessDataResult<DisputeDto>> resolve(
             @PathVariable UUID disputeId, @RequestBody @Valid ResolveDisputeDto request) {

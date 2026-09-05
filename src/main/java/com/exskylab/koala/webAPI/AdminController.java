@@ -1,5 +1,7 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.core.security.RequiresPermission;
+import com.exskylab.koala.entities.StaffPermission;
 import com.exskylab.koala.core.utilities.results.ErrorResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -58,12 +60,14 @@ public class AdminController {
             @ApiResponse(responseCode = "404", description = "Görsel bulunamadı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
+    @RequiresPermission(value = StaffPermission.CONTENT_MODERATE, action = "image.remove")
     @DeleteMapping("/images/{imageId}")
     public ResponseEntity<Result> removeImage(@PathVariable UUID imageId) {
         galleryService.removeImageEverywhere(imageId);
         return ResponseEntity.ok(new SuccessResult(GalleryMessages.IMAGE_REMOVED, HttpStatus.OK));
     }
 
+    @RequiresPermission(StaffPermission.COMPANY_APPROVE)
     @GetMapping("/companies")
     public ResponseEntity<SuccessDataResult<PageDto<CompanyDto>>> companies(
             @RequestParam(defaultValue = "false") boolean approved,
@@ -82,6 +86,7 @@ public class AdminController {
             @ApiResponse(responseCode = "404", description = "Şirket bulunamadı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
+    @RequiresPermission(value = StaffPermission.COMPANY_APPROVE, action = "company.approve")
     @PostMapping("/companies/{companyId}/approve")
     public ResponseEntity<SuccessDataResult<CompanyDto>> approveCompany(@PathVariable UUID companyId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
@@ -89,6 +94,7 @@ public class AdminController {
                 AdminMessages.COMPANY_APPROVED, HttpStatus.OK));
     }
 
+    @RequiresPermission(StaffPermission.USER_READ)
     @GetMapping("/users")
     public ResponseEntity<SuccessDataResult<PageDto<SafeUserDto>>> users(
             @RequestParam(required = false) String query,

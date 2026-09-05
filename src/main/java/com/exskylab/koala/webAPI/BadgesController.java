@@ -1,5 +1,7 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.core.security.RequiresPermission;
+import com.exskylab.koala.entities.StaffPermission;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 
 import com.exskylab.koala.core.utilities.results.ErrorResult;
@@ -72,6 +74,7 @@ public class BadgesController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Rozetler listelendi")
     })
+    @RequiresPermission(StaffPermission.BADGE_MANAGE)
     @GetMapping("/admin/badges")
     public ResponseEntity<SuccessDataResult<List<BadgeAdminDto>>> allBadges() {
         return ResponseEntity.ok(new SuccessDataResult<>(
@@ -79,6 +82,7 @@ public class BadgesController {
                 BadgeMessages.LISTED, HttpStatus.OK));
     }
 
+    @RequiresPermission(value = StaffPermission.BADGE_MANAGE, action = "badge.create")
     @PostMapping("/admin/badges")
     public ResponseEntity<SuccessDataResult<BadgeAdminDto>> createBadge(
             @RequestBody @Valid SaveBadgeDto request) {
@@ -97,6 +101,7 @@ public class BadgesController {
             @ApiResponse(responseCode = "404", description = "Rozet bulunamadı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
+    @RequiresPermission(value = StaffPermission.BADGE_MANAGE, action = "badge.update")
     @PutMapping("/admin/badges/{badgeId}")
     public ResponseEntity<SuccessDataResult<BadgeAdminDto>> updateBadge(
             @PathVariable UUID badgeId, @RequestBody @Valid SaveBadgeDto request) {
@@ -115,6 +120,7 @@ public class BadgesController {
             @ApiResponse(responseCode = "404", description = "Rozet bulunamadı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
+    @RequiresPermission(value = StaffPermission.BADGE_MANAGE, action = "badge.icon.set")
     @PutMapping(value = "/admin/badges/{badgeId}/icon", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<SuccessDataResult<BadgeAdminDto>> setIcon(
             @PathVariable UUID badgeId, @RequestPart("icon") MultipartFile icon) {
@@ -131,6 +137,7 @@ public class BadgesController {
             @ApiResponse(responseCode = "404", description = "Rozet bulunamadı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
+    @RequiresPermission(value = StaffPermission.BADGE_MANAGE, action = "badge.activation.set")
     @PostMapping("/admin/badges/{badgeId}/activation")
     public ResponseEntity<SuccessDataResult<BadgeAdminDto>> setActive(
             @PathVariable UUID badgeId, @RequestParam boolean active) {

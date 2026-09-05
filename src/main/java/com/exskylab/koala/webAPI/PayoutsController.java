@@ -1,5 +1,7 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.core.security.RequiresPermission;
+import com.exskylab.koala.entities.StaffPermission;
 import com.exskylab.koala.core.utilities.results.ErrorResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -62,6 +64,7 @@ public class PayoutsController {
             @ApiResponse(responseCode = "409", description = "Atama tamamlanmamış, para emanette değil ya da açık uyuşmazlık var",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
+    @RequiresPermission(value = StaffPermission.PAYOUT_RELEASE, action = "payout.release")
     @PostMapping("/admin/job-assignments/{assignmentId}/release")
     public ResponseEntity<SuccessDataResult<PayoutDto>> release(@PathVariable UUID assignmentId) {
         PayoutDto payout = payoutMapper.toPayoutDto(payoutService.releaseToWorker(assignmentId));
@@ -79,6 +82,7 @@ public class PayoutsController {
             @ApiResponse(responseCode = "409", description = "Para emanette değil",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
+    @RequiresPermission(value = StaffPermission.PAYMENT_REFUND, action = "payment.refund")
     @PostMapping("/admin/job-assignments/{assignmentId}/refund")
     public ResponseEntity<SuccessResult> refund(@PathVariable UUID assignmentId,
                                                 @RequestBody @Valid RefundRequestDto request) {
