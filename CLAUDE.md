@@ -637,6 +637,73 @@ Uyuşmazlık yalnızca **emanette para varken** açılabilir, atama başına ayn
 
 **Şikayet üç hedeften birine bağlanabilir:** kullanıcı, ilan veya mesaj. Üçü de boşsa 400. Kendini şikayet etmek reddediliyor. Sonuçlanmış (`ACTIONED`/`DISMISSED`) bir şikayet tekrar sonuçlandırılamaz.
 
+### Şikayet inceleme yüzeyi — iki DTO, bir sınır (#63)
+
+**Moderasyon yüzeyi kullanıcı yüzeyiyle aynı DTO'yu kullanmaz.** `/admin/reports**` `AdminReportDto` /
+`AdminReportDetailDto` döndürür, `/reports` ve `/reports/me` eskisi gibi `ReportDto`. Issue "`ReportDto`'ya
+şikayet eden ve `reviewedBy` eklensin" diyordu; **eklenmedi, bilerek**: aynı DTO `GET /reports/me` yanıtında
+da duruyor ve `reviewedBy` oraya konsaydı şikayeti açan kullanıcı **kararı veren moderatörün adını ve
+fotoğrafını** okuyabilecekti. Moderatör kimliğinin şikayet edene sızması taciz yüzeyidir; ayrım DTO
+sınırında çözüldü. `AdminReportDto` eski `ReportDto` alanlarının **hepsini** taşır (`reportedUserId` dahil,
+inmiş panel kırılmasın diye), üzerine `reporter`, `reportedUser`, `reviewedBy` (üçü de `SafeUserDto`) ve
+`reportedUserReportCount` ekler.
+
+**Tele ne çıkacağına içerik değil ihtiyaç karar verdi.** Kimlik her yerde `SafeUserDto` — id, ad, soyad,
+kullanıcı adı, profil fotoğrafı. E-posta, telefon, TCKN ve IBAN moderasyon kararı için gerekmediği için
+yüzeyin hiçbir yerinde yok; `ReportModerationPrivacyTest` bunu `AdminReportDto` ve `AdminReportDetailDto`
+altında **geçişli** tarayarak sabitliyor (bir gün `SafeUserDto` zenginleşirse ya da yerine daha geniş bir DTO
+konursa kırmızıya döner, ve testin kırmızıya dönebildiği sentetik bir sızıntı vakasıyla gösteriliyor — §3'teki
+#72 dersi). Loglara kimlik yine **kullanıcı id'si** olarak giriyor (§2i); şikayet açıklaması, mesaj gövdesi ve
+ilan başlığı hiçbir log satırına yazılmıyor — kullanıcı yazımı serbest metin, içinde üçüncü kişilerin verisi
+olabilir.
+
+**Hedefin okunabilir içeriği yalnızca detayda.** `GET /admin/reports/{reportId}` `{report, content}` döndürür;
+`content` ilan başlığını, mesaj gövdesini ve görsel URL'ini taşır. Kuyruk satırları **hedefin içeriğini**
+taşımaz — yalnızca UUID'sini; şikayet edenin kendi yazdığı `description` kuyrukta kalmaya devam ediyor
+(eskiden de oradaydı, triyaj onsuz yapılamıyor). Ayrımın gerekçesi: kuyruk operatörün hiçbir vakayı açmadan
+yüklediği toplu görünüm ve **şikayet edilen mesajın gövdesi şikayet edenin değil, üçüncü bir kişinin
+yazısıdır** — her sayfa yüklemesinde toptan dışarı vermek gereksiz. Vakayı açmak tekil okumadır ve tekil
+okuma denetim kaydına girer (§2av, `AuditScope` kuralı 3) — yani içeriğe kimin baktığı yazılı kalıyor.
+Bunun görünür yan etkisi: `status` zorunlu olmaktan çıktığı için **süzgeçsiz kuyruk yüklemesi artık denetim
+satırı yazmıyor** (§2av'nin "filtresiz liste yüklemesi yazılmaz" kuralı); süzgeçli her arama yazılıyor.
+
+**Geçmiş sayısı sayfadan değil tablodan geliyor.** `reportedUserReportCount` şikayet edilen hakkındaki **tüm**
+kayıtların sayısı (bulunduğu satır dahil), sayfa kapsamı değil. Kuyruk sayfası çekildikten sonra sayfadaki
+şikayet edilen id'leri için **tek** bir `group by` sorgusu atılıyor (`ReportDao.tallyByReportedUser`); satır
+başına sorgu yok. `ReportModerationIT` sayfa boyutunu bire indirip sayının yine iki geldiğini doğruluyor —
+panelin bugün gösterdiği "bu sayfada N kez" işaretinin sessizce bu alana dönüşmesi böyle engelleniyor.
+
+**Süzgeçlerin hepsi isteğe bağlı, `status` dahil.** Verilmezse tüm durumlar döner. `reason`, `targetType`
+(`USER`/`JOB`/`MESSAGE`/`IMAGE`) ve `reportedUserId` de var; sonuncusu koala-admin#7'nin "aynı kullanıcı
+hakkındaki şikayetleri grupla" maddesini karşılıyor. Sorgu `r.reportedUser.id` yolunu kullanıyor: Hibernate
+bunu `@ManyToOne`'ın FK kolonuna indirdiği için **join açmıyor**, yani şikayet edileni olmayan satırlar
+süzgeçsiz kuyruktan düşmüyor — varsayılmadı, `aReportWithoutAReportedUserStaysInTheUnfilteredQueue` ile
+ölçüldü. `reported_user_id` üzerine indeks eklendi (`idx_reports_reported_user`): hem süzgeç hem sayım
+sorgusu bu kolondan geçiyor.
+
+**`POST /admin/reports/{id}/review` personel kimliğiyle çalışmıyordu — 404 dönüyordu.** §2p'nin yukarıda
+`DisputeManager` için anlattığı tuzağın aynısı, ve bu dosyada "`ReportManager.reviewedBy` de aynı boşlukta
+duruyor" diye yazılıydı: `securityService.getAuthenticatedUser()` bir `StaffPrincipal` görünce
+`{user.not.authenticated}` fırlatıyor, yani Keycloak kimliğiyle gelen bir moderatör şikayeti **hiç karara
+bağlayamıyordu**. `review` artık `StaffPrincipal actor` alıyor ve `reviewedBy` yalnız aktör `null` iken
+(köprü, marketplace `ROLE_ADMIN`) yazılıyor. Personel kararında satır boş kalıyor ve "kim karar verdi"
+sorusunu admin denetim kaydı cevaplıyor. ADR-0010'un öngördüğü `reviewed_by_staff_id` kolonu hâlâ yok;
+geldiğinde bu dal oraya yazacak. **Panelin bilmesi gereken:** `reviewedBy` köprü kararlarında dolu, personel
+kararlarında boş — boşluğu "bilinmiyor" diye göstermek yerine denetim kaydına bağlamak gerekiyor.
+
+**Karar yanıtı artık kuyruk satırının tamamı.** `review` `AdminReportDto` döndürüyor (eskiden `ReportDto`);
+panel karardan sonra listeyi tazelemek için ikinci bir istek atmak zorunda değil. Alanlar eklendi, hiçbiri
+kaldırılmadı.
+
+**Karar gerekçesi zorunlu oldu.** `ReviewReportDto.note` `@NotBlank` taşıyor (`{report.review.note.required}`);
+yalnız boşluktan oluşan gerekçe de reddediliyor. Panel istemcide zaten en az 10 karakter şart koşuyordu,
+sunucu tarafı boş gerekçeyi kabul etmeye devam ediyordu.
+
+**#63'ün 6. maddesi bilerek dışarıda.** Askıya alma ucunun gerekip gerekmediği issue'da **ürün kararı** olarak
+işaretli; ilan ve mesaj kaldırma uçları da kabul kriterlerinde yok ve `JobService`/`MessagingService`
+yüzeylerine dokunuyor. Bu PR şikayeti **okunabilir** yaptı, yaptırımı değil: operatör hâlâ "haklı" dediğinde
+uygulayacak bir uç bulamıyor (görsel için `DELETE /admin/images/{imageId}` var). Kendi issue'sunu hak ediyor.
+
 **`workHours` artık tahmin değil.** `WorkSession` check-in/check-out çiftini ve isteğe bağlı konumu tutar; kapanışta dakika yazılır ve atamanın `workHours` alanı tüm oturumların toplamından `HALF_UP` ile türetilir. Atama başına aynı anda tek açık oturum var (`uk_work_sessions_open_per_assignment`). Check-in/out yalnızca **işçinin kendisi** yapabilir — işveren yalnızca okuyabilir. İlk check-in atamayı `IN_PROGRESS`'e taşır.
 
 **Çevrimdışı puantaj olayı kalıcı ve idempotent.** Yeni istemci `clientEventId` ile `capturedAt` alanlarını birlikte gönderir; eski konum-only gövde sunucu zamanlı davranışını korur. Yeni sözleşmede ham cihaz zamanı, ilk alım zamanı, ücret hesabındaki etkili zaman ve plausibility bayrakları ayrı saklanır. Aynı atama/işlem kimliği aynı normalize payload ile tekrarlandığında ilk `WorkSession` döner; değiştirilmiş payload 409'dur. Atama başına transaction advisory lock eşzamanlı istekleri sıralar; check-out retry kapanmış oturumu da bulur. Varsayılan 72 saat geçmiş/5 dakika gelecek penceresi `timesheet.*` ayarlarıyla değişir; ilan penceresi dışı ve monotonik olmayan zamanlar reddedilmeden işaretlenip güvenli sınıra çekilir. Tehdit modeli ve ayrıntılı zaman kararı [ADR-0013](docs/adr/0013-record-offline-timesheet-events-before-reconciling-them.md)'tedir.
@@ -2049,6 +2116,8 @@ Birim testlerde `CommissionCalculator` artık `FallbackSettings.commissionCalcul
 
 **Yetkili daveti testleri (§2s2).** `CompanyContactInvitationRulesTest` yedi kural: şirket yöneticisi listeyi okur, üye olmayan okuyamaz, davet edilen/daveti gönderen/şirket yöneticisi tekil daveti okur, UUID'yi elinde tutan yabancı okuyamaz, yabancı davetin durumuna hiç bakılmadan reddedilir. `CompanyInvitationSendingRulesTest` beş kural: ilk davet gider, zaten yetkili olan kişi 409, bekleyen davet varken ikinci davet 409, cevaplanmış davet yeni daveti engellemez, yönetici olmayan davet edilecek kişinin durumuna hiç bakılmadan reddedilir. `CompanyContactInvitationAccessIT` sekiz kural — gerçek filtre zinciri üzerinden: yalnız `ROLE_USER` taşıyan şirket yöneticisi listeye 200 ile ulaşır, `STAFF` yetkilisi ve üye olmayan listeyi var olmayan bir şirketten ayırt edemez, üç taraf da daveti okur, yabancı ve `STAFF` daveti rastgele bir UUID'den ayırt edemez, başkasının davetini cevaplamak var olmayan daveti cevaplamakla aynı yanıtı verir, şirket yöneticisi daveti okuyabilir ama cevaplayamaz. Ayırt edilemezlik durum koduyla değil `errorCode` ile sabitleniyor.
 **Var olma gizlemesi testleri (§2d2).** `ExistenceConcealmentIT` dokuz uçta tek bir kuralı sabitliyor: yabancının var olmayan bir kaynağa aldığı yanıt ile başkasına ait gerçek bir kaynağa aldığı yanıt, istemcinin gönderdiği id yer tutucuya çevrildikten ve `timeStamp`/`correlationId` düşüldükten sonra **birebir aynı** — konuşma mesajları, iptal, iptal kaydı, iptal önizlemesi, puantaj, check-in, tamamlama, değerlendirme ve iş şablonu. `ExistenceConcealmentRulesTest` aynı kuralı kaynak kodda tarıyor, dört kural: hiçbir manager metodu iki farklı 404 anahtarı döndürmez, `Concealment.notFound`'a verilen her anahtar `NOT_FOUND` ile biter, gizlenen yanıt tek yerde ve log satırıyla birlikte üretilir, muafiyet listesi bayatlamaz. İkisinin de yakalayamadıkları §2d2'de yazılı.
+
+**Şikayet inceleme testleri (§2p).** `ReportModerationIT` on sekiz kural sabitliyor — gerçek Postgres üzerinde: susuz kuyruk her durumu döndürür, durum verilince daralır, şikayet edileni olmayan satır susuz kuyruktan düşmez, gerekçe süzgeci daraltır, dört hedef tipi birbirinden ayrılır, aynı kişi hakkındaki şikayetler durumdan bağımsız gruplanır, satır şikayet edeni ve şikayet edileni adlandırır, kararı veren yalnız karardan sonra dolar, geçmiş sayısı kişinin tüm kayıtlarını sayar, **sayfa boyutu bire indiğinde sayı yine iki gelir** (sayfa kapsamlı olamaz), sonuçlanmış şikayet de geçmişe sayılır, ilan şikayetinin detayı başlığı, mesaj şikayetininki gövdeyi, görsel şikayetininki URL'i taşır, detay kuyruktaki kimlik ve sayıyı tekrarlar, bilinmeyen şikayetin detayı yok, ve **personel kimliğiyle gelen moderatör şikayeti karara bağlayabilir** (yanıt kuyruk satırının tamamı, `reviewedBy` boş). `ReportRulesTest` iki kural kazandı: personel kararı `reviewedBy` yazmaz, köprü kararı yazar — ikincisi olmadan düzeltme sessizce köprü yolunu da kapatabilirdi. `ReportModerationPrivacyTest` yüzeyin taşıdığı alan adlarını geçişli tarayıp e-posta/telefon/IBAN/TCKN taşımadığını sabitliyor ve kırmızıya dönebildiğini sentetik bir sızıntı DTO'suyla gösteriyor.
 
 **`ApiConventionTest` yüzeyi yapısal olarak koruyor.** Kaynak kodu tarayıp §0b'deki altı kuralı doğruluyor: admin kuralı `/admin` dışında bir yol gösteremez, aynı fiil+yol iki handler'da olamaz, yol sondaki eğik çizgi taşıyamaz, DTO adı HTTP fiili içeremez, 32 karakteri aşamaz, `request`/`response` dışında duramaz. Yeni bir uç eklerken bedava koruma.
 
