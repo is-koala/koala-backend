@@ -66,7 +66,8 @@ class StaffAuthorizationIT extends AbstractIntegrationTest {
         assertTrue(resolved.roles().containsAll(
                 Set.of("TRUST_LEAD", "MODERATOR", "DISPUTE_HANDLER", "SUPPORT_AGENT")));
         assertEquals(Set.of(StaffPermission.USER_READ, StaffPermission.USER_READ_PII,
-                        StaffPermission.CONTENT_MODERATE, StaffPermission.DISPUTE_RESOLVE),
+                        StaffPermission.USER_DELETION_MANAGE, StaffPermission.CONTENT_MODERATE,
+                        StaffPermission.DISPUTE_RESOLVE),
                 resolved.permissions());
     }
 
@@ -76,7 +77,8 @@ class StaffAuthorizationIT extends AbstractIntegrationTest {
 
         assertTrue(permissions.containsAll(Set.of(StaffPermission.PAYOUT_RELEASE, StaffPermission.PAYMENT_REFUND,
                 StaffPermission.CONTENT_MODERATE, StaffPermission.CATEGORY_MANAGE, StaffPermission.ROLE_MANAGE,
-                StaffPermission.STAFF_MANAGE, StaffPermission.AUDIT_READ, StaffPermission.USER_READ_PII)));
+                StaffPermission.STAFF_MANAGE, StaffPermission.AUDIT_READ, StaffPermission.USER_READ_PII,
+                StaffPermission.USER_DELETION_MANAGE)));
     }
 
     @Test

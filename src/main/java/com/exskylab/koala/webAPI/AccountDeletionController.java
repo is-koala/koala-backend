@@ -7,8 +7,10 @@ import com.exskylab.koala.core.dtos.legal.request.RejectDeletionDto;
 import com.exskylab.koala.core.dtos.legal.response.AccountDeletionDto;
 import com.exskylab.koala.core.helpers.MessageResolver;
 import com.exskylab.koala.core.mappers.LegalMapper;
+import com.exskylab.koala.core.security.RequiresPermission;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.entities.AccountDeletionStatus;
+import com.exskylab.koala.entities.StaffPermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -51,6 +53,7 @@ public class AccountDeletionController {
             @ApiResponse(responseCode = "400", description = "Geçersiz sayfalama veya durum değeri")
     })
     @GetMapping
+    @RequiresPermission(StaffPermission.USER_READ_PII)
     public ResponseEntity<SuccessDataResult<PageDto<AccountDeletionDto>>> list(
             @RequestParam(required = false) AccountDeletionStatus status,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
@@ -67,6 +70,7 @@ public class AccountDeletionController {
             @ApiResponse(responseCode = "409", description = "Talep daha önce işlendi")
     })
     @PostMapping("/{requestId}/reject")
+    @RequiresPermission(value = StaffPermission.USER_DELETION_MANAGE, action = "user.deletion.reject")
     public ResponseEntity<SuccessDataResult<AccountDeletionDto>> reject(
             @PathVariable UUID requestId, @RequestBody @Valid RejectDeletionDto body) {
         var deletion = legalService.rejectDeletionRequest(requestId, body.reason());

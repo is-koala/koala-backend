@@ -25,6 +25,8 @@ class StaffRoleGraphSeedTest {
 
     private static final Path CHANGELOG =
             Path.of("src/main/resources/db/changelog/2026/09/06-20-staff-authorization.xml");
+    private static final Path ACCOUNT_DELETION_PERMISSION_CHANGELOG =
+            Path.of("src/main/resources/db/changelog/2026/09/06-21-account-deletion-staff-permission.xml");
 
     private static final Pattern PAIR = Pattern.compile("\\('([A-Za-z_.]+)',\\s*'([A-Za-z_.]+)'\\)");
 
@@ -105,6 +107,16 @@ class StaffRoleGraphSeedTest {
         assertTrue(StaffPermission.fromCode("role.manage").isPresent());
         assertEquals(StaffPermission.STAFF_MANAGE, StaffPermission.fromCode("staff.manage").orElseThrow());
         assertEquals(StaffPermission.ROLE_MANAGE, StaffPermission.fromCode("role.manage").orElseThrow());
+    }
+
+    @Test
+    void trustLeadReceivesTheDedicatedAccountDeletionPermission() throws IOException {
+        String changelog = Files.readString(ACCOUNT_DELETION_PERMISSION_CHANGELOG);
+
+        assertEquals(StaffPermission.USER_DELETION_MANAGE,
+                StaffPermission.fromCode("user.deletion.manage").orElseThrow());
+        assertTrue(changelog.contains("role.code = 'TRUST_LEAD'"));
+        assertTrue(changelog.contains("'user.deletion.manage'"));
     }
 
     @Test

@@ -14,6 +14,7 @@ public enum StaffPermission {
     CONTENT_MODERATE("content.moderate", true, PermissionSensitivity.NORMAL),
     USER_READ("user.read", false, PermissionSensitivity.NORMAL),
     USER_READ_PII("user.read_pii", false, PermissionSensitivity.PERSONAL_DATA),
+    USER_DELETION_MANAGE("user.deletion.manage", true, PermissionSensitivity.PERSONAL_DATA),
     USER_ROLE_MANAGE("user.role.manage", true, PermissionSensitivity.NORMAL),
     COMPANY_APPROVE("company.approve", true, PermissionSensitivity.NORMAL),
     DISPUTE_RESOLVE("dispute.resolve", true, PermissionSensitivity.NORMAL),

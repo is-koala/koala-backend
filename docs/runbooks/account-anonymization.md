@@ -20,3 +20,5 @@ The scheduled lifecycle is `REQUESTED` → waiting period → `ANONYMIZED`. A re
 | `account_media_deletion_outbox` | Persist the minimum storage key in the same transaction, try after commit, retry hourly, and delete the outbox row after storage confirms deletion. | A storage outage cannot turn an `ANONYMIZED` request into a forgotten personal object. |
 
 The implementation executes under a database transaction and stores no personal values in audit rows. Storage deletion starts only after that transaction commits and is itself idempotent. Failed object deletions remain durable in `account_media_deletion_outbox`; the retry worker runs every 15 minutes and makes due attempts hourly until deletion succeeds. Provider logs, replicas, analytics exports and independent backups require their own retention/erasure controls outside this repository.
+
+Staff access is fail-closed: listing deletion requests requires `user.read_pii`, while rejection requires the dedicated mutating `user.deletion.manage` permission seeded to `TRUST_LEAD` (and inherited by `OWNER`). The rejection action is named `user.deletion.reject` for audit capture.
