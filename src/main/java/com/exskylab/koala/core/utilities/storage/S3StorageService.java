@@ -42,7 +42,7 @@ public class S3StorageService implements StorageService {
                     .bucket(storageProperties.getBucket())
                     .key(key)
                     .contentType(contentType)
-                    .contentDisposition(FileDispositions.inline(originalFileName))
+                    .contentDisposition(dispositionFor(folderType, originalFileName))
                     .build(), RequestBody.fromBytes(fileBytes));
         } catch (RuntimeException e) {
             log.error("S3 upload failed for {}", key, e);
@@ -51,6 +51,12 @@ public class S3StorageService implements StorageService {
 
         log.info("Uploaded to S3: {}", key);
         return key;
+    }
+
+    private static String dispositionFor(FolderType folderType, String originalFileName) {
+        return folderType == FolderType.DISPUTE_EVIDENCE
+                ? FileDispositions.attachment(originalFileName)
+                : FileDispositions.inline(originalFileName);
     }
 
     @Override

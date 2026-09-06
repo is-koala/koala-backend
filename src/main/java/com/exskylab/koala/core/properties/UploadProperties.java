@@ -21,11 +21,17 @@ public class UploadProperties {
 
     private int maxImageMegapixels = 50;
 
+    private int maxEvidenceSizeMb = 10;
+
+    private int maxEvidencePerDispute = 5;
+
     private Set<String> imageExtensions = new LinkedHashSet<>(List.of("png", "jpg", "jpeg", "webp"));
 
     private Set<String> fileExtensions = new LinkedHashSet<>(List.of("pdf", "doc", "docx"));
 
     private Set<String> publicFileExtensions = new LinkedHashSet<>(List.of("pdf", "png", "jpg", "jpeg"));
+
+    private Set<String> evidenceExtensions = new LinkedHashSet<>(List.of("pdf", "png", "jpg", "jpeg", "webp"));
 
     public int getMaxImageSizeMb() {
         return maxImageSizeMb;
@@ -81,6 +87,30 @@ public class UploadProperties {
 
     public void setFileExtensions(Set<String> fileExtensions) {
         this.fileExtensions = fileExtensions;
+    }
+
+    public int getMaxEvidenceSizeMb() {
+        return maxEvidenceSizeMb;
+    }
+
+    public void setMaxEvidenceSizeMb(int maxEvidenceSizeMb) {
+        this.maxEvidenceSizeMb = maxEvidenceSizeMb;
+    }
+
+    public int getMaxEvidencePerDispute() {
+        return maxEvidencePerDispute;
+    }
+
+    public void setMaxEvidencePerDispute(int maxEvidencePerDispute) {
+        this.maxEvidencePerDispute = maxEvidencePerDispute;
+    }
+
+    public Set<String> getEvidenceExtensions() {
+        return evidenceExtensions;
+    }
+
+    public void setEvidenceExtensions(Set<String> evidenceExtensions) {
+        this.evidenceExtensions = evidenceExtensions;
     }
 
     public Set<String> getPublicFileExtensions() {

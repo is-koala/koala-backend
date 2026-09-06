@@ -33,8 +33,11 @@ class PostgresAccountAnonymizerTest {
         PersonalMediaDeletionOutbox outbox = mock(PersonalMediaDeletionOutbox.class);
         UUID userId = UUID.randomUUID();
         String key = "cv/private.pdf";
-        when(jdbcTemplate.queryForList(anyString(), eq(String.class),
-                any(), any(), any())).thenReturn(List.of(key));
+        String evidenceKey = "files/dispute-evidence/9a3b2f11-7f0e-4a3d-8c21-1c5c2f4a77b0.png";
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class), any(), any(), any()))
+                .thenAnswer(invocation -> invocation.getArgument(0, String.class).contains("dispute_evidence")
+                        ? List.of(evidenceKey)
+                        : List.of(key));
         TransactionSynchronizationManager.initSynchronization();
 
         IysProperties properties = new IysProperties();
@@ -42,10 +45,10 @@ class PostgresAccountAnonymizerTest {
         new PostgresAccountAnonymizer(jdbcTemplate, outbox, new IysRecipientCipher(properties), properties)
                 .anonymize(userId, UUID.randomUUID());
 
-        verify(outbox).enqueue(List.of(key));
-        verify(outbox, never()).process(List.of(key));
+        verify(outbox).enqueue(List.of(key, evidenceKey));
+        verify(outbox, never()).process(List.of(key, evidenceKey));
         TransactionSynchronizationManager.getSynchronizations()
                 .forEach(synchronization -> synchronization.afterCommit());
-        verify(outbox).process(List.of(key));
+        verify(outbox).process(List.of(key, evidenceKey));
     }
 }

@@ -121,7 +121,7 @@ public class AuthManager implements AuthService {
 
     @Override
     public AuthSetPasswordDto verifyRegistrationToken(AuthVerifyRegistrationTokenDto authVerifyRegistrationTokenDto) {
-        log.debug("Verifying registration token for id: {}", authVerifyRegistrationTokenDto.getRegistrationToken());
+        log.debug("Verifying a registration token.");
 
         PendingRegistration pendingRegistration = pendingRegistrationService.getByToken(authVerifyRegistrationTokenDto.getRegistrationToken());
 

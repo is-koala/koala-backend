@@ -476,9 +476,27 @@ Gerekçe: (b) elle SQL yazmayı ortadan kaldırmıyor, yalnızca kopyalanacak bi
 
 **`ExternalServiceException` (502) yığın izi taşımıyor.** Kendi yığın izi hiçbir zaman bilgi vermiyordu — fırlatıldığı satırı zaten `errorCode` söylüyor — ama `GlobalExceptionHandler` 5xx'i `log.error(..., ex)` ile bastığı için her sağlayıcı hatası tam bir yığın izi üretiyordu. `UnconfiguredPushService` her push'ta bu istisnayı fırlattığı için (§2s) gürültü sabit bir maliyetti, üstelik yukarıdaki `log.error` düzeltmesi tüketici tarafında bunu **çoğaltacaktı**. İstisna artık `writableStackTrace = false` ile kuruluyor: tek satır çıkıyor, gerçek teşhis ise fırlatma noktasındaki `log.error(..., e)` satırında duruyor.
 
-**Diğer log kuralları yerinde:** okuma yolu DEBUG, akış anlatımı DEBUG, durum değişikliği INFO; PII `core/helpers/LogMasks` üzerinden maskelenir ve `LogPrivacyTest` bunu kaynak kodda tarar; kimlik gerektiğinde kullanıcı **id**'si yazılır.
+**Okuma yolu DEBUG.** `Getting/Fetching/Retrieving/Listing` ile başlayan 18 manager logu DEBUG'a indirildi — erişim logu geldikten sonra bunlar gürültüydü. Yazma işlemleri INFO kalır, denetim izi onlar.
 
 **Erişim logu istemci IP'sini taşır.** İstemci IP'si tek yerden gelir: `ClientIpResolver`. Doğrudan bağlantı `getRemoteAddr()` değeridir; `Forwarded` veya `X-Forwarded-For` yalnız doğrudan kaynak `app.trusted-proxies` içindeki bir IP/CIDR ise okunur. Güvenilmeyen istemcinin başlığı yok sayılır. Spring'in başlığı güven sınırı bilmeden tüketmemesi için `forward-headers-strategy: none`; zinciri yalnız bu çözücü işler. BFF gelen yönlendirme başlıklarını kopyalamaz, bağlantı IP'siyle tek değer yazar.
+
+### Kişisel veri
+
+**PII maskelenir.** `core/helpers/LogMasks`: e-posta yerel kısmı maskeli (`y***@gmail.com`, alan adı kalır ki başarısız giriş takip edilebilsin), telefonun son dört hanesi, IBAN'ın baş ve sonu, TCKN hiç. Kimlik gerektiğinde kullanıcı **id**'si yazılır.
+
+**`LogPrivacyTest` bunu yapısal olarak koruyor.** Kaynak kodu tarayıp hiçbir log çağrısının maskelenmemiş e-posta, telefon, IBAN, TCKN veya parola taşımadığını doğrular. Yazıldığında `NotificationManager` içinde gözden kaçmış bir SMS logunu yakaladı.
+
+**Yasaklı liste genişletildi, çünkü koruma sanıldığı yerde yoktu (#13).** Test yazıldığında yalnız e-posta, telefon, IBAN, TCKN ve parolayı tanıyordu; ad, soyad, doğum tarihi, cinsiyet, serbest metin profil alanları ve token accessor'ları listede hiç yoktu. Üç gerçek sızıntı tam bu boşluktan geçiyordu ve test yeşildi: `UserManager.patchCurrentUser` ad/soyad/doğum tarihi/cinsiyeti **hem eski hem yeni değeriyle** `INFO`'da yazıyordu — yani prod'da açık seviyede —, `AuthManager.verifyRegistrationToken` kayıt tamamlama token'ını `DEBUG`'da yazıyordu ("id" diyen bir mesajın altında; argüman bir bearer token'dı), `CompanyManager.addCompany` şirket adını `INFO`'da yazıyordu. Listeye isim, doğum tarihi, cinsiyet, adres bileşenleri ve serbest metin profil alanları (`about`, `qualifications`, `interests`) eklendi. `*Token` accessor'ları tek tek yazılmadı, `get[A-Za-z]*[Tt]oken[A-Za-z]*\(\)` deseniyle yasaklandı — yarın eklenecek bir token getter'ı listeye kimse yazmasa da yakalanır. Doğrulama kodu ayrı bir isim istemedi: kod `UserVerification.token` alanında duruyor, yani zaten aynı desenin altında.
+
+**Değer silindi, maskelenmedi.** Üç sızıntının hiçbirinde değerin kendisi teşhise yaramıyordu. `UserManager`'da satırlar duruyor ama artık yalnız *hangi alanın* değiştiğini ve kullanıcı id'sini yazıyor: "adı A'dan B'ye değişti" bir hata ayıklamada işe yaramaz, "şu kullanıcı ad alanını değiştirmek istedi" yarar. `AuthManager`'da argüman düştü ve mesaj düzeltildi — token bir id değildi; kaydın kimliği bir satır sonra `pendingRegistration.getId()` olarak zaten yazılıyor. `CompanyManager`'da satırın tamamı silindi: bir sonraki satır aynı olayı `user.getId()` ile zaten kaydediyor. `LogMasks`'e yeni bir maske eklenmedi, çünkü maskelenmiş bir ad da teşhis değeri taşımıyor; maske ancak alan hem kişisel hem de ayırt edici olarak gerekliyse (e-posta, telefon, IBAN) anlamlı.
+
+**Değişken taraması artık argümanları gerçekten ayırıyor.** Eski sezgisel argüman listesini `call.lastIndexOf('"')` ile kesiyordu: bir argüman kendi metin sabitini taşıdığı anda (`log.info("{} {}", email, "n/a")`) ondan önceki her şey taramanın dışında kalıyordu; virgülsüz birleştirme (`log.info("... " + email)`) de görülmüyordu. Şimdi çağrıdan metin sabitleri çıkarılıyor, kalan kod üst seviye virgüllerden bölünüyor ve her argüman tek tek inceleniyor. Yan kazanç: `LogMasks.` muafiyeti de argüman seviyesine indi — önceden bir çağrıda tek bir maskeli argüman görmek çağrının tamamını muaf kılıyordu, yani maskeli ve ham argümanı yan yana taşıyan bir satır sessizce geçerdi. İki sentetik test bölmenin kırmızıya dönebildiğini gösteriyor, üçüncüsü taramanın en az 100 çağrıda argüman çözebildiğini sabitliyor — kırmızıya dönebildiği gösterilmemiş bir koruma doğrulanmamıştır (#72). Ad ve adres gibi isimler `x.getId()` biçimindeki referanslarda muaf: `address` değişkenini loglamak sızıntı, `address.getId()` yazmak değil.
+
+**#13 iki ayrı dalda ilerledi.** PII sızıntıları ve `LogPrivacyTest` genişletmesi bu alt başlıkta; `requestId`, yapısal JSON, MDC ve teşhis edilebilirlik yukarıdaki alt başlıklarda. İkisi ayrı PR'larda birleşti.
+
+**Logger `@Slf4j` ile geliyor.** Faz 19'da elle `LoggerFactory.getLogger(...)` çağıran 59 dosya Lombok'un `@Slf4j` anotasyonuna geçti; alan adı her yerde `log`. Öncesinde dört farklı tanım biçimi vardı (instance/static karışık, hatta `this.getClass()` — static bir alanda derlenmiyordu bile). Spring projelerinde yaygın olan biçim bu.
+
+**Akış anlatımı DEBUG, durum değişikliği INFO.** "Creating address…", "Checking if user is a contact", "Starting registration" gibi 12 anlatı logu daha DEBUG'a indi. INFO artık *olan biteni* kaydediyor: hangi kayıt, hangi id, hangi karar. Erişim logu (§ yukarıda) zaten her isteği bir satırla yazıyor.
 
 **Kapsam dışı: `micrometer-tracing` + OpenTelemetry.** `traceId`/`spanId` W3C Trace Context'in terimleridir ve **servisler arası** izleme içindir; ikinci bir servis olmadan eklenen bağımlılık karşılıksız kalır. Gerçek dağıtık izleme geldiğinde `traceparent` başlığı kabul edilir ve MDC anahtarları `trace.id`/`span.id` biçiminde (noktalı, yukarıdaki tuzak) yazılır.
 
@@ -879,6 +897,75 @@ uygulayacak bir uç bulamıyor (görsel için `DELETE /admin/images/{imageId}` v
 **`workHours` artık tahmin değil.** `WorkSession` check-in/check-out çiftini ve isteğe bağlı konumu tutar; kapanışta dakika yazılır ve atamanın `workHours` alanı tüm oturumların toplamından `HALF_UP` ile türetilir. Atama başına aynı anda tek açık oturum var (`uk_work_sessions_open_per_assignment`). Check-in/out yalnızca **işçinin kendisi** yapabilir — işveren yalnızca okuyabilir. İlk check-in atamayı `IN_PROGRESS`'e taşır.
 
 **Çevrimdışı puantaj olayı kalıcı ve idempotent.** Yeni istemci `clientEventId` ile `capturedAt` alanlarını birlikte gönderir; eski konum-only gövde sunucu zamanlı davranışını korur. Yeni sözleşmede ham cihaz zamanı, ilk alım zamanı, ücret hesabındaki etkili zaman ve plausibility bayrakları ayrı saklanır. Aynı atama/işlem kimliği aynı normalize payload ile tekrarlandığında ilk `WorkSession` döner; değiştirilmiş payload 409'dur. Atama başına transaction advisory lock eşzamanlı istekleri sıralar; check-out retry kapanmış oturumu da bulur. Varsayılan 72 saat geçmiş/5 dakika gelecek penceresi `timesheet.*` ayarlarıyla değişir; ilan penceresi dışı ve monotonik olmayan zamanlar reddedilmeden işaretlenip güvenli sınıra çekilir. Tehdit modeli ve ayrıntılı zaman kararı [ADR-0013](docs/adr/0013-record-offline-timesheet-events-before-reconciling-them.md)'tedir.
+
+### Uyuşmazlık kanıt ekleri — seçilen yükleme akışı ve taramanın sınırı (#102)
+
+**Doğrulanmış multipart seçildi, presigned upload + finalize seçilmedi.** Issue ikisini de öneriyordu. Presigned
+yol backend'i büyük dosya trafiğinden kurtarır ama bu depoda **doğrulanamaz bir ikinci kapı** kurardı: finalize
+adımı nesne sahipliğini ve checksum'ı `HeadObject` ile doğrulamak zorunda, o doğrulamanın tek gerçek uygulaması
+S3'te, ve **varsayılan depo `local`** — `LocalStorageService` PUT imzalayamaz (§2ab). Yani güvenliğin bağlı olduğu
+tek satır CI'da hiç koşmayan bir dalda kalırdı; üstüne bekleyen (`PENDING`) satır, yetim nesne temizliği ve
+finalize edilmeyen yüklemeler için ayrı bir yaşam döngüsü gerekirdi. Multipart'ta doğrulama her depo
+uygulamasının paylaştığı tek yoldan geçiyor ve iş tek bir transaction: dosya boyutu 10 MB ile, uyuşmazlık başına
+adet 5 ile sınırlı olduğu için backend'in taşıyıcı olması ölçülebilir bir maliyet değil. Presigned'a geçilecekse
+şartı yazılı: `StorageService`'e imzalı PUT eklenmeden ve finalize'ın sahiplik+checksum kontrolü gerçek bir
+S3'e karşı test edilmeden geçilmez.
+
+**Kanıt `files/dispute-evidence/` altında, ve bu iç içelik bilinçli.** Önek `files/` ile başladığı için
+`StorageKeys.isPrivate` true — nesne özel kalıyor ve CDN'e hiç düşmüyor. Alt önek bucket lifecycle kuralının
+kanıt dosyalarına, geri kalan `files/` içeriğine dokunmadan bağlanabilmesi için var. **`/uploads/files/**` bu
+nesneleri servis edemez**: o yol sahipliği `media` tablosundan çözüyor (`CvService.assertCanDownload`), kanıtın
+`media` satırı yok, dolayısıyla 404. Yani genel indirme yolu varsayılan olarak kapalı; kanıt yalnız uyuşmazlık
+kapsamındaki uçlardan iniyor.
+
+**Yetki uyuşmazlığın kendisinden okunuyor, dosyadan değil.** `DisputeManager` önce uyuşmazlığı buluyor, sonra
+`AssignmentParticipants` ile atamanın tarafı olup olmadığına bakıyor. Taraf olmayanın aldığı yanıt var olmayan
+uyuşmazlığınkiyle **aynı anahtar** (`{dispute.not.found}`) — §2d2'nin kuralı. Kanıt eki yalnız `RESOLVED`
+olmayan uyuşmazlığa ekleniyor; çözülmüş uyuşmazlık listelenip indirilmeye devam ediyor, çünkü karar sonrası
+dosyayı okumak hâlâ meşru.
+
+**Adet sınırı satır kilidinin arkasında.** `attachEvidence` `findByIdForUpdate` ile uyuşmazlık satırını kilitliyor,
+sayımı ondan sonra yapıyor. Eşzamanlı iki yükleme sıraya giriyor; sınır `upload.max-evidence-per-dispute` (5).
+Boyut `upload.max-evidence-size-mb` (10), uzantı beyaz listesi `upload.evidence-extensions`
+(`pdf,png,jpg,jpeg,webp`).
+
+**İçerik tipi istemciden alınmıyor.** `Content-Type` başlığı sahtelenebilir (§2ab); saklanan tip uzantıdan
+`MediaTypeFactory` ile türetiliyor. Ayrıca `UploadValidator` kanıt için **baytlara bakıyor**: `pdf` iddia eden
+dosya `%PDF` sihirli baytıyla başlamak zorunda, görsel iddia eden dosya `ImageIO` ile açılabilmek zorunda. `.exe`
+zaten uzantı beyaz listesinden düşüyor.
+
+**Yükleme yarıda kalırsa ne satır ne nesne kalıyor.** Depo yazması patlarsa satır hiç açılmıyor. Satır yazması
+patlarsa nesne yetim kalırdı; `attachEvidence` bunun için transaction'a bir `afterCompletion` kaydediyor ve
+commit dışındaki her sonuçta nesneyi siliyor. Kural testle sabit (`anObjectWrittenBeforeAFailedCommitIsRemoved…`)
+ve mekanizma çıkarıldığında kırmızıya döndüğü ölçüldü.
+
+**DTO depo anahtarı taşımıyor, indirme ayrı uçtan.** `DisputeEvidenceDto` yalnız kimlik, yükleyen, ad, tip,
+boyut, SHA-256 ve zaman taşıyor. İndirme `GET /disputes/{id}/evidence/{evidenceId}/download` (taraflar) ve
+`GET /admin/disputes/{id}/evidence/{evidenceId}/download` (personel, `dispute.resolve`) uçlarından; depo imzalı
+adres destekliyorsa `storage.signed-url-minutes` (3 dk) ömürlü imzalı adrese 302, desteklemiyorsa baytlar
+akıtılıyor. İki yolda da `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff` ve
+`Cache-Control: no-store` var — kanıt tarayıcıda çizilmiyor. İmzanın ömrü gerçek bir `S3Presigner` ile ölçülüyor
+(`X-Amz-Expires=180`), kaynak taramasıyla değil.
+
+**`SignedFileResponses` `StorageDownloadController.serve`'ün bilinçli ikizi.** İkisi de "imzalı adres varsa 302,
+yoksa baytları akıt" kararını veriyor ama **disposition politikaları farklı**: özgeçmiş ve görseller `inline`
+kalmalı, kanıt her zaman `attachment`. Ortak bir yardımcıya indirmek `StorageDownloadController`'ın
+constructor'ını değiştirir ve `StorageDownloadRulesTest`'i de sürükler; kazanç, iki farklı politikayı tek
+metotta bayrakla yönetmenin maliyetini karşılamadı. Üçüncü bir çağıran çıkarsa birleştirilir.
+
+**Zararlı içerik taraması bu PR'da yok ve yapılamaz.** Depoda antivirüs/ICAP/karantina altyapısı yok; eklenmedi.
+Yapılan şey tür, boyut, adet, sihirli bayt kontrolü, adın anahtara girmemesi ve indirmenin `attachment` olması.
+**İyi biçimlenmiş ama zararlı bir PDF ya da görsel bugün saklanıyor ve servis ediliyor.** Gerçek tarama harici
+bir servis (S3 tetikli tarayıcı ya da ICAP ağ geçidi) ve satırda bir karantina durumu ister; kendi issue'sunu
+hak ediyor. Ayrıntı `docs/runbooks/dispute-evidence.md`'de.
+
+**KVKK silmesi yeni bir mekanizma kurmadı, ADR-0012'nin yoluna bağlandı.** `PostgresAccountAnonymizer.removeMedia`
+artık `dispute_evidence` anahtarlarını da toplayıp **aynı** `PersonalMediaDeletionOutbox`'a yazıyor: tek sorgu
+kümesi, tek `enqueue`, commit sonrası tek `process`. Açık uyuşmazlık zaten anonimleştirmeyi bloke ediyor
+(ADR-0012), yani zamanlayıcı koştuğunda vaka kapalı. Silinen kapsam **hem kullanıcının yüklediği kanıt hem
+kullanıcının taraf olduğu atamanın uyuşmazlıklarındaki kanıt** — `disputes.reason`'ın bugünkü davranışının
+aynısı. Gerekçe: aynı satırdaki serbest metin iki taraf için de zaten siliniyor; daha tanımlayıcı olan dosyayı
+bırakıp anlatıyı silmek tutarsız olurdu. `storage_key` ve `checksum_sha256` bu yüzden nullable.
 
 ## 2r. Profil uçları
 
@@ -2392,7 +2479,6 @@ Bu depodaki yapısal korumaların hepsi kaynağı **düz metin** tarıyor, yani 
 | `MessageCatalogTest` | yalnız **kullanılan → var** yönüne bakıyor, **var → kullanılıyor** yönüne bakmıyor | **evet:** `device.not.found.by.user.and.user.agent` üç katalogda da duruyor, koddan çağıranı yok — yerini `DeviceMessages.DEVICE_NOT_FOUND` = `{device.not.found}` almış |
 | `MessageCatalogTest` | `theTwoCatalogsCoverExactlyTheSameKeys` **iki** katalog karşılaştırıyor, oysa üç dosya var: varsayılan `messages.properties` 340 anahtarda kalmış, tr/en 630 | evet ama erişilemez: `AcceptHeaderLocaleResolver` yalnız `en`/`tr` destekliyor ve varsayılanı `tr` — dosya ölü ağırlık |
 | `MessageCatalogTest` | `KEY` deseni yalnız tam literal `"{anahtar}"` biçimini tanıyor; birleştirmeyle kurulan bir anahtar görünmez | hayır — bugün her anahtar literal |
-| `LogPrivacyTest` | değişken taraması argümanları `call.lastIndexOf('"')` ile kesiyor: `log.info("... " + email)` (virgülsüz birleştirme) ve `log.info("{} {}", email, "n/a")` (son argüman literal) taramanın dışında kalıyor | hayır |
 | `LogPrivacyTest` | `LOG_CALL` yalnız `log.` alıcısını tanıyor; elle `LoggerFactory` ile alınmış bir logger'ın çağrıları görünmez. §1 bunu yasaklıyor ama yasağı zorlayan test yok | hayır |
 | `PageableSortSafetyTest` | imza deseni `)\s*\{` istiyor, yani `throws` yan tümcesi taşıyan sayfalı bir metot hiç taranmaz. Gövde penceresi 900 karakterde sabit ve **sonraki metoda taşabiliyor**: sanitize etmeyen bir metot, pencereye giren başka bir metot sanitize ediyorsa yeşil kalır | hayır (19 sayfalı metot, `throws` yok, taşma yok) |
 | `SoftDeleteCoverageTest` | `theExclusionListStaysHonest` yalnız `HARD_DELETE_BY_DESIGN` listesini denetliyor; `NOT_AUDITED` ve `INHERITS_FROM_ROOT` listeleri denetimsiz | **evet:** `CompanyContact` `NOT_AUDITED` içinde ama bugün `BaseEntity`'yi genişletiyor **ve** `@SQLDelete` taşıyor — muafiyet bayat, üstelik biri `@SQLDelete`'ini silse test bunu göremez |

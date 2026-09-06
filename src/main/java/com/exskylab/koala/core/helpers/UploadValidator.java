@@ -11,6 +11,8 @@ import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.util.Arrays;
 import java.util.Iterator;
 
 import java.util.Locale;
@@ -18,6 +20,8 @@ import java.util.Set;
 
 @Component
 public class UploadValidator {
+
+    private static final byte[] PDF_MAGIC = {0x25, 0x50, 0x44, 0x46};
 
     private final UploadProperties uploadProperties;
 
@@ -45,6 +49,28 @@ public class UploadValidator {
         if (folderType == FolderType.IMAGE) {
             rejectOversizedCanvas(file);
         }
+
+        if (folderType == FolderType.DISPUTE_EVIDENCE) {
+            rejectContentThatDoesNotMatchTheExtension(file, extension);
+        }
+    }
+
+    private void rejectContentThatDoesNotMatchTheExtension(MultipartFile file, String extension) {
+        byte[] head;
+        try (InputStream stream = file.getInputStream()) {
+            head = stream.readNBytes(PDF_MAGIC.length);
+        } catch (IOException e) {
+            throw new ValidationException(StorageMessages.UNSUPPORTED_TYPE);
+        }
+
+        if ("pdf".equals(extension)) {
+            if (!Arrays.equals(head, PDF_MAGIC)) {
+                throw new ValidationException(StorageMessages.UNSUPPORTED_TYPE);
+            }
+            return;
+        }
+
+        rejectOversizedCanvas(file);
     }
 
     private void rejectOversizedCanvas(MultipartFile file) {
@@ -94,13 +120,16 @@ public class UploadValidator {
             case IMAGE -> uploadProperties.getImageExtensions();
             case PUBLIC_FILE -> uploadProperties.getPublicFileExtensions();
             case FILE -> uploadProperties.getFileExtensions();
+            case DISPUTE_EVIDENCE -> uploadProperties.getEvidenceExtensions();
         };
     }
 
     private long maximumBytes(FolderType folderType) {
-        int megabytes = folderType == FolderType.IMAGE
-                ? uploadProperties.getMaxImageSizeMb()
-                : uploadProperties.getMaxFileSizeMb();
+        int megabytes = switch (folderType) {
+            case IMAGE -> uploadProperties.getMaxImageSizeMb();
+            case DISPUTE_EVIDENCE -> uploadProperties.getMaxEvidenceSizeMb();
+            case FILE, PUBLIC_FILE -> uploadProperties.getMaxFileSizeMb();
+        };
 
         return (long) megabytes * 1024 * 1024;
     }
