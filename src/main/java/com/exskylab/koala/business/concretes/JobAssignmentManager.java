@@ -1,5 +1,7 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.core.dtos.jobAssignment.response.AdminAssignmentDto;
+
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.business.abstracts.CompanyContactService;
@@ -507,6 +509,12 @@ public class JobAssignmentManager implements JobAssignmentService {
     public JobAssignment getDetailedById(UUID assignmentId) {
         return jobAssignmentDao.findWithDetailsForPaymentById(assignmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(JobAssignmentMessages.NOT_FOUND));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AdminAssignmentDto getAdminDetail(UUID assignmentId) {
+        return jobAssignmentMapper.toAdminAssignmentDto(getDetailedById(assignmentId));
     }
 
     @Override

@@ -58,7 +58,8 @@ class AggregateBoundaryTest {
             new Exemption("PayoutManager", "JobAssignmentDao",
                     "salt okuma; JobAssignmentManager PayoutService'e bağlı olduğu için ters yön döngü olurdu"),
             new Exemption("PayoutManager", "DisputeDao",
-                    "salt okuma; DisputeManager PayoutService'e bağlı olduğu için ters yön döngü olurdu"),
+                    "salt okuma; DisputeManager StaffPayoutService üzerinden PayoutService'e bağlı olduğu için "
+                            + "ters yön döngü olurdu"),
             new Exemption("JobManager", "JobAssignmentDao",
                     "salt okuma; JobManager MessagingService uzerinden JobAssignmentService'e baglansa dongu olurdu"),
             new Exemption("JobManager", "JobApplicationDao",

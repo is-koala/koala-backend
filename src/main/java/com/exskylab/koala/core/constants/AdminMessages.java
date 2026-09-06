@@ -13,4 +13,5 @@ public class AdminMessages {
     public static final String LAST_ADMIN_ROLE_PROTECTED = "{admin.user.role.last.admin.protected}";
     public static final String MEMBERSHIP_ROLE_PROTECTED = "{admin.user.role.membership.protected}";
     public static final String SYSTEM_USER_ROLES_PROTECTED = "{admin.user.role.system.protected}";
+    public static final String ASSIGNMENT_DETAIL = "{admin.assignment.detail}";
 }

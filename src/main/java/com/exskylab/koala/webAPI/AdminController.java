@@ -12,10 +12,12 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import com.exskylab.koala.business.abstracts.CompanyService;
 import com.exskylab.koala.business.abstracts.GalleryService;
+import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.constants.AdminMessages;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.company.response.CompanyDto;
+import com.exskylab.koala.core.dtos.jobAssignment.response.AdminAssignmentDto;
 import com.exskylab.koala.core.dtos.user.request.GrantRoleDto;
 import com.exskylab.koala.core.dtos.user.response.RoleGrantDto;
 import com.exskylab.koala.core.dtos.user.response.SafeUserDto;
@@ -49,16 +51,34 @@ public class AdminController {
     private final UserMapper userMapper;
     private final GalleryService galleryService;
     private final RoleGrantMapper roleGrantMapper;
+    private final JobAssignmentService jobAssignmentService;
 
     public AdminController(CompanyService companyService, UserService userService,
                            CompanyMapper companyMapper, UserMapper userMapper,
-                           GalleryService galleryService, RoleGrantMapper roleGrantMapper) {
+                           GalleryService galleryService, RoleGrantMapper roleGrantMapper,
+                           JobAssignmentService jobAssignmentService) {
         this.companyService = companyService;
         this.userService = userService;
         this.companyMapper = companyMapper;
         this.userMapper = userMapper;
         this.galleryService = galleryService;
         this.roleGrantMapper = roleGrantMapper;
+        this.jobAssignmentService = jobAssignmentService;
+    }
+
+    @Operation(summary = "Atama özeti",
+            description = "Uyuşmazlık ve emanet ekranlarının ihtiyaç duyduğu okuma: taraflar, atama ve ödeme durumu, fiyat dökümü. Emanetteki tutar finansal veridir; uç payment.read ile korunur.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Atama özeti döndürüldü"),
+            @ApiResponse(responseCode = "404", description = "Atama bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(StaffPermission.PAYMENT_READ)
+    @GetMapping("/job-assignments/{assignmentId}")
+    public ResponseEntity<SuccessDataResult<AdminAssignmentDto>> assignment(@PathVariable UUID assignmentId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                jobAssignmentService.getAdminDetail(assignmentId),
+                AdminMessages.ASSIGNMENT_DETAIL, HttpStatus.OK));
     }
 
     @Operation(summary = "Görseli her yerden kaldır",

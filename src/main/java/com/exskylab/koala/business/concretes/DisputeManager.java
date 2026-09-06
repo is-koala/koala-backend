@@ -4,11 +4,12 @@ import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.DisputeService;
-import com.exskylab.koala.business.abstracts.PayoutService;
+import com.exskylab.koala.business.abstracts.StaffPayoutService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.DisputeMessages;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
+import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.dataAccess.DisputeDao;
 import com.exskylab.koala.entities.*;
 import org.springframework.data.domain.Page;
@@ -43,19 +44,19 @@ public class DisputeManager implements DisputeService {
     private final UserService userService;
     private final SecurityService securityService;
     private final AssignmentParticipants participants;
-    private final PayoutService payoutService;
+    private final StaffPayoutService staffPayoutService;
     private final ActivityNotificationService activityNotificationService;
 
     public DisputeManager(DisputeDao disputeDao, JobAssignmentService jobAssignmentService, UserService userService,
                           SecurityService securityService, AssignmentParticipants participants,
-                          PayoutService payoutService, ActivityNotificationService activityNotificationService,
+                          StaffPayoutService staffPayoutService, ActivityNotificationService activityNotificationService,
                                 PageableSanitizer pageableSanitizer) {
         this.disputeDao = disputeDao;
         this.jobAssignmentService = jobAssignmentService;
         this.userService = userService;
         this.securityService = securityService;
         this.participants = participants;
-        this.payoutService = payoutService;
+        this.staffPayoutService = staffPayoutService;
         this.activityNotificationService = activityNotificationService;
             this.pageableSanitizer = pageableSanitizer;
     }
@@ -93,9 +94,15 @@ public class DisputeManager implements DisputeService {
 
     @Override
     @Transactional
-    public Dispute resolveDispute(UUID disputeId, DisputeResolution resolution, String note) {
+    public Dispute resolveDispute(StaffPrincipal actor, UUID disputeId, DisputeResolution resolution, String note) {
         Dispute dispute = disputeDao.findById(disputeId)
                 .orElseThrow(() -> new ResourceNotFoundException(DisputeMessages.NOT_FOUND));
+
+        UUID assignmentId = dispute.getJobAssignment().getId();
+
+        if (resolution.movesMoney()) {
+            staffPayoutService.requirePermission(actor, resolution.getMoneyPermission(), assignmentId);
+        }
 
         if (dispute.getStatus() == DisputeStatus.RESOLVED) {
             throw new ConflictException(DisputeMessages.ALREADY_RESOLVED);
@@ -104,15 +111,16 @@ public class DisputeManager implements DisputeService {
         dispute.setStatus(DisputeStatus.RESOLVED);
         dispute.setResolution(resolution);
         dispute.setResolutionNote(note);
-        dispute.setResolvedBy(securityService.getAuthenticatedUser());
+        if (actor == null) {
+            dispute.setResolvedBy(securityService.getAuthenticatedUser());
+        }
         dispute.setResolvedAt(Instant.now());
 
         Dispute saved = disputeDao.save(dispute);
-        UUID assignmentId = dispute.getJobAssignment().getId();
 
         switch (resolution) {
-            case RELEASE_TO_WORKER -> payoutService.releaseToWorker(assignmentId);
-            case REFUND_EMPLOYER -> payoutService.refundEmployer(assignmentId, null, note);
+            case RELEASE_TO_WORKER -> staffPayoutService.releaseToWorker(actor, assignmentId, note);
+            case REFUND_EMPLOYER -> staffPayoutService.refundEmployer(actor, assignmentId, null, note);
             case DISMISSED -> log.info("Dispute {} dismissed, escrow untouched.", disputeId);
         }
 

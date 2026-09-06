@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.abstracts;
 
+import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.entities.Dispute;
 import com.exskylab.koala.entities.DisputeResolution;
 import org.springframework.data.domain.Page;
@@ -12,7 +13,7 @@ public interface DisputeService {
 
     Dispute openDispute(UUID jobAssignmentId, String reason);
 
-    Dispute resolveDispute(UUID disputeId, DisputeResolution resolution, String note);
+    Dispute resolveDispute(StaffPrincipal actor, UUID disputeId, DisputeResolution resolution, String note);
 
     List<Dispute> getForAssignment(UUID jobAssignmentId);
 
