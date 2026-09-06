@@ -160,11 +160,16 @@ class AssignmentOperationsAuthorizationTest {
     void anEmployerCancellingEarlyGetsAFullRefundAndTheAssignmentClosed() {
         JobAssignment a = assignment(AssignmentStatus.CONFIRMED, PaymentStatus.HELD_IN_ESCROW, inHours(48));
         when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
+        Refund refund = new Refund();
+        refund.setId(UUID.randomUUID());
+        when(payoutService.refundEmployer(eq(a.getId()), eq(new BigDecimal("1075.00")), any()))
+                .thenReturn(refund);
 
         Cancellation cancellation = cancellationManager.cancelAssignment(a.getId(), "iş iptal");
 
         assertEquals(CancellationParty.EMPLOYER, cancellation.getCancelledByParty());
         assertEquals(0, cancellation.getFeeAmount().signum());
+        assertSame(refund, cancellation.getRefund());
         assertEquals(AssignmentStatus.CANCELLED, a.getStatus());
         verify(payoutService).refundEmployer(eq(a.getId()), eq(new BigDecimal("1075.00")), any());
     }

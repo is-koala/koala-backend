@@ -10,7 +10,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import com.exskylab.koala.business.abstracts.CancellationService;
 import com.exskylab.koala.business.abstracts.DisputeService;
-import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.business.abstracts.TimesheetService;
 import com.exskylab.koala.core.constants.CancellationMessages;
 import com.exskylab.koala.core.constants.DisputeMessages;
@@ -45,7 +44,6 @@ public class JobAssignmentOperationsController {
 
     private final CancellationService cancellationService;
     private final DisputeService disputeService;
-    private final PayoutService payoutService;
     private final TimesheetService timesheetService;
     private final JobAssignmentService jobAssignmentService;
     private final JobAssignmentMapper jobAssignmentMapper;
@@ -55,7 +53,6 @@ public class JobAssignmentOperationsController {
 
     public JobAssignmentOperationsController(CancellationService cancellationService,
                                              DisputeService disputeService,
-                                             PayoutService payoutService,
                                              TimesheetService timesheetService,
                                              JobAssignmentService jobAssignmentService,
                                              JobAssignmentMapper jobAssignmentMapper,
@@ -64,7 +61,6 @@ public class JobAssignmentOperationsController {
                                              TimesheetMapper timesheetMapper) {
         this.cancellationService = cancellationService;
         this.disputeService = disputeService;
-        this.payoutService = payoutService;
         this.timesheetService = timesheetService;
         this.jobAssignmentService = jobAssignmentService;
         this.jobAssignmentMapper = jobAssignmentMapper;
@@ -74,7 +70,7 @@ public class JobAssignmentOperationsController {
     }
 
     @Operation(summary = "Atamayı iptal et",
-            description = "İşçi iptal ederse işveren her koşulda tam iade alır. İşveren cezasız pencere içinde iptal ederse kesinti yoktur; pencere dışında geç iptal ücreti kesilir. İş başladıktan sonra iade yapılmaz. Atama başına tek iptal kaydı açılabilir.")
+            description = "İşçi iptal ederse işveren her koşulda tam iade alır. İşveren cezasız pencere içinde iptal ederse kesinti yoktur; pencere dışında geç iptal ücreti kesilir. İş başladıktan sonra iade yapılmaz. Atama başına tek iptal kaydı açılabilir. Para alanları exact decimal string, iade durumu yalnız bu iptalin doğrudan oluşturduğu iadedir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "İptal edildi"),
             @ApiResponse(responseCode = "404", description = "Atama bulunamadı ya da taraf değilsiniz",
@@ -87,14 +83,13 @@ public class JobAssignmentOperationsController {
             @PathVariable UUID assignmentId, @RequestBody @Valid CancelAssignmentDto request) {
 
         var cancellation = cancellationService.cancelAssignment(assignmentId, request.getReason());
-        var refund = payoutService.getLatestRefundForAssignment(assignmentId).orElse(null);
         return ResponseEntity.status(HttpStatus.CREATED).body(new SuccessDataResult<>(
-                cancellationMapper.toCancellationDto(cancellation, refund),
+                cancellationMapper.toCancellationDto(cancellation),
                 CancellationMessages.CREATED, HttpStatus.CREATED));
     }
 
     @Operation(summary = "İptal kesintisini önizle",
-            description = "İptal etmeden, şu an iptal edilse ne kesileceğini döndürür. Hiçbir kayıt oluşturmaz. Kesinti iptal edenin tarafına göre değiştiği için hesap çağıranın kendi tarafına göre yapılır. Atama iptal edilebilir durumda değilse hata yerine cancellableNow=false döner.")
+            description = "İptal etmeden, şu an iptal edilse ne kesileceğini döndürür. Hiçbir kayıt oluşturmaz. Kesinti iptal edenin tarafına göre değiştiği için hesap çağıranın kendi tarafına göre yapılır. Atama iptal edilebilir durumda değilse hata yerine cancellableNow=false döner. Para alanları bilimsel gösterim kullanmayan exact decimal string'dir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Önizleme döndürüldü"),
             @ApiResponse(responseCode = "404", description = "Atama bulunamadı ya da taraf değilsiniz",
@@ -110,7 +105,7 @@ public class JobAssignmentOperationsController {
     }
 
     @Operation(summary = "İptal kaydını getir",
-            description = "Uygulanan oran, kesilen ücret ve iade tutarını taşır.")
+            description = "Uygulanan oran, kesilen ücret ve iade tutarını exact decimal string olarak taşır. İade yaşam döngüsü yalnız iptale doğrudan bağlı iadedir; eski kayıtlarda bağlantı yoksa null olabilir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "İptal kaydı döndürüldü"),
             @ApiResponse(responseCode = "404", description = "İptal kaydı yok",
@@ -119,11 +114,8 @@ public class JobAssignmentOperationsController {
     @GetMapping("/{assignmentId}/cancellation")
     public ResponseEntity<SuccessDataResult<CancellationDto>> cancellation(@PathVariable UUID assignmentId) {
         var cancellation = cancellationService.getForAssignment(assignmentId).orElse(null);
-        var refund = cancellation == null
-                ? null
-                : payoutService.getLatestRefundForAssignment(assignmentId).orElse(null);
         return ResponseEntity.ok(new SuccessDataResult<>(
-                cancellationMapper.toCancellationDto(cancellation, refund),
+                cancellationMapper.toCancellationDto(cancellation),
                 CancellationMessages.FETCHED, HttpStatus.OK));
     }
 
