@@ -35,9 +35,7 @@ public class UserProducerService {
             );
             log.info("User profile updated event sent for user id: {}", updatedUser.getId());
         }catch (Exception e){
-            log.error("User profile updated event could not be sent for user id: {}, Error: {}",
-                    updatedUser.getId(),
-                    e.getMessage());
+            log.error("User profile updated event could not be sent for user id: {}", updatedUser.getId(), e);
         }
 
     }

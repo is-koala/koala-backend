@@ -215,6 +215,7 @@ class ExistenceConcealmentIT extends AbstractIntegrationTest {
                 new TreeMap<>(objectMapper.readValue(body, new TypeReference<Map<String, Object>>() {
                 }));
         parsed.remove("timeStamp");
+        parsed.remove("requestId");
         parsed.remove("correlationId");
         return parsed.toString().replace(resourceId.toString(), "{istenen-id}");
     }

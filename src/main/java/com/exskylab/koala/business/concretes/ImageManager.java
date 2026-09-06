@@ -77,7 +77,7 @@ public class ImageManager implements ImageService {
             log.info("Image uploaded successfully: {}", savedImage.getFileName());
             return savedImage;
         } catch (Exception e) {
-            log.error("Image upload failed fileName: {}, errorMessage: {}", image.getOriginalFilename(), e.getMessage());
+            log.error("Image upload failed fileName: {}", image.getOriginalFilename(), e);
             throw new ValidationException(ImageMessages.IMAGE_UPLOAD_ERROR);
         }
     }

@@ -44,7 +44,7 @@ public class UnpaidAssignmentExpiryScheduler {
                     expired++;
                 }
             } catch (Exception e) {
-                log.error("Unpaid expiry failed for assignment {}: {}", assignmentId, e.getMessage());
+                log.error("Unpaid expiry failed for assignment {}", assignmentId, e);
             }
         }
 

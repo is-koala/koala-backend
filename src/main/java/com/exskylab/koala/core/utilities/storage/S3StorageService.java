@@ -45,7 +45,7 @@ public class S3StorageService implements StorageService {
                     .contentDisposition(dispositionFor(folderType, originalFileName))
                     .build(), RequestBody.fromBytes(fileBytes));
         } catch (RuntimeException e) {
-            log.error("S3 upload failed for {}: {}", key, e.getMessage());
+            log.error("S3 upload failed for {}", key, e);
             throw new ValidationException(StorageMessages.UPLOAD_FAILED);
         }
 
@@ -67,7 +67,7 @@ public class S3StorageService implements StorageService {
                     .key(key)
                     .build());
         } catch (RuntimeException e) {
-            log.error("S3 delete failed for {}: {}", key, e.getMessage());
+            log.error("S3 delete failed for {}", key, e);
             throw new ValidationException(StorageMessages.DELETE_FAILED);
         }
 
@@ -84,7 +84,7 @@ public class S3StorageService implements StorageService {
         } catch (NoSuchKeyException e) {
             throw new ResourceNotFoundException(StorageMessages.FILE_NOT_FOUND);
         } catch (RuntimeException e) {
-            log.error("S3 read failed for {}: {}", key, e.getMessage());
+            log.error("S3 read failed for {}", key, e);
             throw new ValidationException(StorageMessages.DOWNLOAD_FAILED);
         }
     }

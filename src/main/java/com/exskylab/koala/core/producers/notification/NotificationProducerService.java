@@ -28,9 +28,7 @@ public class NotificationProducerService {
             );
             log.info("Email task sent to queue for id: {}", emailTaskDto.id());
         } catch (Exception e) {
-            log.error("Email task could not be sent to queue for id: {}, Error: {}",
-                    emailTaskDto.id(),
-                    e.getMessage());
+            log.error("Email task could not be sent to queue for id: {}", emailTaskDto.id(), e);
             throw new ExternalServiceException(NotificationMessages.EMAIL_TASK_CANNOT_BE_SENT_TO_QUEUE);
 
         }
@@ -47,9 +45,7 @@ public class NotificationProducerService {
             );
             log.info("Sms task sent to queue for id: {}", smsTaskDto.id());
         } catch (Exception e) {
-            log.error("Sms task could not be sent to queue for id: {}, Error: {}",
-                    smsTaskDto.id(),
-                    e.getMessage());
+            log.error("Sms task could not be sent to queue for id: {}", smsTaskDto.id(), e);
 
             throw new ExternalServiceException(NotificationMessages.SMS_TASK_CANNOT_BE_SENT_TO_QUEUE);
         }
@@ -66,9 +62,7 @@ public class NotificationProducerService {
             );
             log.info("Push task sent to queue for id: {}", pushTaskDto.id());
         } catch (Exception e) {
-            log.error("Push task could not be sent to queue for id: {}, Error: {}",
-                    pushTaskDto.id(),
-                    e.getMessage());
+            log.error("Push task could not be sent to queue for id: {}", pushTaskDto.id(), e);
 
             throw new ExternalServiceException(NotificationMessages.PUSH_TASK_CANNOT_BE_SENT_TO_QUEUE);
         }

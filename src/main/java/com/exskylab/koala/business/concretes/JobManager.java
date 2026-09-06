@@ -117,7 +117,7 @@ public class JobManager implements JobService {
         try {
             type = JobType.valueOf(usersMeJobsPostRequestDto.getType().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            log.error("Invalid job type: {}", usersMeJobsPostRequestDto.getType());
+            log.error("Invalid job type: {}", usersMeJobsPostRequestDto.getType(), e);
             throw new ValidationException(JobMessages.INVALID_JOB_TYPE);
         }
 
@@ -125,7 +125,7 @@ public class JobManager implements JobService {
         try {
             salaryType = SalaryType.valueOf(usersMeJobsPostRequestDto.getSalaryType().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            log.error("Invalid salary type: {}", usersMeJobsPostRequestDto.getSalaryType());
+            log.error("Invalid salary type: {}", usersMeJobsPostRequestDto.getSalaryType(), e);
             throw new ValidationException(JobMessages.INVALID_SALARY_TYPE);
         }
 
@@ -186,7 +186,7 @@ public class JobManager implements JobService {
         try {
             type = JobType.valueOf(companiesCompanyIdJobsPostRequestDto.getType().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            log.error("Invalid job type: {}", companiesCompanyIdJobsPostRequestDto.getType());
+            log.error("Invalid job type: {}", companiesCompanyIdJobsPostRequestDto.getType(), e);
             throw new ValidationException(JobMessages.INVALID_JOB_TYPE);
         }
 
@@ -195,7 +195,7 @@ public class JobManager implements JobService {
         try {
             salaryType = SalaryType.valueOf(companiesCompanyIdJobsPostRequestDto.getSalaryType().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            log.error("Invalid salary type: {}", companiesCompanyIdJobsPostRequestDto.getSalaryType());
+            log.error("Invalid salary type: {}", companiesCompanyIdJobsPostRequestDto.getSalaryType(), e);
             throw new ValidationException(JobMessages.INVALID_SALARY_TYPE);
         }
 

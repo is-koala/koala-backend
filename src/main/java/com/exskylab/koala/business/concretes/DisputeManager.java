@@ -276,8 +276,7 @@ public class DisputeManager implements DisputeService {
                 try {
                     storageService.deleteFile(key);
                 } catch (RuntimeException exception) {
-                    log.error("Orphaned dispute evidence object could not be removed: {}",
-                            exception.getClass().getSimpleName());
+                    log.error("Orphaned dispute evidence object could not be removed", exception);
                 }
             }
         });
@@ -303,7 +302,7 @@ public class DisputeManager implements DisputeService {
         try {
             return file.getBytes();
         } catch (IOException e) {
-            log.error("Dispute evidence could not be read for user {}: {}", actorId, e.getMessage());
+            log.error("Dispute evidence could not be read for user {}", actorId, e);
             throw new ValidationException(DisputeMessages.EVIDENCE_UPLOAD_FAILED);
         }
     }

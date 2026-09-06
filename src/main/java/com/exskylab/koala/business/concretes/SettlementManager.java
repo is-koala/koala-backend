@@ -142,8 +142,8 @@ public class SettlementManager implements SettlementService {
             if (task.getAttempts() >= retryProperties.getMaxAttempts()) {
                 task.setStatus(SettlementTaskStatus.FAILED);
                 markSettlementGivenUp(task);
-                log.error("Settlement task {} gave up after {} attempts ({})",
-                        taskId, task.getAttempts(), e.getClass().getSimpleName());
+                log.error("Settlement task {} gave up after {} attempts",
+                        taskId, task.getAttempts(), e);
             } else {
                 task.setNextAttemptAt(Instant.now().plus(backoffFor(task.getAttempts())));
                 log.warn("Settlement task {} failed on attempt {}, next try at {} ({})",
