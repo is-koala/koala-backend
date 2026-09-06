@@ -16,6 +16,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpHeaders;
 import org.springframework.lang.NonNull;
 import org.springframework.messaging.converter.SimpleMessageConverter;
 import org.springframework.messaging.simp.stomp.StompFrameHandler;
@@ -23,16 +25,23 @@ import org.springframework.messaging.simp.stomp.StompHeaders;
 import org.springframework.messaging.simp.stomp.StompSession;
 import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.web.socket.WebSocketHttpHeaders;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.io.Decoders;
+import io.jsonwebtoken.security.Keys;
 
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Date;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
@@ -46,8 +55,15 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.hamcrest.Matchers.containsString;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@AutoConfigureMockMvc
 @TestPropertySource(properties = {
         "realtime.origins.production=https://iskoala.com",
         "realtime.origins.staging=https://staging.iskoala.com"
@@ -57,6 +73,8 @@ class RealtimeHandshakeIT extends AbstractIntegrationTest {
     private static final String ALLOWED_ORIGIN = "https://iskoala.com";
     private static final String UNKNOWN_ORIGIN = "https://iskoala.com.evil.example";
     private static final long TIMEOUT_SECONDS = 10;
+    private static final String JWT_SECRET =
+            "dGVzdC1vbmx5LXNlY3JldC1uZXZlci11c2VkLWluLXByb2R1Y3Rpb24tMDEyMzQ1Njc4OWFiY2RlZg==";
 
     @LocalServerPort
     private int port;
@@ -73,11 +91,16 @@ class RealtimeHandshakeIT extends AbstractIntegrationTest {
     @Autowired
     private SessionDao sessionDao;
 
+    @Autowired
+    private MockMvc mockMvc;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private WebSocketStompClient stompClient;
     private UUID userId;
     private String accessToken;
+    private String clientDeviceId;
+    private UUID persistedSessionId;
 
     @BeforeEach
     void setUp() {
@@ -98,7 +121,8 @@ class RealtimeHandshakeIT extends AbstractIntegrationTest {
         device.setUser(user);
         device.setType(DeviceType.WEB_BROWSER);
         device.setName("Realtime browser");
-        device.setClientDeviceId("realtime-" + UUID.randomUUID());
+        clientDeviceId = "realtime-" + UUID.randomUUID();
+        device.setClientDeviceId(clientDeviceId);
         device.setFirstSeenAt(Instant.now());
         device.setLastSeenAt(Instant.now());
         device = deviceDao.saveAndFlush(device);
@@ -111,8 +135,9 @@ class RealtimeHandshakeIT extends AbstractIntegrationTest {
         session.setLastAccessedAt(Instant.now());
         session.setActive(true);
         session = sessionDao.saveAndFlush(session);
+        persistedSessionId = session.getId();
 
-        accessToken = jwtService.generateAccessToken(user, session.getId());
+        accessToken = jwtService.generateAccessToken(user, persistedSessionId);
     }
 
     @AfterEach
@@ -126,6 +151,85 @@ class RealtimeHandshakeIT extends AbstractIntegrationTest {
 
         assertTrue(session.isConnected());
         session.disconnect();
+    }
+
+    @Test
+    void anAuthenticatedSessionCanIssueANonCacheableRealtimeCredential() throws Exception {
+        Instant requestedAt = Instant.now();
+        MvcResult result = mockMvc.perform(realtimeCredentialRequest())
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")))
+                .andExpect(jsonPath("$.data.token").isNotEmpty())
+                .andExpect(jsonPath("$.data.expiresAt").isNotEmpty())
+                .andReturn();
+
+        JsonNode data = objectMapper.readTree(result.getResponse().getContentAsString()).get("data");
+        Instant expiresAt = Instant.parse(data.get("expiresAt").asString());
+        assertTrue(expiresAt.isAfter(requestedAt.plusSeconds(60)));
+        assertTrue(expiresAt.isBefore(requestedAt.plusSeconds(120)));
+
+        Claims claims = Jwts.parser()
+                .verifyWith(Keys.hmacShaKeyFor(Decoders.BASE64.decode(JWT_SECRET)))
+                .build()
+                .parseSignedClaims(data.get("token").asString())
+                .getPayload();
+        assertEquals(Set.of("stomp"), claims.getAudience());
+        assertEquals(userId.toString(), claims.getSubject());
+        assertEquals(persistedSessionId.toString(), claims.getId());
+    }
+
+    @Test
+    void aRealtimeCredentialCannotAuthenticateAnHttpRequest() throws Exception {
+        String realtimeCredential = issueRealtimeCredential();
+
+        mockMvc.perform(get("/users/me")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + realtimeCredential)
+                        .header("X-Client-Platform", "web")
+                        .header("X-Device-Id", clientDeviceId)
+                        .header(HttpHeaders.USER_AGENT, "Koala realtime test"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void aRealtimeCredentialCompletesStompConnect() throws Exception {
+        StompSession session = connect(ALLOWED_ORIGIN, issueRealtimeCredential());
+
+        assertTrue(session.isConnected());
+        session.disconnect();
+    }
+
+    @Test
+    void aCredentialWithAnotherAudienceCannotConnect() {
+        String token = signedToken(userId, persistedSessionId, "not-stomp",
+                Instant.now().plusSeconds(60));
+
+        assertThrows(ExecutionException.class, () -> connect(ALLOWED_ORIGIN, token));
+    }
+
+    @Test
+    void aCredentialCannotClaimAnotherUserInItsSession() {
+        String token = signedToken(UUID.randomUUID(), persistedSessionId, "stomp",
+                Instant.now().plusSeconds(60));
+
+        assertThrows(ExecutionException.class, () -> connect(ALLOWED_ORIGIN, token));
+    }
+
+    @Test
+    void anExpiredRealtimeCredentialCannotConnect() {
+        String token = signedToken(userId, persistedSessionId, "stomp",
+                Instant.now().minusSeconds(1));
+
+        assertThrows(ExecutionException.class, () -> connect(ALLOWED_ORIGIN, token));
+    }
+
+    @Test
+    void aCredentialForARevokedSessionCannotConnect() throws Exception {
+        String token = issueRealtimeCredential();
+        Session revoked = sessionDao.findById(persistedSessionId).orElseThrow();
+        revoked.setActive(false);
+        sessionDao.saveAndFlush(revoked);
+
+        assertThrows(ExecutionException.class, () -> connect(ALLOWED_ORIGIN, token));
     }
 
     @Test
@@ -186,6 +290,35 @@ class RealtimeHandshakeIT extends AbstractIntegrationTest {
                         ? bytes : String.valueOf(payload).getBytes(StandardCharsets.UTF_8));
             }
         };
+    }
+
+    private String issueRealtimeCredential() throws Exception {
+        MvcResult result = mockMvc.perform(realtimeCredentialRequest())
+                .andExpect(status().isOk())
+                .andReturn();
+        return objectMapper.readTree(result.getResponse().getContentAsString())
+                .get("data").get("token").asString();
+    }
+
+    private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder realtimeCredentialRequest() {
+        return post("/users/me/realtime-credential")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .header("X-Client-Platform", "web")
+                .header("X-Device-Id", clientDeviceId)
+                .header(HttpHeaders.USER_AGENT, "Koala realtime test");
+    }
+
+    private String signedToken(UUID subject, UUID sessionId, String audience, Instant expiresAt) {
+        return Jwts.builder()
+                .subject(subject.toString())
+                .id(sessionId.toString())
+                .audience().add(audience)
+                .and()
+                .issuedAt(Date.from(expiresAt.minusSeconds(60)))
+                .expiration(Date.from(expiresAt))
+                .issuer("iskoala.com")
+                .signWith(Keys.hmacShaKeyFor(Decoders.BASE64.decode(JWT_SECRET)), Jwts.SIG.HS256)
+                .compact();
     }
 
     private StompSession connect(String origin, String token) throws Exception {

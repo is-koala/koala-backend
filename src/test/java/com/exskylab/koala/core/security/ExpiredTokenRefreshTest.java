@@ -5,6 +5,7 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import io.jsonwebtoken.security.SignatureException;
+import io.jsonwebtoken.UnsupportedJwtException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -107,5 +108,21 @@ class ExpiredTokenRefreshTest {
     void garbageIsStillRejected() {
         assertThrows(RuntimeException.class,
                 () -> jwtService.extractSessionIdAllowingExpired("bu.bir.token.degil"));
+    }
+
+    @Test
+    void aRealtimeCredentialCannotEnterTheRefreshFlow() {
+        String realtimeCredential = Jwts.builder()
+                .subject(userId.toString())
+                .id(sessionId.toString())
+                .audience().add("stomp")
+                .and()
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 60_000))
+                .signWith(key(), Jwts.SIG.HS256)
+                .compact();
+
+        assertThrows(UnsupportedJwtException.class,
+                () -> jwtService.extractSessionIdAllowingExpired(realtimeCredential));
     }
 }

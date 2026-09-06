@@ -125,6 +125,15 @@ class RateLimitBucketTest {
     }
 
     @Test
+    void realtimeCredentialsHaveTheirOwnAllowance() throws Exception {
+        properties.getRealtimeCredential().setMaxAttempts(2);
+        properties.getWrite().setMaxAttempts(50);
+
+        assertEquals(2, passing("POST", "/users/me/realtime-credential", "10.0.0.13", 5));
+        assertEquals(5, passing("POST", "/reports", "10.0.0.13", 5));
+    }
+
+    @Test
     void everyWriteEndpointIsCoveredEvenIfNobodyListedIt() throws Exception {
         properties.getWrite().setMaxAttempts(2);
 

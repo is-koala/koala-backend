@@ -10,6 +10,7 @@ import com.exskylab.koala.core.helpers.BearerTokenExtractor;
 import com.exskylab.koala.core.helpers.RateLimiter;
 import com.exskylab.koala.core.properties.RateLimitProperties;
 import com.exskylab.koala.core.security.JwtService;
+import com.exskylab.koala.core.security.JwtIdentity;
 import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.dataAccess.ConversationDao;
 import com.exskylab.koala.entities.Session;
@@ -105,9 +106,12 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     private void authenticate(StompHeaderAccessor accessor) {
         String token = BearerTokenExtractor.extractHeader(accessor.getFirstNativeHeader("Authorization"));
 
-        UUID sessionId = jwtService.extractSessionId(token);
-        Session session = sessionService.findActiveSessionById(sessionId);
-        UserPrincipal principal = UserPrincipal.from(session.getDevice().getUser(), sessionId);
+        JwtIdentity identity = jwtService.extractRealtimeIdentity(token);
+        Session session = sessionService.findActiveSessionById(identity.sessionId());
+        if (!session.getDevice().getUser().getId().equals(identity.userId())) {
+            throw new UnauthorizedException(RealtimeMessages.FRAME_REJECTED);
+        }
+        UserPrincipal principal = UserPrincipal.from(session.getDevice().getUser(), identity.sessionId());
 
         accessor.setUser(new RealtimeAuthentication(principal));
 

@@ -8,11 +8,15 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import com.exskylab.koala.business.abstracts.MessagingService;
 import com.exskylab.koala.business.abstracts.PresenceService;
 import com.exskylab.koala.core.constants.MessagingMessages;
+import com.exskylab.koala.core.constants.RealtimeMessages;
 import com.exskylab.koala.core.dtos.realtime.response.PresenceDto;
+import com.exskylab.koala.core.dtos.realtime.response.RealtimeCredentialDto;
 import com.exskylab.koala.core.realtime.RealtimePublisher;
+import com.exskylab.koala.core.security.JwtService;
 import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -30,12 +34,32 @@ public class RealtimeController {
     private final MessagingService messagingService;
     private final PresenceService presenceService;
     private final RealtimePublisher realtimePublisher;
+    private final JwtService jwtService;
 
     public RealtimeController(MessagingService messagingService, PresenceService presenceService,
-                              RealtimePublisher realtimePublisher) {
+                              RealtimePublisher realtimePublisher, JwtService jwtService) {
         this.messagingService = messagingService;
         this.presenceService = presenceService;
         this.realtimePublisher = realtimePublisher;
+        this.jwtService = jwtService;
+    }
+
+    @Operation(summary = "Kısa ömürlü gerçek zamanlı bağlantı kimliği",
+            description = "Yalnız STOMP CONNECT için geçerli, mevcut oturuma bağlı kimlik döndürür.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Bağlantı kimliği üretildi"),
+            @ApiResponse(responseCode = "401", description = "Oturum geçersiz")
+    })
+    @PostMapping("/users/me/realtime-credential")
+    @ResponseBody
+    public ResponseEntity<SuccessDataResult<RealtimeCredentialDto>> issueCredential(
+            Authentication authentication) {
+        UserPrincipal principal = (UserPrincipal) authentication.getPrincipal();
+
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(new SuccessDataResult<>(jwtService.generateRealtimeCredential(principal),
+                        RealtimeMessages.CREDENTIAL_ISSUED, HttpStatus.OK));
     }
 
     @MessageMapping("/conversations/{conversationId}/typing")
