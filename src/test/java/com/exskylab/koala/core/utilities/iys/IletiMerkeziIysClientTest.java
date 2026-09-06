@@ -89,6 +89,35 @@ class IletiMerkeziIysClientTest {
         server.verify();
     }
 
+    @Test
+    void lookupRejectsAResponseForAnotherCommunicationType() {
+        server.expect(requestTo("https://provider.test/v1/consent/show/json"))
+                .andRespond(withSuccess("""
+                        {"response":{"status":{"code":200},"consent":{
+                          "brandCode":"brand","recipient":"+905551112233","recipientType":"BIREYSEL",
+                          "type":"EPOSTA","status":"ONAY","source":"HS_WEB",
+                          "consentDate":"2026-09-06 20:45:00"}}}
+                        """, MediaType.APPLICATION_JSON));
+
+        assertThrows(ExternalServiceException.class,
+                () -> client.lookupConsent("0555 111 22 33", NotificationChannel.SMS));
+    }
+
+    @Test
+    void lookupMapsANullStatusToTheSemanticInvalidResponseError() {
+        server.expect(requestTo("https://provider.test/v1/consent/show/json"))
+                .andRespond(withSuccess("""
+                        {"response":{"status":{"code":200},"consent":{
+                          "brandCode":"brand","recipient":"person@koala.test","recipientType":"BIREYSEL",
+                          "type":"EPOSTA","status":null,"source":"HS_WEB",
+                          "consentDate":"2026-09-06 20:45:00"}}}
+                        """, MediaType.APPLICATION_JSON));
+
+        ExternalServiceException exception = assertThrows(ExternalServiceException.class,
+                () -> client.lookupConsent("person@koala.test", NotificationChannel.EMAIL));
+        assertEquals("{iys.provider.invalid.response}", exception.getMessage());
+    }
+
     private IysProperties configuredProperties() {
         IysProperties configured = new IysProperties();
         configured.setEnabled(true);

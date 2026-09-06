@@ -6,10 +6,10 @@ import com.exskylab.koala.business.abstracts.NotificationPreferenceService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.entities.NotificationChannel;
 import com.exskylab.koala.entities.User;
-import com.exskylab.koala.entities.IysFailureCode;
-import com.exskylab.koala.core.constants.IysMessages;
-import com.exskylab.koala.core.exceptions.ExternalServiceException;
+import com.exskylab.koala.core.utilities.iys.IysFailureClassifier;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.UUID;
 
@@ -19,13 +19,16 @@ public class IysReconciliationManager implements IysReconciliationService {
     private final IysService iysService;
     private final NotificationPreferenceService notificationPreferenceService;
     private final UserService userService;
+    private final TransactionTemplate transactionTemplate;
 
     public IysReconciliationManager(IysService iysService,
                                     NotificationPreferenceService notificationPreferenceService,
-                                    UserService userService) {
+                                    UserService userService,
+                                    PlatformTransactionManager transactionManager) {
         this.iysService = iysService;
         this.notificationPreferenceService = notificationPreferenceService;
         this.userService = userService;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
     @Override
@@ -36,21 +39,13 @@ public class IysReconciliationManager implements IysReconciliationService {
             permission = iysService.refreshPermission(user, channel);
         } catch (RuntimeException exception) {
             iysService.recordReconciliationFailure(userId, channel,
-                    exception instanceof ExternalServiceException external
-                            ? failureCode(external) : IysFailureCode.UNKNOWN);
+                    IysFailureClassifier.classify(exception));
             throw exception;
         }
-        if (!permission.granted()) {
-            notificationPreferenceService.applyIysWithdrawal(user, channel, permission.recordedAt());
-        }
-    }
-
-    private IysFailureCode failureCode(ExternalServiceException exception) {
-        return switch (exception.getMessage()) {
-            case IysMessages.PROVIDER_UNAVAILABLE -> IysFailureCode.PROVIDER_UNAVAILABLE;
-            case IysMessages.PROVIDER_REJECTED -> IysFailureCode.PROVIDER_REJECTED;
-            case IysMessages.INVALID_RESPONSE -> IysFailureCode.INVALID_RESPONSE;
-            default -> IysFailureCode.UNKNOWN;
-        };
+        transactionTemplate.executeWithoutResult(status -> {
+            if (iysService.applyReconciledPermission(user, permission)) {
+                notificationPreferenceService.applyIysWithdrawal(user, channel, permission.recordedAt());
+            }
+        });
     }
 }

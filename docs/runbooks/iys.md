@@ -19,6 +19,8 @@ ticari e-posta ve SMS gönderimi kapalı kalır; yerel tercih güncellemesi ise 
    outbox görevine dondurulur, sonradan config değişmesi eski kararın kaynağını değiştirmez.
 4. API anahtarı ve hash'i secret store'a konmalı; repoya, loglara veya destek kayıtlarına
    yazılmamalıdır.
+   `IYS_RECIPIENT_ENCRYPTION_KEY` ayrıca 32 rastgele baytın Base64 karşılığı olmalı ve hesap silme
+   sonrasında tamamlanmayı bekleyen RET görevleri bitene dek eski anahtar erişilebilir tutulmalıdır.
 5. Kontrollü bir Koala test hesabıyla hem e-posta hem SMS için `ONAY` ve `RET` akışları gerçek
    sağlayıcı hesabında doğrulanmalıdır. Kayıt ucunun `200` cevabı yalnız kabul/kuyruk anlamına
    geldiği için sorgu ucunda aynı durum görülmeden test başarılı sayılmamalıdır.
@@ -31,6 +33,9 @@ dış HTTP sınırını taklit eder; canlı doğrulama yerine geçmez.
 Önce kimlik bilgilerini, marka kodunu ve dört kaynak eşlemesini yükleyin; ardından
 `IYS_ENABLED=true` yapın.
 Uygulama yeni tercih kararlarını asenkron işler ve kayıt sonrasında sorgu ucuyla sonucu doğrular.
+Kayıt ucunun başarılı cevabı `registration_accepted_at` ile saklanır; sonraki denemeler aynı kararı
+yeniden kaydetmez, yalnız sorgu ucunda kesin sonucu arar. Yerel karar, mutabakat ve outbox tamamlaması
+kullanıcı+kanal advisory lock'ı altında sıralanır; daha eski sağlayıcı görüntüsü yeni yerel kararı ezemez.
 İYS'de `RET` görüldüğünde aynı kanaldaki bütün yerel ticari kategoriler kapanır. İYS'deki `ONAY`,
 kullanıcının Koala içindeki daha dar opt-out kararlarını açmaz.
 
@@ -68,6 +73,12 @@ metni, alıcı adresi ve kimlik bilgileri veritabanına ya da uygulama loguna ya
 `PROCESSING` kalan görevler `IYS_CLAIM_TIMEOUT` sonrasında tekrar alınabilir. Başarısız
 mutabakatlar kalıcı `next_reconciliation_at` backoff'u ile ertelenir; tek bir bozuk kayıt aynı
 batch'in kalanını sürekli aç bırakmaz.
+
+Hesap silinirken bekleyen/tükenmiş RET görevinin plaintext alıcısı hemen `[anonymized]` yapılır.
+Görevin sağlayıcıya ulaştırılması için gereken asgari alıcı, AES-256-GCM ciphertext olarak en fazla
+`IYS_DELETION_WITHDRAWAL_RETENTION` (varsayılan 3 gün) tutulur; başarıda veya sürenin sonunda silinir.
+ONAY görevleri ve izin snapshot'ları yaşatılmaz. Anahtar yoksa/tutarsızsa anonimleştirme transaction'ı
+geri alınır; sessizce RET kaybetmek yerine silme yeniden denenir.
 
 ## Eski izin kayıtları
 

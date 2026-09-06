@@ -14,6 +14,7 @@ import com.exskylab.koala.entities.NotificationCategory;
 import com.exskylab.koala.entities.NotificationChannel;
 import com.exskylab.koala.entities.NotificationPreference;
 import com.exskylab.koala.entities.User;
+import com.exskylab.koala.entities.CommercialMessageConsent;
 import com.exskylab.koala.entities.IysFailureCode;
 import com.exskylab.koala.core.constants.IysMessages;
 import com.exskylab.koala.core.exceptions.ExternalServiceException;
@@ -120,6 +121,30 @@ class IysReconciliationIT extends AbstractIntegrationTest {
 
         when(clock.instant()).thenReturn(NOW.plusSeconds(3601));
         assertFalse(iysService.isAllowed(user, NotificationChannel.EMAIL, user.getEmail()));
+    }
+
+    @Test
+    void anOlderRegistryWithdrawalCannotOverrideANewerLocalApproval() {
+        User user = userDao.save(user());
+        NotificationPreference localOptIn = preference(user, NotificationCategory.NEWSLETTER, true);
+        notificationPreferenceDao.save(localOptIn);
+        CommercialMessageConsent consent = new CommercialMessageConsent();
+        consent.setUser(user);
+        consent.setCategory(NotificationCategory.NEWSLETTER);
+        consent.setChannel(NotificationChannel.EMAIL);
+        consent.setGranted(true);
+        consent.setRecordedAt(NOW);
+        consent.setSource(CommercialConsentSource.PREFERENCE_CENTRE);
+        consentDao.save(consent);
+        iysService.enqueue(user, consent, NotificationChannel.EMAIL, true, null);
+        when(providerClient.lookupConsent(user.getEmail(), NotificationChannel.EMAIL))
+                .thenReturn(new IysPermissionResult(user.getEmail(), NotificationChannel.EMAIL,
+                        false, WITHDRAWN_AT, "HS_WEB"));
+
+        reconciliationService.reconcile(user.getId(), NotificationChannel.EMAIL);
+
+        assertTrue(notificationPreferenceDao.findById(localOptIn.getId()).orElseThrow().isEnabled());
+        assertTrue(permissionStateDao.findByUserIdAndChannel(user.getId(), NotificationChannel.EMAIL).isEmpty());
     }
 
     @Test

@@ -38,8 +38,9 @@ public class IletiMerkeziIysClient implements IysProviderClient {
             throw new ExternalServiceException(IysMessages.PROVIDER_NOT_CONFIGURED);
         }
 
+        String recipient = normalizedRecipient(consent.recipient(), consent.channel());
         Authentication authentication = new Authentication(properties.getApiKey(), properties.getApiHash());
-        ConsentRecord item = new ConsentRecord(consent.recipient(), "BIREYSEL", typeOf(consent.channel()),
+        ConsentRecord item = new ConsentRecord(recipient, "BIREYSEL", typeOf(consent.channel()),
                 consent.granted() ? "ONAY" : "RET", consent.source(),
                 CONSENT_DATE.format(consent.recordedAt().atZone(ZoneId.of("Europe/Istanbul"))));
         Request request = new Request(authentication,
@@ -59,9 +60,10 @@ public class IletiMerkeziIysClient implements IysProviderClient {
             throw new ExternalServiceException(IysMessages.PROVIDER_NOT_CONFIGURED);
         }
 
+        String requestedRecipient = normalizedRecipient(recipient, channel);
         Request request = new Request(
                 new Authentication(properties.getApiKey(), properties.getApiHash()),
-                new ConsentLookup(properties.getBrandCode(), recipient, "BIREYSEL", typeOf(channel)));
+                new ConsentLookup(properties.getBrandCode(), requestedRecipient, "BIREYSEL", typeOf(channel)));
         IletiMerkeziResponse response = post("/show/json", request);
         ProviderConsent consent = response == null || response.response() == null
                 ? null : response.response().consent();
@@ -70,15 +72,26 @@ public class IletiMerkeziIysClient implements IysProviderClient {
             throw new ExternalServiceException(IysMessages.INVALID_RESPONSE);
         }
 
-        boolean granted = switch (consent.status()) {
-            case "ONAY" -> true;
-            case "RET" -> false;
-            default -> throw new ExternalServiceException(IysMessages.INVALID_RESPONSE);
-        };
         try {
-            return new IysPermissionResult(consent.recipient(), channel, granted,
+            String responseRecipient = normalizedRecipient(consent.recipient(), channel);
+            if (!requestedRecipient.equalsIgnoreCase(responseRecipient)
+                    || !"BIREYSEL".equals(consent.recipientType())
+                    || !typeOf(channel).equals(consent.type())
+                    || consent.brandCode() == null
+                    || !properties.getBrandCode().strip().equals(String.valueOf(consent.brandCode()).strip())
+                    || !properties.isAllowedSource(consent.source())) {
+                throw new ExternalServiceException(IysMessages.INVALID_RESPONSE);
+            }
+            boolean granted = switch (consent.status()) {
+                case "ONAY" -> true;
+                case "RET" -> false;
+                default -> throw new ExternalServiceException(IysMessages.INVALID_RESPONSE);
+            };
+            return new IysPermissionResult(responseRecipient, channel, granted,
                     LocalDateTime.parse(consent.consentDate(), CONSENT_DATE)
                             .atZone(ZoneId.of("Europe/Istanbul")).toInstant(), consent.source());
+        } catch (ExternalServiceException exception) {
+            throw exception;
         } catch (RuntimeException exception) {
             throw new ExternalServiceException(IysMessages.INVALID_RESPONSE);
         }
@@ -103,6 +116,14 @@ public class IletiMerkeziIysClient implements IysProviderClient {
             case SMS -> "MESAJ";
             case PUSH, IN_APP -> throw new ValidationException(IysMessages.CHANNEL_UNSUPPORTED);
         };
+    }
+
+    private String normalizedRecipient(String recipient, NotificationChannel channel) {
+        String normalized = IysRecipientNormalizer.normalize(recipient, channel);
+        if (normalized == null) {
+            throw new ValidationException(IysMessages.VERIFIED_RECIPIENT_REQUIRED);
+        }
+        return normalized;
     }
 
     private record Envelope(Request request) {
@@ -133,7 +154,7 @@ public class IletiMerkeziIysClient implements IysProviderClient {
     private record Status(Integer code, String message) {
     }
 
-    private record ProviderConsent(String recipient, String recipientType, String type, String status,
+    private record ProviderConsent(Object brandCode, String recipient, String recipientType, String type, String status,
                                    String source, String consentDate) {
     }
 }

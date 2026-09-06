@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-06-82-iys-delivery-state" author="koala">
+        <addColumn tableName="iys_consent_tasks">
+            <column name="registration_accepted_at" type="TIMESTAMPTZ"/>
+            <column name="retained_recipient_ciphertext" type="TEXT"/>
+            <column name="recipient_retain_until" type="TIMESTAMPTZ"/>
+        </addColumn>
+        <sql>
+            alter table iys_consent_tasks
+            add constraint chk_iys_retained_recipient_window
+            check ((retained_recipient_ciphertext is null) = (recipient_retain_until is null));
+            create index idx_iys_retained_recipient_expiry
+            on iys_consent_tasks (recipient_retain_until)
+            where retained_recipient_ciphertext is not null and is_deleted = false;
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

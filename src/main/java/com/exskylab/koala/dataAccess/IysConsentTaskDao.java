@@ -14,12 +14,21 @@ import org.springframework.stereotype.Repository;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.Optional;
 
 @Repository
 public interface IysConsentTaskDao extends JpaRepository<IysConsentTask, UUID> {
 
-    @EntityGraph(attributePaths = {"user", "consent"})
+    @EntityGraph(attributePaths = {"consent"})
     java.util.Optional<IysConsentTask> findWithDetailsById(UUID id);
+
+    @EntityGraph(attributePaths = {"user", "consent"})
+    Optional<IysConsentTask> findTopByUserIdAndChannelOrderByDecisionSequenceDesc(UUID userId,
+                                                                                  NotificationChannel channel);
+
+    @Query(value = "select pg_advisory_xact_lock(hashtextextended(cast(:userId as text) || ':' || :channel, 0))",
+            nativeQuery = true)
+    void lockDecisionStream(@Param("userId") UUID userId, @Param("channel") String channel);
 
     @Query("""
             select task.id from IysConsentTask task
@@ -68,4 +77,15 @@ public interface IysConsentTaskDao extends JpaRepository<IysConsentTask, UUID> {
             where status = 'PROCESSING' and processing_started_at <= :staleBefore and is_deleted = false
             """, nativeQuery = true)
     int recoverStaleClaims(@Param("staleBefore") Instant staleBefore, @Param("now") Instant now);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            update iys_consent_tasks
+            set retained_recipient_ciphertext = null, recipient_retain_until = null,
+                status = 'EXHAUSTED', processing_started_at = null,
+                last_failure_code = 'SECURE_RECIPIENT_UNAVAILABLE', updated_at = :now
+            where retained_recipient_ciphertext is not null
+              and recipient_retain_until <= :now and is_deleted = false
+            """, nativeQuery = true)
+    int expireRetainedRecipients(@Param("now") Instant now);
 }

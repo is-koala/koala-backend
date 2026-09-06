@@ -28,6 +28,10 @@ public class IysProperties {
 
     private Duration claimTimeout = Duration.ofMinutes(5);
 
+    private String recipientEncryptionKey;
+
+    private Duration deletionWithdrawalRetention = Duration.ofDays(3);
+
     private Retry retry = new Retry();
 
     private Reconciliation reconciliation = new Reconciliation();
@@ -91,13 +95,17 @@ public class IysProperties {
 
     public String sourceFor(CommercialConsentSource decisionSource, ClientPlatform platform) {
         if (decisionSource == CommercialConsentSource.UNSUBSCRIBE_LINK) {
-            return sources.unsubscribe;
+            return sources.unsubscribe.strip();
         }
-        return switch (platform == null ? ClientPlatform.UNKNOWN : platform) {
+        return (switch (platform == null ? ClientPlatform.UNKNOWN : platform) {
             case WEB -> sources.web;
             case IOS, ANDROID -> sources.mobile;
             case UNKNOWN -> sources.unknown;
-        };
+        }).strip();
+    }
+
+    public boolean isAllowedSource(String source) {
+        return Sources.allowed(source);
     }
 
     public Duration getPermissionMaxAge() {
@@ -107,6 +115,18 @@ public class IysProperties {
     public Duration getClaimTimeout() { return claimTimeout; }
 
     public void setClaimTimeout(Duration claimTimeout) { this.claimTimeout = claimTimeout; }
+
+    public String getRecipientEncryptionKey() { return recipientEncryptionKey; }
+
+    public void setRecipientEncryptionKey(String recipientEncryptionKey) {
+        this.recipientEncryptionKey = recipientEncryptionKey;
+    }
+
+    public Duration getDeletionWithdrawalRetention() { return deletionWithdrawalRetention; }
+
+    public void setDeletionWithdrawalRetention(Duration deletionWithdrawalRetention) {
+        this.deletionWithdrawalRetention = deletionWithdrawalRetention;
+    }
 
     public void setPermissionMaxAge(Duration permissionMaxAge) {
         this.permissionMaxAge = permissionMaxAge;

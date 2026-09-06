@@ -39,6 +39,9 @@ public class IysConsentTask extends BaseEntity {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    @Column(name = "user_id", insertable = false, updatable = false)
+    private UUID userId;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "consent_id", nullable = false)
     private CommercialMessageConsent consent;
@@ -68,6 +71,15 @@ public class IysConsentTask extends BaseEntity {
 
     @Column(name = "processing_started_at")
     private Instant processingStartedAt;
+
+    @Column(name = "registration_accepted_at")
+    private Instant registrationAcceptedAt;
+
+    @Column(name = "retained_recipient_ciphertext")
+    private String retainedRecipientCiphertext;
+
+    @Column(name = "recipient_retain_until")
+    private Instant recipientRetainUntil;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "last_failure_code", length = 32)

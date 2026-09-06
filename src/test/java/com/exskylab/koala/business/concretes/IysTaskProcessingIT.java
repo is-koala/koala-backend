@@ -7,6 +7,7 @@ import com.exskylab.koala.core.constants.IysMessages;
 import com.exskylab.koala.core.exceptions.ExternalServiceException;
 import com.exskylab.koala.dataAccess.CommercialMessageConsentDao;
 import com.exskylab.koala.dataAccess.IysConsentTaskDao;
+import com.exskylab.koala.dataAccess.IysPermissionStateDao;
 import com.exskylab.koala.dataAccess.UserDao;
 import com.exskylab.koala.entities.CommercialConsentSource;
 import com.exskylab.koala.entities.CommercialMessageConsent;
@@ -33,6 +34,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -55,6 +58,9 @@ class IysTaskProcessingIT extends AbstractIntegrationTest {
 
     @Autowired
     private IysConsentTaskDao iysConsentTaskDao;
+
+    @Autowired
+    private IysPermissionStateDao iysPermissionStateDao;
 
     @Autowired
     private CommercialMessageConsentDao commercialMessageConsentDao;
@@ -121,6 +127,24 @@ class IysTaskProcessingIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void aConsentForThePreviousEmailNeverAuthorizesTheUsersNewEmail() {
+        User user = savedUser("old-recipient@koala.test");
+        IysConsentTask task = pendingTask(user, true, NOW);
+        user.setEmail("new-recipient@koala.test");
+        userDao.saveAndFlush(user);
+        when(providerClient.lookupConsent(task.getRecipient(), task.getChannel()))
+                .thenReturn(new IysPermissionResult(task.getRecipient(), task.getChannel(),
+                        true, NOW, "HS_WEB"));
+
+        assertTrue(iysService.runTask(task.getId()));
+
+        var permission = iysPermissionStateDao
+                .findByUserIdAndChannel(user.getId(), NotificationChannel.EMAIL).orElseThrow();
+        assertEquals("old-recipient@koala.test", permission.getRecipient());
+        assertFalse(iysService.isAllowed(user, NotificationChannel.EMAIL, user.getEmail()));
+    }
+
+    @Test
     void anOlderRetryIsSupersededByANewerDecisionForTheSameChannel() {
         User user = savedUser("iys-ordering@koala.test");
         IysConsentTask olderGrant = pendingTask(user, true, NOW);
@@ -133,6 +157,24 @@ class IysTaskProcessingIT extends AbstractIntegrationTest {
         assertEquals(NOW, superseded.getCompletedAt());
         assertEquals(0, superseded.getAttempts());
         verifyNoInteractions(providerClient);
+    }
+
+    @Test
+    void anAcceptedRegistrationIsPolledWithoutRegisteringTheDecisionAgain() {
+        IysConsentTask task = pendingTask();
+        when(providerClient.lookupConsent(task.getRecipient(), task.getChannel()))
+                .thenReturn(new IysPermissionResult(task.getRecipient(), task.getChannel(),
+                                false, NOW.minusSeconds(60), "HS_WEB"),
+                        new IysPermissionResult(task.getRecipient(), task.getChannel(),
+                                true, NOW, "HS_WEB"));
+
+        assertFalse(iysService.runTask(task.getId()));
+        when(clock.instant()).thenReturn(NOW.plusSeconds(60));
+        assertTrue(iysService.runTask(task.getId()));
+
+        verify(providerClient, times(1)).registerConsent(any());
+        assertEquals(IysConsentTaskStatus.COMPLETED,
+                iysConsentTaskDao.findById(task.getId()).orElseThrow().getStatus());
     }
 
     private IysConsentTask pendingTask() {

@@ -1,5 +1,7 @@
 package com.exskylab.koala.core.privacy;
 
+import com.exskylab.koala.core.properties.IysProperties;
+import com.exskylab.koala.core.utilities.iys.IysRecipientCipher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -8,6 +10,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.util.List;
 import java.util.UUID;
+import java.time.Instant;
+import java.sql.Timestamp;
 
 @Component
 public class PostgresAccountAnonymizer implements AccountAnonymizer {
@@ -16,11 +20,17 @@ public class PostgresAccountAnonymizer implements AccountAnonymizer {
 
     private final JdbcTemplate jdbcTemplate;
     private final PersonalMediaDeletionOutbox mediaDeletionOutbox;
+    private final IysRecipientCipher iysRecipientCipher;
+    private final IysProperties iysProperties;
 
     public PostgresAccountAnonymizer(JdbcTemplate jdbcTemplate,
-                                     PersonalMediaDeletionOutbox mediaDeletionOutbox) {
+                                     PersonalMediaDeletionOutbox mediaDeletionOutbox,
+                                     IysRecipientCipher iysRecipientCipher,
+                                     IysProperties iysProperties) {
         this.jdbcTemplate = jdbcTemplate;
         this.mediaDeletionOutbox = mediaDeletionOutbox;
+        this.iysRecipientCipher = iysRecipientCipher;
+        this.iysProperties = iysProperties;
     }
 
     @Override
@@ -143,6 +153,7 @@ public class PostgresAccountAnonymizer implements AccountAnonymizer {
     }
 
     private void revokeCredentials(UUID userId) {
+        retainPendingIysWithdrawals(userId);
         jdbcTemplate.update("""
                 update sessions
                    set refresh_token_hash = null, ip_address = null, location = null, is_active = false
@@ -185,7 +196,7 @@ public class PostgresAccountAnonymizer implements AccountAnonymizer {
                        processing_started_at = null,
                        completed_at = case when status in ('PENDING', 'PROCESSING')
                                            then coalesce(completed_at, now()) else completed_at end
-                 where user_id = ?
+                 where user_id = ? and retained_recipient_ciphertext is null
                 """, REDACTED, userId);
         jdbcTemplate.update("""
                 update iys_permission_states
@@ -195,6 +206,31 @@ public class PostgresAccountAnonymizer implements AccountAnonymizer {
                 """, REDACTED, userId);
         jdbcTemplate.update("update unsubscribe_tokens set is_deleted = true, deleted_at = coalesce(deleted_at, now()), expires_at = least(expires_at, now()) where user_id = ?",
                 userId);
+    }
+
+    private void retainPendingIysWithdrawals(UUID userId) {
+        List<IysWithdrawalRecipient> withdrawals = jdbcTemplate.query("""
+                select id, recipient from iys_consent_tasks
+                 where user_id = ? and granted = false
+                   and status in ('PENDING', 'PROCESSING', 'EXHAUSTED')
+                   and retained_recipient_ciphertext is null
+                   and is_deleted = false
+                """, (resultSet, rowNumber) -> new IysWithdrawalRecipient(
+                resultSet.getObject("id", UUID.class), resultSet.getString("recipient")), userId);
+        Instant retainUntil = Instant.now().plus(iysProperties.getDeletionWithdrawalRetention());
+        for (IysWithdrawalRecipient withdrawal : withdrawals) {
+            String ciphertext = iysRecipientCipher.encrypt(withdrawal.recipient());
+            jdbcTemplate.update("""
+                    update iys_consent_tasks
+                       set recipient = ?, retained_recipient_ciphertext = ?, recipient_retain_until = ?,
+                           status = 'PENDING', attempts = 0, next_attempt_at = now(),
+                           processing_started_at = null, completed_at = null, last_failure_code = null
+                     where id = ?
+                    """, REDACTED, ciphertext, Timestamp.from(retainUntil), withdrawal.id());
+        }
+    }
+
+    private record IysWithdrawalRecipient(UUID id, String recipient) {
     }
 
     private void scrubProfile(UUID userId) {

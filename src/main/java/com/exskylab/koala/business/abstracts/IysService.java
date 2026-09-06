@@ -23,6 +23,8 @@ public interface IysService {
 
     IysPermissionResult refreshPermission(User user, NotificationChannel channel);
 
+    boolean applyReconciledPermission(User user, IysPermissionResult permission);
+
     List<com.exskylab.koala.core.utilities.iys.IysReconciliationTarget> findStalePermissions();
 
     void recordReconciliationFailure(UUID userId, NotificationChannel channel, IysFailureCode failureCode);

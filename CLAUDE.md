@@ -1827,7 +1827,8 @@ veritabanına elle yazılmış ya da göçten kalmış bir satır bile ödeme bi
 gönderim noktası eklendiğinde tercihi kontrol etmeyi hatırlamak gerekmiyor. Bastırılan gönderim `null`
 döner, `Notification` satırı **açılmaz** ve kuyruğa girmez.
 
-**Alıcısı olmayan e-posta hiçbir zaman bastırılmaz.** `recipient == null` olduğunda tercih sorulmaz — henüz
+**Alıcısı olmayan işlemsel e-posta yerel tercih nedeniyle bastırılmaz.** `recipient == null` olduğunda yerel
+tercih sorulmaz — henüz
 Koala kullanıcısı olmayan bir adrese gönderim yapan akışlar için. Bu boşluk **iki** yerde geçerli:
 `AuthManager.startRegistration` (kayıt doğrulaması; `User` satırı henüz yok, ortada yalnızca
 `PendingRegistration` var) ve `CompanyManager.sendCompanyCreatedMail`'in şirket adresine giden ilk postası
@@ -1835,6 +1836,8 @@ Koala kullanıcısı olmayan bir adrese gönderim yapan akışlar için. Bu boş
 ile buluyor, bulamazsa `ResourceNotFoundException` atıyor — davet her zaman kayıtlı bir kullanıcıya gider ve
 `setRecipient` çağırır. Bir gönderim noktası eklerken ölçüt "adres kayıtlı bir kullanıcıya ait olabilir mi",
 "bu akış davet gibi mi görünüyor" değil.
+Ticari `EMAIL`/`SMS` bunun istisnasıdır: gerçek hedef adres/numara İYS'de doğrulanmış, güncel ve aynı
+kullanıcıya ait bir izinle eşleşmiyorsa gönderim `NotificationManager` kapısında bastırılır.
 
 **`sendCompanyCreatedMail` iki posta gönderiyor ve yalnızca birinin alıcısı var — bilinçli.** İlki
 `company.email` adresine gidiyor: bu adres `CreateCompanyRequestDto` üzerinden serbest metin olarak geliyor,
@@ -1920,12 +1923,11 @@ tercih ekranını sözleşme kataloğunun kurulmuş olmasına bağlamak kırılg
 **Çekilen izin de kaydediliyor**, verilen izinle aynı özenle — §2n'deki "sormadık ile sorduk-reddetti ayrımı"
 gerekçesinin aynısı. Abonelikten çıkma bağlantısıyla gelen kayıt `source = UNSUBSCRIBE_LINK` taşıyor.
 
-**SMS tercih yüzeyinde yok, bilerek.** `NotificationChannel.SMS` `preferable = false`; issue #31 kanal
-listesini `EMAIL`/`PUSH`/`IN_APP` olarak veriyor ve ticari SMS İYS'nin asıl konusu. Bayrağın açılması İYS
-dilimine ait (`docs/research/iys-commercial-message-integration.md`).
-
-**İYS entegrasyonu bu dilimde yapılmadı.** Kapsam, zamanlama, gerekçe ve açık kalan hukuk sorusu
-`docs/research/iys-commercial-message-integration.md` içinde; takip issue'su Dalga 7 altında.
+**SMS yerel tercih yüzeyinde yok; ticari SMS İYS kapısından geçer.** `NotificationChannel.SMS`
+`preferable = false`; telefonlar sağlayıcı sınırında kanonik `+90` E.164 biçimine çevrilir. İYS kararı,
+sağlayıcı kabulünden sonra sorgu sonucu görülene dek tamamlanmış sayılmaz. Outbox, mutabakat ve yerel
+kararlar kullanıcı+kanal bazında tek bir newest-wins sırasını paylaşır. Operasyon, silme sırasındaki RET
+taşıması ve dış ön koşulların tek kaynağı `docs/runbooks/iys.md` dosyasıdır.
 
 ---
 
