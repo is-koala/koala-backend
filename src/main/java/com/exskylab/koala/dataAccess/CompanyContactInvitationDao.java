@@ -2,6 +2,7 @@ package com.exskylab.koala.dataAccess;
 
 import com.exskylab.koala.entities.Company;
 import com.exskylab.koala.entities.CompanyContactInvitation;
+import com.exskylab.koala.entities.CompanyContactInvitationStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -13,5 +14,8 @@ public interface CompanyContactInvitationDao extends JpaRepository<CompanyContac
     List<CompanyContactInvitation> findByCompany(Company company);
 
     List<CompanyContactInvitation> findByCompanyId(UUID companyId);
+
+    boolean existsByCompanyIdAndInvitedUserIdAndStatus(UUID companyId, UUID invitedUserId,
+                                                      CompanyContactInvitationStatus status);
 
 }

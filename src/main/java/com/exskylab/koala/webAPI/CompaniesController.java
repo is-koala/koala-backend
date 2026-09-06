@@ -90,7 +90,9 @@ public class CompaniesController {
             description = "Davet edilen kullanıcıya e-posta ve uygulama içi bildirim gider.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Davet gönderildi"),
-            @ApiResponse(responseCode = "404", description = "Şirket ya da kullanıcı bulunamadı",
+            @ApiResponse(responseCode = "400", description = "Rol geçersiz ya da kimlik bilgileri uyuşmuyor",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "Şirket ya da kullanıcı bulunamadı; şirketin ADMIN yetkilisi değilseniz de bu kod döner",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "409", description = "Kullanıcı zaten yetkili ya da bekleyen davet var",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
@@ -107,10 +109,10 @@ public class CompaniesController {
     }
 
     @Operation(summary = "Şirketin davetleri",
-            description = "Yalnızca ADMIN rolüne açıktır.")
+            description = "Yalnızca şirketin ADMIN yetkilisine açıktır; platform yöneticisi olmak gerekmez.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Davetler listelendi"),
-            @ApiResponse(responseCode = "404", description = "Şirket bulunamadı",
+            @ApiResponse(responseCode = "404", description = "Şirket bulunamadı ya da şirketin ADMIN yetkilisi değilsiniz",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @GetMapping("/{companyId}/contact-invitations")

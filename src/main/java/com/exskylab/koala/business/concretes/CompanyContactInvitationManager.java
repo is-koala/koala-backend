@@ -83,6 +83,13 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
     }
 
     @Override
+    public boolean hasPendingInvitation(UUID companyId, UUID invitedUserId) {
+        log.debug("Checking pending invitation for user with id: {} in company with id: {}", invitedUserId, companyId);
+        return companyContactInvitationDao.existsByCompanyIdAndInvitedUserIdAndStatus(companyId, invitedUserId,
+                CompanyContactInvitationStatus.PENDING);
+    }
+
+    @Override
     public GetCompanyContactInvitationDto answerToInvitation(UUID invitationId, boolean accepted) {
         log.info("Answering invitation with id: {} to accepted: {}", invitationId, accepted);
         CompanyContactInvitation invitation = companyContactInvitationDao.findById(invitationId)
@@ -90,8 +97,10 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
 
         var currentUser = securityService.getAuthenticatedUser();
 
-        if (!invitation.getInvitedUser().getId().equals(currentUser.getId())){
-            throw new ForbiddenException(CompanyContactInvitationMessages.USER_NOT_ASSOCIATED_WITH_INVITATION);
+        if (!invitation.wasSentTo(currentUser)){
+            log.warn("User with id: {} was not invited by invitation with id: {}, terminating request!",
+                    currentUser.getId(), invitationId);
+            throw new ResourceNotFoundException(CompanyContactInvitationMessages.COMPANY_CONTACT_INVITATION_NOT_FOUND);
         }
 
         if (invitation.getStatus() != CompanyContactInvitationStatus.PENDING) {
@@ -151,7 +160,20 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
         var entity = companyContactInvitationDao.findById(invitationId)
                 .orElseThrow(() -> new ResourceNotFoundException(CompanyContactInvitationMessages.COMPANY_CONTACT_INVITATION_NOT_FOUND));
 
+        var currentUser = securityService.getAuthenticatedUser();
+
+        if (!isAssociatedWithInvitation(entity, currentUser)) {
+            log.warn("User with id: {} is not associated with invitation with id: {}, terminating request!",
+                    currentUser.getId(), invitationId);
+            throw new ResourceNotFoundException(CompanyContactInvitationMessages.COMPANY_CONTACT_INVITATION_NOT_FOUND);
+        }
+
         return companyContactInvitationMapper.toGetCompanyContactInvitationDto(entity);
+    }
+
+    private boolean isAssociatedWithInvitation(CompanyContactInvitation invitation, User currentUser) {
+        return invitation.isPartyTo(currentUser)
+                || companyContactService.isUserAdminOfCompany(invitation.companyId(), currentUser.getId());
     }
 
     @Override
@@ -162,8 +184,8 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
         var isAdmin = companyContactService.isUserAdminOfCompany(companyId, currentUser.getId());
 
         if (!isAdmin){
-            log.warn("User with id: {} is not a contact of company with id: {}, terminating request!", currentUser.getId(), companyId);
-            throw new ForbiddenException(CompanyMessages.USER_NOT_ASSOCIATED_WITH_COMPANY);
+            log.warn("User with id: {} is not an admin of company with id: {}, terminating request!", currentUser.getId(), companyId);
+            throw new ResourceNotFoundException(CompanyMessages.USER_NOT_ASSOCIATED_WITH_COMPANY);
         }
 
         var invitations = getInvitationsByCompanyId(companyId);

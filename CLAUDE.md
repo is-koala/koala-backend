@@ -590,6 +590,77 @@ Uyuşmazlık yalnızca **emanette para varken** açılabilir, atama başına ayn
 
 **Şirket onayı bir açıktı.** `CompanyManager` şirketi `approved = false` yaratıyordu ve `setApproved(true)` **hiçbir yerde çağrılmıyordu**; hiçbir şirket onaylanamıyordu. Onay ucu bunu kapatıyor.
 
+## 2s2. Yetkili daveti — kim listeler, kim okur, kim cevaplar
+
+Davet yüzeyi bugüne kadar hiçbir istemcide açılmamıştı; web ilk istemci olurken dört ayrı yerde ya
+yetkilendirme yanlış katmandaydı ya belge kodla çelişiyordu (issue #68).
+
+**Liste ucu platform rolüne kilitliydi.** `SecurityConfig` `GET /companies/{companyId}/contact-invitations`
+için `hasAnyRole("ADMIN")` yazıyordu; oradaki `ADMIN` `Role.ROLE_ADMIN`, yani **platform** yöneticisi —
+şirketin `CompanyContactRole.ADMIN`'i değil. Sıradan bir işveren davet gönderebiliyor ama gönderdiği daveti
+göremiyordu, istek filtrede 403 ile duruyordu. Doğru denetim servis katmanında zaten yazılıydı ve
+**erişilemiyordu**. Kural kardeş uçlardaki kalıba çekildi: filtre `USER, ADMIN`'e açık, yetki servis
+katmanında (§0b).
+
+**Sözleşme — üç uç, üç ayrı taraf kümesi:**
+
+| Uç | Kim geçer | Geçmeyen ne alır |
+|---|---|---|
+| `GET /companies/{id}/contact-invitations` | yalnız şirketin `ADMIN` yetkilisi | **404** `USER_NOT_ASSOCIATED_WITH_COMPANY` |
+| `GET /contact-invitations/{id}` | davet edilen, daveti gönderen, şirketin `ADMIN` yetkilisi | **404** `COMPANY_CONTACT_INVITATION_NOT_FOUND` |
+| `POST /contact-invitations/{id}` | yalnız davet edilen | **404** `COMPANY_CONTACT_INVITATION_NOT_FOUND` |
+
+`STAFF` yetkilisi listeyi de tekil daveti de göremez: davet üyelik yönetimidir ve §2s'e göre o `ADMIN`'in işi.
+
+**Durum kodunu eşitlemek yetmez, anahtar da aynı olmak zorunda.** §2o/§2ab/§2p'nin 404 kuralının amacı
+kaynağın *varlığını* sızdırmamak; ama §2d gereği `errorCode` mesaj anahtarından türüyor ve hata zarfıyla
+istemciye gidiyor. İki dal aynı 404'ü döndürse bile farklı anahtar kullanıyorsa `errorCode` onları ayırt
+eder — UUID deneyen saldırgan "sana ait değil" anlamına gelen bir kod aldığında **kaynağın var olduğunu**
+öğrenir. Bu yüzden "davet yok" ile "davet senin değil" dalları **aynı anahtarı** taşıyor. Liste ucunda ayrı
+bir dal yok: `isUserAdminOfCompany` saf bir `exists…` sorgusu olduğu için var olmayan şirket de üyesi
+olmadığın şirket de aynı yanıtı üretiyor. Depo genelindeki tarama is-koala/koala-backend#77.
+
+**`inviteContactToCompany` artık `requireCompanyAdmin` kullanıyor.** Metot kendi ADMIN kontrolünü
+`company.getContacts()` üzerinde elle kuruyordu, oysa sınıfta aynı işi yapan bir yardımcı vardı ve o
+`ResourceNotFoundException` atıyordu. **İstemciye görünen sonuç: davet gönderme ucu yetkisiz çağrıda artık
+403 değil 404 dönüyor** — sınıfın diğer altı ucuyla (logo, galeri) aynı davranış. Kontrol metodun ilk satırı:
+yetkilendirme daima durum kontrolünden önce (§2ar3), yani yabancı biri davet edilecek kişinin var olup
+olmadığını da öğrenemiyor.
+
+**Bekleyen davet tekil.** `PENDING` bir davet dururken aynı kişiye ikinci davet **409**
+(`COMPANY_CONTACT_INVITATION_ALREADY_PENDING`); öncesinde her çağrı yeni bir kayıt ve `CRITICAL` öncelikli
+yeni bir e-posta üretiyordu ve kayıtların hepsi ayrı ayrı kabul edilebiliyordu. Cevaplanmış davet yeni daveti
+engellemez. "Kullanıcı zaten yetkili" dalı da `ValidationException`'dan `ConflictException`'a çekildi (§2ag):
+ikisi de durum çakışması, girdi şekli hatası değil.
+
+**Davet DTO'sunda e-posta alanı kendi anahtarını kullanıyor.** `InviteContactToCompanyDto.email`
+`{companyContact.firstName.notBlank}` mesajını taşıyordu — boş e-posta gönderen kullanıcıya "Ad boş olamaz"
+gidiyordu. Alan artık `@Email` de taşıyor; kimsenin kullanmadığı `companyContact.firstName.notBlank` anahtarı
+üç katalogdan da düşürüldü, `user.not.associated.with.invitation` de öyle (o dal artık 404 anahtarını
+kullanıyor).
+
+**Düzeltmeyi sabitleyen şey `CompanyContactInvitationAccessIT`.** Hata filtre zincirindeydi; manager'ı
+doğrudan çağıran birim testleri düzeltme öncesi kodda da geçerdi, yani hiçbir şeyi sabitlemezlerdi. IT
+`MockMvc` ile gerçek zinciri koşuyor ve **yalnız `ROLE_USER` taşıyan** şirket yöneticisiyle 200 alıyor;
+`SecurityConfig` satırı geri alınırsa test 403 ile kırmızıya döner (denendi, görüldü). Aynı sınıf `STAFF`
+yetkilisini gerçek bir `company_contacts` satırıyla modelliyor ve yabancının aldığı 404'ün rastgele bir
+UUID'nin 404'ünden **`errorCode` dahil** ayırt edilemediğini kanıtlıyor.
+
+**Entity üzerindeki türetilmiş erişimci `get` öneki almaz — bu bir tuzak, tercih değil.** Getter zincirini
+gizlemek için `CompanyContactInvitation`'a `companyId()` eklendi. İnceleme bunu `getCompanyId()` yapmayı
+önerdi (bean adlandırması), denendi ve **`GET /companies/{id}/contact-invitations` 500 dönmeye başladı**:
+Spring Data türetilmiş sorguları JavaBean özelliklerinden çözüyor, `getCompanyId()` bir `companyId` özelliği
+doğuruyor ve `findByCompanyId` artık `company.id` yerine `c.companyId` üretiyor — Hibernate böyle bir
+öznitelik bulamayınca `UnknownPathException` atıyor. Aynı risk Jackson ve MapStruct için de var. Kural:
+alanı olmayan türetilmiş bir erişimciye entity'de bean adı verme; `Conversation.hasParticipant` ve
+`isGroup` de aynı sebeple fiil biçiminde.
+
+**`ApiConventionTest` bir kural daha koruyor.** `noCompanyScopedRuleIsLockedToThePlatformAdminRole`,
+`/companies` ya da `/contact-invitations` altındaki hiçbir kuralın yalnız `ADMIN` rolüne kilitlenmediğini
+doğruluyor — şirket yetkisi servis katmanında denetlenir. Mevcut `ADMIN_RULE`'un `hasAnyRole`'ü de
+yakalayacak biçimde genişletilmesi **bilerek yapılmadı**: genişletme `POST /images` satırını kırmızıya
+düşürür ve o ayrı bir ürün kararı — is-koala/koala-backend#72.
+
 ## 2t. Iyzico mutabakat tetiği
 
 `approvePaymentSettlement` yazılmıştı ama **hiç çağrılmıyordu** — emanetteki para Iyzico tarafında alt üye işyerine hiç açılmıyordu. Faz 8B bunu bağladı:
@@ -1654,6 +1725,8 @@ Birim testlerde `CommissionCalculator` artık `FallbackSettings.commissionCalcul
 `AdminAuditTrailIT` on dokuz kural — gerçek HTTP üzerinden: izin verilen değişiklik aktör/izin/eylem/kayıt ile yazılır, detay gövde-IP-istemciyi taşır, `cancellation.late-fee-rate` artık iz bırakmadan değişmez, reddedilen istek `allowed = false` yazar, filtreli kullanıcı araması yazılır, filtresiz yükleme yazılmaz, sayfa çevirmek arama değildir, tek kayıt okuması yazılır, finansal satır 10 yıl normal satır 2 yıl saklanır, anonim istek tabloyu doldurmaz, köprü admini de denetlenir, denetim kaydını okumak yazılır ama kendi satırını döndürmez, ikinci okuma tek satır ekler, uç `audit.read` istiyor ve reddi de yazılıyor, çekirdek alanların hepsi dönüyor, detay silinince çekirdek dönmeye devam ediyor, beş süzgecin hepsi sunucuda daraltıyor, aktör süzgeci bir kişinin yaptıklarını buluyor, tanınmayan sıralama alanı 400 dönüyor.
 
 `AdminAuditStorageIT` bölünmeyi gerçek Postgres'te doğruluyor (çekirdek detay silinince kalır, cascade ters yönde çalışır, iki yarı kendi tarihini taşır); `AdminAuditRetentionIT` saklama ve KVKK silmesini (10 yıl / 24 ay / 6 ay damgaları, süresi dolan detay çekirdeği bırakır, süresi dolan çekirdek detayı götürür, penceredeki satıra dokunulmaz, silme talebi yalnız o kişinin detayını siler, ikinci silme zararsız). KVKK tetiği `LegalConsentTest` içinde: kabul edilen talep silme çağırır, engellenen talep hiçbir şey silmez.
+
+**Yetkili daveti testleri (§2s2).** `CompanyContactInvitationRulesTest` yedi kural: şirket yöneticisi listeyi okur, üye olmayan okuyamaz, davet edilen/daveti gönderen/şirket yöneticisi tekil daveti okur, UUID'yi elinde tutan yabancı okuyamaz, yabancı davetin durumuna hiç bakılmadan reddedilir. `CompanyInvitationSendingRulesTest` beş kural: ilk davet gider, zaten yetkili olan kişi 409, bekleyen davet varken ikinci davet 409, cevaplanmış davet yeni daveti engellemez, yönetici olmayan davet edilecek kişinin durumuna hiç bakılmadan reddedilir. `CompanyContactInvitationAccessIT` sekiz kural — gerçek filtre zinciri üzerinden: yalnız `ROLE_USER` taşıyan şirket yöneticisi listeye 200 ile ulaşır, `STAFF` yetkilisi ve üye olmayan listeyi var olmayan bir şirketten ayırt edemez, üç taraf da daveti okur, yabancı ve `STAFF` daveti rastgele bir UUID'den ayırt edemez, başkasının davetini cevaplamak var olmayan daveti cevaplamakla aynı yanıtı verir, şirket yöneticisi daveti okuyabilir ama cevaplayamaz. Ayırt edilemezlik durum koduyla değil `errorCode` ile sabitleniyor.
 
 **`ApiConventionTest` yüzeyi yapısal olarak koruyor.** Kaynak kodu tarayıp §0b'deki altı kuralı doğruluyor: admin kuralı `/admin` dışında bir yol gösteremez, aynı fiil+yol iki handler'da olamaz, yol sondaki eğik çizgi taşıyamaz, DTO adı HTTP fiili içeremez, 32 karakteri aşamaz, `request`/`response` dışında duramaz. Yeni bir uç eklerken bedava koruma.
 

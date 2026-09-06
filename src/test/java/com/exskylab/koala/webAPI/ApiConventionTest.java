@@ -21,6 +21,8 @@ class ApiConventionTest {
     private static final Pattern CLASS_MAPPING = Pattern.compile("@RequestMapping\\(\"([^\"]*)\"\\)");
     private static final Pattern METHOD_MAPPING =
             Pattern.compile("@(Get|Post|Put|Patch|Delete)Mapping(?:\\(\\s*(?:value\\s*=\\s*)?\"([^\"]*)\")?");
+    private static final Pattern PLATFORM_ADMIN_ONLY_RULE =
+            Pattern.compile("\\.requestMatchers\\(([^)]*)\\)\\s*\\.has(?:Any)?Role\\(\\s*\"ADMIN\"\\s*\\)");
     private static final Pattern ADMIN_RULE =
             Pattern.compile("\\.requestMatchers\\(([^)]*)\\)\\s*\\.hasRole\\(\"ADMIN\"\\)");
 
@@ -83,6 +85,25 @@ class ApiConventionTest {
                         "ADMIN'e kısıtlı uç /admin altında olmalı: " + value);
             }
         }
+    }
+
+    @Test
+    void noCompanyScopedRuleIsLockedToThePlatformAdminRole() throws IOException {
+        Matcher rule = PLATFORM_ADMIN_ONLY_RULE.matcher(Files.readString(SECURITY_CONFIG));
+        List<String> offenders = new ArrayList<>();
+
+        while (rule.find()) {
+            Matcher path = Pattern.compile("\"([^\"]*)\"").matcher(rule.group(1));
+            while (path.find()) {
+                String value = path.group(1);
+                if (value.startsWith("/companies") || value.startsWith("/contact-invitations")) {
+                    offenders.add(value);
+                }
+            }
+        }
+
+        assertTrue(offenders.isEmpty(),
+                "Şirket yetkisi servis katmanında denetlenir, platform ADMIN rolüne kilitlenemez: " + offenders);
     }
 
     @Test
