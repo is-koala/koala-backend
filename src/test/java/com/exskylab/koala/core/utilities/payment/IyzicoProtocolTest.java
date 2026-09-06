@@ -1,5 +1,8 @@
 package com.exskylab.koala.core.utilities.payment;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.exskylab.koala.core.exceptions.ExternalServiceException;
 import com.exskylab.koala.core.properties.IyzicoProperties;
 import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoEndpoints;
@@ -7,8 +10,12 @@ import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoPaymentResultRequestDto;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoPaymentResultResponseDto;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoRefundRequestDto;
+import com.exskylab.koala.core.utilities.payment.iyzico.dtos.PaymentSessionRequestDto;
+import com.exskylab.koala.core.utilities.payment.iyzico.dtos.PaymentSessionResponseDto;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -22,6 +29,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Locale;
+import java.util.stream.Collectors;
+
+import org.slf4j.LoggerFactory;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.*;
@@ -56,12 +66,21 @@ class IyzicoProtocolTest {
         return request;
     }
 
+    private PaymentSessionRequestDto initializeRequest() {
+        PaymentSessionRequestDto request = new PaymentSessionRequestDto();
+        request.setConversationId("conv-1");
+        return request;
+    }
+
     private static String successBody() {
         return """
                 {"status":"success","paymentStatus":"SUCCESS","fraudStatus":1,"mdStatus":1,
                  "paymentId":"pay-1","conversationId":"conv-1","price":"1075.00",
                  "paidPrice":"1075.00","currency":"TRY","basketId":"basket-1",
-                 "itemTransactions":[{"paymentTransactionId":"txn-1","paidPrice":"1075.00"}]}
+                 "token":"tok-1","signature":"183f3da44502ffc7c4e80b737e68844f2153f83a62234df275e5fbc2e6b64a39",
+                 "itemTransactions":[{"itemId":"job-1","paymentTransactionId":"txn-1",
+                 "price":"1075.00","paidPrice":"1075.00","subMerchantPrice":"1000.00",
+                 "subMerchantKey":"submerchant-key"}]}
                 """;
     }
 
@@ -128,7 +147,10 @@ class IyzicoProtocolTest {
     void aDeclinedPaymentIsReturnedRatherThanThrown() {
         server.expect(requestTo(BASE_URL + IyzicoEndpoints.CHECKOUT_FORM_RETRIEVE))
                 .andRespond(withSuccess("""
-                        {"status":"success","paymentStatus":"FAILURE","conversationId":"conv-1"}
+                        {"status":"success","paymentStatus":"FAILURE","paymentId":"pay-1",
+                         "conversationId":"conv-1","price":"1075.00","paidPrice":"1075.00",
+                         "currency":"TRY","basketId":"basket-1","token":"tok-1",
+                         "signature":"74acb6c387c11a86fc25c9599498cb7276d0657b90e68470949bcb095e47801d"}
                         """, MediaType.APPLICATION_JSON));
 
         IyzicoPaymentResultResponseDto result = service.retrieveCheckoutFormResult(retrieveRequest());
@@ -149,6 +171,107 @@ class IyzicoProtocolTest {
         assertEquals(1, result.getFraudStatus());
         assertEquals(1, result.getMdStatus());
         assertEquals("TRY", result.getCurrency());
+        assertEquals("tok-1", result.getToken());
+        assertEquals("job-1", result.getItemId());
+        assertEquals(0, new BigDecimal("1075.00").compareTo(result.getItemPrice()));
+        assertEquals(0, new BigDecimal("1000.00").compareTo(result.getItemSubMerchantPrice()));
+        assertEquals("submerchant-key", result.getItemSubMerchantKey());
+        assertEquals(1, result.getItemCount());
+    }
+
+    @Test
+    void aRetrieveResponseWithAnInvalidOfficialSignatureIsRejected() {
+        server.expect(requestTo(BASE_URL + IyzicoEndpoints.CHECKOUT_FORM_RETRIEVE))
+                .andRespond(withSuccess("""
+                        {"status":"success","paymentStatus":"SUCCESS","fraudStatus":1,"mdStatus":1,
+                         "paymentId":"pay-1","conversationId":"conv-1","price":"1075.00",
+                         "paidPrice":"1075.00","currency":"TRY","basketId":"basket-1",
+                         "token":"tok-1","signature":"tampered",
+                         "itemTransactions":[{"paymentTransactionId":"txn-1","paidPrice":"1075.00"}]}
+                        """, MediaType.APPLICATION_JSON));
+
+        assertThrows(ExternalServiceException.class,
+                () -> service.retrieveCheckoutFormResult(retrieveRequest()));
+    }
+
+    @Test
+    void anInitializeResponseWithAnInvalidOfficialSignatureIsRejected() {
+        server.expect(requestTo(BASE_URL + IyzicoEndpoints.CHECKOUT_FORM_INITIALIZE))
+                .andRespond(withSuccess("""
+                        {"status":"success","conversationId":"conv-1","token":"tok-1",
+                         "paymentPageUrl":"https://sandbox-api.iyzipay.com/checkoutform/example",
+                         "signature":"tampered"}
+                        """, MediaType.APPLICATION_JSON));
+
+        assertThrows(ExternalServiceException.class,
+                () -> service.initiateCheckoutFormPayment(initializeRequest()));
+    }
+
+    @Test
+    void aSignedInitializeResponseCannotRedirectToAnUntrustedHost() {
+        server.expect(requestTo(BASE_URL + IyzicoEndpoints.CHECKOUT_FORM_INITIALIZE))
+                .andRespond(withSuccess("""
+                        {"status":"success","conversationId":"conv-1","token":"tok-1",
+                         "paymentPageUrl":"https://attacker.example/checkoutform/example",
+                         "signature":"da244a6a48b4793ef8d0d6e0b5e46683c5a9bf0f6b4f73b60168667f4ae66a25"}
+                        """, MediaType.APPLICATION_JSON));
+
+        assertThrows(ExternalServiceException.class,
+                () -> service.initiateCheckoutFormPayment(initializeRequest()));
+    }
+
+    @Test
+    void aValidSignedInitializeResponseReturnsTheTrustedHostedSession() {
+        server.expect(requestTo(BASE_URL + IyzicoEndpoints.CHECKOUT_FORM_INITIALIZE))
+                .andRespond(withSuccess("""
+                        {"status":"success","conversationId":"conv-1","token":"tok-1",
+                         "paymentPageUrl":"https://sandbox-cpp.iyzipay.com/checkoutform/example",
+                         "signature":"da244a6a48b4793ef8d0d6e0b5e46683c5a9bf0f6b4f73b60168667f4ae66a25"}
+                        """, MediaType.APPLICATION_JSON));
+
+        PaymentSessionResponseDto result = service.initiateCheckoutFormPayment(initializeRequest());
+
+        assertEquals("tok-1", result.getToken());
+        assertEquals("https://sandbox-cpp.iyzipay.com/checkoutform/example", result.getPaymentPageUrl());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "https://sandbox-api.iyzipay.com/checkoutform/example",
+            "https://sandbox-payment.iyzipay.com/checkoutform/example",
+            "https://sandbox-cpp.iyzipay.com:444/checkoutform/example",
+            "https://user@sandbox-cpp.iyzipay.com/checkoutform/example",
+            "https://sandbox-cpp.iyzipay.com/checkoutform/example#token"
+    })
+    void onlyTheExactOfficialSandboxHostedOriginIsAccepted(String hostedUrl) {
+        server.expect(requestTo(BASE_URL + IyzicoEndpoints.CHECKOUT_FORM_INITIALIZE))
+                .andRespond(withSuccess("""
+                        {"status":"success","conversationId":"conv-1","token":"tok-1",
+                         "paymentPageUrl":"%s",
+                         "signature":"da244a6a48b4793ef8d0d6e0b5e46683c5a9bf0f6b4f73b60168667f4ae66a25"}
+                        """.formatted(hostedUrl), MediaType.APPLICATION_JSON));
+
+        assertThrows(ExternalServiceException.class,
+                () -> service.initiateCheckoutFormPayment(initializeRequest()));
+    }
+
+    @Test
+    void theExactOfficialLiveHostedOriginIsAccepted() {
+        IyzicoProperties live = new IyzicoProperties();
+        live.setApiKey("live-api-key");
+        live.setSecretKey(SECRET);
+        live.setBaseUrl("https://api.iyzipay.com");
+        IyzicoPaymentService liveService = new IyzicoPaymentService(restTemplate, live, new ObjectMapper());
+        server.expect(requestTo("https://api.iyzipay.com" + IyzicoEndpoints.CHECKOUT_FORM_INITIALIZE))
+                .andRespond(withSuccess("""
+                        {"status":"success","conversationId":"conv-1","token":"tok-1",
+                         "paymentPageUrl":"https://cpp.iyzipay.com/checkoutform/example",
+                         "signature":"da244a6a48b4793ef8d0d6e0b5e46683c5a9bf0f6b4f73b60168667f4ae66a25"}
+                        """, MediaType.APPLICATION_JSON));
+
+        PaymentSessionResponseDto result = liveService.initiateCheckoutFormPayment(initializeRequest());
+
+        assertEquals("https://cpp.iyzipay.com/checkoutform/example", result.getPaymentPageUrl());
     }
 
     @Test
@@ -156,7 +279,9 @@ class IyzicoProtocolTest {
         server.expect(requestTo(BASE_URL + IyzicoEndpoints.CHECKOUT_FORM_RETRIEVE))
                 .andRespond(withSuccess("""
                         {"status":"success","paymentStatus":"SUCCESS","fraudStatus":1,"mdStatus":0,
-                         "paymentId":"pay-1","conversationId":"conv-1","paidPrice":"1075.00","currency":"TRY"}
+                         "paymentId":"pay-1","conversationId":"conv-1","price":"1075.00",
+                         "paidPrice":"1075.00","currency":"TRY","basketId":"basket-1",
+                         "token":"tok-1","signature":"183f3da44502ffc7c4e80b737e68844f2153f83a62234df275e5fbc2e6b64a39"}
                         """, MediaType.APPLICATION_JSON));
 
         IyzicoPaymentResultResponseDto result = service.retrieveCheckoutFormResult(retrieveRequest());
@@ -169,7 +294,9 @@ class IyzicoProtocolTest {
         server.expect(requestTo(BASE_URL + IyzicoEndpoints.CHECKOUT_FORM_RETRIEVE))
                 .andRespond(withSuccess("""
                         {"status":"success","paymentStatus":"SUCCESS","fraudStatus":1,
-                         "paymentId":"pay-1","conversationId":"conv-1","paidPrice":"1075.00","currency":"TRY"}
+                         "paymentId":"pay-1","conversationId":"conv-1","price":"1075.00",
+                         "paidPrice":"1075.00","currency":"TRY","basketId":"basket-1",
+                         "token":"tok-1","signature":"183f3da44502ffc7c4e80b737e68844f2153f83a62234df275e5fbc2e6b64a39"}
                         """, MediaType.APPLICATION_JSON));
 
         IyzicoPaymentResultResponseDto result = service.retrieveCheckoutFormResult(retrieveRequest());
@@ -197,6 +324,49 @@ class IyzicoProtocolTest {
                                 """));
 
         assertThrows(ExternalServiceException.class, () -> service.retrieveCheckoutFormResult(retrieveRequest()));
+    }
+
+    @Test
+    void aFiveHundredResponseRemainsAmbiguousInsteadOfBecomingAProviderRejection() {
+        server.expect(requestTo(BASE_URL + IyzicoEndpoints.CHECKOUT_FORM_INITIALIZE))
+                .andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("""
+                                {"status":"failure","errorCode":"50000","errorMessage":"Temporary error"}
+                                """));
+
+        ExternalServiceException thrown = assertThrows(ExternalServiceException.class,
+                () -> service.initiateCheckoutFormPayment(initializeRequest()));
+
+        assertEquals("PAYMENT_PROVIDER_UNAVAILABLE", thrown.getErrorCode());
+    }
+
+    @Test
+    void providerResponseDetailsNeverReachApplicationLogs() {
+        String sensitiveProviderDetail = "TCKN-10000000146-IBAN-TR000000000000000000000001";
+        Logger logger = (Logger) LoggerFactory.getLogger(IyzicoPaymentService.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            server.expect(requestTo(BASE_URL + IyzicoEndpoints.CHECKOUT_FORM_RETRIEVE))
+                    .andRespond(withStatus(HttpStatus.BAD_REQUEST)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .body("""
+                                    {"status":"failure","errorCode":"1000","errorMessage":"%s"}
+                                    """.formatted(sensitiveProviderDetail)));
+
+            assertThrows(ExternalServiceException.class,
+                    () -> service.retrieveCheckoutFormResult(retrieveRequest()));
+
+            String logs = appender.list.stream()
+                    .map(ILoggingEvent::getFormattedMessage)
+                    .collect(Collectors.joining("\n"));
+            assertFalse(logs.contains(sensitiveProviderDetail));
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
     }
 
     @Test

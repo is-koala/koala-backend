@@ -14,8 +14,6 @@ public class PaymentSessionDto {
 
     private String paymentPageUrl;
 
-    private String token;
-
     private PricingBreakdownDto pricing;
 
 }

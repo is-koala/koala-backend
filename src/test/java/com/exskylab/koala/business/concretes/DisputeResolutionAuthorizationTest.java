@@ -32,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -42,6 +43,7 @@ class DisputeResolutionAuthorizationTest {
     private DisputeDao disputeDao;
     private PayoutService payoutService;
     private SecurityService securityService;
+    private JobAssignmentService jobAssignmentService;
     private DisputeManager disputeManager;
 
     private final UUID assignmentId = UUID.randomUUID();
@@ -54,8 +56,9 @@ class DisputeResolutionAuthorizationTest {
         disputeDao = mock(DisputeDao.class);
         payoutService = mock(PayoutService.class);
         securityService = mock(SecurityService.class);
+        jobAssignmentService = mock(JobAssignmentService.class);
 
-        disputeManager = new DisputeManager(disputeDao, mock(JobAssignmentService.class), mock(UserService.class),
+        disputeManager = new DisputeManager(disputeDao, jobAssignmentService, mock(UserService.class),
                 securityService, mock(AssignmentParticipants.class), new StaffPayoutManager(payoutService, StaffBridges.open()),
                 mock(ActivityNotificationService.class), new PageableSanitizer());
 
@@ -68,6 +71,9 @@ class DisputeResolutionAuthorizationTest {
         dispute.setStatus(DisputeStatus.OPEN);
 
         when(disputeDao.findById(disputeId)).thenReturn(Optional.of(dispute));
+        when(disputeDao.findJobAssignmentIdById(disputeId)).thenReturn(Optional.of(assignmentId));
+        when(disputeDao.findByIdForUpdate(disputeId)).thenReturn(Optional.of(dispute));
+        when(jobAssignmentService.getDetailedByIdForUpdate(assignmentId)).thenReturn(assignment);
         when(disputeDao.save(any(Dispute.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(securityService.getAuthenticatedUser()).thenReturn(new User());
     }
@@ -107,6 +113,18 @@ class DisputeResolutionAuthorizationTest {
 
         verifyNoInteractions(payoutService);
         assertEquals(DisputeStatus.RESOLVED, dispute.getStatus());
+    }
+
+    @Test
+    void resolutionLocksTheAssignmentBeforeReadingTheDisputeForUpdate() {
+        StaffPrincipal handler = staff(StaffPermission.DISPUTE_RESOLVE);
+
+        disputeManager.resolveDispute(handler, disputeId, DisputeResolution.DISMISSED, "dayanaksız");
+
+        var order = inOrder(disputeDao, jobAssignmentService);
+        order.verify(disputeDao).findJobAssignmentIdById(disputeId);
+        order.verify(jobAssignmentService).getDetailedByIdForUpdate(assignmentId);
+        order.verify(disputeDao).findByIdForUpdate(disputeId);
     }
 
     @Test

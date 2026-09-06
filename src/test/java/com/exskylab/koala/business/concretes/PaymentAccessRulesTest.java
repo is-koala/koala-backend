@@ -6,6 +6,7 @@ import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
 import com.exskylab.koala.core.monitoring.PaymentMetrics;
+import com.exskylab.koala.core.properties.PaymentVerificationProperties;
 import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
 import com.exskylab.koala.dataAccess.PaymentDao;
@@ -53,7 +54,7 @@ class PaymentAccessRulesTest {
 
         paymentManager = new PaymentManager(paymentDao, mock(IyzicoPaymentService.class),
                 mock(PaymentStateMachine.class), securityService, jobAssignmentDao, participants,
-                new PaymentMetrics(new SimpleMeterRegistry()));
+                new PaymentMetrics(new SimpleMeterRegistry()), new PaymentVerificationProperties());
 
         Job job = new Job();
         job.setId(UUID.randomUUID());
