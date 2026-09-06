@@ -11,6 +11,7 @@ public final class StorageKeys {
     public static final String IMAGE_PREFIX = "images/";
     public static final String PUBLIC_FILE_PREFIX = "public/";
     public static final String PRIVATE_PREFIX = "files/";
+    public static final String DISPUTE_EVIDENCE_PREFIX = "files/dispute-evidence/";
 
     private static final String TURKISH = "çÇğĞıİöÖşŞüÜâÂîÎûÛ";
     private static final String ASCII = "cCgGiIoOsSuUaAiIuU";
@@ -28,6 +29,7 @@ public final class StorageKeys {
             case IMAGE -> IMAGE_PREFIX;
             case PUBLIC_FILE -> PUBLIC_FILE_PREFIX;
             case FILE -> PRIVATE_PREFIX;
+            case DISPUTE_EVIDENCE -> DISPUTE_EVIDENCE_PREFIX;
         };
     }
 
@@ -37,6 +39,10 @@ public final class StorageKeys {
 
     public static boolean isPublicFile(String key) {
         return key != null && key.startsWith(PUBLIC_FILE_PREFIX);
+    }
+
+    public static boolean isDisputeEvidence(String key) {
+        return key != null && key.startsWith(DISPUTE_EVIDENCE_PREFIX);
     }
 
     public static boolean isImage(String key) {

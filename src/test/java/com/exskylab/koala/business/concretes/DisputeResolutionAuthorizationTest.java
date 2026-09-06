@@ -58,7 +58,12 @@ class DisputeResolutionAuthorizationTest {
         securityService = mock(SecurityService.class);
         jobAssignmentService = mock(JobAssignmentService.class);
 
-        disputeManager = new DisputeManager(disputeDao, jobAssignmentService, mock(UserService.class),
+        disputeManager = new DisputeManager(disputeDao, mock(com.exskylab.koala.dataAccess.DisputeEvidenceDao.class),
+                mock(com.exskylab.koala.core.utilities.storage.StorageService.class),
+                new com.exskylab.koala.core.helpers.UploadValidator(
+                        new com.exskylab.koala.core.properties.UploadProperties()),
+                new com.exskylab.koala.core.properties.UploadProperties(),
+                jobAssignmentService, mock(UserService.class),
                 securityService, mock(AssignmentParticipants.class), new StaffPayoutManager(payoutService, StaffBridges.open()),
                 mock(ActivityNotificationService.class), new PageableSanitizer());
 

@@ -10,11 +10,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Set;
@@ -24,10 +26,13 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 @AutoConfigureMockMvc
 class ExistenceConcealmentIT extends AbstractIntegrationTest {
+
+    private static final byte[] PNG = smallPng();
 
     @FunctionalInterface
     private interface Attempt {
@@ -51,6 +56,7 @@ class ExistenceConcealmentIT extends AbstractIntegrationTest {
     private final UUID assignmentId = UUID.randomUUID();
     private final UUID conversationId = UUID.randomUUID();
     private final UUID templateId = UUID.randomUUID();
+    private final UUID disputeId = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
@@ -82,6 +88,9 @@ class ExistenceConcealmentIT extends AbstractIntegrationTest {
                 + "values (?, now(), false, ?, ?)", UUID.randomUUID(), conversationId, workerId);
         jdbc.update("insert into job_templates (id, created_at, is_deleted, owner_id, template_name, title) "
                 + "values (?, now(), false, ?, ?, ?)", templateId, employerId, "Şablon", "Şablon başlığı");
+        jdbc.update("insert into disputes (id, created_at, is_deleted, job_assignment_id, opened_by_id, "
+                + "status, reason) values (?, now(), false, ?, ?, 'OPEN', ?)",
+                disputeId, assignmentId, workerId, "Kanıt gizleme testi");
     }
 
     @AfterEach
@@ -90,6 +99,8 @@ class ExistenceConcealmentIT extends AbstractIntegrationTest {
         jdbc.update("delete from conversation_participants where conversation_id = ?", conversationId);
         jdbc.update("delete from messages where conversation_id = ?", conversationId);
         jdbc.update("delete from conversations where id = ?", conversationId);
+        jdbc.update("delete from dispute_evidence where dispute_id = ?", disputeId);
+        jdbc.update("delete from disputes where id = ?", disputeId);
         jdbc.update("delete from work_sessions where job_assignment_id = ?", assignmentId);
         jdbc.update("delete from reviews where job_assignment_id = ?", assignmentId);
         jdbc.update("delete from cancellations where job_assignment_id = ?", assignmentId);
@@ -169,6 +180,28 @@ class ExistenceConcealmentIT extends AbstractIntegrationTest {
                 id -> mockMvc.perform(get("/users/me/job-templates/{id}", id).with(user(principal(outsiderId)))));
     }
 
+    @Test
+    void attachingEvidenceToSomeoneElsesDisputeLooksExactlyLikeAttachingToOneThatDoesNotExist() throws Exception {
+        assertIndistinguishable(disputeId,
+                id -> mockMvc.perform(multipart("/disputes/{id}/evidence", id)
+                        .file(new MockMultipartFile("file", "kanit.png", "image/png", PNG))
+                        .with(user(principal(outsiderId)))));
+    }
+
+    @Test
+    void listingSomeoneElsesDisputeEvidenceLooksExactlyLikeListingOneThatDoesNotExist() throws Exception {
+        assertIndistinguishable(disputeId,
+                id -> mockMvc.perform(get("/disputes/{id}/evidence", id).with(user(principal(outsiderId)))));
+    }
+
+    @Test
+    void downloadingSomeoneElsesDisputeEvidenceLooksExactlyLikeDownloadingOneThatDoesNotExist() throws Exception {
+        UUID evidenceId = UUID.randomUUID();
+        assertIndistinguishable(disputeId,
+                id -> mockMvc.perform(get("/disputes/{id}/evidence/{evidenceId}/download", id, evidenceId)
+                        .with(user(principal(outsiderId)))));
+    }
+
     private void assertIndistinguishable(UUID real, Attempt attempt) throws Exception {
         UUID phantom = UUID.randomUUID();
 
@@ -198,5 +231,16 @@ class ExistenceConcealmentIT extends AbstractIntegrationTest {
 
     private UserPrincipal principal(UUID id) {
         return new UserPrincipal(id, email(id), Set.of(Role.ROLE_USER), null);
+    }
+
+    private static byte[] smallPng() {
+        try {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            javax.imageio.ImageIO.write(
+                    new java.awt.image.BufferedImage(8, 8, java.awt.image.BufferedImage.TYPE_INT_RGB), "png", out);
+            return out.toByteArray();
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException(e);
+        }
     }
 }
