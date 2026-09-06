@@ -4,7 +4,11 @@ import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.core.constants.BankAccountMessages;
 import com.exskylab.koala.core.dtos.bankAccount.request.SaveBankAccountDto;
 import com.exskylab.koala.core.dtos.bankAccount.response.BankAccountDto;
+import com.exskylab.koala.core.dtos.bankAccount.response.IbanVerificationDto;
+import com.exskylab.koala.core.helpers.BankAccountVerificationPolicy;
 import com.exskylab.koala.core.mappers.BankAccountMapper;
+import com.exskylab.koala.core.properties.BankVerificationProperties;
+import com.exskylab.koala.entities.BankAccount;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.core.utilities.results.SuccessResult;
 import io.swagger.v3.oas.annotations.Operation;
@@ -32,10 +36,13 @@ public class BankAccountsController {
 
     private final BankAccountService bankAccountService;
     private final BankAccountMapper bankAccountMapper;
+    private final BankVerificationProperties verificationProperties;
 
-    public BankAccountsController(BankAccountService bankAccountService, BankAccountMapper bankAccountMapper) {
+    public BankAccountsController(BankAccountService bankAccountService, BankAccountMapper bankAccountMapper,
+                                  BankVerificationProperties verificationProperties) {
         this.bankAccountService = bankAccountService;
         this.bankAccountMapper = bankAccountMapper;
+        this.verificationProperties = verificationProperties;
     }
 
     @Operation(summary = "Banka hesaplarımı getir",
@@ -73,6 +80,23 @@ public class BankAccountsController {
         return ResponseEntity.ok(new SuccessDataResult<>(
                 bankAccountMapper.toBankAccountDto(bankAccountService.selectMyPrimaryAccount(accountId)),
                 BankAccountMessages.PRIMARY_SELECTED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "IBAN sahipliği doğrulamasını başlat",
+            description = "Kullanıcı kendi kayıtlı IBAN'ından Koala'nın tahsilat hesabına, dönen tutarı ve tekil referansı kullanarak küçük tutarlı bir transfer yapar. Gönderen IBAN kayıtlı IBAN'la eşleşmezse doğrulama geçmez. Beklemedeki doğrulama varken aynı tutar ve referans döner.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Doğrulama başlatıldı"),
+            @ApiResponse(responseCode = "404", description = "Banka hesabı bulunamadı"),
+            @ApiResponse(responseCode = "409", description = "Hesap zaten doğrulanmış ya da deneme hakkı bitmiş"),
+            @ApiResponse(responseCode = "502", description = "Doğrulama transferi için tahsilat hesabı tanımlı değil")
+    })
+    @PostMapping("/{accountId}/verification")
+    public ResponseEntity<SuccessDataResult<IbanVerificationDto>> startVerification(@PathVariable UUID accountId) {
+        BankAccount account = bankAccountService.startMyVerification(accountId);
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                bankAccountMapper.toIbanVerificationDto(account, verificationProperties.getCollectionIban(),
+                        BankAccountVerificationPolicy.attemptsLeft(account, verificationProperties.getMaxAttempts())),
+                BankAccountMessages.VERIFICATION_STARTED, HttpStatus.OK));
     }
 
     @Operation(summary = "Banka hesabını sil",

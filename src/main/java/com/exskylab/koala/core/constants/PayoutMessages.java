@@ -12,4 +12,5 @@ public class PayoutMessages {
     public static final String REFUNDED = "{payout.refunded}";
     public static final String LISTED = "{payout.listed}";
     public static final String SETTLEMENT_FAILED = "{payout.settlement.failed}";
+    public static final String WORKER_IBAN_NOT_VERIFIED = "{payout.worker.iban.not.verified}";
 }
