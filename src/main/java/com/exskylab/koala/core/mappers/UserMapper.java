@@ -30,6 +30,6 @@ public interface UserMapper {
 
     @Mapping(target = "companyId", source = "company.id")
     @Mapping(target = "companyName", source = "company.name")
-    @Mapping(target = "approved", source = "company.approved")
+    @Mapping(target = "approved", expression = "java(contact.getCompany().getApprovalStatus().isApproved())")
     CompanyMembershipDto toCompanyMembershipDto(CompanyContact contact);
 }

@@ -50,8 +50,8 @@ class CompanyContactInvitationAccessIT extends AbstractIntegrationTest {
         insertUser(invitedUserId);
         insertUser(outsiderId);
 
-        jdbc.update("insert into companies (id, created_at, is_deleted, name, tax_number, email, is_approved) "
-                        + "values (?, now(), false, ?, ?, ?, true)",
+        jdbc.update("insert into companies (id, created_at, is_deleted, name, tax_number, email, approval_status) "
+                        + "values (?, now(), false, ?, ?, ?, 'APPROVED')",
                 companyId, "Davet Test " + companyId, String.valueOf(Math.abs(companyId.hashCode())),
                 "company-" + companyId + "@example.com");
 

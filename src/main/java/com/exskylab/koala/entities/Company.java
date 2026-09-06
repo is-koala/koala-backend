@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -66,8 +67,15 @@ public class Company extends BaseEntity{
     @OrderBy("sortOrder ASC")
     private List<CompanyImage> images = new ArrayList<>();
 
-    @Column(name = "is_approved")
-    private boolean isApproved;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "approval_status", nullable = false)
+    private CompanyApprovalStatus approvalStatus = CompanyApprovalStatus.PENDING;
+
+    @Column(name = "approval_note", length = 1000)
+    private String approvalNote;
+
+    @Column(name = "approval_decided_at")
+    private Instant approvalDecidedAt;
 
     @Column(name = "iyzico_submerchant_key")
     private String iyzicoSubmerchantKey;

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-06-62-company-approval-decision" author="koala">
+        <addColumn tableName="companies">
+            <column name="approval_status" type="VARCHAR(32)"/>
+            <column name="approval_note" type="VARCHAR(1000)"/>
+            <column name="approval_decided_at" type="TIMESTAMPTZ"/>
+        </addColumn>
+
+        <sql>
+            UPDATE companies
+            SET approval_status = CASE WHEN is_approved IS TRUE THEN 'APPROVED' ELSE 'PENDING' END
+            WHERE approval_status IS NULL
+        </sql>
+
+        <addNotNullConstraint tableName="companies" columnName="approval_status"
+                              columnDataType="VARCHAR(32)"/>
+
+        <createIndex tableName="companies" indexName="idx_companies_approval_status">
+            <column name="approval_status"/>
+        </createIndex>
+
+        <dropColumn tableName="companies" columnName="is_approved"/>
+
+        <rollback>
+            <addColumn tableName="companies">
+                <column name="is_approved" type="BOOLEAN"/>
+            </addColumn>
+            <sql>
+                UPDATE companies SET is_approved = (approval_status = 'APPROVED')
+            </sql>
+            <dropIndex tableName="companies" indexName="idx_companies_approval_status"/>
+            <dropColumn tableName="companies" columnName="approval_decided_at"/>
+            <dropColumn tableName="companies" columnName="approval_note"/>
+            <dropColumn tableName="companies" columnName="approval_status"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

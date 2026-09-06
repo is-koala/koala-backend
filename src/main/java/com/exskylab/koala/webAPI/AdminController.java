@@ -16,7 +16,10 @@ import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.constants.AdminMessages;
 import com.exskylab.koala.core.dtos.common.PageDto;
-import com.exskylab.koala.core.dtos.company.response.CompanyDto;
+import com.exskylab.koala.core.dtos.company.request.ApproveCompanyDto;
+import com.exskylab.koala.core.dtos.company.request.RejectCompanyDto;
+import com.exskylab.koala.core.dtos.company.response.CompanyReviewDto;
+import com.exskylab.koala.entities.CompanyApprovalStatus;
 import com.exskylab.koala.core.dtos.jobAssignment.response.AdminAssignmentDto;
 import com.exskylab.koala.core.dtos.user.request.GrantRoleDto;
 import com.exskylab.koala.core.dtos.user.response.RoleGrantDto;
@@ -96,35 +99,70 @@ public class AdminController {
     }
 
     @Operation(summary = "Şirketleri onay durumuna göre listele",
-            description = "approved=false onay bekleyen şirketleri verir.")
+            description = "status verilmezse onay bekleyenler döner. query, şirket adı ve vergi numarasında arar.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Şirketler listelendi")
+            @ApiResponse(responseCode = "200", description = "Şirketler listelendi"),
+            @ApiResponse(responseCode = "400", description = "Bilinmeyen sıralama alanı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @RequiresPermission(StaffPermission.COMPANY_APPROVE)
     @GetMapping("/companies")
-    public ResponseEntity<SuccessDataResult<PageDto<CompanyDto>>> companies(
-            @RequestParam(defaultValue = "false") boolean approved,
+    public ResponseEntity<SuccessDataResult<PageDto<CompanyReviewDto>>> companies(
+            @RequestParam(defaultValue = "PENDING") CompanyApprovalStatus status,
+            @RequestParam(required = false) String query,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
-        var page = companyService.getCompaniesByApproval(approved, pageable);
+        var page = companyService.searchCompanies(status, query, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
-                PageDto.of(page, page.getContent().stream().map(companyMapper::toCompanyDto).toList()),
+                PageDto.of(page, page.getContent().stream().map(companyMapper::toCompanyReviewDto).toList()),
                 AdminMessages.COMPANIES_LISTED, HttpStatus.OK));
     }
 
     @Operation(summary = "Şirketi onayla",
-            description = "Onaylanana kadar şirket ilan yayınlayamaz.")
+            description = "Gövde isteğe bağlıdır; note verilirse onay gerekçesi kayda geçer. "
+                    + "Reddedilmiş bir şirket de onaylanabilir, onaylanmış şirket 409 alır.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Şirket onaylandı"),
+            @ApiResponse(responseCode = "400", description = "Gerekçe 1000 karakteri aşıyor",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "404", description = "Şirket bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "Şirket zaten onaylı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @RequiresPermission(value = StaffPermission.COMPANY_APPROVE, action = "company.approve")
     @PostMapping("/companies/{companyId}/approve")
-    public ResponseEntity<SuccessDataResult<CompanyDto>> approveCompany(@PathVariable UUID companyId) {
+    public ResponseEntity<SuccessDataResult<CompanyReviewDto>> approveCompany(
+            @PathVariable UUID companyId,
+            @RequestBody(required = false) @Valid ApproveCompanyDto request) {
+
+        String note = request == null ? null : request.getNote();
         return ResponseEntity.ok(new SuccessDataResult<>(
-                companyMapper.toCompanyDto(companyService.approveCompany(companyId)),
+                companyMapper.toCompanyReviewDto(companyService.approveCompany(companyId, note)),
                 AdminMessages.COMPANY_APPROVED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "Şirketi reddet",
+            description = "Gerekçe zorunludur ve kayda geçer. Reddedilen şirket onay kuyruğundan düşer; "
+                    + "status=REJECTED ile listelenir. Onaylanmış bir şirket buradan reddedilemez.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Şirket reddedildi"),
+            @ApiResponse(responseCode = "400", description = "Gerekçe boş ya da çok uzun",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "Şirket bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "Şirket zaten reddedilmiş ya da onaylanmış",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(value = StaffPermission.COMPANY_APPROVE, action = "company.reject")
+    @PostMapping("/companies/{companyId}/reject")
+    public ResponseEntity<SuccessDataResult<CompanyReviewDto>> rejectCompany(
+            @PathVariable UUID companyId,
+            @RequestBody @Valid RejectCompanyDto request) {
+
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                companyMapper.toCompanyReviewDto(companyService.rejectCompany(companyId, request.getReason())),
+                AdminMessages.COMPANY_REJECTED, HttpStatus.OK));
     }
 
     @Operation(summary = "Kullanıcıları ara",

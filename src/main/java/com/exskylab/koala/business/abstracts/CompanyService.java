@@ -9,6 +9,7 @@ import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.companyFollow.response.FollowedCompanyDto;
 import com.exskylab.koala.core.dtos.gallery.request.UpdateGalleryDto;
 import com.exskylab.koala.core.dtos.gallery.response.GalleryImageDto;
+import com.exskylab.koala.entities.CompanyApprovalStatus;
 import com.exskylab.koala.entities.CompanyContact;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -56,7 +57,9 @@ public interface CompanyService {
 
     void removeContact(UUID companyId, UUID userId);
 
-    Page<Company> getCompaniesByApproval(boolean approved, Pageable pageable);
+    Page<Company> searchCompanies(CompanyApprovalStatus status, String query, Pageable pageable);
 
-    Company approveCompany(UUID companyId);
+    Company approveCompany(UUID companyId, String note);
+
+    Company rejectCompany(UUID companyId, String reason);
 }

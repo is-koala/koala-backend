@@ -227,8 +227,8 @@ class ApplicationDecisionIT extends AbstractIntegrationTest {
 
     @Test
     void anOutsiderCannotTellACompanyJobApplicationFromAnIndividualOne() throws Exception {
-        jdbc.update("insert into companies (id, created_at, is_deleted, name, tax_number, email, is_approved) "
-                        + "values (?, now(), false, ?, ?, ?, true)",
+        jdbc.update("insert into companies (id, created_at, is_deleted, name, tax_number, email, approval_status) "
+                        + "values (?, now(), false, ?, ?, ?, 'APPROVED')",
                 companyId, "Test Sirket " + companyId, String.valueOf(Math.abs(companyId.hashCode())),
                 "company-" + companyId + "@example.com");
         jdbc.update("update jobs set employer_type = 'COMPANY', company_id = ? where id = ?", companyId, jobId);
