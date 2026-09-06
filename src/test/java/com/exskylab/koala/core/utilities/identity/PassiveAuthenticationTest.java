@@ -212,4 +212,56 @@ class PassiveAuthenticationTest {
 
         assertTrue(result.nationalName().isEmpty());
     }
+
+    @Test
+    void theChipsOwnDataGroup15VerifiesAgainstTheSignedSecurityObject() throws Exception {
+        byte[] dg15 = TestChip.dataGroup15();
+        byte[] sod = turkey.securityObjectWithDg15(dg1, dg15);
+
+        PassiveAuthenticationResult result = verifierTrusting(turkey).verify(sod, dg1, null, dg15);
+
+        assertEquals(TCKN, result.nationalIdentityNumber());
+    }
+
+    @Test
+    void aDataGroup15FromTheAttackersOwnKeyPairIsRefused() throws Exception {
+        byte[] chipKey = TestChip.dataGroup15();
+        byte[] sod = turkey.securityObjectWithDg15(dg1, chipKey);
+        byte[] attackerKey = TestChip.dataGroup15();
+
+        PassiveAuthenticationException thrown = assertThrows(PassiveAuthenticationException.class,
+                () -> verifierTrusting(turkey).verify(sod, dg1, null, attackerKey),
+                "calinan sod+dg1 ile saldirganin kendi anahtari Active Authentication'i gecmemeli");
+
+        assertEquals("{identity.data.group.tampered}", thrown.getMessageKey());
+    }
+
+    @Test
+    void aDataGroup15ThatTheSecurityObjectNeverSignedIsRefused() throws Exception {
+        byte[] sod = turkey.securityObject(dg1);
+        byte[] attackerKey = TestChip.dataGroup15();
+
+        PassiveAuthenticationException thrown = assertThrows(PassiveAuthenticationException.class,
+                () -> verifierTrusting(turkey).verify(sod, dg1, null, attackerKey),
+                "SOD DG15 listelemiyorsa gonderilen anahtar uydurmadir");
+
+        assertEquals("{identity.chip.key.unsigned}", thrown.getMessageKey());
+    }
+
+    @Test
+    void aCardWithoutDataGroup15StillVerifiesWhenNoKeyIsSent() throws Exception {
+        PassiveAuthenticationResult result =
+                verifierTrusting(turkey).verify(turkey.securityObject(dg1), dg1, null, null);
+
+        assertEquals(TCKN, result.nationalIdentityNumber());
+    }
+
+    @Test
+    void aCardThatCarriesDataGroup15StillVerifiesWhenNoKeyIsSent() throws Exception {
+        byte[] sod = turkey.securityObjectWithDg15(dg1, TestChip.dataGroup15());
+
+        PassiveAuthenticationResult result = verifierTrusting(turkey).verify(sod, dg1, null, new byte[0]);
+
+        assertEquals(TCKN, result.nationalIdentityNumber());
+    }
 }
