@@ -47,7 +47,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-
 @Service
 @Slf4j
 public class UserManager implements UserService {
@@ -55,7 +54,6 @@ public class UserManager implements UserService {
     private static final Set<String> USER_SORTABLE = Set.of("createdAt", "firstName", "lastName");
 
     private static final Sort USER_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
-
 
     private static final Locale TURKISH = Locale.of("tr", "TR");
 
@@ -211,7 +209,6 @@ public class UserManager implements UserService {
             currentUser.setGender(gender);
             }
 
-
         if (userMePatchRequestDto.getPhoneNumber() != null){
             if (!userMePatchRequestDto.getPhoneNumber().equals(currentUser.getPhoneNumber())) {
                 log.info("Phone change requested for user id: {}", currentUser.getId());
@@ -277,7 +274,6 @@ public class UserManager implements UserService {
             return new UserUpdateResponseDto(toMeDto(savedUser), pendingVerifications);
     }
 
-
     @Override
     @Transactional
     public void updateCurrentUserPassword(ChangePasswordDto userMeChangePasswordPutRequestDto, UUID currentSessionId) {
@@ -289,7 +285,6 @@ public class UserManager implements UserService {
             log.warn("New password is the same as the current password. No need to update.");
             throw new ValidationException(UserMessages.NEW_PASSWORD_CANNOT_BE_SAME_AS_CURRENT_PASSWORD);
         }
-
 
         if (!userMeChangePasswordPutRequestDto.getConfirmNewPassword().equals(userMeChangePasswordPutRequestDto.getNewPassword())){
             log.warn("New password does not match the confirmed new password. No need to update.");
@@ -522,8 +517,6 @@ public class UserManager implements UserService {
         return addressMapper.toAddressDto(address);
     }
 
-
-
     private UserMeResponseDto toMeDto(User user) {
         String maskedIban = bankAccountService.findPrimaryIban(user.getId())
                 .map(LogMasks::iban)
@@ -574,14 +567,10 @@ public class UserManager implements UserService {
 
         addRole(target, role);
         if (actor == null) {
-            // Köprü yolu: aktör bir marketplace kullanıcısı, kimliği granted_by_id'ye yazılabiliyor.
             UUID grantedById = securityService.getAuthenticatedUserId();
             userDao.stampRoleGrant(target.getId(), role.name(), Instant.now(), grantedById);
             log.info("Role {} granted to user {} by bridge admin {}", role, target.getId(), grantedById);
         } else {
-            // Personel yolu: granted_by_id users'a yabancı anahtar taşıyor ve personelin orada satırı yok
-            // (ADR-0014: personel marketplace kullanıcılarından ayrı). Sütun boş kalıyor, "kim verdi"
-            // sorusunu admin denetim kaydı cevaplıyor.
             userDao.stampRoleGrantTime(target.getId(), role.name(), Instant.now());
             log.info("Role {} granted to user {} by staff {}", role, target.getId(), actor.subject());
         }
@@ -604,10 +593,6 @@ public class UserManager implements UserService {
         }
 
         if (role == Role.ROLE_ADMIN) {
-            // Kendi rolünü alma koruması yalnız köprü yolunda anlamlı: orada aktör bir marketplace
-            // kullanıcısı, yani hedefle aynı kişi olabilir. Personel yolunda aktör hiçbir zaman bir
-            // users satırı değildir, dolayısıyla hedefle çakışamaz — kontrol vakumda kalırdı ve
-            // securityService'e uzanmak IllegalStateException demek olurdu.
             if (actor == null && target.getId().equals(securityService.getAuthenticatedUserId())) {
                 throw new ConflictException(AdminMessages.OWN_ADMIN_ROLE_PROTECTED);
             }
