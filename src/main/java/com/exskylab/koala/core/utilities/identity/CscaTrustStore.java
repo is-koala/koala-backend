@@ -94,7 +94,7 @@ public class CscaTrustStore {
                 }
             });
         } catch (Exception e) {
-            log.error("CSCA trust anchors could not be loaded from {}: {}", directory, e.getMessage());
+            log.error("CSCA trust anchors could not be loaded from {}", directory, e);
         }
         return loaded;
     }

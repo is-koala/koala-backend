@@ -56,8 +56,7 @@ public class StaffAuditFilter extends OncePerRequestFilter {
         try {
             staffAuditService.record(context.pending(), bodyOf(cached), context.before(), context.after());
         } catch (Exception exception) {
-            log.error("Denetim kaydı yazılamadı: {} {}",
-                    context.pending().action(), exception.getMessage());
+            log.error("Denetim kaydı yazılamadı: {}", context.pending().action(), exception);
         }
     }
 

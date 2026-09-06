@@ -49,7 +49,7 @@ public class AssignmentAutoCompletionScheduler {
                     completed++;
                 }
             } catch (Exception e) {
-                log.error("Auto completion failed for assignment {}: {}", assignmentId, e.getMessage());
+                log.error("Auto completion failed for assignment {}", assignmentId, e);
             }
         }
 

@@ -30,7 +30,7 @@ public class AdminAuditRetentionScheduler {
             int entries = staffAuditService.purgeExpiredEntries();
             log.info("Audit retention run finished: {} detail rows and {} core rows removed.", details, entries);
         } catch (Exception exception) {
-            log.error("Audit retention run failed: {}", exception.getMessage());
+            log.error("Audit retention run failed", exception);
         }
     }
 }

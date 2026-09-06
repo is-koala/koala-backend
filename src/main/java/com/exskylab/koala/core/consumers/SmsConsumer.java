@@ -45,7 +45,7 @@ public class SmsConsumer {
         try {
             notification = notificationService.getById(smsTaskDto.id());
         } catch (Exception e) {
-            log.error("Notification not found to send sms ID: {}. Aborting request.", smsTaskDto.id());
+            log.error("Notification not found to send sms ID: {}. Aborting request.", smsTaskDto.id(), e);
             return;
         }
 
@@ -64,7 +64,7 @@ public class SmsConsumer {
             notification.setSentAt(Instant.now());
             log.info("Sms task sent for id: {}", smsTaskDto.id());
         } catch (Exception e) {
-            log.error("Sms task could not be sent for id: {}, Error: {}", smsTaskDto.id(), e.getMessage());
+            log.error("Sms task could not be sent for id: {}", smsTaskDto.id(), e);
             notification.setStatus(NotificationStatus.FAILED);
             notification.setFailureReason(truncate(e.getMessage()));
         } finally {
