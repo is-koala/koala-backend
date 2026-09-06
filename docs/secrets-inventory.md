@@ -21,7 +21,7 @@ This inventory records logical names and controls only. It must never contain a 
 
 ### ADR-0007 binary control
 
-Mobile/web Maps keys are public identifiers that may enter their intended client binary, but application/API restrictions, quotas and budget alerts are mandatory. `GOOGLE_KEY_01`–`03` are server credentials and must never enter a mobile or web bundle. No database, payment, object-storage, mail, SMS, JWT, Keycloak, Sentry auth or release private key may enter any client binary.
+Mobile/web Maps keys are public identifiers that may enter their intended client binary, but application/API restrictions, quotas and budget alerts are mandatory. `GOOGLE_KEY_01`–`03` are server credentials and must never enter a mobile or web bundle. No database, payment, object-storage, mail, SMS, JWT, Sentry auth or release private key may enter any client binary.
 
 ## Backend and platform secrets
 
@@ -31,7 +31,6 @@ Mobile/web Maps keys are public identifiers that may enter their intended client
 | `POSTGRES_PASSWORD` | PostgreSQL container administrator login | local/staging/prod where self-hosted | Infrastructure secret store | Database bootstrap only; never exposed to application runtime | Platform database | Doğrulanmadı |
 | `RABBITMQ_PASSWORD` | Queue broker login | dev/staging/prod | Application secret store | Per vhost/environment | Platform | Doğrulanmadı |
 | `JWT_SECRET` | Access-token signing | staging/prod | Application secret store | Backend runtime only | Backend security | Doğrulanmadı |
-| `KEYCLOAK_CLIENT_SECRET` | Admin staff OIDC client | staging/prod when enabled | Identity secret store | Confidential client and exact redirects | Identity | Doğrulanmadı |
 | `IYZICO_API_KEY`, `IYZICO_SECRET_KEY` | Payment API | sandbox/production | Payment secret store | Separate sandbox/production merchant scope | Payments | Doğrulanmadı |
 | `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY` | Media object access | staging/prod | Media secret store | Media bucket prefix only | Platform | Doğrulanmadı |
 | `BACKUP_ACCESS_KEY`, `BACKUP_SECRET_KEY` | Backup object access | staging/prod | Backup runner secret store | Separate principal; backup bucket only | Platform | Doğrulanmadı |
