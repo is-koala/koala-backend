@@ -123,6 +123,22 @@ class AdminAuditTrailIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
+    void theLateFeeRateCanNoLongerBeChangedWithoutATrace() throws Exception {
+        String token = tokenFor("OWNER");
+
+        mockMvc.perform(put("/admin/settings/" + LATE_FEE_KEY)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"value\":\"0.40\"}"))
+                .andExpect(status().isOk());
+
+        Map<String, Object> row = onlyRow();
+
+        assertEquals("0.40", row.get("after_value"));
+        assertEquals(LATE_FEE_KEY, row.get("resource_id"));
+    }
+
+    @Test
     void aDeniedRequestIsTheOnlyTraceOfAnAttemptedEscalation() throws Exception {
         String token = tokenFor("SUPPORT_AGENT");
 

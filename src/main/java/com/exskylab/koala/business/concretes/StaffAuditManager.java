@@ -4,9 +4,11 @@ import com.exskylab.koala.business.abstracts.StaffAuditService;
 import com.exskylab.koala.core.properties.AuditRetentionProperties;
 import com.exskylab.koala.core.security.StaffAuditRecord;
 import com.exskylab.koala.dataAccess.AdminAuditEntryDao;
+import com.exskylab.koala.dataAccess.AdminAuditEntryDetailDao;
 import com.exskylab.koala.entities.AdminAuditEntry;
 import com.exskylab.koala.entities.AdminAuditEntryDetail;
 import com.exskylab.koala.entities.PermissionSensitivity;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +16,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 
 @Service
+@Slf4j
 public class StaffAuditManager implements StaffAuditService {
 
     private static final int DISPLAY_NAME_LIMIT = 200;
@@ -26,11 +29,14 @@ public class StaffAuditManager implements StaffAuditService {
     private static final String UNKNOWN_ACTOR = "unknown";
 
     private final AdminAuditEntryDao adminAuditEntryDao;
+    private final AdminAuditEntryDetailDao adminAuditEntryDetailDao;
     private final AuditRetentionProperties retentionProperties;
 
     public StaffAuditManager(AdminAuditEntryDao adminAuditEntryDao,
+                             AdminAuditEntryDetailDao adminAuditEntryDetailDao,
                              AuditRetentionProperties retentionProperties) {
         this.adminAuditEntryDao = adminAuditEntryDao;
+        this.adminAuditEntryDetailDao = adminAuditEntryDetailDao;
         this.retentionProperties = retentionProperties;
     }
 
@@ -63,6 +69,39 @@ public class StaffAuditManager implements StaffAuditService {
         entry.setDetail(detail);
 
         return adminAuditEntryDao.save(entry);
+    }
+
+    @Override
+    @Transactional
+    public int purgeExpiredDetails() {
+        int purged = adminAuditEntryDetailDao.deleteExpired(Instant.now());
+        if (purged > 0) {
+            log.info("Audit detail rows past their retention window removed: {}", purged);
+        }
+        return purged;
+    }
+
+    @Override
+    @Transactional
+    public int purgeExpiredEntries() {
+        int purged = adminAuditEntryDao.deleteExpired(Instant.now());
+        if (purged > 0) {
+            log.info("Audit core rows past their retention window removed: {}", purged);
+        }
+        return purged;
+    }
+
+    @Override
+    @Transactional
+    public int eraseDetailsForResource(String resourceId) {
+        if (resourceId == null || resourceId.isBlank()) {
+            return 0;
+        }
+        int erased = adminAuditEntryDetailDao.deleteByResourceId(resourceId);
+        if (erased > 0) {
+            log.info("Audit detail rows erased on request for resource {}: {}", resourceId, erased);
+        }
+        return erased;
     }
 
     private int coreMonthsFor(PermissionSensitivity sensitivity) {
