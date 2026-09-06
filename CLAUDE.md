@@ -839,6 +839,75 @@ uygulayacak bir uç bulamıyor (görsel için `DELETE /admin/images/{imageId}` v
 
 **Çevrimdışı puantaj olayı kalıcı ve idempotent.** Yeni istemci `clientEventId` ile `capturedAt` alanlarını birlikte gönderir; eski konum-only gövde sunucu zamanlı davranışını korur. Yeni sözleşmede ham cihaz zamanı, ilk alım zamanı, ücret hesabındaki etkili zaman ve plausibility bayrakları ayrı saklanır. Aynı atama/işlem kimliği aynı normalize payload ile tekrarlandığında ilk `WorkSession` döner; değiştirilmiş payload 409'dur. Atama başına transaction advisory lock eşzamanlı istekleri sıralar; check-out retry kapanmış oturumu da bulur. Varsayılan 72 saat geçmiş/5 dakika gelecek penceresi `timesheet.*` ayarlarıyla değişir; ilan penceresi dışı ve monotonik olmayan zamanlar reddedilmeden işaretlenip güvenli sınıra çekilir. Tehdit modeli ve ayrıntılı zaman kararı [ADR-0013](docs/adr/0013-record-offline-timesheet-events-before-reconciling-them.md)'tedir.
 
+### Uyuşmazlık kanıt ekleri — seçilen yükleme akışı ve taramanın sınırı (#102)
+
+**Doğrulanmış multipart seçildi, presigned upload + finalize seçilmedi.** Issue ikisini de öneriyordu. Presigned
+yol backend'i büyük dosya trafiğinden kurtarır ama bu depoda **doğrulanamaz bir ikinci kapı** kurardı: finalize
+adımı nesne sahipliğini ve checksum'ı `HeadObject` ile doğrulamak zorunda, o doğrulamanın tek gerçek uygulaması
+S3'te, ve **varsayılan depo `local`** — `LocalStorageService` PUT imzalayamaz (§2ab). Yani güvenliğin bağlı olduğu
+tek satır CI'da hiç koşmayan bir dalda kalırdı; üstüne bekleyen (`PENDING`) satır, yetim nesne temizliği ve
+finalize edilmeyen yüklemeler için ayrı bir yaşam döngüsü gerekirdi. Multipart'ta doğrulama her depo
+uygulamasının paylaştığı tek yoldan geçiyor ve iş tek bir transaction: dosya boyutu 10 MB ile, uyuşmazlık başına
+adet 5 ile sınırlı olduğu için backend'in taşıyıcı olması ölçülebilir bir maliyet değil. Presigned'a geçilecekse
+şartı yazılı: `StorageService`'e imzalı PUT eklenmeden ve finalize'ın sahiplik+checksum kontrolü gerçek bir
+S3'e karşı test edilmeden geçilmez.
+
+**Kanıt `files/dispute-evidence/` altında, ve bu iç içelik bilinçli.** Önek `files/` ile başladığı için
+`StorageKeys.isPrivate` true — nesne özel kalıyor ve CDN'e hiç düşmüyor. Alt önek bucket lifecycle kuralının
+kanıt dosyalarına, geri kalan `files/` içeriğine dokunmadan bağlanabilmesi için var. **`/uploads/files/**` bu
+nesneleri servis edemez**: o yol sahipliği `media` tablosundan çözüyor (`CvService.assertCanDownload`), kanıtın
+`media` satırı yok, dolayısıyla 404. Yani genel indirme yolu varsayılan olarak kapalı; kanıt yalnız uyuşmazlık
+kapsamındaki uçlardan iniyor.
+
+**Yetki uyuşmazlığın kendisinden okunuyor, dosyadan değil.** `DisputeManager` önce uyuşmazlığı buluyor, sonra
+`AssignmentParticipants` ile atamanın tarafı olup olmadığına bakıyor. Taraf olmayanın aldığı yanıt var olmayan
+uyuşmazlığınkiyle **aynı anahtar** (`{dispute.not.found}`) — §2d2'nin kuralı. Kanıt eki yalnız `RESOLVED`
+olmayan uyuşmazlığa ekleniyor; çözülmüş uyuşmazlık listelenip indirilmeye devam ediyor, çünkü karar sonrası
+dosyayı okumak hâlâ meşru.
+
+**Adet sınırı satır kilidinin arkasında.** `attachEvidence` `findByIdForUpdate` ile uyuşmazlık satırını kilitliyor,
+sayımı ondan sonra yapıyor. Eşzamanlı iki yükleme sıraya giriyor; sınır `upload.max-evidence-per-dispute` (5).
+Boyut `upload.max-evidence-size-mb` (10), uzantı beyaz listesi `upload.evidence-extensions`
+(`pdf,png,jpg,jpeg,webp`).
+
+**İçerik tipi istemciden alınmıyor.** `Content-Type` başlığı sahtelenebilir (§2ab); saklanan tip uzantıdan
+`MediaTypeFactory` ile türetiliyor. Ayrıca `UploadValidator` kanıt için **baytlara bakıyor**: `pdf` iddia eden
+dosya `%PDF` sihirli baytıyla başlamak zorunda, görsel iddia eden dosya `ImageIO` ile açılabilmek zorunda. `.exe`
+zaten uzantı beyaz listesinden düşüyor.
+
+**Yükleme yarıda kalırsa ne satır ne nesne kalıyor.** Depo yazması patlarsa satır hiç açılmıyor. Satır yazması
+patlarsa nesne yetim kalırdı; `attachEvidence` bunun için transaction'a bir `afterCompletion` kaydediyor ve
+commit dışındaki her sonuçta nesneyi siliyor. Kural testle sabit (`anObjectWrittenBeforeAFailedCommitIsRemoved…`)
+ve mekanizma çıkarıldığında kırmızıya döndüğü ölçüldü.
+
+**DTO depo anahtarı taşımıyor, indirme ayrı uçtan.** `DisputeEvidenceDto` yalnız kimlik, yükleyen, ad, tip,
+boyut, SHA-256 ve zaman taşıyor. İndirme `GET /disputes/{id}/evidence/{evidenceId}/download` (taraflar) ve
+`GET /admin/disputes/{id}/evidence/{evidenceId}/download` (personel, `dispute.resolve`) uçlarından; depo imzalı
+adres destekliyorsa `storage.signed-url-minutes` (3 dk) ömürlü imzalı adrese 302, desteklemiyorsa baytlar
+akıtılıyor. İki yolda da `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff` ve
+`Cache-Control: no-store` var — kanıt tarayıcıda çizilmiyor. İmzanın ömrü gerçek bir `S3Presigner` ile ölçülüyor
+(`X-Amz-Expires=180`), kaynak taramasıyla değil.
+
+**`SignedFileResponses` `StorageDownloadController.serve`'ün bilinçli ikizi.** İkisi de "imzalı adres varsa 302,
+yoksa baytları akıt" kararını veriyor ama **disposition politikaları farklı**: özgeçmiş ve görseller `inline`
+kalmalı, kanıt her zaman `attachment`. Ortak bir yardımcıya indirmek `StorageDownloadController`'ın
+constructor'ını değiştirir ve `StorageDownloadRulesTest`'i de sürükler; kazanç, iki farklı politikayı tek
+metotta bayrakla yönetmenin maliyetini karşılamadı. Üçüncü bir çağıran çıkarsa birleştirilir.
+
+**Zararlı içerik taraması bu PR'da yok ve yapılamaz.** Depoda antivirüs/ICAP/karantina altyapısı yok; eklenmedi.
+Yapılan şey tür, boyut, adet, sihirli bayt kontrolü, adın anahtara girmemesi ve indirmenin `attachment` olması.
+**İyi biçimlenmiş ama zararlı bir PDF ya da görsel bugün saklanıyor ve servis ediliyor.** Gerçek tarama harici
+bir servis (S3 tetikli tarayıcı ya da ICAP ağ geçidi) ve satırda bir karantina durumu ister; kendi issue'sunu
+hak ediyor. Ayrıntı `docs/runbooks/dispute-evidence.md`'de.
+
+**KVKK silmesi yeni bir mekanizma kurmadı, ADR-0012'nin yoluna bağlandı.** `PostgresAccountAnonymizer.removeMedia`
+artık `dispute_evidence` anahtarlarını da toplayıp **aynı** `PersonalMediaDeletionOutbox`'a yazıyor: tek sorgu
+kümesi, tek `enqueue`, commit sonrası tek `process`. Açık uyuşmazlık zaten anonimleştirmeyi bloke ediyor
+(ADR-0012), yani zamanlayıcı koştuğunda vaka kapalı. Silinen kapsam **hem kullanıcının yüklediği kanıt hem
+kullanıcının taraf olduğu atamanın uyuşmazlıklarındaki kanıt** — `disputes.reason`'ın bugünkü davranışının
+aynısı. Gerekçe: aynı satırdaki serbest metin iki taraf için de zaten siliniyor; daha tanımlayıcı olan dosyayı
+bırakıp anlatıyı silmek tutarsız olurdu. `storage_key` ve `checksum_sha256` bu yüzden nullable.
+
 ## 2r. Profil uçları
 
 `GET/POST/DELETE /users/me/saved-jobs[/{jobId}]` — kaydedilen ilanlar. Kaydetme idempotent, olmayan ilan 404, kaydedilmemiş ilanı silmek sessizce geçer.

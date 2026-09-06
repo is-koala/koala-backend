@@ -10,13 +10,21 @@ public final class FileDispositions {
     }
 
     public static String inline(String originalFileName) {
+        return disposition("inline", originalFileName);
+    }
+
+    public static String attachment(String originalFileName) {
+        return disposition("attachment", originalFileName);
+    }
+
+    private static String disposition(String kind, String originalFileName) {
         if (originalFileName == null || originalFileName.isBlank()) {
-            return "inline";
+            return kind;
         }
 
         String trimmed = originalFileName.trim();
 
-        return "inline; filename=\"" + StorageKeys.sanitize(trimmed) + "\""
+        return kind + "; filename=\"" + StorageKeys.sanitize(trimmed) + "\""
                 + "; filename*=UTF-8''" + encode(trimmed);
     }
 

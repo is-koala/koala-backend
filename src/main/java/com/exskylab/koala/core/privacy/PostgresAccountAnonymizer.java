@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.time.Instant;
@@ -49,14 +50,14 @@ public class PostgresAccountAnonymizer implements AccountAnonymizer {
     }
 
     private void removeMedia(UUID userId) {
-        List<String> keys = jdbcTemplate.queryForList("""
+        List<String> keys = new ArrayList<>(jdbcTemplate.queryForList("""
                 select distinct m.file_url
                 from media m
                 where m.file_url is not null
                   and (m.id in (select profile_picture_id from users where id = ?)
                     or m.id in (select cv_id from users where id = ?)
                     or m.id in (select verification_document_id from user_verifications where user_id = ?))
-                """, String.class, userId, userId, userId);
+                """, String.class, userId, userId, userId));
         jdbcTemplate.update("""
                 update media
                    set file_name = ?, file_type = null, file_url = null, file_size = 0,
@@ -65,8 +66,35 @@ public class PostgresAccountAnonymizer implements AccountAnonymizer {
                     or id in (select cv_id from users where id = ?)
                     or id in (select verification_document_id from user_verifications where user_id = ?)
                 """, REDACTED, userId, userId, userId);
+        keys.addAll(removeDisputeEvidence(userId));
         mediaDeletionOutbox.enqueue(keys);
         processMediaAfterCommit(keys);
+    }
+
+    private List<String> removeDisputeEvidence(UUID userId) {
+        List<String> keys = jdbcTemplate.queryForList("""
+                select distinct e.storage_key
+                from dispute_evidence e
+                where e.storage_key is not null
+                  and (e.uploaded_by_id = ?
+                    or e.dispute_id in (
+                       select d.id from disputes d
+                       join job_assignments a on a.id = d.job_assignment_id
+                       join jobs j on j.id = a.job_id
+                       where a.worker_id = ? or j.creator_id = ?))
+                """, String.class, userId, userId, userId);
+        jdbcTemplate.update("""
+                update dispute_evidence
+                   set original_file_name = ?, content_type = null, storage_key = null,
+                       checksum_sha256 = null, file_size = 0, is_deleted = true, deleted_at = now()
+                 where uploaded_by_id = ?
+                    or dispute_id in (
+                       select d.id from disputes d
+                       join job_assignments a on a.id = d.job_assignment_id
+                       join jobs j on j.id = a.job_id
+                       where a.worker_id = ? or j.creator_id = ?)
+                """, REDACTED, userId, userId, userId);
+        return keys;
     }
 
     private void scrubUserContent(UUID userId) {
