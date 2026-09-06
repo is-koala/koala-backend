@@ -16,6 +16,7 @@ import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.StaffPayoutService;
 import com.exskylab.koala.core.constants.PayoutMessages;
 import com.exskylab.koala.core.dtos.payout.request.RefundRequestDto;
+import com.exskylab.koala.core.dtos.payout.request.ReleaseRequestDto;
 import com.exskylab.koala.core.dtos.payout.response.PayoutDto;
 import com.exskylab.koala.core.mappers.PayoutMapper;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
@@ -61,7 +62,7 @@ public class PayoutsController {
     }
 
     @Operation(summary = "Emanetteki parayı işçiye çıkar",
-            description = "Yalnızca atama COMPLETED ise çalışır ve açık uyuşmazlık varsa reddedilir. Aynı atama için ikinci kez çağrılırsa yeni kayıt açılmaz. Sağlayıcı mutabakatı senkron yapılmaz; kuyruğa alınıp üstel geri çekilmeyle denenir.")
+            description = "Yalnızca atama COMPLETED ise çalışır ve açık uyuşmazlık varsa reddedilir. Aynı atama için ikinci kez çağrılırsa yeni kayıt açılmaz. Sağlayıcı mutabakatı senkron yapılmaz; kuyruğa alınıp üstel geri çekilmeyle denenir. Gövde isteğe bağlıdır; verilen gerekçe denetim kaydına düşer.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Çıkış kaydı oluşturuldu"),
             @ApiResponse(responseCode = "404", description = "Atama bulunamadı",
@@ -72,8 +73,11 @@ public class PayoutsController {
     @RequiresPermission(value = StaffPermission.PAYOUT_RELEASE, action = "payout.release")
     @PostMapping("/admin/job-assignments/{assignmentId}/release")
     public ResponseEntity<SuccessDataResult<PayoutDto>> release(@PathVariable UUID assignmentId,
+                                                                @RequestBody(required = false) @Valid ReleaseRequestDto request,
                                                                 @AuthenticationPrincipal StaffPrincipal actor) {
-        PayoutDto payout = payoutMapper.toPayoutDto(staffPayoutService.releaseToWorker(actor, assignmentId));
+        String reason = request == null ? null : request.getReason();
+        PayoutDto payout = payoutMapper.toPayoutDto(
+                staffPayoutService.releaseToWorker(actor, assignmentId, reason));
 
         return ResponseEntity.status(HttpStatus.OK).body(new SuccessDataResult<>(
                 payout, PayoutMessages.RELEASED, HttpStatus.OK));

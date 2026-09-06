@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.security;
 
+import com.exskylab.koala.core.properties.StaffBridgeProperties;
 import com.exskylab.koala.entities.Role;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -28,12 +29,14 @@ public class StaffPermissionAuthorizationManager implements AuthorizationManager
 
     private final ObjectProvider<RequestMappingHandlerMapping> handlerMappings;
     private final StaffAuditRecorder staffAuditRecorder;
+    private final StaffBridgeProperties staffBridgeProperties;
 
     public StaffPermissionAuthorizationManager(
             @Qualifier("requestMappingHandlerMapping") ObjectProvider<RequestMappingHandlerMapping> handlerMappings,
-            StaffAuditRecorder staffAuditRecorder) {
+            StaffAuditRecorder staffAuditRecorder, StaffBridgeProperties staffBridgeProperties) {
         this.handlerMappings = handlerMappings;
         this.staffAuditRecorder = staffAuditRecorder;
+        this.staffBridgeProperties = staffBridgeProperties;
     }
 
     @Override
@@ -56,13 +59,17 @@ public class StaffPermissionAuthorizationManager implements AuthorizationManager
         return decision;
     }
 
-    private static AuthorizationDecision decide(Authentication current, RequiresPermission required) {
+    private AuthorizationDecision decide(Authentication current, RequiresPermission required) {
         if (current == null || !current.isAuthenticated()) {
             return DENIED;
         }
 
         if (current.getPrincipal() instanceof StaffPrincipal staff) {
             return decideForStaff(staff, required);
+        }
+
+        if (!staffBridgeProperties.isOpen()) {
+            return DENIED;
         }
 
         boolean marketplaceAdmin = current.getAuthorities().stream()

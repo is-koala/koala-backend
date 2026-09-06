@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.mappers;
 
+import com.exskylab.koala.core.dtos.jobAssignment.response.AdminAssignmentDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.PaymentSessionDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.MyAssignmentDto;
@@ -30,4 +31,11 @@ public interface JobAssignmentMapper {
     MyAssignmentDto toMyAssignmentDto(JobAssignment jobAssignment);
 
     java.util.List<MyAssignmentDto> toMyAssignmentDtoList(java.util.List<JobAssignment> assignments);
+
+    @Mapping(target = "jobId", source = "job.id")
+    @Mapping(target = "jobTitle", source = "job.title")
+    @Mapping(target = "companyName", source = "job.company.name")
+    @Mapping(target = "employer", source = "job.creator")
+    @Mapping(target = "pricing", source = "jobAssignment")
+    AdminAssignmentDto toAdminAssignmentDto(JobAssignment jobAssignment);
 }

@@ -1,6 +1,7 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.support.FallbackSettings;
+import com.exskylab.koala.support.StaffBridges;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.BadgeService;
 import com.exskylab.koala.business.abstracts.CompanyContactService;
@@ -72,7 +73,8 @@ class AssignmentOperationsAuthorizationTest {
         cancellationManager = new CancellationManager(cancellationDao, jobAssignmentService, userService,
                 securityService, participants, policy, payoutService, mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class));
         disputeManager = new DisputeManager(disputeDaoStub, jobAssignmentService, userService,
-                securityService, participants, payoutService, mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class),
+                securityService, participants, new StaffPayoutManager(payoutService, StaffBridges.open()),
+                mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class),
                 new com.exskylab.koala.core.helpers.PageableSanitizer());
         timesheetManager = new TimesheetManager(workSessionDao, jobAssignmentService, securityService, participants);
         jobAssignmentManager = new JobAssignmentManager(jobAssignmentDao, securityService,
@@ -226,7 +228,7 @@ class AssignmentOperationsAuthorizationTest {
         Dispute dispute = openDispute(a);
         when(securityService.getAuthenticatedUser()).thenReturn(user());
 
-        disputeManager.resolveDispute(dispute.getId(), DisputeResolution.RELEASE_TO_WORKER, "işçi haklı");
+        disputeManager.resolveDispute(null, dispute.getId(), DisputeResolution.RELEASE_TO_WORKER, "işçi haklı");
 
         assertEquals(DisputeStatus.RESOLVED, dispute.getStatus());
         verify(payoutService).releaseToWorker(a.getId());
@@ -239,7 +241,7 @@ class AssignmentOperationsAuthorizationTest {
         Dispute dispute = openDispute(a);
         when(securityService.getAuthenticatedUser()).thenReturn(user());
 
-        disputeManager.resolveDispute(dispute.getId(), DisputeResolution.DISMISSED, "dayanaksız");
+        disputeManager.resolveDispute(null, dispute.getId(), DisputeResolution.DISMISSED, "dayanaksız");
 
         verify(payoutService, never()).releaseToWorker(any());
         verify(payoutService, never()).refundEmployer(any(), any(), any());
@@ -253,7 +255,7 @@ class AssignmentOperationsAuthorizationTest {
         when(securityService.getAuthenticatedUser()).thenReturn(user());
 
         assertThrows(ConflictException.class,
-                () -> disputeManager.resolveDispute(dispute.getId(), DisputeResolution.REFUND_EMPLOYER, "yine"));
+                () -> disputeManager.resolveDispute(null, dispute.getId(), DisputeResolution.REFUND_EMPLOYER, "yine"));
         verify(payoutService, never()).refundEmployer(any(), any(), any());
     }
 

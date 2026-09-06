@@ -127,6 +127,8 @@ koala:
     issuer-uri: ${STAFF_ISSUER_URI:}
     jwk-set-uri: ${STAFF_JWK_SET_URI:}
     audience: ${STAFF_AUDIENCE:koala-api}
+    bridge:
+      open: ${STAFF_MARKETPLACE_BRIDGE_OPEN:true}
 
 payments:
   return-base-url: ${PAYMENTS_RETURN_BASE_URL:koala-staging://}

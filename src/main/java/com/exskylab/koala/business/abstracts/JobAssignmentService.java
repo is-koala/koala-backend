@@ -1,5 +1,7 @@
 package com.exskylab.koala.business.abstracts;
 
+import com.exskylab.koala.core.dtos.jobAssignment.response.AdminAssignmentDto;
+
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.MyAssignmentDto;
 
@@ -34,6 +36,8 @@ public interface JobAssignmentService {
     boolean autoCompleteAssignment(UUID assignmentId);
 
     JobAssignment getDetailedById(UUID assignmentId);
+
+    AdminAssignmentDto getAdminDetail(UUID assignmentId);
 
     long countCompletedForWorker(UUID workerId);
 

@@ -1,6 +1,7 @@
 package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.core.security.RequiresPermission;
+import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.entities.StaffPermission;
 import com.exskylab.koala.core.utilities.results.ErrorResult;
 import io.swagger.v3.oas.annotations.Operation;
@@ -23,6 +24,7 @@ import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -57,9 +59,11 @@ public class DisputesController {
     }
 
     @Operation(summary = "Uyuşmazlığı çöz",
-            description = "RELEASE_TO_WORKER parayı işçiye çıkarır, REFUND_EMPLOYER işverene iade eder, DISMISSED emanete dokunmaz. Kısmi paylaşım yoktur: bir atama ya işçiye çıkar ya iade edilir.")
+            description = "RELEASE_TO_WORKER parayı işçiye çıkarır, REFUND_EMPLOYER işverene iade eder, DISMISSED emanete dokunmaz. Kısmi paylaşım yoktur: bir atama ya işçiye çıkar ya iade edilir. Para hareketi doğuran iki sonuç dispute.resolve'a ek olarak sonucun yönüne göre payout.release ya da payment.refund iznini de ister; izin yoksa 403 döner ve uyuşmazlığın durumuna hiç bakılmaz.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Uyuşmazlık çözüldü"),
+            @ApiResponse(responseCode = "403", description = "Sonucun gerektirdiği finansal izin yok",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "404", description = "Uyuşmazlık bulunamadı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "409", description = "Uyuşmazlık zaten çözülmüş",
@@ -68,11 +72,12 @@ public class DisputesController {
     @RequiresPermission(value = StaffPermission.DISPUTE_RESOLVE, action = "dispute.resolve")
     @PostMapping("/{disputeId}/resolve")
     public ResponseEntity<SuccessDataResult<DisputeDto>> resolve(
-            @PathVariable UUID disputeId, @RequestBody @Valid ResolveDisputeDto request) {
+            @PathVariable UUID disputeId, @RequestBody @Valid ResolveDisputeDto request,
+            @AuthenticationPrincipal StaffPrincipal actor) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
                 disputeMapper.toDisputeDto(disputeService.resolveDispute(
-                        disputeId, request.getResolution(), request.getNote())),
+                        actor, disputeId, request.getResolution(), request.getNote())),
                 DisputeMessages.RESOLVED, HttpStatus.OK));
     }
 }
