@@ -703,9 +703,9 @@ Uyuşmazlık yalnızca **emanette para varken** açılabilir, atama başına ayn
 
 **`CompanyContact` artık `BaseEntity`.** Denetim kolonları ve soft delete kazandı; üyelikten çıkarma geçmişi silmiyor. `(company_id, user_id)` kısmi benzersiz indeksi eklendi, yani çıkarılan biri yeniden eklenebiliyor.
 
-**Admin uçları `/admin/**` altında, tamamı `ROLE_ADMIN`.** `GET /admin/companies?approved=false` onay bekleyenleri listeler, `POST /admin/companies/{id}/approve` onaylar, `GET /admin/users?query=` kullanıcı arar.
+**Admin uçları `/admin/**` altında, tamamı `ROLE_ADMIN`.** `GET /admin/companies?status=PENDING` onay bekleyenleri listeler, `POST /admin/companies/{id}/approve` onaylar, `POST /admin/companies/{id}/reject` reddeder (§2s4), `GET /admin/users?query=` kullanıcı arar.
 
-**Şirket onayı bir açıktı.** `CompanyManager` şirketi `approved = false` yaratıyordu ve `setApproved(true)` **hiçbir yerde çağrılmıyordu**; hiçbir şirket onaylanamıyordu. Onay ucu bunu kapatıyor.
+**Şirket onayı bir açıktı.** `CompanyManager` şirketi `approved = false` yaratıyordu ve `setApproved(true)` **hiçbir yerde çağrılmıyordu**; hiçbir şirket onaylanamıyordu. Onay ucu bunu kapatıyor; ret ucu, gerekçe ve karar bildirimi §2s4'te.
 
 ## 2s2. Yetkili daveti — kim listeler, kim okur, kim cevaplar
 
@@ -831,6 +831,94 @@ yol açardı.
 **#52 bu işin önkoşuluydu.** `COMPANY_UPDATES` `ALERT` iken kullanıcı kategoriyi kapatabiliyordu ve
 `sendInApp` de aynı kapıdan geçtiği için (§2at) yeni akış kaydı da susturulabilirdi — çıkmaz sokak aynen geri
 gelirdi. Kategori `TRANSACTIONAL` olduğu için `isAllowed` satıra hiç bakmadan `true` dönüyor.
+
+## 2s4. Şirket onay kuyruğu — ret ucu, gerekçe ve karar bildirimi
+
+§2s onay ucunu kapatmıştı; kuyruğun geri kalanı açıktı (is-koala/koala-backend#62). Ret ucu yoktu, yani
+reddedilmesi gereken bir başvuru kuyrukta **sonsuza kadar** kalıyordu; onay gerekçesi hiçbir yere yazılamıyordu;
+`CompanyManager.approveCompany` `notificationService`'i **hiç çağırmıyordu**, yani şirket sahibi onaylandığını
+öğrenemiyordu; ve kuyruk yalnız `approved` bayrağıyla süzülebiliyordu, adla ya da vergi numarasıyla aranamıyordu.
+
+**Durum tek kolonda: `companies.approval_status`.** `is_approved` düşürüldü (`06-62` migration'ı `true` olanı
+`APPROVED`, kalanını `PENDING` yazıp kolonu siliyor; rollback bloğu geri kuruyor). İki değerli bir bayrak üç
+durumu anlatamaz ve bayrağı bırakıp yanına enum eklemek "iki gerçeklik" demekti — reddedilen şirketin
+`is_approved` değeri de `false` olurdu, yani kuyruk sorgusu onu bekleyenlerin arasında görmeye devam ederdi.
+İstemci sözleşmesi korundu: `CompanyDto.approved` ve `/users/me` içindeki `companies[].approved` hâlâ boolean,
+ikisi de `CompanyApprovalStatus.isApproved()` üzerinden türetiliyor.
+
+**Karar asimetrik: ret geri alınabilir, onay alınamaz.** `PENDING`/`REJECTED` → `APPROVED` serbest (şirket
+belgesini düzeltip yeniden değerlendirilebilsin diye), `APPROVED` → `REJECTED` **409**
+(`admin.company.approved.not.rejectable`). Gerekçe blast radius: reddetmek bugün hiçbir şeyi geri almıyor,
+onayı geri almak ise şirketin açık ilanlarını, süren atamalarını ve emanetteki parasını ilgilendirir ve bu dilim
+onların hiçbirini modellemiyor. Onayı sessizce `PENDING`'e çevirmek operatöre şirketin **durdurulduğunu**
+düşündürürdü; oysa durdurmazdı (aşağıdaki bulgu). Gerçek "askıya alma" kendi issue'sunu hak ediyor.
+İkinci ret de 409 (`admin.company.already.rejected`) — gerekçeyi güncellemek karar vermek değildir.
+
+**Onay gövdesi isteğe bağlı, ret gövdesi zorunlu.** `ApproveCompanyDto.note` opsiyonel (`@Size(max = 1000)`),
+`RejectCompanyDto.reason` `@NotBlank` + `@Size(max = 1000)` — doğrulama §2ah gereği DTO'da, yani eksik gerekçe
+**400 + alan adı** döndürüyor. `approve` ucu `@RequestBody(required = false)` taşıyor: panel bugün gövdesiz
+çağırıyor ve o çağrı kırılmadan çalışmaya devam ediyor. Karar `approval_note` + `approval_decided_at`
+kolonlarına yazılıyor; `updated_at` bu iş için yeterli değildi, şirketin herhangi bir düzenlemesi onu kaydırır.
+
+**Kararın bildirimi `ActivityNotificationManager`'da, §2s'in kuralı gereği.** `companyApprovalDecided(company)`
+alıcıyı orada seçiyor: yalnız şirketin **`ADMIN`** yetkilileri: `STAFF` ilan açar, üyelik ve onay §2s'e göre
+`ADMIN`'in işi. Kategori `COMPANY_UPDATES`, yani §2at'ye göre `TRANSACTIONAL` — tercih ekranından susturulamaz;
+onaylandığını öğrenemeyen bir şirket sahibi ne yapacağını bilemezdi. Hedef `NotificationTargetType.COMPANY`,
+`targetId` şirketin kendisi.
+
+**Gerekçe bildirimin gövdesine konmadı, bilinçli.** Bildirim yalnız kararı söylüyor ("Şirket başvurunuz
+reddedildi. Gerekçeyi şirket sayfasından görebilirsiniz"), gerekçe `GET /companies/{id}` üzerinden okunuyor.
+İki sebep: operatörün serbest metni e-postaya ve push başlığına birebir girseydi, hem şablonun tonunu
+kontrol edemezdik hem `activity-notice-template`'in tek parametreli yapısını olay başına özelleştirmek
+gerekirdi (§2s'in "olay başına ayrı şablon yerine tek şablon" kararının tersi).
+
+**Gerekçeyi kimin okuyabildiği yanıt düzeyinde ayrılıyor.** `GET /companies/{companyId}` **her oturumlu
+kullanıcıya** açık (`hasAnyRole("USER","ADMIN")`), yani `approvalNote`'u mapper'a bağlamak operatörün
+notunu herkese açardı. Mapper alanı `ignore` ediyor; `getCompanyDetail` şirketin yetkilisiyse **sonradan**
+dolduruyor — `followerCount`/`following` ile aynı desen. `approvalStatus` herkese açık kalıyor: bir şirketin
+onaylı olup olmadığı zaten `approved` ile de görünüyordu.
+
+**Yönetim kuyruğu artık `CompanyDto` döndürmüyor, `CompanyReviewDto` döndürüyor.** İki sebep: gerekçe yukarıdaki
+ayrım yüzünden ortak DTO'da duramaz, ve `CompanyDto` satır başına `companyContacts` + `images` çiziyordu — 20
+satırlık bir kuyruk için sayfalamayı bozmadan çekilemeyecek iki koleksiyon (§2l). İnceleme satırı kuyruğun
+istediği alanlardan ibaret: ad, vergi numarası, iletişim, tür, durum, gerekçe, karar anı, `createdAt` ve
+`createdBy` (`SafeUserDto`).
+
+**`createdBy` liste ucunda eager çekiliyor.** `CompanyDao.search` `@EntityGraph({"createdBy",
+"createdBy.profilePicture"})` taşıyor; ikincisi olmadan `SafeUserDto.profilePictureUrl` satır başına bir sorgu
+daha atardı ve `EagerFetchCoverageIT` zaten kırmızıya dönerdi (§2af). İkisi de to-one, yani sayfalama
+veritabanında kalıyor.
+
+**Süzgeç `approved` yerine `status`.** `GET /admin/companies?status=PENDING|APPROVED|REJECTED&query=...`,
+varsayılan `PENDING`. Boolean bayrak kalsaydı reddedilen şirket `approved=false` kuyruğunda görünmeye devam
+ederdi — issue'nun "kuyruktan düşsün" maddesi tam olarak bu. Varsayılanın `PENDING` olması, eski istemcinin
+`?approved=false` çağrısının **hâlâ doğru** sayfayı almasını sağlıyor; `approved=true` çağıran bir istemci
+varsa `status=APPROVED`'a geçmeli. `query` ad **ve** vergi numarasında arıyor, `cast(:query as string)`
+deyimiyle (§2l), boş/boşluk gönderildiğinde süzgeç uygulanmıyor. Sıralama beyaz listesi `createdAt`/`name`
+olarak duruyor ve `rejectUnknownSort` 400 döndürüyor (§2l).
+
+**Bulgu: onay bugün hiçbir kapıyı kapatmıyor.** `approveCompany` dışında `isApproved()` çağıran **tek bir satır
+yoktu**; `JobManager.createCorporateJob` şirketin onaylı olup olmadığına hiç bakmıyor. Onay ucunun Swagger
+açıklaması "Onaylanana kadar şirket ilan yayınlayamaz" diyordu ve bu **yanlıştı** — açıklama gerçek davranışa
+çekildi. Kapıyı gerçekten kurmak (onaysız şirketin ilan açamaması) mevcut akışları ve testleri etkileyen ayrı
+bir ürün kararı; bu dilimde yapılmadı.
+
+**Şirket belgesi kavramı eklenmedi.** Issue'nun beşinci maddesi ürün kararı olarak açık bırakılmıştı; karar
+"hayır, bu dilimde değil": belge yüklemek hangi belge türlerinin isteneceği, kimin görebileceği ve KVKK saklama
+süresinin ne olduğu sorularını açar (§2av'nin ayrımı). Galeri bugün galeri olarak etiketli kalıyor.
+
+**Sabitleyen testler.** `CompanyAdministrationRulesTest` karar makinesini ve yönlendirmeyi birim düzeyinde
+tutuyor (ret gerekçeyi yazar ve kuyruktan düşürür, onay notu kırpılmış olarak kaydeder, onaylanmış şirket
+reddedilemez, reddedilmiş şirket iki kez reddedilemez ama onaylanabilir, iki karar da bildirim tetikler,
+reddedilen karar hiçbir bildirim üretmez, bilinmeyen sıralama alanı 400, gerekçeyi yalnız şirketin kendi
+insanı okur). `ActivityNotificationRulesTest` alıcı seçimini sabitliyor (yalnız `ADMIN` yetkilileri,
+`COMPANY_UPDATES` kategorisi, akış kaydı şirketi gösteriyor, onay ile ret aynı cümleyi taşımıyor).
+`CompanyApprovalIT` dokuz kuralı gerçek HTTP ve gerçek Postgres üzerinde doğruluyor — ret ucu, gerekçesiz ret
+400, onaylanmış şirketin 409'u, gövdesiz onayın hâlâ çalışması, ada ve vergi numarasına göre arama, kuyruk
+satırının `createdAt`/`createdBy` taşıması, bilinmeyen sıralama alanının 400 dönmesi, iki kararın da akışa
+ayrı cümlelerle düşmesi ve gerekçenin yabancıya görünmemesi.
+
+---
 
 ## 2t. Iyzico mutabakat tetiği
 

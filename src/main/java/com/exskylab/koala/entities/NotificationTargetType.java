@@ -5,6 +5,7 @@ public enum NotificationTargetType {
     JOB_APPLICATION,
     JOB_ASSIGNMENT,
     CONVERSATION,
+    COMPANY,
     COMPANY_CONTACT_INVITATION,
     USER
 }

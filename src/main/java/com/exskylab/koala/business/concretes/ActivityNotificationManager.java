@@ -11,6 +11,10 @@ import com.exskylab.koala.core.helpers.MessageResolver;
 import com.exskylab.koala.entities.ApplicationStatus;
 import com.exskylab.koala.entities.AssignmentStatus;
 import com.exskylab.koala.entities.Cancellation;
+import com.exskylab.koala.entities.Company;
+import com.exskylab.koala.entities.CompanyApprovalStatus;
+import com.exskylab.koala.entities.CompanyContact;
+import com.exskylab.koala.entities.CompanyContactRole;
 import com.exskylab.koala.entities.DispatchPriority;
 import com.exskylab.koala.entities.Dispute;
 import com.exskylab.koala.entities.JobApplication;
@@ -155,6 +159,20 @@ public class ActivityNotificationManager implements ActivityNotificationService 
     public void identityVerified(User user) {
         notify(user, null, ActivityMessages.IDENTITY_VERIFIED, NotificationCategory.IDENTITY_VERIFICATION,
                 NotificationTargetType.USER, user.getId());
+    }
+
+    @Override
+    public void companyApprovalDecided(Company company) {
+        String key = company.getApprovalStatus() == CompanyApprovalStatus.APPROVED
+                ? ActivityMessages.COMPANY_APPROVED
+                : ActivityMessages.COMPANY_REJECTED;
+
+        company.getContacts().stream()
+                .filter(contact -> contact.getRole() == CompanyContactRole.ADMIN)
+                .map(CompanyContact::getUser)
+                .forEach(admin -> notify(admin, company.getName(), key,
+                        NotificationCategory.COMPANY_UPDATES,
+                        NotificationTargetType.COMPANY, company.getId()));
     }
 
     private User employerOf(JobAssignment assignment) {

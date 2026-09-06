@@ -65,7 +65,8 @@ class MapperCharacterizationTest {
         userMapper = new UserMapperImpl(urls, addressMapper, new EducationMapperImpl(), new ExperienceMapperImpl());
         companyContactMapper = new CompanyContactMapperImpl(userMapper);
         galleryMapper = new GalleryMapperImpl(urls);
-        companyMapper = new CompanyMapperImpl(urls, companyContactMapper, addressMapper, galleryMapper);
+        companyMapper = new CompanyMapperImpl(urls, companyContactMapper, addressMapper, galleryMapper,
+                userMapper);
         PricingDtoMapper pricingDtoMapper = new PricingDtoMapper();
         jobMapper = new JobMapperImpl(userMapper, jobCategoryMapper, addressMapper, companyMapper,
                 galleryMapper, pricingDtoMapper);

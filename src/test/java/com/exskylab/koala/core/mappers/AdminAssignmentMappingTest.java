@@ -41,7 +41,7 @@ class AdminAssignmentMappingTest {
                 new EducationMapperImpl(), new ExperienceMapperImpl());
         GalleryMapper galleryMapper = new GalleryMapperImpl(urls);
         CompanyMapper companyMapper = new CompanyMapperImpl(urls,
-                new CompanyContactMapperImpl(userMapper), addressMapper, galleryMapper);
+                new CompanyContactMapperImpl(userMapper), addressMapper, galleryMapper, userMapper);
         PricingDtoMapper pricingDtoMapper = new PricingDtoMapper();
         JobMapper jobMapper = new JobMapperImpl(userMapper, new JobCategoryMapperImpl(), addressMapper,
                 companyMapper, galleryMapper, pricingDtoMapper);

@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.business.abstracts.ActivityNotificationService;
 import com.exskylab.koala.business.abstracts.AddressService;
 import com.exskylab.koala.business.abstracts.CompanyContactInvitationService;
 import com.exskylab.koala.business.abstracts.CompanyContactService;
@@ -76,7 +77,8 @@ class CompanyCreationNotificationTest {
                 mock(ImageService.class), mock(CompanyContactInvitationService.class), securityService,
                 addressService, mock(EntityManager.class), mock(CompanyMapper.class),
                 mock(CompanyContactService.class), mock(GalleryService.class),
-                mock(CompanyFollowService.class), new PageableSanitizer());
+                mock(CompanyFollowService.class), new PageableSanitizer(),
+                mock(ActivityNotificationService.class));
     }
 
     private List<SendEmailDto> mailsSentWhileCreating(String companyEmail) {
