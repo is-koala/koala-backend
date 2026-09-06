@@ -216,7 +216,6 @@ class ExistenceConcealmentIT extends AbstractIntegrationTest {
                 }));
         parsed.remove("timeStamp");
         parsed.remove("requestId");
-        parsed.remove("correlationId");
         return parsed.toString().replace(resourceId.toString(), "{istenen-id}");
     }
 

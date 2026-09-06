@@ -340,7 +340,7 @@ class PaymentCallbackTest {
     }
 
     @Test
-    void providerCorrelationIdsCannotChangeAfterFraudReview() {
+    void providerIdentifiersCannotChangeAfterFraudReview() {
         Payment payment = pendingPayment();
         payment.setStatus(PaymentAttemptStatus.IN_REVIEW);
         payment.setProviderPaymentId("pay-original");
