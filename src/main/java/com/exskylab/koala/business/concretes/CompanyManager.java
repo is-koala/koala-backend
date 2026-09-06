@@ -204,10 +204,6 @@ public class CompanyManager implements CompanyService {
             throw new ValidationException(CompanyMessages.USER_MUST_VERIFY_IDENTITY);
         }
 
-        if (!userToInvite.getTcIdentityNumber().equals(contactToCompanyDto.getTcIdentityNumber())){
-            throw new ValidationException(CompanyMessages.USER_TC_IDENTITY_DOES_NOT_MATCH);
-        }
-
         companyContactInvitationService.inviteUserToCompany(currentUser, userToInvite, company, role);
 
         log.info("Contact with user id: {} invited to company with id: {} successfully.", userToInvite.getId(), companyId);

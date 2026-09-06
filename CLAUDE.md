@@ -776,6 +776,44 @@ uygulayacak bir uç bulamıyor (görsel için `DELETE /admin/images/{imageId}` v
 
 **Şirket onayı bir açıktı.** `CompanyManager` şirketi `approved = false` yaratıyordu ve `setApproved(true)` **hiçbir yerde çağrılmıyordu**; hiçbir şirket onaylanamıyordu. Onay ucu bunu kapatıyor; ret ucu, gerekçe ve karar bildirimi §2s4'te.
 
+**Davet ucu üçüncü kişinin TCKN'sini artık istemiyor.** `POST /companies/{companyId}/contact-invitations`
+gövdesi bugüne kadar davet **edilen** kişinin T.C. kimlik numarasını istiyordu ve o alanın tek işi
+`inviteContactToCompany` içindeki bir **teyit** kontrolüydü: gönderilen numara, bulunan kullanıcının kayıtlı
+numarasıyla karşılaştırılıyordu. Kimlik **eşleştirme** anahtarı hiçbir zaman o alan değildi — davet edilen
+kişi `userService.getByEmail` ile bulunuyor. Alan, `companyContact.tcIdentityNumber.notBlank` anahtarı ve
+öksüz kalan `user.tc.identity.does.not.match` üç katalogdan da düşürüldü (§2aj). **Yeni gövde iki alan:**
+`{"email": "...", "role": "ADMIN" | "STAFF"}`.
+
+**Gerekçe: bir kullanıcıdan başkasının kimlik numarasını istemek o veriyi isteyenin istemcisine taşıyor.**
+§2i'nin "TCKN hiç loglanmaz" ve §2aq'nun "yanıtta maskelenir" kurallarıyla aynı yön — değer istemciye
+girdiği anda log'a, Sentry olayına ve ölçümlemeye açılıyor. `koala-web` davet formunu bu yüzden bilerek
+yazmamıştı; `server-only.test.ts` `tcIdentityNumber` dizesinin yalnız `viewer.ts` içinde geçmesini zorluyor.
+Karşılığında verdiği güvence de zayıftı: **davet zaten kabul gerektiriyor**, yani yanlış adrese gönderilen
+bir davet karşı taraf kabul etmedikçe hiçbir şey yapmıyor. Teyidi ikinci onay adımı, yazılan bir numaradan
+daha güçlü yapıyor.
+
+**Kimliği doğrulanmamış kişi hâlâ yetkili yapılamıyor, ve bunu bir test koruyor.** Davet edilen kişinin
+`tcIdentityNumber`'ı null ise davet yine **400** `USER_MUST_VERIFY_IDENTITY` ile reddediliyor; bu kural
+kaldırılan teyitten bağımsız. `CompanyInvitationSendingRulesTest`'teki
+`someoneWhoseIdentityIsNotVerifiedStillCannotBeMadeAContact` onu ileride "kalıntı" sanılıp silinmesin diye
+sabitliyor — kontrol kaldırılınca kırmızıya döndüğü denendi ve görüldü.
+
+**Kullanıcı sayımı incelendi, uç bilerek olduğu gibi bırakıldı.** `getByEmail` kayıtlı olmayan bir adres için
+**404** `USER_NOT_FOUND_BY_EMAIL` üretiyor, yani uç davet edene "bu e-posta Koala'da kayıtlı mı" sorusunu
+cevaplıyor — is-koala/koala-backend#42'nin (giriş ucu) kardeşi. **Gizlenmedi, ve sebebi §2d2'nin kendi
+kuralı:** gizleme yanıt düzeyindedir, tek bir anahtarın düzeyinde değil. Burada eşitlenecek iki *hata* dalı
+yok; sinyali veren şey **başarı** — kayıtlı bir adres 201 (ya da 409/400) döndürüyor, kayıtlı olmayan
+döndüremiyor. 404'ün anahtarını `Concealment.notFound` ile şirketin anahtarına çekmek tek bir bit bile
+saklamaz, yalnızca şirket yöneticisine şirketinin bulunamadığını söyleyen bir yalan üretirdi. Sinyali
+gerçekten kaldıran tek tasarım, davetin **kayıtlı olmayan bir adrese de** açılabilmesi olurdu; o, davet
+kanalı yüzeyidir (is-koala/koala-backend#85) ve bu değişikliğin kapsamı dışında.
+
+**Yüzeyin darlığı kabul gerekçesinin ikinci ayağı.** Uca ulaşmak `requireCompanyAdmin`'den geçmeyi, yani
+şirketin **ADMIN** yetkilisi olmayı gerektiriyor ve o kontrol metodun ilk satırı (§2s2). Şirket yöneticisi
+olmanın yolu şirket kurmaktan geçiyor, şirket kurmak ise `addCompany`'de `isIdentityVerified` istiyor
+(§2aq): her deneme çiple doğrulanmış gerçek bir kimliğe bağlı ve `WRITE` kovasında IP başına dakikada 60
+istekle sınırlı (§2j). #42'den farkı bu — orası anonim, burası kimliği doğrulanmış ve dar.
+
 ## 2s2. Yetkili daveti — kim listeler, kim okur, kim cevaplar
 
 Davet yüzeyi bugüne kadar hiçbir istemcide açılmamıştı; web ilk istemci olurken dört ayrı yerde ya
@@ -2253,6 +2291,7 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 | Aday kartında `JobApplicantDto.jobTitle` ve `cvUrl` | §2ap |
 | `CompanyDto.approved` (`isApproved` değil) | `CompanyMembershipDto` ile aynı ad |
 | Şirket logosu `PUT/DELETE /companies/{id}/logo` | §2ap |
+| Davet gövdesinden `tcIdentityNumber` **kalktı**: `POST /companies/{id}/contact-invitations` artık yalnız `{email, role}` alıyor | §2s |
 | Aday profili `GET /users/{userId}` | giriş ister, tam adres dönmez, `cvUrl` ilişkiye bağlı (§2ap) |
 | Bireysel ilanda sigorta alanı **olmayacak** | ürün kuralı, §2ap |
 | İlan formuna isteğe bağlı `headcount`, kartta `hiredCount`/`headcount` göstergesi; kontenjan dolu ilanda kabul artık 409 (`JOB_APPLICATION_JOB_HEADCOUNT_FULL`) | §2ao2 — sunucu kontenjanı zorluyor, gösterge yine istemcide |

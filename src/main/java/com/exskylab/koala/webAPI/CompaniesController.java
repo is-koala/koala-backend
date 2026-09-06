@@ -87,10 +87,12 @@ public class CompaniesController {
 
 
     @Operation(summary = "Şirkete yetkili davet et",
-            description = "Davet edilen kullanıcıya e-posta ve uygulama içi bildirim gider.")
+            description = "Gövde yalnızca davet edilen kişinin e-postasını ve rolünü taşır; kimlik numarası istenmez. "
+                    + "Davet edilen kişinin kimliği doğrulanmış olmalıdır. "
+                    + "Davet edilen kullanıcıya e-posta ve uygulama içi bildirim gider.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Davet gönderildi"),
-            @ApiResponse(responseCode = "400", description = "Rol geçersiz ya da kimlik bilgileri uyuşmuyor",
+            @ApiResponse(responseCode = "400", description = "Rol geçersiz ya da davet edilen kişinin kimliği doğrulanmamış",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "404", description = "Şirket ya da kullanıcı bulunamadı; şirketin ADMIN yetkilisi değilseniz de bu kod döner",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),

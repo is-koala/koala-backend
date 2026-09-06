@@ -3,7 +3,6 @@ package com.exskylab.koala.core.constants;
 import org.springframework.http.HttpStatus;
 
 public class CompanyContactMessages {
-    public static final String TC_IDENTITY_NUMBER_NOT_BLANK = "{companyContact.tcIdentityNumber.notBlank}";
     public static final String EMAIL_NOT_BLANK = "{companyContact.email.notBlank}";
     public static final String EMAIL_INVALID = "{companyContact.email.invalid}";
     public static final String  INVALID_UUID = "{companyContact.invalidUuid}";
