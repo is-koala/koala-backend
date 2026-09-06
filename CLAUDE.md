@@ -329,7 +329,7 @@ Gerekçe: (b) elle SQL yazmayı ortadan kaldırmıyor, yalnızca kopyalanacak bi
 
 ## 2j. Hız sınırı
 
-**Beş kova var, yazma ve pahalı genel uçların hepsi kapsanıyor.**
+**Yedi kova var, yazma ve pahalı genel uçların hepsi kapsanıyor.**
 
 | Kova | Kapsam | Varsayılan | Anahtar |
 |---|---|---|---|
@@ -338,12 +338,16 @@ Gerekçe: (b) elle SQL yazmayı ortadan kaldırmıyor, yalnızca kopyalanacak bi
 | `MESSAGE` | mesaj gönderme | 30 / 1 dk | kova + IP |
 | `PUBLIC` | ilan listesi/detayı/görselleri ve adres ağ geçidi | 120 / 1 dk | kova + IP |
 | `WRITE` | **diğer tüm** POST/PUT/PATCH/DELETE | 60 / 1 dk | kova + IP |
+| `REALTIME_SUBSCRIBE` | STOMP `SUBSCRIBE` kareleri | 30 / 1 dk | kova + STOMP oturumu |
+| `REALTIME_MESSAGE` | STOMP `SEND` kareleri | 60 / 1 dk | kova + STOMP oturumu |
 
 **`WRITE` bilerek yakalayıcı.** Yeni bir yazma ucu eklendiğinde listeye yazılması gerekmez, kendiliğinden kapsanır — `SecurityConfig`'teki `anyRequest().authenticated()` ile aynı mantık: unutulan uç açıkta kalmaz.
 
 **Yazma kovalarının anahtarında yol yok.** `AUTH` yol bazlı kalır ve gövdedeki e-posta/telefon/token gibi hedefin SHA-256 özeti IP'ye eklenir; aynı BFF IP'sindeki bir hesabın başarısız denemesi diğer hesabı kilitlemez ve ham PII sayaç anahtarına girmez. Yükleme, genel okuma ve yazmada anahtar yalnızca kova + IP'dir.
 
 **Anahtar IP, kullanıcı değil.** `RateLimitFilter` güvenlik zincirinin dışında (`HIGHEST_PRECEDENCE + 20`) çalıştığı için o noktada principal henüz yok. Kullanıcı bazlı sınır istenirse filtrenin `SessionAuthFilter`'dan sonraya, güvenlik zincirinin içine taşınması gerekir.
+
+**Gerçek zamanlı kovaların anahtarı STOMP oturumudur, IP değil** — issue'nun istediği sınır "bağlantı başına". Soket katmanında `RateLimitFilter` hiç çalışmıyor (o bir servlet filtresi); sayaç `StompAuthChannelInterceptor` içinden düşülüyor. `SUBSCRIBE` bütçesi yetki kontrolünden **önce** tükeniyor, yani bir bot veritabanına hiç dokunmadan durduruluyor. Bütçe aşımı `TooManyRequestsException` fırlatır; `SUBSCRIBE`'da bu §2ai'deki abonelik başına ret karesine dönüşür ve bağlantı ayakta kalır, `SEND`'de ise `ERROR` karesi ve kapanma demektir — sel gönderen istemcinin soketi bilerek düşürülüyor.
 
 **Diğer okuma uçları sınırlanmıyor.** Genel ilan korpusu ve adres sağlayıcı ağ geçidi `PUBLIC` kovasındadır; kimlikli profil okumaları sınır dışıdır.
 
@@ -794,6 +798,8 @@ on iki kuralla sabitliyor. Operasyon tarafı `docs/runbooks/payments.md`'de.
 - `/topic/presence/{userId}` — o kullanıcının `PRESENCE` olayları.
 - `/app/conversations/{id}/typing` — istemcinin yazıyor bildirimi. **Sunucu tarafta yetki kontrolü var** (`assertParticipant`), yoksa yabancı biri herhangi bir konuşmaya olay basabilirdi.
 
+**Zarfın beşinci olay tipi `ERROR`.** Reddedilen bir abonelik, denenen hedefin kendi aboneliğine `type: ERROR` ve `error: {destination, errorCode, message}` taşıyan bir `RealtimeEventDto` alır; gerekçe ve mekanik §2ai'de.
+
 **Sohbet listesi için kişisel kuyruk var.** Yeni mesaj hem konuşma topic'ine hem **her iki tarafın** `/user/queue/messages` kuyruğuna gidiyor. Öncesinde yalnızca konuşma topic'i vardı; sohbet listesini canlı tutmak için istemcinin 20 ayrı topic'e abone olması gerekiyordu, o yüzden liste ancak elle tazelenince güncelleniyordu. Kopya iki tarafa da gider — gönderenin *ikinci cihazındaki* liste de güncellensin diye. Sohbeti açık olan istemci aynı olayı iki kanaldan alır, `message.id` ile tekilleştirmesi gerekir.
 
 **Kullanıcı hedefi id ile anahtarlanıyor, e-posta ile değil.** `UserPrincipal` bir `UserDetails` ve `getUsername()` e-posta döndürüyor; `Authentication.getName()` de onu kullandığı için `convertAndSendToUser(userId, …)` hiçbir zaman eşleşmezdi. `RealtimeAuthentication` yalnızca `getName()`'i ezip kullanıcı id'sini döndürüyor. E-posta değişebilir bir tanımlayıcı, yönlendirmeyi ona bağlamak istenmedi.
@@ -969,7 +975,21 @@ Ayrıca taşıma sınırları kondu: mesaj 64 KB, gönderim tamponu 512 KB, gön
 
 **TLS bu katmanın dışında.** Soket `wss://` üzerinden servis edilmeli; şifreleme reverse proxy'de sonlanıyor. Uygulama `ws://` ile de çalışır, bu yüzden **prod'da proxy'nin TLS sonlandırdığından emin olunmalı** — kod bunu zorlayamaz.
 
-`StompSubscriptionSecurityTest` on bir senaryoyu sabitliyor, `RealtimeFanoutTest` yedi tanesini.
+**Yetkisiz abonelik artık bağlantıyı düşürmüyor.** Yetki reddi `preSend` içinden bir `ForbiddenException` olarak çıkıyordu ve Spring'in varsayılan davranışı bunu bir STOMP `ERROR` karesine çevirip **soketi `CloseStatus.PROTOCOL_ERROR` (1002) ile kapatıyordu** (`StompSubProtocolHandler.sendErrorMessage`, `finally` bloğu). Sonucu şuydu: izinli bir konuşmaya abone olmuş istemci, ikinci bir izinsiz aboneliği denediği anda **ilk aboneliğini de kaybediyordu**; tek bir yanlış id bütün gerçek zamanlı oturumu düşürüyordu.
+
+`StompErrorFrameHandler` bunu kapatıyor — `StompEndpointRegistry.setErrorHandler` ile takılan bir `StompSubProtocolErrorHandler`. `SUBSCRIBE` reddinde `ERROR` yerine, **başarısız aboneliğin kendi `id`'sine adreslenmiş bir `MESSAGE` karesi** dönüyor; `sendToClient` yalnızca komut `ERROR` olduğunda kapattığı için bağlantı ayakta kalıyor ve istemci reddi tam da denediği aboneliğin callback'inde görüyor.
+
+**Bu, issue'nun lafzıyla STOMP spec'i arasındaki çelişkinin çözümü.** Issue "ilgili aboneliğe hata frame'i dönsün" diyor; ama STOMP 1.2'de `ERROR` karesi tanımı gereği bağlantıyı sonlandırır ve Spring de öyle davranır. İkisi birden olamaz. Seçilen taraf kabul kriteri: bağlantı düşmüyor, hata bilgisi aboneliğe gidiyor.
+
+**Zarf değişmedi, `RealtimeEventDto` genişledi.** Ret karesi de aynı zarfı taşıyor: `type: ERROR` ve `error: {destination, errorCode, message}`. Ayrı bir gövde şekli seçilseydi, `/topic/conversations/{id}` callback'i bazen `RealtimeEventDto` bazen başka bir şey alırdı; istemci `type` üzerinde zaten dallanıyor.
+
+**`CONNECT` reddi hâlâ soketi kapatıyor ve kapatmalı** — kimliği doğrulanmamış bir bağlantıyı açık tutmanın anlamı yok. Değişen şey `ERROR` karesinin **metni**: Spring'in varsayılanı `ex.getMessage()` yazıyordu, yani istemciye `Failed to send message to clientInboundChannel` gibi iç detay gidiyordu. Artık katalogdan çözülmüş metin gidiyor (`{realtime.frame.rejected}`, ya da hata bir `KoalaException` ise onun anahtarı). **Token bu karede hiçbir zaman görünmüyordu** — `MessageDeliveryException` başarısız mesajı yalnızca `toString()`'e ekler, Spring ise `getMessage()` okur; yine de `StompErrorFrameTest` bunu regresyon olarak sabitliyor.
+
+**Asıl kusur origin allowlist'inde değil, CORS filtresindeydi.** `realtime.origins.*` ve `OriginHandshakeInterceptor` baştan doğruydu ama **hiç çalışmıyordu**: `CorsConfig` filtresi `/**` altına kayıtlı ve REST allowlist'i ADR-0011 gereği **boş**, dolayısıyla `Origin` başlığı taşıyan her handshake isteği daha güvenlik zinciri sırasında **403** alıyordu. Yani `STOMP_PRODUCTION_ORIGIN` ne yazarsa yazsın `https://iskoala.com` üzerinden tarayıcı STOMP bağlantısı **kurulamıyordu**; allowlist ölü koddu. Tarayıcı WebSocket handshake'i CORS'a tabi değildir (preflight yok, `Access-Control-Allow-Origin` aranmaz) ama sunucudaki `CorsFilter` `Origin` başlığını görüp reddediyordu.
+
+`CorsConfig` artık gerçek zamanlı uç için **hiç CORS görüşü bildirmiyor** (`getCorsConfiguration` null döner), kararı tümüyle `OriginHandshakeInterceptor`'a bırakıyor. İki allowlist'in ayrı olması ADR-0011'in kararı; bu düzeltme o ayrımı fiilen çalışır hâle getiriyor. `/ws` için CORS yapılandırması **kopyalanmadı** — kopyalansaydı aynı origin listesi iki yerde durur ve ayrışırdı.
+
+`StompSubscriptionSecurityTest` on bir senaryoyu, `StompErrorFrameTest` ikisini, `StompConnectionRateLimitTest` üçünü ve `RealtimeFanoutTest` yedisini sabitliyor. `RealtimeHandshakeIT` beş kuralı **gerçek soket üzerinden** kanıtlıyor: izinli origin bağlanır, tanınmayan origin handshake'i geçemez, origin taşımayan native istemci bağlanır, geçersiz token oturum açamaz, ve **yetkisiz abonelik bağlantıyı düşürmeden o aboneliğe ret karesi döndürür**.
 
 ## 2aj. İki dil tek yerden
 
@@ -1534,6 +1554,10 @@ Birim testlerde `CommissionCalculator` artık `FallbackSettings.commissionCalcul
 **Faz 19B testleri.** `ErrorEnvelopeIT` zarfın sekiz özelliğini sabitliyor: kategori + spesifik kod birlikte, `resource` yoldan türüyor, mesaj `Accept-Language`'a uyuyor, bilinmeyen dil ham anahtar döndürmüyor, doğrulama hataları alan listesiyle geliyor. Bir davranışı da belgeliyor: **bilinmeyen uç 404 değil 401 döner** — güvenlik zinciri önce çalıştığı için hangi uçların var olduğu sızmaz.
 
 **Faz 19 testleri.** `ErrorCodeTest` (yedi tipli yüzey, mesaj anahtarından türeyen kod), `LocaleSafetyTest` (locale'siz büyük/küçük harf yok), `RequestValidationTest` (çapraz alan kuralları DTO'da), `StompSubscriptionSecurityTest` (abonelik yetkisi).
+
+**Gerçek zamanlı güvenlik testleri (§2ai).** `StompErrorFrameTest` iki kural: reddedilen abonelik soketi kapatan `ERROR` karesiyle değil, kendi aboneliğine adreslenmiş bir `MESSAGE` karesiyle yanıtlanır; başarısız `CONNECT` iç detay değil katalog metni döndürür ve token'ı hiçbir zaman yankılamaz. `StompConnectionRateLimitTest` üç kural: abonelik seli bütçe dolunca reddedilir, mesaj seli de öyle, ve bir bağlantı başka bir bağlantının bütçesini harcayamaz. `CorsContractTest` bir kural kazandı: **gerçek zamanlı handshake REST CORS allowlist'ine tabi değildir** — bu kural olmadan boş allowlist bütün tarayıcı bağlantılarını 403 ile kesiyordu.
+
+`RealtimeHandshakeIT` bunları gerçek bir soket üzerinde `WebSocketStompClient` ile doğruluyor ve `webEnvironment = RANDOM_PORT` kullandığı için **`@Transactional` olamaz** — sunucu ayrı bir iş parçacığında kendi transaction'ında okuyor, geri alınan bir test transaction'ındaki kullanıcı/oturum satırlarını göremez. Satırlar her testte benzersiz e-posta ve cihaz kimliğiyle yazılıyor.
 
 **Faz 18 testleri.** `AggregateBoundaryTest` (manager→DAO sınırı, gerekçeli muafiyetler), `EagerFetchCoverageIT` (liste sorgularında lazy eşlikçi zorunluluğu). `LogPrivacyTest` genişletildi: artık yalnızca getter'ları değil, **değişken/parametre üzerinden** geçen kişisel veriyi de yakalıyor — yazıldığı anda iki gerçek sızıntı buldu (`JavaMailSenderManager` ham e-posta, `PhoneVerificationManager` ham telefon).
 

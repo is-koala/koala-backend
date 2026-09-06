@@ -1,6 +1,8 @@
 package com.exskylab.koala.core.configs;
 
 import com.exskylab.koala.core.properties.CorsProperties;
+import com.exskylab.koala.core.properties.RealtimeProperties;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 import org.springframework.web.cors.CorsConfiguration;
@@ -13,9 +15,11 @@ import java.util.List;
 public class CorsConfig {
 
     private final CorsProperties corsProperties;
+    private final RealtimeProperties realtimeProperties;
 
-    public CorsConfig(CorsProperties corsProperties) {
+    public CorsConfig(CorsProperties corsProperties, RealtimeProperties realtimeProperties) {
         this.corsProperties = corsProperties;
+        this.realtimeProperties = realtimeProperties;
     }
 
     @Bean
@@ -30,10 +34,15 @@ public class CorsConfig {
         config.setExposedHeaders(List.of("X-Correlation-Id", "Authorization"));
 
         source.registerCorsConfiguration("/**", config);
-        return new CorsFilter(source);
 
+        return new CorsFilter(request ->
+                isRealtimeHandshake(request) ? null : source.getCorsConfiguration(request));
     }
 
+    private boolean isRealtimeHandshake(HttpServletRequest request) {
+        String endpoint = realtimeProperties.getEndpoint();
+        String path = request.getRequestURI();
 
-
+        return path != null && (path.equals(endpoint) || path.startsWith(endpoint + "/"));
+    }
 }

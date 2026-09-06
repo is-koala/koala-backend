@@ -4,5 +4,6 @@ public enum RealtimeEventType {
     MESSAGE,
     TYPING,
     READ,
-    PRESENCE
+    PRESENCE,
+    ERROR
 }

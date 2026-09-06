@@ -3,6 +3,8 @@ package com.exskylab.koala.core.realtime;
 import com.exskylab.koala.business.abstracts.SessionService;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.exceptions.UnauthorizedException;
+import com.exskylab.koala.core.helpers.RateLimiter;
+import com.exskylab.koala.core.properties.RateLimitProperties;
 import com.exskylab.koala.core.security.JwtService;
 import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.dataAccess.ConversationDao;
@@ -36,8 +38,12 @@ class StompSubscriptionSecurityTest {
     @BeforeEach
     void setUp() {
         conversationDao = mock(ConversationDao.class);
+        RateLimitProperties rateLimitProperties = new RateLimitProperties();
+        rateLimitProperties.setEnabled(false);
+
         interceptor = new StompAuthChannelInterceptor(
-                mock(JwtService.class), mock(SessionService.class), conversationDao);
+                mock(JwtService.class), mock(SessionService.class), conversationDao,
+                new RateLimiter(rateLimitProperties), rateLimitProperties);
 
         User employer = user();
         conversation = new Conversation();

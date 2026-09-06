@@ -2,9 +2,13 @@ package com.exskylab.koala.core.realtime;
 
 import com.exskylab.koala.business.abstracts.SessionService;
 import com.exskylab.koala.core.constants.MessagingMessages;
+import com.exskylab.koala.core.constants.RealtimeMessages;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
+import com.exskylab.koala.core.exceptions.TooManyRequestsException;
 import com.exskylab.koala.core.exceptions.UnauthorizedException;
 import com.exskylab.koala.core.helpers.BearerTokenExtractor;
+import com.exskylab.koala.core.helpers.RateLimiter;
+import com.exskylab.koala.core.properties.RateLimitProperties;
 import com.exskylab.koala.core.security.JwtService;
 import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.dataAccess.ConversationDao;
@@ -34,15 +38,23 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     private static final Pattern PRESENCE_TOPIC =
             Pattern.compile("^/topic/presence/([0-9a-fA-F-]{36})$");
 
+    private static final String SUBSCRIBE_BUDGET = "stomp-subscribe:";
+    private static final String MESSAGE_BUDGET = "stomp-message:";
+
     private final JwtService jwtService;
     private final SessionService sessionService;
     private final ConversationDao conversationDao;
+    private final RateLimiter rateLimiter;
+    private final RateLimitProperties rateLimitProperties;
 
     public StompAuthChannelInterceptor(JwtService jwtService, SessionService sessionService,
-                                       ConversationDao conversationDao) {
+                                       ConversationDao conversationDao, RateLimiter rateLimiter,
+                                       RateLimitProperties rateLimitProperties) {
         this.jwtService = jwtService;
         this.sessionService = sessionService;
         this.conversationDao = conversationDao;
+        this.rateLimiter = rateLimiter;
+        this.rateLimitProperties = rateLimitProperties;
     }
 
     @Override
@@ -56,12 +68,28 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
         switch (accessor.getCommand()) {
             case CONNECT -> authenticate(accessor);
-            case SUBSCRIBE -> authoriseSubscription(accessor);
+            case SUBSCRIBE -> {
+                consume(accessor, SUBSCRIBE_BUDGET, rateLimitProperties.getRealtimeSubscribe());
+                authoriseSubscription(accessor);
+            }
+            case SEND -> consume(accessor, MESSAGE_BUDGET, rateLimitProperties.getRealtimeMessage());
             default -> {
             }
         }
 
         return message;
+    }
+
+    private void consume(StompHeaderAccessor accessor, String budget, RateLimitProperties.Bucket bucket) {
+        String sessionId = accessor.getSessionId();
+        if (sessionId == null) {
+            return;
+        }
+
+        if (!rateLimiter.tryAcquire(budget + sessionId, bucket.getMaxAttempts(), bucket.getWindow())) {
+            log.warn("Realtime session {} exceeded its {} budget", sessionId, budget);
+            throw new TooManyRequestsException(RealtimeMessages.TOO_MANY_FRAMES);
+        }
     }
 
     private void authenticate(StompHeaderAccessor accessor) {
