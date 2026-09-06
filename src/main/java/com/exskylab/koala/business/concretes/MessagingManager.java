@@ -11,6 +11,7 @@ import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.messaging.response.ConversationDto;
 import com.exskylab.koala.core.exceptions.ConflictException;
+import com.exskylab.koala.core.helpers.Concealment;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.properties.MessagingProperties;
 import com.exskylab.koala.dataAccess.*;
@@ -267,8 +268,10 @@ public class MessagingManager implements MessagingService {
         Conversation conversation = conversationDao.findWithParticipantsById(conversationId)
                 .orElseThrow(() -> new ResourceNotFoundException(MessagingMessages.CONVERSATION_NOT_FOUND));
 
-        if (!conversation.hasParticipant(securityService.getAuthenticatedUserId())) {
-            throw new ResourceNotFoundException(MessagingMessages.NOT_A_PARTICIPANT);
+        UUID actorId = securityService.getAuthenticatedUserId();
+        if (!conversation.hasParticipant(actorId)) {
+            throw Concealment.notFound(MessagingMessages.CONVERSATION_NOT_FOUND, actorId, conversationId,
+                    "not a participant of the conversation");
         }
         return conversation;
     }
@@ -316,7 +319,8 @@ public class MessagingManager implements MessagingService {
                 .orElseThrow(() -> new ResourceNotFoundException(MessagingMessages.CONVERSATION_NOT_FOUND));
 
         if (!conversation.hasParticipant(userId)) {
-            throw new ResourceNotFoundException(MessagingMessages.CONVERSATION_NOT_FOUND);
+            throw Concealment.notFound(MessagingMessages.CONVERSATION_NOT_FOUND, userId, conversationId,
+                    "not a participant of the conversation");
         }
     }
 

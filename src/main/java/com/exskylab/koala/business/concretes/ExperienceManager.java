@@ -6,6 +6,7 @@ import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.ExperienceMessages;
 import com.exskylab.koala.core.dtos.experience.request.SaveExperienceDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
+import com.exskylab.koala.core.helpers.Concealment;
 import com.exskylab.koala.dataAccess.ExperienceDao;
 import com.exskylab.koala.entities.Experience;
 import com.exskylab.koala.core.exceptions.ValidationException;
@@ -74,8 +75,10 @@ public class ExperienceManager implements ExperienceService {
         Experience experience = experienceDao.findWithUserById(experienceId)
                 .orElseThrow(() -> new ResourceNotFoundException(ExperienceMessages.NOT_FOUND));
 
-        if (!experience.getUser().getId().equals(securityService.getAuthenticatedUserId())) {
-            throw new ResourceNotFoundException(ExperienceMessages.NOT_OWNER);
+        UUID actorId = securityService.getAuthenticatedUserId();
+        if (!experience.getUser().getId().equals(actorId)) {
+            throw Concealment.notFound(ExperienceMessages.NOT_FOUND, actorId, experienceId,
+                    "experience belongs to another user");
         }
         return experience;
     }

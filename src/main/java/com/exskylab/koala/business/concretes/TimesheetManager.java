@@ -4,9 +4,10 @@ import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.TimesheetService;
+import com.exskylab.koala.core.constants.JobAssignmentMessages;
 import com.exskylab.koala.core.constants.TimesheetMessages;
-import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
+import com.exskylab.koala.core.helpers.Concealment;
 import com.exskylab.koala.dataAccess.WorkSessionDao;
 import com.exskylab.koala.entities.PaymentStatus;
 import com.exskylab.koala.entities.AssignmentStatus;
@@ -107,8 +108,10 @@ public class TimesheetManager implements TimesheetService {
     public List<WorkSession> getSessions(UUID jobAssignmentId) {
         JobAssignment assignment = jobAssignmentService.getDetailedById(jobAssignmentId);
 
-        if (!participants.isParticipant(assignment, securityService.getAuthenticatedUserId())) {
-            throw new ResourceNotFoundException(TimesheetMessages.NOT_A_PARTICIPANT);
+        UUID actorId = securityService.getAuthenticatedUserId();
+        if (!participants.isParticipant(assignment, actorId)) {
+            throw Concealment.notFound(JobAssignmentMessages.NOT_FOUND, actorId, jobAssignmentId,
+                    "not a participant of the assignment");
         }
 
         return workSessionDao.findAllByJobAssignmentIdOrderByCheckInAtAsc(jobAssignmentId);
@@ -117,8 +120,10 @@ public class TimesheetManager implements TimesheetService {
     private JobAssignment requireWorker(UUID jobAssignmentId) {
         JobAssignment assignment = jobAssignmentService.getDetailedById(jobAssignmentId);
 
-        if (!assignment.getWorker().getId().equals(securityService.getAuthenticatedUserId())) {
-            throw new ResourceNotFoundException(TimesheetMessages.NOT_THE_WORKER);
+        UUID actorId = securityService.getAuthenticatedUserId();
+        if (!assignment.getWorker().getId().equals(actorId)) {
+            throw Concealment.notFound(JobAssignmentMessages.NOT_FOUND, actorId, jobAssignmentId,
+                    "not the worker of the assignment");
         }
         return assignment;
     }
