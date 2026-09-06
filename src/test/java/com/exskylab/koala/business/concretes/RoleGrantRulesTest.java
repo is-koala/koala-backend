@@ -15,6 +15,7 @@ import com.exskylab.koala.core.constants.SystemUser;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
+import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.core.mappers.AddressMapper;
 import com.exskylab.koala.core.mappers.BadgeMapper;
 import com.exskylab.koala.core.mappers.UserMapper;
@@ -91,8 +92,8 @@ class RoleGrantRulesTest {
         when(userDao.findById(missing)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> userManager.getRoleGrants(missing));
-        assertThrows(ResourceNotFoundException.class, () -> userManager.grantRole(missing, Role.ROLE_ADMIN));
-        assertThrows(ResourceNotFoundException.class, () -> userManager.revokeRole(missing, Role.ROLE_ADMIN));
+        assertThrows(ResourceNotFoundException.class, () -> userManager.grantRole(null, missing, Role.ROLE_ADMIN));
+        assertThrows(ResourceNotFoundException.class, () -> userManager.revokeRole(null, missing, Role.ROLE_ADMIN));
     }
 
     @Test
@@ -100,7 +101,7 @@ class RoleGrantRulesTest {
         User target = user(UUID.randomUUID(), Role.ROLE_USER);
         Set<Role> before = target.getAuthorities();
 
-        userManager.grantRole(target.getId(), Role.ROLE_ADMIN);
+        userManager.grantRole(null, target.getId(), Role.ROLE_ADMIN);
 
         assertSame(before, target.getAuthorities(),
                 "Koleksiyon ornegi degistirilirse Hibernate rol verme kaydini siler.");
@@ -112,7 +113,7 @@ class RoleGrantRulesTest {
     void grantingARoleTheUserAlreadyHasWritesNothing() {
         User target = user(UUID.randomUUID(), Role.ROLE_USER, Role.ROLE_ADMIN);
 
-        userManager.grantRole(target.getId(), Role.ROLE_ADMIN);
+        userManager.grantRole(null, target.getId(), Role.ROLE_ADMIN);
 
         assertEquals(2, target.getAuthorities().size());
         verify(userDao, never()).stampRoleGrant(any(), any(), any(), any());
@@ -123,7 +124,7 @@ class RoleGrantRulesTest {
     void anAdminCannotTakeAwayTheirOwnAdminRole() {
         user(actingAdminId, Role.ROLE_USER, Role.ROLE_ADMIN);
 
-        assertThrows(ConflictException.class, () -> userManager.revokeRole(actingAdminId, Role.ROLE_ADMIN));
+        assertThrows(ConflictException.class, () -> userManager.revokeRole(null, actingAdminId, Role.ROLE_ADMIN));
     }
 
     @Test
@@ -131,7 +132,7 @@ class RoleGrantRulesTest {
         User target = user(UUID.randomUUID(), Role.ROLE_USER, Role.ROLE_ADMIN);
         when(userDao.countUsersWithRole(Role.ROLE_ADMIN.name())).thenReturn(1L);
 
-        assertThrows(ConflictException.class, () -> userManager.revokeRole(target.getId(), Role.ROLE_ADMIN));
+        assertThrows(ConflictException.class, () -> userManager.revokeRole(null, target.getId(), Role.ROLE_ADMIN));
         assertTrue(target.getAuthorities().contains(Role.ROLE_ADMIN));
     }
 
@@ -140,7 +141,7 @@ class RoleGrantRulesTest {
         User target = user(UUID.randomUUID(), Role.ROLE_USER, Role.ROLE_ADMIN);
         when(userDao.countUsersWithRole(Role.ROLE_ADMIN.name())).thenReturn(2L);
 
-        userManager.revokeRole(target.getId(), Role.ROLE_ADMIN);
+        userManager.revokeRole(null, target.getId(), Role.ROLE_ADMIN);
 
         assertFalse(target.getAuthorities().contains(Role.ROLE_ADMIN));
     }
@@ -149,7 +150,7 @@ class RoleGrantRulesTest {
     void theMarketplaceMembershipRoleIsNotRevocableHere() {
         User target = user(UUID.randomUUID(), Role.ROLE_USER, Role.ROLE_ADMIN);
 
-        assertThrows(ConflictException.class, () -> userManager.revokeRole(target.getId(), Role.ROLE_USER));
+        assertThrows(ConflictException.class, () -> userManager.revokeRole(null, target.getId(), Role.ROLE_USER));
         assertTrue(target.getAuthorities().contains(Role.ROLE_USER));
     }
 
@@ -157,15 +158,15 @@ class RoleGrantRulesTest {
     void theSystemUserKeepsItsRolesWhateverIsAsked() {
         user(SystemUser.ID, Role.ROLE_USER, Role.ROLE_ADMIN);
 
-        assertThrows(ConflictException.class, () -> userManager.grantRole(SystemUser.ID, Role.ROLE_ADMIN));
-        assertThrows(ConflictException.class, () -> userManager.revokeRole(SystemUser.ID, Role.ROLE_ADMIN));
+        assertThrows(ConflictException.class, () -> userManager.grantRole(null, SystemUser.ID, Role.ROLE_ADMIN));
+        assertThrows(ConflictException.class, () -> userManager.revokeRole(null, SystemUser.ID, Role.ROLE_ADMIN));
     }
 
     @Test
     void revokingARoleTheUserNeverHadChangesNothing() {
         User target = user(UUID.randomUUID(), Role.ROLE_USER);
 
-        userManager.revokeRole(target.getId(), Role.ROLE_ADMIN);
+        userManager.revokeRole(null, target.getId(), Role.ROLE_ADMIN);
 
         assertEquals(Set.of(Role.ROLE_USER), target.getAuthorities());
         verify(userDao, never()).saveAndFlush(any());
@@ -191,5 +192,43 @@ class RoleGrantRulesTest {
         when(userDao.findByEmail("yok@koala.test")).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> userManager.bootstrapAdminRole("yok@koala.test"));
+    }
+
+    private static StaffPrincipal staff() {
+        return StaffPrincipal.unregistered("kc-subject-1", Set.of("OWNER"));
+    }
+
+    @Test
+    void grantRoleWritesNoGrantedByForAStaffActorAndNeverTouchesTheMarketplacePrincipal() {
+        User target = user(UUID.randomUUID(), Role.ROLE_USER);
+
+        userManager.grantRole(staff(), target.getId(), Role.ROLE_ADMIN);
+
+        verify(userDao).stampRoleGrantTime(eq(target.getId()), eq(Role.ROLE_ADMIN.name()), any());
+        verify(userDao, never()).stampRoleGrant(any(), any(), any(), any());
+        verify(securityService, never()).getAuthenticatedUserId();
+        verify(securityService, never()).getAuthenticatedUser();
+    }
+
+    @Test
+    void revokeRoleForAStaffActorSkipsTheSelfRevokeCheckAndNeverTouchesTheMarketplacePrincipal() {
+        User target = user(UUID.randomUUID(), Role.ROLE_USER, Role.ROLE_ADMIN);
+        when(userDao.countUsersWithRole(Role.ROLE_ADMIN.name())).thenReturn(2L);
+
+        userManager.revokeRole(staff(), target.getId(), Role.ROLE_ADMIN);
+
+        assertFalse(target.getAuthorities().contains(Role.ROLE_ADMIN));
+        verify(securityService, never()).getAuthenticatedUserId();
+        verify(securityService, never()).getAuthenticatedUser();
+    }
+
+    @Test
+    void revokeRoleStillProtectsTheLastAdminForAStaffActor() {
+        User target = user(UUID.randomUUID(), Role.ROLE_USER, Role.ROLE_ADMIN);
+        when(userDao.countUsersWithRole(Role.ROLE_ADMIN.name())).thenReturn(1L);
+
+        assertThrows(ConflictException.class,
+                () -> userManager.revokeRole(staff(), target.getId(), Role.ROLE_ADMIN));
+        assertTrue(target.getAuthorities().contains(Role.ROLE_ADMIN));
     }
 }

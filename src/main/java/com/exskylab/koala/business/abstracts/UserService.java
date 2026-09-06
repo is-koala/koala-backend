@@ -1,6 +1,7 @@
 package com.exskylab.koala.business.abstracts;
 
 
+import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.core.dtos.address.request.AddressWriteDto;
 import com.exskylab.koala.core.dtos.address.response.AddressDto;
 import com.exskylab.koala.core.dtos.user.request.UpdateUserDto;
@@ -63,9 +64,9 @@ public interface UserService {
 
     List<UserDao.RoleGrantView> getRoleGrants(UUID userId);
 
-    List<UserDao.RoleGrantView> grantRole(UUID userId, Role role);
+    List<UserDao.RoleGrantView> grantRole(StaffPrincipal actor, UUID userId, Role role);
 
-    void revokeRole(UUID userId, Role role);
+    void revokeRole(StaffPrincipal actor, UUID userId, Role role);
 
     boolean bootstrapAdminRole(String email);
 }

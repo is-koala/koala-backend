@@ -1,5 +1,7 @@
 package com.exskylab.koala.webAPI;
 
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.core.security.RequiresPermission;
 import com.exskylab.koala.entities.StaffPermission;
 import com.exskylab.koala.core.utilities.results.ErrorResult;
@@ -134,11 +136,12 @@ public class AdminController {
     @PostMapping("/companies/{companyId}/approve")
     public ResponseEntity<SuccessDataResult<CompanyReviewDto>> approveCompany(
             @PathVariable UUID companyId,
-            @RequestBody(required = false) @Valid ApproveCompanyDto request) {
+            @RequestBody(required = false) @Valid ApproveCompanyDto request,
+            @AuthenticationPrincipal StaffPrincipal actor) {
 
         String note = request == null ? null : request.getNote();
         return ResponseEntity.ok(new SuccessDataResult<>(
-                companyMapper.toCompanyReviewDto(companyService.approveCompany(companyId, note)),
+                companyMapper.toCompanyReviewDto(companyService.approveCompany(actor, companyId, note)),
                 AdminMessages.COMPANY_APPROVED, HttpStatus.OK));
     }
 
@@ -158,10 +161,11 @@ public class AdminController {
     @PostMapping("/companies/{companyId}/reject")
     public ResponseEntity<SuccessDataResult<CompanyReviewDto>> rejectCompany(
             @PathVariable UUID companyId,
-            @RequestBody @Valid RejectCompanyDto request) {
+            @RequestBody @Valid RejectCompanyDto request,
+            @AuthenticationPrincipal StaffPrincipal actor) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
-                companyMapper.toCompanyReviewDto(companyService.rejectCompany(companyId, request.getReason())),
+                companyMapper.toCompanyReviewDto(companyService.rejectCompany(actor, companyId, request.getReason())),
                 AdminMessages.COMPANY_REJECTED, HttpStatus.OK));
     }
 
@@ -211,10 +215,11 @@ public class AdminController {
     @RequiresPermission(value = StaffPermission.USER_ROLE_MANAGE, action = "user.role.grant")
     @PostMapping("/users/{userId}/roles")
     public ResponseEntity<SuccessDataResult<List<RoleGrantDto>>> grantUserRole(
-            @PathVariable UUID userId, @RequestBody @Valid GrantRoleDto request) {
+            @PathVariable UUID userId, @RequestBody @Valid GrantRoleDto request,
+            @AuthenticationPrincipal StaffPrincipal actor) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
-                roleGrantMapper.toRoleGrantDtoList(userService.grantRole(userId, request.getRole())),
+                roleGrantMapper.toRoleGrantDtoList(userService.grantRole(actor, userId, request.getRole())),
                 AdminMessages.USER_ROLE_GRANTED, HttpStatus.OK));
     }
 
@@ -231,8 +236,9 @@ public class AdminController {
     })
     @RequiresPermission(value = StaffPermission.USER_ROLE_MANAGE, action = "user.role.revoke")
     @DeleteMapping("/users/{userId}/roles/{role}")
-    public ResponseEntity<Result> revokeUserRole(@PathVariable UUID userId, @PathVariable Role role) {
-        userService.revokeRole(userId, role);
+    public ResponseEntity<Result> revokeUserRole(@PathVariable UUID userId, @PathVariable Role role,
+                                                 @AuthenticationPrincipal StaffPrincipal actor) {
+        userService.revokeRole(actor, userId, role);
         return ResponseEntity.ok(new SuccessResult(AdminMessages.USER_ROLE_REVOKED, HttpStatus.OK));
     }
 }
