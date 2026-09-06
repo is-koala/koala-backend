@@ -8,6 +8,7 @@ import com.exskylab.koala.business.abstracts.JobService;
 import com.exskylab.koala.business.abstracts.PricingService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.dtos.jobApplication.request.AnswerApplicationDto;
+import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.mappers.JobApplicationMapper;
 import com.exskylab.koala.dataAccess.JobApplicationDao;
@@ -78,6 +79,10 @@ class JobHeadcountRulesTest {
         return job;
     }
 
+    private void occupied(Job job, long slots) {
+        when(jobAssignmentService.countOccupiedSlots(job.getId())).thenReturn(slots);
+    }
+
     private static AnswerApplicationDto accept() {
         AnswerApplicationDto dto = new AnswerApplicationDto();
         dto.setStatus("ACCEPTED");
@@ -85,8 +90,9 @@ class JobHeadcountRulesTest {
     }
 
     @Test
-    void aJobWithoutAHeadcountStillHires() {
+    void aJobWithoutAHeadcountHiresWithoutALimit() {
         Job job = job(null, LocalDateTime.now().plusDays(1));
+        occupied(job, 7);
         JobApplication application = applicationFor(job);
 
         assertDoesNotThrow(() -> manager.respondToApplication(application.getId(), accept()));
@@ -94,18 +100,64 @@ class JobHeadcountRulesTest {
     }
 
     @Test
-    void hiringBeyondTheHeadcountIsAllowed() {
+    void aJobWithoutAHeadcountIsNeverEvenCounted() {
+        Job job = job(null, LocalDateTime.now().plusDays(1));
+
+        manager.respondToApplication(applicationFor(job).getId(), accept());
+
+        verify(jobAssignmentService, never()).countOccupiedSlots(any());
+    }
+
+    @Test
+    void theLastOpeningCanStillBeFilled() {
+        Job job = job(2, LocalDateTime.now().plusDays(1));
+        occupied(job, 1);
+
+        assertDoesNotThrow(() -> manager.respondToApplication(applicationFor(job).getId(), accept()));
+
+        verify(jobAssignmentService).save(any(JobAssignment.class));
+    }
+
+    @Test
+    void aFullJobRefusesAFurtherAcceptance() {
         Job job = job(1, LocalDateTime.now().plusDays(1));
+        occupied(job, 1);
+        JobApplication application = applicationFor(job);
 
-        assertDoesNotThrow(() -> manager.respondToApplication(applicationFor(job).getId(), accept()));
-        assertDoesNotThrow(() -> manager.respondToApplication(applicationFor(job).getId(), accept()));
+        ConflictException thrown = assertThrows(ConflictException.class,
+                () -> manager.respondToApplication(application.getId(), accept()));
 
-        verify(jobAssignmentService, times(2)).save(any(JobAssignment.class));
+        assertEquals("JOB_APPLICATION_JOB_HEADCOUNT_FULL", thrown.getErrorCode());
+        verify(jobAssignmentService, never()).save(any());
+        assertEquals(ApplicationStatus.APPLIED, application.getStatus());
+    }
+
+    @Test
+    void aJobHiredBeyondItsHeadcountRefusesFurtherAcceptances() {
+        Job job = job(2, LocalDateTime.now().plusDays(1));
+        occupied(job, 5);
+
+        assertThrows(ConflictException.class,
+                () -> manager.respondToApplication(applicationFor(job).getId(), accept()));
+    }
+
+    @Test
+    void aFullJobCanStillRejectApplications() {
+        Job job = job(1, LocalDateTime.now().plusDays(1));
+        occupied(job, 1);
+        JobApplication application = applicationFor(job);
+
+        AnswerApplicationDto reject = new AnswerApplicationDto();
+        reject.setStatus("REJECTED");
+
+        assertDoesNotThrow(() -> manager.respondToApplication(application.getId(), reject));
+        assertEquals(ApplicationStatus.REJECTED, application.getStatus());
     }
 
     @Test
     void reachingTheHeadcountDoesNotCloseTheJob() {
         Job job = job(1, LocalDateTime.now().plusDays(1));
+        occupied(job, 0);
 
         manager.respondToApplication(applicationFor(job).getId(), accept());
 
@@ -115,6 +167,7 @@ class JobHeadcountRulesTest {
     @Test
     void aWorkerCanStillBeHiredAfterTheJobHasStarted() {
         Job job = job(3, LocalDateTime.now().minusHours(4));
+        occupied(job, 1);
 
         assertDoesNotThrow(() -> manager.respondToApplication(applicationFor(job).getId(), accept()));
 
@@ -124,6 +177,7 @@ class JobHeadcountRulesTest {
     @Test
     void acceptingAnApplicationCopiesThePublishedPriceToTheAssignment() {
         Job job = job(1, LocalDateTime.now().plusDays(1));
+        occupied(job, 0);
         JobApplication application = applicationFor(job);
 
         manager.respondToApplication(application.getId(), accept());

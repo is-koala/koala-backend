@@ -45,6 +45,7 @@ class ApplicationReadinessTest {
         job.setId(UUID.randomUUID());
         job.setCreator(employer);
         job.setEmployerType(JobEmployerType.INDIVIDUAL);
+        job.setStatus(JobStatus.OPEN);
 
         JobService jobService = mock(JobService.class);
         when(jobService.getById(job.getId())).thenReturn(job);

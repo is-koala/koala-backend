@@ -18,6 +18,9 @@ public class JobApplicationMessages {
     public static final String JOB_APPLICATION_WITHDRAWN_SUCCESS = "{job.application.withdrawn.success}";
     public static final String JOB_APPLICATION_NOT_WITHDRAWABLE = "{job.application.not.withdrawable}";
     public static final String JOB_APPLICATION_ALREADY_WITHDRAWN = "{job.application.already.withdrawn}";
+    public static final String JOB_NOT_OPEN = "{job.application.job.not.open}";
+    public static final String JOB_CANCELLED = "{job.application.job.cancelled}";
+    public static final String JOB_HEADCOUNT_FULL = "{job.application.job.headcount.full}";
     public static final String APPLICANT_IDENTITY_NOT_VERIFIED = "{applicant.identity.not.verified}";
     public static final String APPLICANT_ADDRESS_REQUIRED = "{applicant.address.required}";
     public static final String APPLICANT_BANK_ACCOUNT_REQUIRED = "{applicant.bank.account.required}";

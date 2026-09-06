@@ -62,6 +62,10 @@ public class JobAssignmentManager implements JobAssignmentService {
             java.util.EnumSet.of(AssignmentStatus.PENDING_CONFIRMATION, AssignmentStatus.CONFIRMED,
                     AssignmentStatus.IN_PROGRESS);
 
+    private static final java.util.Set<AssignmentStatus> SLOT_OCCUPYING_STATUSES =
+            java.util.EnumSet.of(AssignmentStatus.PENDING_CONFIRMATION, AssignmentStatus.CONFIRMED,
+                    AssignmentStatus.IN_PROGRESS, AssignmentStatus.COMPLETED);
+
     private static final java.util.Set<String> MY_ASSIGNMENTS_SORTABLE =
             java.util.Set.of("assignmentDateTime", "actualCompletionDateTime", "status");
 
@@ -500,6 +504,12 @@ public class JobAssignmentManager implements JobAssignmentService {
     public JobAssignment getDetailedById(UUID assignmentId) {
         return jobAssignmentDao.findWithDetailsForPaymentById(assignmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(JobAssignmentMessages.NOT_FOUND));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countOccupiedSlots(UUID jobId) {
+        return jobAssignmentDao.countByJobIdAndStatusIn(jobId, SLOT_OCCUPYING_STATUSES);
     }
 
     @Override

@@ -42,4 +42,6 @@ public interface JobAssignmentService {
     boolean hasMoneyInEscrowFor(UUID workerId);
 
     boolean hasActiveWorkFor(UUID workerId);
+
+    long countOccupiedSlots(UUID jobId);
 }

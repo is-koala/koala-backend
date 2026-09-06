@@ -34,12 +34,14 @@ public class JobApplicationsController {
 
 
     @Operation(summary = "Başvuruyu kabul et ya da reddet",
-            description = "Yalnızca ilan sahibi ya da şirket yetkilisi cevaplayabilir. Kabul edildiğinde iş ataması oluşur.")
+            description = "Yalnızca ilan sahibi ya da şirket yetkilisi cevaplayabilir; yetkisiz kullanıcı başvurunun durumu ne olursa olsun 404 alır. Kabul edildiğinde iş ataması oluşur ve işçiye tam adres açılır. Kontenjanı dolu ya da iptal edilmiş ilanda kabul edilemez; kapatılmış ilandaki başvuru cevaplanabilir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Cevap kaydedildi"),
+            @ApiResponse(responseCode = "400", description = "Geçersiz başvuru durumu",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "404", description = "Başvuru bulunamadı ya da yetki yok",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
-            @ApiResponse(responseCode = "409", description = "Başvuru zaten cevaplanmış",
+            @ApiResponse(responseCode = "409", description = "Başvuru zaten cevaplanmış ya da geri çekilmiş, ilan iptal edilmiş ya da kontenjan dolu",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping("/{applicationId}/respond")

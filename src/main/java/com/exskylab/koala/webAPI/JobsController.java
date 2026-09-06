@@ -196,14 +196,14 @@ public class JobsController {
     }
 
     @Operation(summary = "İlana başvur",
-            description = "Kullanıcı kendi ilanına başvuramaz. Aynı ilana ikinci başvuru açılmaz.")
+            description = "Yalnızca OPEN ilan başvuru alır; kapatılan ya da iptal edilen ilana yeni başvuru gelmez. Kullanıcı kendi ilanına başvuramaz, aynı ilana ikinci başvuru açılmaz.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Başvuru oluşturuldu"),
-            @ApiResponse(responseCode = "400", description = "Kendi ilanına başvurulamaz",
+            @ApiResponse(responseCode = "400", description = "Kendi ilanına başvurulamaz, zaten başvurulmuş ya da başvuru şartları eksik",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "404", description = "İlan bulunamadı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
-            @ApiResponse(responseCode = "409", description = "Bu ilana zaten başvurulmuş",
+            @ApiResponse(responseCode = "409", description = "İlan başvuruya kapalı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping("/{jobId}/applications")
