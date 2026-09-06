@@ -20,6 +20,8 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 
@@ -49,12 +51,11 @@ class StompConnectionRateLimitTest {
     }
 
     @Test
-    void aConnectionThatFloodsMessagesIsRefusedOnceItsBudgetIsSpent() {
-        assertDoesNotThrow(() -> interceptor.preSend(typing("stomp-1"), null));
-        assertDoesNotThrow(() -> interceptor.preSend(typing("stomp-1"), null));
+    void aFloodedMessageFrameIsDroppedRatherThanClosingTheConnection() {
+        assertNotNull(interceptor.preSend(typing("stomp-1"), null));
+        assertNotNull(interceptor.preSend(typing("stomp-1"), null));
 
-        assertThrows(TooManyRequestsException.class,
-                () -> interceptor.preSend(typing("stomp-1"), null));
+        assertNull(interceptor.preSend(typing("stomp-1"), null));
     }
 
     @Test
@@ -63,7 +64,7 @@ class StompConnectionRateLimitTest {
         interceptor.preSend(ownPresence("stomp-1"), null);
 
         assertDoesNotThrow(() -> interceptor.preSend(ownPresence("stomp-2"), null));
-        assertDoesNotThrow(() -> interceptor.preSend(typing("stomp-1"), null));
+        assertNotNull(interceptor.preSend(typing("stomp-1"), null));
     }
 
     private Message<?> typing(String sessionId) {

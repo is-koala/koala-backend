@@ -4,7 +4,6 @@
 
 Bu dosya projeyi konu konu anlatır: mimari, alınmış kararlar ve gerekçeleri, tuzaklar. Bir konuya dokunmadan önce ilgili başlığı oku.
 
-
 ## 0. Nerede kaldık — oturum devri
 
 **Son durum (30.08.2026):** 156 endpoint, 64 entity, 97 test dosyası, 44 Liquibase changelog, 536 mesaj anahtarı. `./mvnw verify` — 604 birim testi yeşil; entegrasyon testleri Docker gerektirir.
@@ -180,7 +179,6 @@ Servis ve controller katmanı düz anahtar kullanır: `"{user.not.found}"`. Çö
 
 **`details` yalnızca doğrulama hatalarında.** `{field, message}` çiftleri, mesajları çözümlenmiş hâlde — istemci ham anahtar görmez.
 
-
 **HTTP kodu exception'ın kendisinde.** `KoalaException` bir `HttpStatus` taşır; alt sınıflar constructor'da belirler (404, 403, 409, 401, 502). `errorCode` sınıf adından türetilir: `UserNotFoundException` → `USER_NOT_FOUND`. Eskiden hepsi ayrımsız 400 dönüyordu.
 
 **İstemciye iç detay sızmaz.** Beklenmeyen hatalarda gövdeye sabit bir metin yazılır, exception yalnızca correlation ID ile loglanır.
@@ -329,7 +327,7 @@ Gerekçe: (b) elle SQL yazmayı ortadan kaldırmıyor, yalnızca kopyalanacak bi
 
 ## 2j. Hız sınırı
 
-**Yedi kova var, yazma ve pahalı genel uçların hepsi kapsanıyor.**
+**Beş kova var, yazma ve pahalı genel uçların hepsi kapsanıyor.**
 
 | Kova | Kapsam | Varsayılan | Anahtar |
 |---|---|---|---|
@@ -338,8 +336,6 @@ Gerekçe: (b) elle SQL yazmayı ortadan kaldırmıyor, yalnızca kopyalanacak bi
 | `MESSAGE` | mesaj gönderme | 30 / 1 dk | kova + IP |
 | `PUBLIC` | ilan listesi/detayı/görselleri ve adres ağ geçidi | 120 / 1 dk | kova + IP |
 | `WRITE` | **diğer tüm** POST/PUT/PATCH/DELETE | 60 / 1 dk | kova + IP |
-| `REALTIME_SUBSCRIBE` | STOMP `SUBSCRIBE` kareleri | 30 / 1 dk | kova + STOMP oturumu |
-| `REALTIME_MESSAGE` | STOMP `SEND` kareleri | 60 / 1 dk | kova + STOMP oturumu |
 
 **`WRITE` bilerek yakalayıcı.** Yeni bir yazma ucu eklendiğinde listeye yazılması gerekmez, kendiliğinden kapsanır — `SecurityConfig`'teki `anyRequest().authenticated()` ile aynı mantık: unutulan uç açıkta kalmaz.
 
@@ -347,13 +343,24 @@ Gerekçe: (b) elle SQL yazmayı ortadan kaldırmıyor, yalnızca kopyalanacak bi
 
 **Anahtar IP, kullanıcı değil.** `RateLimitFilter` güvenlik zincirinin dışında (`HIGHEST_PRECEDENCE + 20`) çalıştığı için o noktada principal henüz yok. Kullanıcı bazlı sınır istenirse filtrenin `SessionAuthFilter`'dan sonraya, güvenlik zincirinin içine taşınması gerekir.
 
-**Gerçek zamanlı kovaların anahtarı STOMP oturumudur, IP değil** — issue'nun istediği sınır "bağlantı başına". Soket katmanında `RateLimitFilter` hiç çalışmıyor (o bir servlet filtresi); sayaç `StompAuthChannelInterceptor` içinden düşülüyor. `SUBSCRIBE` bütçesi yetki kontrolünden **önce** tükeniyor, yani bir bot veritabanına hiç dokunmadan durduruluyor. Bütçe aşımı `TooManyRequestsException` fırlatır; `SUBSCRIBE`'da bu §2ai'deki abonelik başına ret karesine dönüşür ve bağlantı ayakta kalır, `SEND`'de ise `ERROR` karesi ve kapanma demektir — sel gönderen istemcinin soketi bilerek düşürülüyor.
-
 **Diğer okuma uçları sınırlanmıyor.** Genel ilan korpusu ve adres sağlayıcı ağ geçidi `PUBLIC` kovasındadır; kimlikli profil okumaları sınır dışıdır.
 
 Aşıldığında 429 ve `TOO_MANY_REQUESTS` döner.
 
+**Soket tarafında iki bütçe daha var ve bunlar yukarıdaki tablonun parçası değil.** `RateLimitFilter` bir servlet filtresi; STOMP kareleri ona hiç uğramıyor, dolayısıyla `Bucket` enum'unda karşılıkları yok ve **429 dönmüyorlar**. Sayaç `StompAuthChannelInterceptor` içinden, aynı `RateLimiter` üzerinden düşülüyor:
+
+| Bütçe | Kapsam | Varsayılan | Anahtar |
+|---|---|---|---|
+| `stomp-subscribe` | STOMP `SUBSCRIBE` kareleri | 30 / 1 dk | önek + STOMP oturum id'si |
+| `stomp-message` | STOMP `SEND` kareleri | 60 / 1 dk | önek + STOMP oturum id'si |
+
+**Anahtar STOMP oturumudur, IP değil** — issue'nun istediği sınır "bağlantı başına". `SUBSCRIBE` bütçesi yetki kontrolünden **önce** tükeniyor, yani bir bot veritabanına hiç dokunmadan durduruluyor.
+
+**İki bütçenin aşım davranışı farklı, ve fark bilinçli.** `SUBSCRIBE` aşımı `TooManyRequestsException` fırlatır; bu §2ai'deki yola girip `REALTIME_TOO_MANY_FRAMES` koduyla o aboneliğe ret karesi olarak döner, bağlantı ayakta kalır. `SEND` aşımında ise kare **sessizce düşürülür** (`preSend` null döndürür): karenin cevaplanabileceği bir abonelik id'si yok, `ERROR` göndermek soketi kapatırdı ve bu tam da bu issue'nun kapatmaya çalıştığı davranış olurdu. Bugün tek `@MessageMapping` yazıyor göstergesi; tuşa basıldıkça olay üreten bir istemcinin dakikada 60'ı aşması olağan, ve bunun bedeli bütün gerçek zamanlı oturumu kaybetmek olamaz. Yazıyor göstergesi zaten en iyi çaba — §2z'nin "gerçek zamanlı katman iyileştirme, tek kaynak değil" kuralının aynısı.
+
 Sayaç bellekte (`ConcurrentHashMap`), yani **tek örnek varsayımıyla çalışıyor**. Birden fazla örnek çalıştırıldığında sınır örnek başına uygulanır; o noktada Redis'e taşınmalı.
+
+**Sayaç artık gerçekten temizleniyor.** `RateLimiter.evictExpired` baştan beri yazılıydı ama **hiçbir yerden çağrılmıyordu**; süresi dolmuş her pencere haritada kalıyordu. IP anahtarlarında bu yavaş bir sızıntıydı, gerçek zamanlı bütçeler geldiğinde hızlandı: anahtar STOMP oturumu olduğu için **her yeni WebSocket bağlantısı kalıcı bir satır** bırakırdı. `RateLimiterEvictionScheduler` on dakikada bir süpürüyor; adım idempotent olduğu için çok örnekli kurulumda da zararsız.
 
 Testlerde `rate-limit.enabled=false`; açıkça test eden sınıflar `@TestPropertySource` ile kendi ayarını verir.
 
@@ -988,6 +995,10 @@ Ayrıca taşıma sınırları kondu: mesaj 64 KB, gönderim tamponu 512 KB, gön
 **Asıl kusur origin allowlist'inde değil, CORS filtresindeydi.** `realtime.origins.*` ve `OriginHandshakeInterceptor` baştan doğruydu ama **hiç çalışmıyordu**: `CorsConfig` filtresi `/**` altına kayıtlı ve REST allowlist'i ADR-0011 gereği **boş**, dolayısıyla `Origin` başlığı taşıyan her handshake isteği daha güvenlik zinciri sırasında **403** alıyordu. Yani `STOMP_PRODUCTION_ORIGIN` ne yazarsa yazsın `https://iskoala.com` üzerinden tarayıcı STOMP bağlantısı **kurulamıyordu**; allowlist ölü koddu. Tarayıcı WebSocket handshake'i CORS'a tabi değildir (preflight yok, `Access-Control-Allow-Origin` aranmaz) ama sunucudaki `CorsFilter` `Origin` başlığını görüp reddediyordu.
 
 `CorsConfig` artık gerçek zamanlı uç için **hiç CORS görüşü bildirmiyor** (`getCorsConfiguration` null döner), kararı tümüyle `OriginHandshakeInterceptor`'a bırakıyor. İki allowlist'in ayrı olması ADR-0011'in kararı; bu düzeltme o ayrımı fiilen çalışır hâle getiriyor. `/ws` için CORS yapılandırması **kopyalanmadı** — kopyalansaydı aynı origin listesi iki yerde durur ve ayrışırdı.
+
+**Muafiyet yol bazlı, `Upgrade` başlığına bakmıyor.** Yani `/ws` ve altındaki her istek CORS filtresini atlıyor, yalnızca gerçek handshake değil. Bu kabul edilebilir çünkü o önek **yalnızca** STOMP ucunu servis ediyor; altına ikinci bir handler eklenirse muafiyetin daraltılması gerekir.
+
+**Ret metni her zaman varsayılan dilde.** `MessageResolver` `LocaleContextHolder`'dan okuyor ve soket iş parçacığında `Accept-Language` çözümlenmiş bir istek yok; §2aj'nin "başlık yoksa Türkçe" varsayılanına düşülüyor. İstemcinin dilini soket üzerinden taşımak isteniyorsa `CONNECT` karesine bir dil başlığı eklenip burada okunması gerekir — bugün yapılmadı.
 
 `StompSubscriptionSecurityTest` on bir senaryoyu, `StompErrorFrameTest` ikisini, `StompConnectionRateLimitTest` üçünü ve `RealtimeFanoutTest` yedisini sabitliyor. `RealtimeHandshakeIT` beş kuralı **gerçek soket üzerinden** kanıtlıyor: izinli origin bağlanır, tanınmayan origin handshake'i geçemez, origin taşımayan native istemci bağlanır, geçersiz token oturum açamaz, ve **yetkisiz abonelik bağlantıyı düşürmeden o aboneliğe ret karesi döndürür**.
 
@@ -1724,7 +1735,6 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 - **Anonim değerlendirme — yapılmayacak** (§2am).
 
 **Sandbox'ta doğrulanması gereken:** Iyzico akışı uçtan uca test edilmedi. Protokol dokümana karşı denetlendi ve dört blocker düzeltildi (§2x), ama gerçek bir sandbox işlemiyle görülmesi gerekenler: ödeme → emanet → işçiye çıkış zinciri, ve **kısmi iade + disapprove ikilisinin sıralaması** — doküman marketplace'te bu ikisinin birlikte kullanımına dair sıra vermiyor. Faz 7C.
-
 
 ## 8. Soft delete
 

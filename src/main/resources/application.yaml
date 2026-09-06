@@ -155,6 +155,7 @@ notification-preferences:
 
 rate-limit:
   enabled: ${RATE_LIMIT_ENABLED:true}
+  eviction-cron: ${RATE_LIMIT_EVICTION_CRON:0 */10 * * * *}
   max-attempts: ${RATE_LIMIT_MAX_ATTEMPTS:10}
   window: ${RATE_LIMIT_WINDOW:1m}
   upload:

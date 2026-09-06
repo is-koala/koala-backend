@@ -38,8 +38,8 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     private static final Pattern PRESENCE_TOPIC =
             Pattern.compile("^/topic/presence/([0-9a-fA-F-]{36})$");
 
-    private static final String SUBSCRIBE_BUDGET = "stomp-subscribe:";
-    private static final String MESSAGE_BUDGET = "stomp-message:";
+    private static final String SUBSCRIBE_BUDGET = "stomp-subscribe";
+    private static final String MESSAGE_BUDGET = "stomp-message";
 
     private final JwtService jwtService;
     private final SessionService sessionService;
@@ -69,10 +69,16 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         switch (accessor.getCommand()) {
             case CONNECT -> authenticate(accessor);
             case SUBSCRIBE -> {
-                consume(accessor, SUBSCRIBE_BUDGET, rateLimitProperties.getRealtimeSubscribe());
+                if (!withinBudget(accessor, SUBSCRIBE_BUDGET, rateLimitProperties.getRealtimeSubscribe())) {
+                    throw new TooManyRequestsException(RealtimeMessages.TOO_MANY_FRAMES);
+                }
                 authoriseSubscription(accessor);
             }
-            case SEND -> consume(accessor, MESSAGE_BUDGET, rateLimitProperties.getRealtimeMessage());
+            case SEND -> {
+                if (!withinBudget(accessor, MESSAGE_BUDGET, rateLimitProperties.getRealtimeMessage())) {
+                    return null;
+                }
+            }
             default -> {
             }
         }
@@ -80,16 +86,20 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         return message;
     }
 
-    private void consume(StompHeaderAccessor accessor, String budget, RateLimitProperties.Bucket bucket) {
+    private boolean withinBudget(StompHeaderAccessor accessor, String budget,
+                                 RateLimitProperties.Bucket bucket) {
         String sessionId = accessor.getSessionId();
         if (sessionId == null) {
-            return;
+            log.warn("Realtime frame without a session id skipped the {} budget", budget);
+            return true;
         }
 
-        if (!rateLimiter.tryAcquire(budget + sessionId, bucket.getMaxAttempts(), bucket.getWindow())) {
-            log.warn("Realtime session {} exceeded its {} budget", sessionId, budget);
-            throw new TooManyRequestsException(RealtimeMessages.TOO_MANY_FRAMES);
+        if (rateLimiter.tryAcquire(budget + ":" + sessionId, bucket.getMaxAttempts(), bucket.getWindow())) {
+            return true;
         }
+
+        log.warn("Realtime session {} exceeded its {} budget", sessionId, budget);
+        return false;
     }
 
     private void authenticate(StompHeaderAccessor accessor) {

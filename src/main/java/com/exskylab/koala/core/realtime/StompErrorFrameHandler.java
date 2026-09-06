@@ -3,8 +3,8 @@ package com.exskylab.koala.core.realtime;
 import com.exskylab.koala.core.constants.RealtimeMessages;
 import com.exskylab.koala.core.dtos.realtime.response.RealtimeEventDto;
 import com.exskylab.koala.core.exceptions.KoalaException;
+import com.exskylab.koala.core.exceptions.UnauthorizedException;
 import com.exskylab.koala.core.helpers.MessageResolver;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
@@ -17,7 +17,6 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.util.UUID;
 
-@Slf4j
 @Component
 public class StompErrorFrameHandler extends StompSubProtocolErrorHandler {
 
@@ -76,16 +75,14 @@ public class StompErrorFrameHandler extends StompSubProtocolErrorHandler {
             }
             current = current.getCause();
         }
-        return null;
+        return new UnauthorizedException(RealtimeMessages.FRAME_REJECTED);
     }
 
     private String errorCode(KoalaException failure) {
-        return failure == null ? "REALTIME_FRAME_REJECTED" : failure.getErrorCode();
+        return failure.getErrorCode();
     }
 
     private String text(KoalaException failure) {
-        return failure == null
-                ? messageResolver.resolve(RealtimeMessages.FRAME_REJECTED)
-                : messageResolver.resolve(failure.getMessage());
+        return messageResolver.resolve(failure.getMessage());
     }
 }
