@@ -491,13 +491,121 @@ Testlerde `rate-limit.enabled=false`; açıkça test eden sınıflar `@TestPrope
 
 **IBAN artık `User` üzerinde değil.** `BankAccount` entity'sinde; birincil hesap `is_primary` ile işaretli, doğrulama `BankAccountManager` içinde. `users.iban` kolonu mevcut veriler `bank_accounts`'a kopyalandıktan sonra düşürüldü — iki kaynak bırakılmadı.
 
-**Banka hesabı HTTP yüzeyi koleksiyon tabanlı.** `GET/POST /users/me/bank-accounts`, `POST /users/me/bank-accounts/{accountId}/primary` ve `DELETE /users/me/bank-accounts/{accountId}` yalnızca oturum sahibinin kayıtlarına çalışır. DTO ham IBAN taşımaz; `maskedIban`, `id`, `primary` ve ilerideki sahiplik doğrulama akışına ayrılmış `verificationStatus` döner. İlk etkin hesap otomatik birincildir. Veritabanındaki kısmi benzersiz indeks aktif ve silinmemiş hesaplarda kullanıcı başına en fazla bir birincil kaydı garanti eder; kullanıcıya ait yazmalar transaction-scoped advisory lock ile seri hale getirildiği için eşzamanlı birincil seçimleri de bu invariant'ı bozmaz.
+**Banka hesabı HTTP yüzeyi koleksiyon tabanlı.** `GET/POST /users/me/bank-accounts`, `POST /users/me/bank-accounts/{accountId}/primary`, `POST /users/me/bank-accounts/{accountId}/verification` (§2k2) ve `DELETE /users/me/bank-accounts/{accountId}` yalnızca oturum sahibinin kayıtlarına çalışır. DTO ham IBAN taşımaz; `maskedIban`, `id`, `primary` ve ilerideki sahiplik doğrulama akışına ayrılmış `verificationStatus` döner. İlk etkin hesap otomatik birincildir. Veritabanındaki kısmi benzersiz indeks aktif ve silinmemiş hesaplarda kullanıcı başına en fazla bir birincil kaydı garanti eder; kullanıcıya ait yazmalar transaction-scoped advisory lock ile seri hale getirildiği için eşzamanlı birincil seçimleri de bu invariant'ı bozmaz.
 
 **Eski profil yazma sözleşmesi geçiş boyunca korunuyor.** `PATCH /users/me { iban }` yeni bir IBAN gelirse mevcut birincil kaydı yerinde günceller, aynı IBAN ikincil hesaplarda zaten varsa yeni kayıt açmadan onu birincil yapar. `GET /users/me` içindeki `maskedIban` her zaman koleksiyonun mevcut birincil hesabından üretilir; `users.iban` geri getirilmez ve ikinci bir doğruluk kaynağı oluşmaz. Yeni koleksiyon ucuna yalnızca Türkiye IBAN'ı (`TR`, 26 karakter, mod-97) kabul edilir; ham değer yanıta, hata mesajına, telemetry'ye veya log'a yazılmaz.
 
-**`verificationStatus` bu dalgada yalnızca ileriye uyumlu veri sözleşmesidir.** Mevcut ve yeni hesaplar `UNVERIFIED` başlar; eski profil ucu bir IBAN'ı değiştirdiğinde durum yeniden `UNVERIFIED` olur ve beyana dayalı `accountHolderName` temizlenir. `PENDING`, `VERIFIED` ve `EXPIRED` değerlerinin geçişleri, zaman aşımı ve ödeme kapısı #71'in sorumluluğundadır; bu koleksiyon yüzeyi bunları uygulamaz ve ödeme semantiğini değiştirmez.
+**`verificationStatus` artık ileriye uyumlu bir veri sözleşmesi değil, para yolunun kapısı** — geçişleri, zaman aşımı, yeniden deneme ve kapının yeri §2k2'de.
 
 `initiatePaymentSession` bütünüyle `@Transactional`: adres eksikliği ya da Iyzico hatası durumunda `Payment` kaydı da geri alınır, sahipsiz deneme kalmaz.
+
+## 2k2. IBAN sahipliği doğrulaması — para yolunu kapatan kontrol
+
+Zarar üç halkalı (`docs/research/uzaktan-kimlik-dogrulama.md` §7.1): kimlik iddiası, kartın gerçekliği ve
+**paranın gideceği hesabın sahipliği**. Üçüncüsü hiç sorulmuyordu: `IbanValidator` yalnızca uzunluk, ülke kodu
+ve mod-97 kontrol hanesine bakıyor, yani "bu IBAN geçerli bir IBAN mı" sorusunu cevaplıyor — "bu IBAN senin mi"
+sorusunu değil. Elinde başkasının gerçek kartı olan biri kurbanın TCKN'siyle ama **kendi IBAN'ıyla** alt üye
+işyeri açtırabiliyordu.
+
+**Yön (a) seçildi: kullanıcı kendi kayıtlı IBAN'ından Koala'ya küçük tutarlı bir transfer yapar.** Issue iki yön
+öneriyordu; (b) — Koala'dan kullanıcıya gönderim + dönen hesap sahibi adının karşılaştırılması — bankadan
+dönen adı okuma yeteneği gerektiriyor ve o yetenek bugün elimizde olduğu **doğrulanmış değil**. (a)'da kanıt
+kendiliğinden sağlam: gönderen IBAN kayıtlı IBAN'la eşleşmezse doğrulama geçmez, üçüncü tarafa bağımlılık yok.
+Bu, BDDK m.7/3 ve MASAK Tebliğ 19 m.6/4'ün "çip doğrulanamadığında ilk finansal hareket kişinin kendi banka
+hesabından yapılsın" çözümünün kopyası.
+
+**Durum modeli dört değerli, ve `is_verified` boolean'ı bilerek kullanılmadı.** "Hiç denenmedi" ile "denendi,
+tutmadı" ayrımı gerekiyor (§2n'deki rıza kaydı gerekçesinin aynısı): `UNVERIFIED` (hiç denenmedi),
+`PENDING` (transfer bekleniyor), `VERIFIED` (gönderen IBAN eşleşti), `EXPIRED` (denendi, tutmadı ya da süresi
+doldu). `bank_accounts` üzerine beklenen tutar, tekil referans, başlangıç/bitiş anı, doğrulanma anı, harcanan
+deneme sayısı ve `account_holder_name_verified` bayrağı eklendi.
+
+**Süresi dolmuş `PENDING` veritabanında beklemez, okunurken hesaplanır.** `BankAccountVerificationPolicy.effectiveStatus`
+`PENDING` + `expiresAt` geçmişte ise `EXPIRED` döndürüyor; kalıcı geçiş bir sonraki başlatmada yazılıyor. Bir
+zamanlayıcı eklenmedi — süpürme işi olmadan da hem kapı hem yanıt doğru davranıyor ve tek örnek varsayımına
+bir zamanlayıcı daha eklemeye değmedi (§7, Faz 11D).
+
+**Zaman aşımı 72 saat, deneme bütçesi 5.** İkisi de `bank.verification.*` altından, yani `.env` ile
+ayarlanabiliyor. Beklenen tutar `1.01`–`1.99` TL arasında rastgele bir kuruş; sabit tutar seçilmedi çünkü
+kuruş hanesi referansın yanında ikinci bir eşleştirme kanıtı veriyor. Tutar `BigDecimal`, ölçek 2 (§2e).
+Referans `KOALA-` + 8 karakter, karışabilen harfler (I, O, 0, 1) alfabede yok ve `verification_reference`
+üzerinde kısmi benzersiz indeks var.
+
+**Yeniden deneme kuralı: bekleyen bir doğrulama varken yeniden başlatmak yeni deneme harcamaz** — aynı tutar ve
+referans döner (idempotent). Deneme ancak `UNVERIFIED` ya da `EXPIRED` durumundan başlatıldığında harcanır.
+Gönderen IBAN ya da tutar tutmazsa o deneme `EXPIRED`'a düşer ve kullanıcı bütçesi bitene kadar yeniden
+başlatabilir. Başarısız deneme **kalıcı olmalı**, yoksa bütçe hiç tükenmezdi: `confirmVerification`
+`@Transactional(noRollbackFor = ValidationException.class)` taşıyor, aksi hâlde reddi yazan `UPDATE` de geri
+alınırdı.
+
+**IBAN değişince doğrulama düşer, ve bu kural entity'nin içinde.** `BankAccount.setIban` değeri
+karşılaştırıyor ve değiştiyse `forgetVerification()` çağırıyor: durum, referans, tutar, süreler, doğrulanma anı,
+deneme sayısı, hesap sahibi adı ve adın doğrulanmışlık bayrağı birlikte sıfırlanıyor. Kural manager'a yazılsaydı
+ikinci bir yazma yolu eklendiği gün sessizce atlanabilirdi — **doğru bir kararın sonradan eklenen bir
+mekanizmayla geçersiz kılınması** bu depodaki tekrar eden kusur (§2d2, #77). Hibernate `@Id` alan üzerinde
+olduğu için alan erişimi kullanıyor, yani veritabanından yükleme bu setter'a uğramıyor ve doğrulama
+hidrasyonda kaybolmuyor (`BankAccountIT` ve `IbanOwnershipGateIT` bunu gerçek Postgres'te doğruluyor).
+Deneme sayısının da sıfırlanması bilinçli: yeni IBAN yeni bütçe hak ediyor, aynı IBAN yeniden yazıldığında ise
+`Objects.equals` yüzünden hiçbir şey sıfırlanmıyor.
+
+**`accountHolderName` artık kullanıcının kendi adından türetilmiyor.** Alan yalnızca doğrulama bir ad
+döndürdüğünde doluyor: personel ekstredeki hesap sahibi adını `senderName` ile bildirirse yazılıyor ve
+`account_holder_name_verified` `true` oluyor; bildirmezse alan `null` kalıyor ve bayrak `false` — yani
+"doğrulanmamış" hâli, uydurma bir değerle değil **boşlukla** temsil ediliyor.
+
+### Transferin sisteme nasıl bildirildiği — seçilen yol ve eksik kalan
+
+**En basit çalışan yol seçildi: elle personel onayı.** `POST /admin/bank-account-verifications/{reference}/confirm`,
+ekstredeki gelen transferin gönderen IBAN'ını, tutarını ve varsa hesap sahibi adını alıyor; karşılaştırmayı
+Koala yapıyor. Uydurma bir banka entegrasyonu yazılmadı.
+
+Uç yeni bir `StaffPermission` ile korunuyor: `bank.account.verify` (`FINANCIAL`, mutating), seed'de yalnız
+`FINANCE_OFFICER`'a veriliyor (§2au'daki görev ayrılığı: ekstre okumak finans dalının işi). Mevcut bir iznin
+altına sokulmadı — `payout.release` para çıkarmayı, `payment.read` okumayı adlandırıyor; ikisi de bu eylem
+değil. Uç `/admin/**` altında olduğu için denetim kaydına giriyor (§2av).
+
+**Eksik kalanlar, açıkça:**
+
+1. **Banka bildirimi yok.** Koala'nın tahsilat hesabına gelen transferi kimse otomatik okumuyor; personel
+   ekstreye bakıp ucu çağırmak zorunda. Banka API'si ya da MT940/CAMT ekstre beslemesi geldiğinde aynı
+   `confirmVerification` çağrısı bir tüketiciden yapılabilir — servis imzası bunu zaten kaldırıyor.
+2. **Tahsilat IBAN'ı henüz yok.** `BANK_VERIFICATION_COLLECTION_IBAN` boşken doğrulama hiç başlatılamıyor
+   (502, `bank.account.verification.unavailable`) ve **hiçbir işçi emanetten para alamıyor**. Değer girilmeden
+   canlıya çıkılamaz; `.env.example` bunu yazıyor.
+3. **Gelen transferin iadesi düşünülmedi.** Doğrulama tutarı Koala'da kalıyor; kullanıcıya geri gönderilmesi ya
+   da ilk hakedişine eklenmesi ürün kararı.
+4. **Alt üye işyeri kaydındaki IBAN'ın tazelenmesi.** `UserProducerService` profil güncellemesinde birincil
+   IBAN'ı olduğu gibi kuyruğa yazıyor ve `IyzicoSynchronizationConsumer` onu alt üye işyerine geçiriyor;
+   bu yol **doğrulanmamış bir IBAN'ı sağlayıcıya taşıyabiliyor**. Emanet kapısı parayı yine durduruyor ama
+   sağlayıcıdaki kayıt bayat kalabiliyor. Kapatmak, doğrulanmış IBAN yokken güncellemenin ne göndereceğine
+   (atla mı, null mı) karar vermeyi gerektiriyor ve o karar Iyzico'nun cevabına bağlı (§2x, Faz 7C).
+5. **KKB IBAN Doğrulama Hizmeti** erişimi gelirse bu akışın yerini alabilir ya da onu tamamlayabilir; başvuru
+   insan işi ve #71'de duruyor.
+
+### Kapı nereye kondu ve neden
+
+**Karar: emanet çıkışı — `PayoutManager.releaseToWorker`.** Doğrulanmış birincil hesabı olmayan işçiye emanetten
+para çıkmıyor (409, `payout.worker.iban.not.verified`) ve `Payout.bankAccount` artık `orElse(null)` değil,
+doğrulanmış hesabın kendisi.
+
+**`JobApplicationManager.assertReadyToWork` bilerek değiştirilmedi.** Orada bugün yalnız IBAN'ın *varlığına*
+bakılıyor (§2ar) ve öyle kalıyor. Gerekçe: başvuruyu engellemek kullanıcıyı **zararın doğmasından çok önce**
+durdurur — henüz kimse ona para göndermeyecekken bankasına gönderir, üstelik hiç iş alamayacak bir kullanıcı
+için doğrulama transferi yaptırmak boşa iş. Zarar parayla doğuyor, kapı da tam orada kesiyor. Araştırmanın
+kendi ifadesi de bu: "işçinin **ilk emanet çıkışı** serbest bırakılmadan önce".
+
+**Ama emanet kapısı tek başına kâğıttan olurdu, bu yüzden ikinci bir nokta kapatıldı.** Paranın gerçekte gittiği
+IBAN Koala'nın tablosunda değil, Iyzico'daki alt üye işyeri kaydında duruyor ve o kayıt
+`JobAssignmentManager.createSubMerchantDtoForWorker` ile yazılıyor. Doğrulanmamış bir IBAN oraya bir kez
+yazıldıktan sonra emanet kapısı kilidi başka kapıda olan bir kapıyı bekliyor olurdu. O yüzden alt üye işyeri
+kaydına yalnız doğrulanmış IBAN gidiyor — hemen altındaki `isIdentityVerified` kontrolüyle **aynı desende**,
+kendi anahtarıyla (`job.assignment.iban.not.verified.for.worker`).
+
+**Bunun bedeli yazılı olsun:** işçinin IBAN'ı doğrulanmamışken **işveren ödeme oturumu açamıyor**, yani kapı
+pratikte işe alım anına da düşüyor. Kabul edildi çünkü depo aynı noktada aynı kararı zaten vermiş: iki satır
+aşağıda kimliği doğrulanmamış işçi için ödeme aynı şekilde reddediliyor. İstemcinin yapması gereken, işçiyi
+başvuru sonrası doğrulamaya yönlendirmek — `assertReadyToWork` bu yüzden serbest bırakıldı.
+
 
 ## 2l. Sayfalama ve ilan araması
 
@@ -2114,6 +2222,26 @@ Kural: bu tür testlerde başlangıç zamanı `LocalDateTime.now(POLICY_ZONE)` �
 
 **Kimlik kapısı testleri.** `IdentityVerificationRulesTest` altı kural: doğrulama artık hiçbir dış servise bağlı değil, ad Türkçe locale ile büyütülüyor, belge numarası saklanıyor, başka hesapta kayıtlı TCKN 409 alıyor, ikinci doğrulama hâlâ reddediliyor, rozet/bildirim/Iyzico senkronizasyon event'i çalışmaya devam ediyor. `EmployerIdentityGateTest` üç kural: doğrulanmış bireysel işveren ilan açabilir, doğrulanmamış açamaz, kapı adres oluşturulmadan önce çalışır. `PaymentSessionAuthorizationTest` iki kural kazandı: doğrulanmamış bireysel işveren ödeme başlatamaz ve alt üye işyeri hiç açılmaz, şirket ilanı bu kapıdan etkilenmez.
 
+**IBAN sahipliği testleri (§2k2).** `IbanVerificationRulesTest` on üç kural: başlatma tekil referans ve kuruş
+ölçekli bir tutar üretir, bekleyen doğrulama yeniden sorulduğunda aynı talimatı döndürür ve deneme harcamaz,
+**başka hesaptan gelen transfer doğrulamaz**, yanlış tutar doğrulamaz, kayıtlı hesaptan gelen transfer doğrular,
+ekstre ad taşımıyorsa `accountHolderName` doğrulanmamış kalır, taşıyorsa yazılır ve doğrulanmış işaretlenir,
+**süresi dolan doğrulama yeni talimatla yeniden başlatılabilir**, süresi geçtikten sonra gelen transfer
+reddedilir, deneme bütçesi tükenir, doğrulanmış hesap bankaya geri gönderilmez, tanınmayan referans 404,
+tahsilat hesabı tanımsızken doğrulama başlatılamaz. `BankAccountTest` üç kural kazandı: **doğrulanmış IBAN'ın
+üstüne yeni IBAN yazılınca doğrulamanın her izi düşer** (durum, referans, tutar, süre, deneme sayısı, ad),
+aynı IBAN yeniden gönderildiğinde doğrulama korunur, yalnız doğrulanmış birincil hesap doğrulanmış sayılır.
+`PayoutReleaseTest` iki kural kazandı: doğrulanmamış IBAN'lı işçiye emanet çıkmaz ve kuyruğa hiçbir mutabakat
+görevi girmez, çıkan `Payout` doğrulanmış hesabı gösterir.
+
+`IbanOwnershipGateIT` kapıyı **gerçek Postgres üzerinde** kanıtlıyor: emanetteki para doğrulanmamış IBAN'a
+çıkmıyor ve `payment_status` `HELD_IN_ESCROW` kalıyor, doğrulandığında çıkıyor, doğrulanmış IBAN'ın üstüne
+`savePrimaryAccount` ile yeni IBAN yazıldığında satırdaki bütün doğrulama izleri siliniyor ve kapı yeniden
+kapanıyor. `IbanVerificationIT` akışın tamamını HTTP üzerinden koşuyor: talimat üretimi ham IBAN'ı yankılamıyor,
+başka IBAN'dan gelen transfer `BANK_ACCOUNT_VERIFICATION_SENDER_MISMATCH` ile reddediliyor, kayıtlı IBAN'dan
+geleni doğruluyor, düşen deneme yeniden başlatılıp başarıya ulaşabiliyor, doğrulanmış hesap 409 alıyor,
+finans dalında olmayan personel onaylayamıyor, ve `PATCH /users/me` ile IBAN değiştirmek doğrulamayı düşürüyor.
+
 **Faz 26 testleri.** `OutboundHttpClientTest` giden HTTP istemcisinin JDK olanı olmadığını ve Boot varsayılanının hâlâ o olduğunu sabitliyor. `ApplicationReadinessTest` altı kural: hazır işçi başvurabilir, kimliği doğrulanmamış başvuramaz, adressiz başvuramaz, IBAN'sız başvuramaz, boş IBAN eksik sayılır, kimlik IBAN'dan önce kontrol edilir. `CancellationPreviewTest` sekiz kural: işçi kesintisiz tam iade görür, işveren pencere içinde kesintisiz, pencere dışında geç iptal oranıyla, iş başladıysa iade yok, zaten iptal edilmiş ve tamamlanmış atama `cancellableNow: false` döner (409 değil), önizleme hiçbir iz bırakmaz, taraf olmayan 404 alır. `AnonymousReviewMappingTest` ve `ReviewRulesTest` anonim değerlendirmeyi sabitliyor: adlı değerlendirme yazarını taşır, anonim taşımaz, liste eşlemesi de gizler, anonim kayıt yazarını veritabanında tutar, puanı ortalamaya girer, ikinci değerlendirme anonim de olsa 409 alır.
 
 **Iyzico protokol testleri.** `IyzicoProtocolTest` on kural sabitliyor — sahte bir HTTP sunucusuna karşı gerçek `RestTemplate` ile: uç yolları dokümandaki değerlerden sapmıyor, sorgulama doğru adrese gidiyor, her istekte `x-iyzi-rnd` var, başlıktaki rastgele anahtar imzalanan anahtarla aynı, imza `randomKey + yol + gövde` üzerinden üretiliyor, reddedilen ödeme exception değil sonuç döndürüyor, işlem kimliği ve tutar `itemTransactions[0]`'dan okunuyor, `status: failure` gövdesi 502'ye çevriliyor, 400 ile dönen hata gövdesi yine de ayrıştırılıyor, iade ondalık tutarla gidiyor. `PaymentCallbackTest` beş yeni kural kazandı: reddedilen ödeme emanet açmaz, dolandırıcılık reddi düşer, inceleme `IN_REVIEW`'da bekler, eksik tahsilat reddedilir, farklı para birimi reddedilir. `PayoutReleaseTest` iade yolunu sabitliyor: tam iade karta döner ve disapprove gerektirmez, kısmi iade her ikisini de kuyruğa alır.
@@ -2285,6 +2413,8 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 | `Review.anonymous` artık var: `POST /job-assignments/{id}/reviews` gövdesinde opsiyonel, `ReviewDto.author` anonimde `null` | §2am |
 | İptal kutusunda `GET /job-assignments/{id}/cancellation-preview` ile kesinti gösterilmeli | §2p |
 | Başvuru ekranı: kimlik/adres/IBAN eksikse "Başvur" kapalı olmalı, uç 400 döndürüyor | §2ar |
+| IBAN sahipliği doğrulaması: `POST /users/me/bank-accounts/{id}/verification` talimatı verir (tutar, referans, hedef IBAN, son tarih); doğrulanmamış IBAN'lı işçi için emanet çıkışı 409 (`PAYOUT_WORKER_IBAN_NOT_VERIFIED`) ve ödeme oturumu 400 (`JOB_ASSIGNMENT_IBAN_NOT_VERIFIED_FOR_WORKER`) döner | §2k2 |
+| `BankAccountDto.verificationStatus` artık gerçek bir kapı: `UNVERIFIED`/`PENDING`/`VERIFIED`/`EXPIRED` | §2k2 |
 | Bireysel ilan açma ekranı: kimlik doğrulanmamışsa kapalı olmalı (`JOB_INDIVIDUAL_EMPLOYER_IDENTITY_NOT_VERIFIED`) | §2aq |
 | Kimlik doğrulamada `sod` + `dg1` (base64) gönderilmeli — bayrak açıldığında zorunlu olacak | §2aq2 |
 | `dg11` gönderilirse ad ulusal karakterlerle çipten alınır, gönderilmezse istekteki ad korunur | §2aq2 |
