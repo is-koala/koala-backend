@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-06-81-iys-consent-tasks" author="koala">
+        <createTable tableName="iys_consent_tasks">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="decision_sequence" type="BIGINT" autoIncrement="true"><constraints nullable="false"/></column>
+            <column name="user_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="consent_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="channel" type="VARCHAR(16)"><constraints nullable="false"/></column>
+            <column name="recipient" type="VARCHAR(320)"><constraints nullable="false"/></column>
+            <column name="granted" type="BOOLEAN"><constraints nullable="false"/></column>
+            <column name="provider_source" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="status" type="VARCHAR(16)"><constraints nullable="false"/></column>
+            <column name="attempts" type="INTEGER" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="next_attempt_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="processing_started_at" type="TIMESTAMPTZ"/>
+            <column name="last_failure_code" type="VARCHAR(32)"/>
+            <column name="completed_at" type="TIMESTAMPTZ"/>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
+            <column name="deleted_by_id" type="UUID"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="iys_consent_tasks" baseColumnNames="user_id"
+                                 constraintName="fk_iys_consent_tasks_user"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="iys_consent_tasks" baseColumnNames="consent_id"
+                                 constraintName="fk_iys_consent_tasks_consent"
+                                 referencedTableName="commercial_message_consents" referencedColumnNames="id"/>
+        <sql>
+            CREATE UNIQUE INDEX uk_iys_consent_tasks_consent
+                ON iys_consent_tasks (consent_id) WHERE is_deleted = false;
+            CREATE INDEX idx_iys_consent_tasks_due
+                ON iys_consent_tasks (status, next_attempt_at) WHERE is_deleted = false;
+            CREATE UNIQUE INDEX uk_iys_consent_tasks_processing
+                ON iys_consent_tasks (user_id, channel)
+                WHERE status = 'PROCESSING' AND is_deleted = false;
+        </sql>
+    </changeSet>
+
+    <changeSet id="2026-09-06-81-iys-permission-states" author="koala">
+        <createTable tableName="iys_permission_states">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="user_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="channel" type="VARCHAR(16)"><constraints nullable="false"/></column>
+            <column name="recipient" type="VARCHAR(320)"><constraints nullable="false"/></column>
+            <column name="status" type="VARCHAR(16)"><constraints nullable="false"/></column>
+            <column name="provider_recorded_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="verified_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="provider_source" type="VARCHAR(32)"/>
+            <column name="next_reconciliation_at" type="TIMESTAMPTZ" defaultValueComputed="now()"><constraints nullable="false"/></column>
+            <column name="reconciliation_attempts" type="INTEGER" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="last_failure_code" type="VARCHAR(32)"/>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
+            <column name="deleted_by_id" type="UUID"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="iys_permission_states" baseColumnNames="user_id"
+                                 constraintName="fk_iys_permission_states_user"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <sql>
+            CREATE UNIQUE INDEX uk_iys_permission_states_user_channel
+                ON iys_permission_states (user_id, channel) WHERE is_deleted = false;
+            CREATE INDEX idx_iys_permission_states_reconciliation
+                ON iys_permission_states (next_reconciliation_at) WHERE is_deleted = false;
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

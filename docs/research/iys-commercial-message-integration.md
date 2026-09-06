@@ -3,6 +3,15 @@
 Tarih: 6 Eylül 2026
 İlgili issue: is-koala/koala-backend#31 (Dalga 3)
 
+## Dalga 7 teslim durumu
+
+Takip issue'su #47 kapsamında sağlayıcı istemcisi, izin outbox'ı ve retry/backoff, periyodik
+mutabakat, doğrulanmış izin önbelleği, gönderim kapısı ve SMS tercih yüzeyi uygulandı. Kod
+varsayılan olarak kapalı ve kimlik bilgileri eksikken fail-closed çalışır.
+
+Canlı sağlayıcı doğrulaması, ETBİS/hukuk onayı ve geçmiş kayıtların sağlayıcı tarafından
+onaylanmış ilk aktarımı hâlâ operasyonel kapıdır. Ayrıntılar `docs/runbooks/iys.md` içindedir.
+
 ## Kısa karar
 
 Issue #31 bildirim tercihi modelini, uçları, gönderim kapısını ve abonelikten çıkma bağlantısını

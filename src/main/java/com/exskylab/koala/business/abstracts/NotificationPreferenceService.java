@@ -5,7 +5,9 @@ import com.exskylab.koala.core.dtos.notificationPreference.response.Notification
 import com.exskylab.koala.core.helpers.ClientContext;
 import com.exskylab.koala.entities.NotificationCategory;
 import com.exskylab.koala.entities.NotificationChannel;
+import com.exskylab.koala.entities.User;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -18,4 +20,6 @@ public interface NotificationPreferenceService {
     List<NotificationPreferenceDto> updateMyPreferences(UpdateNotificationPreferencesDto request, ClientContext client);
 
     void unsubscribe(String rawToken, ClientContext client);
+
+    void applyIysWithdrawal(User user, NotificationChannel channel, Instant recordedAt);
 }

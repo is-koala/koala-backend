@@ -339,11 +339,11 @@ class RequestValidationTest {
     }
 
     @Test
-    void aChannelThatCarriesNoPreferenceCannotBeSubmitted() {
+    void smsCanBeSubmittedAsANotificationPreference() {
         UpdateNotificationPreferencesDto request = new UpdateNotificationPreferencesDto();
         request.setPreferences(List.of(entry(NotificationCategory.MARKETINGS, NotificationChannel.SMS, true)));
 
-        assertTrue(messagesFor(request).contains("{notification.preference.channel.unsupported}"));
+        assertTrue(isValid(request));
     }
 
     private NotificationPreferenceEntryDto entry(NotificationCategory category, NotificationChannel channel,

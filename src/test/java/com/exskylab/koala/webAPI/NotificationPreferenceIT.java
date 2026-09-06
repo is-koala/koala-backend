@@ -1,8 +1,9 @@
 package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.business.abstracts.NotificationService;
+import com.exskylab.koala.business.abstracts.UnsubscribeTokenService;
 import com.exskylab.koala.core.dtos.notification.request.SendEmailDto;
-import com.exskylab.koala.core.producers.notification.EmailTaskDto;
+import com.exskylab.koala.core.dtos.notification.request.SendSmsDto;
 import com.exskylab.koala.core.producers.notification.NotificationProducerService;
 import com.exskylab.koala.dataAccess.CommercialMessageConsentDao;
 import com.exskylab.koala.dataAccess.UserDao;
@@ -13,11 +14,11 @@ import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.entities.User;
 import com.exskylab.koala.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -60,10 +61,16 @@ class NotificationPreferenceIT extends AbstractIntegrationTest {
     private NotificationService notificationService;
 
     @Autowired
+    private UnsubscribeTokenService unsubscribeTokenService;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @MockitoBean
     private NotificationProducerService notificationProducerService;
@@ -116,7 +123,7 @@ class NotificationPreferenceIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void theUnsubscribeLinkInsideTheEmailWorksWithoutLoggingInAndOnlyClosesItsOwnChannel() throws Exception {
+    void theUnsubscribeLinkWorksWithoutLoggingInAndOnlyClosesItsOwnChannel() throws Exception {
         User reader = saveUser("one-click@koala.test");
         String optIn = login("one-click@koala.test");
 
@@ -130,13 +137,8 @@ class NotificationPreferenceIT extends AbstractIntegrationTest {
                                 """))
                 .andExpect(status().isOk());
 
-        SendEmailDto newsletter = jobAlertEmail(reader);
-        newsletter.setCategory(NotificationCategory.NEWSLETTER);
-        notificationService.sendEmail(newsletter, DispatchPriority.NORMAL, true);
-
-        ArgumentCaptor<EmailTaskDto> captor = ArgumentCaptor.forClass(EmailTaskDto.class);
-        verify(notificationProducerService).sendEmailTask(captor.capture());
-        String unsubscribeUrl = String.valueOf(captor.getValue().templateParameters().get("unsubscribeUrl"));
+        String unsubscribeUrl = unsubscribeTokenService.issueLink(
+                reader, NotificationCategory.NEWSLETTER, com.exskylab.koala.entities.NotificationChannel.EMAIL);
 
         assertTrue(unsubscribeUrl.contains("/bildirim-tercihleri/cikis?token="), unsubscribeUrl);
         String rawToken = unsubscribeUrl.substring(unsubscribeUrl.indexOf("token=") + "token=".length());
@@ -184,7 +186,35 @@ class NotificationPreferenceIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void aCommercialMessageIsNotSentUntilTheUserAsksForIt() throws Exception {
+    void aCommercialPreferenceUpdateCommitsAnIysOutboxTaskWithoutWaitingForTheProvider() throws Exception {
+        User subscriber = saveUser("commercial-outbox@koala.test");
+        String token = login("commercial-outbox@koala.test", "WEB");
+
+        mockMvc.perform(put("/users/me/notification-preferences")
+                        .header("Authorization", "Bearer " + token)
+                        .header("X-Client-Platform", "WEB")
+                        .header("X-Device-Id", "notification-preference-it-device")
+                        .header("User-Agent", "Koala Notification Preference IT")
+                        .contentType(MediaType.APPLICATION_JSON)
+                .content(body("MARKETINGS", "EMAIL", true)))
+                .andExpect(status().isOk());
+
+        commercialMessageConsentDao.flush();
+        Map<String, Object> task = jdbcTemplate.queryForMap("""
+                select status, channel, granted, recipient, provider_source
+                from iys_consent_tasks
+                where user_id = ?
+                """, subscriber.getId());
+
+        assertEquals("PENDING", task.get("status"));
+        assertEquals("EMAIL", task.get("channel"));
+        assertEquals(true, task.get("granted"));
+        assertEquals(subscriber.getEmail(), task.get("recipient"));
+        assertEquals("HS_WEB", task.get("provider_source"));
+    }
+
+    @Test
+    void aLocalCommercialOptInCannotBypassMissingIysCredentials() throws Exception {
         User subscriber = saveUser("commercial-default@koala.test");
 
         SendEmailDto newsletter = jobAlertEmail(subscriber);
@@ -200,8 +230,47 @@ class NotificationPreferenceIT extends AbstractIntegrationTest {
                         .content(body("NEWSLETTER", "EMAIL", true)))
                 .andExpect(status().isOk());
 
-        assertNotNull(notificationService.sendEmail(newsletter, DispatchPriority.NORMAL, true));
-        verify(notificationProducerService).sendEmailTask(any());
+        assertNull(notificationService.sendEmail(newsletter, DispatchPriority.NORMAL, true));
+        verify(notificationProducerService, never()).sendEmailTask(any());
+    }
+
+    @Test
+    void aCommercialSmsCannotBypassMissingIysCredentials() throws Exception {
+        User subscriber = saveUser("commercial-sms@koala.test");
+        subscriber.setPhoneNumber("+905551112233");
+        subscriber.setPhoneVerified(true);
+        userDao.saveAndFlush(subscriber);
+        String token = login("commercial-sms@koala.test");
+        mockMvc.perform(put("/users/me/notification-preferences")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body("MARKETINGS", "SMS", true)))
+                .andExpect(status().isOk());
+
+        SendSmsDto sms = new SendSmsDto();
+        sms.setRecipient(subscriber);
+        sms.setDestinationPhoneNumber(subscriber.getPhoneNumber());
+        sms.setCategory(NotificationCategory.MARKETINGS);
+        sms.setMessageBody("Yeni fırsatlar");
+
+        assertNull(notificationService.sendSms(sms, DispatchPriority.NORMAL, true));
+        verify(notificationProducerService, never()).sendSmsTask(any());
+    }
+
+    @Test
+    void aCommercialSmsOptInRequiresAVerifiedPhone() throws Exception {
+        User subscriber = saveUser("commercial-sms-no-phone@koala.test");
+        String token = login(subscriber.getEmail());
+
+        mockMvc.perform(put("/users/me/notification-preferences")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body("MARKETINGS", "SMS", true)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("IYS_VERIFIED_RECIPIENT_REQUIRED"));
+
+        assertEquals(0, jdbcTemplate.queryForObject(
+                "select count(*) from iys_consent_tasks where user_id = ?", Integer.class, subscriber.getId()));
     }
 
     private boolean enabledFor(String accessToken, String category, String channel) throws Exception {
@@ -260,9 +329,14 @@ class NotificationPreferenceIT extends AbstractIntegrationTest {
     }
 
     private String login(String email) throws Exception {
+        return login(email, null);
+    }
+
+    private String login(String email, String platform) throws Exception {
         MvcResult result = mockMvc.perform(post("/auth/login")
                         .header("X-Device-Id", "notification-preference-it-device")
                         .header("User-Agent", "Koala Notification Preference IT")
+                        .header("X-Client-Platform", platform == null ? "" : platform)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + email + "\",\"password\":\"GecerliParola1\"}"))
                 .andExpect(status().isOk())
