@@ -1,11 +1,14 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.NotificationPreferenceService;
+import com.exskylab.koala.business.abstracts.IysService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.UnsubscribeTokenService;
 import com.exskylab.koala.core.dtos.notificationPreference.request.NotificationPreferenceEntryDto;
 import com.exskylab.koala.core.dtos.notificationPreference.request.UpdateNotificationPreferencesDto;
 import com.exskylab.koala.core.dtos.notificationPreference.response.NotificationPreferenceDto;
+import com.exskylab.koala.core.constants.IysMessages;
+import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.helpers.ClientContext;
 import com.exskylab.koala.dataAccess.CommercialMessageConsentDao;
 import com.exskylab.koala.dataAccess.NotificationPreferenceDao;
@@ -37,15 +40,18 @@ public class NotificationPreferenceManager implements NotificationPreferenceServ
     private final CommercialMessageConsentDao commercialMessageConsentDao;
     private final UnsubscribeTokenService unsubscribeTokenService;
     private final SecurityService securityService;
+    private final IysService iysService;
 
     public NotificationPreferenceManager(NotificationPreferenceDao notificationPreferenceDao,
                                          CommercialMessageConsentDao commercialMessageConsentDao,
                                          UnsubscribeTokenService unsubscribeTokenService,
-                                         SecurityService securityService) {
+                                         SecurityService securityService,
+                                         IysService iysService) {
         this.notificationPreferenceDao = notificationPreferenceDao;
         this.commercialMessageConsentDao = commercialMessageConsentDao;
         this.unsubscribeTokenService = unsubscribeTokenService;
         this.securityService = securityService;
+        this.iysService = iysService;
     }
 
     @Override
@@ -72,14 +78,29 @@ public class NotificationPreferenceManager implements NotificationPreferenceServ
         Map<String, NotificationPreference> stored = storedRowsOf(owner.getId());
 
         for (NotificationPreferenceEntryDto entry : request.getPreferences()) {
+            requireVerifiedRecipient(owner, entry);
             apply(owner, entry.getCategory(), entry.getChannel(), entry.getEnabled(), stored);
             recordCommercialDecision(owner, entry.getCategory(), entry.getChannel(), entry.getEnabled(),
-                    CommercialConsentSource.PREFERENCE_CENTRE, client);
+                    CommercialConsentSource.PREFERENCE_CENTRE, client, stored);
         }
 
         log.info("Notification preferences updated for user {}: {} decisions",
                 owner.getId(), request.getPreferences().size());
         return resolve(stored);
+    }
+
+    private void requireVerifiedRecipient(User owner, NotificationPreferenceEntryDto entry) {
+        if (!entry.getEnabled() || !entry.getCategory().getKind().isCommercial()) {
+            return;
+        }
+        boolean verified = switch (entry.getChannel()) {
+            case EMAIL -> owner.isEmailVerified() && owner.getEmail() != null && !owner.getEmail().isBlank();
+            case SMS -> owner.isPhoneVerified() && owner.getPhoneNumber() != null && !owner.getPhoneNumber().isBlank();
+            case PUSH, IN_APP -> true;
+        };
+        if (!verified) {
+            throw new ValidationException(IysMessages.VERIFIED_RECIPIENT_REQUIRED);
+        }
     }
 
     @Override
@@ -88,12 +109,34 @@ public class NotificationPreferenceManager implements NotificationPreferenceServ
         UnsubscribeToken token = unsubscribeTokenService.consume(rawToken);
         User owner = token.getUser();
 
-        apply(owner, token.getCategory(), token.getChannel(), false, storedRowsOf(owner.getId()));
+        Map<String, NotificationPreference> stored = storedRowsOf(owner.getId());
+        apply(owner, token.getCategory(), token.getChannel(), false, stored);
         recordCommercialDecision(owner, token.getCategory(), token.getChannel(), false,
-                CommercialConsentSource.UNSUBSCRIBE_LINK, client);
+                CommercialConsentSource.UNSUBSCRIBE_LINK, client, stored);
 
         log.info("Unsubscribe link switched {} off on {} for user {}",
                 token.getCategory(), token.getChannel(), owner.getId());
+    }
+
+    @Override
+    @Transactional
+    public void applyIysWithdrawal(User owner, NotificationChannel channel, Instant recordedAt) {
+        Map<String, NotificationPreference> stored = storedRowsOf(owner.getId());
+        for (NotificationCategory category : NotificationCategory.values()) {
+            if (!category.getKind().isCommercial()) {
+                continue;
+            }
+            apply(owner, category, channel, false, stored);
+            if (!commercialMessageConsentDao
+                    .existsByUserIdAndCategoryAndChannelAndGrantedAndSourceAndRecordedAt(
+                            owner.getId(), category, channel, false,
+                            CommercialConsentSource.IYS_RECONCILIATION, recordedAt)) {
+                CommercialMessageConsent consent = consent(owner, category, channel, false,
+                        CommercialConsentSource.IYS_RECONCILIATION, recordedAt, null);
+                commercialMessageConsentDao.save(consent);
+            }
+        }
+        log.info("IYS withdrawal applied to commercial preferences for user {} on {}", owner.getId(), channel);
     }
 
     private void apply(User owner, NotificationCategory category, NotificationChannel channel, boolean enabled,
@@ -113,23 +156,41 @@ public class NotificationPreferenceManager implements NotificationPreferenceServ
     }
 
     private void recordCommercialDecision(User owner, NotificationCategory category, NotificationChannel channel,
-                                          boolean granted, CommercialConsentSource source, ClientContext client) {
+                                          boolean granted, CommercialConsentSource source, ClientContext client,
+                                          Map<String, NotificationPreference> stored) {
         if (!category.getKind().isCommercial()) {
             return;
         }
 
+        CommercialMessageConsent consent = consent(owner, category, channel, granted, source, Instant.now(), client);
+
+        commercialMessageConsentDao.save(consent);
+        iysService.enqueue(owner, consent, channel, hasCommercialOptIn(channel, stored), client);
+        log.info("Commercial message consent {} recorded for user {} on {}", granted, owner.getId(), channel);
+    }
+
+    private CommercialMessageConsent consent(User owner, NotificationCategory category, NotificationChannel channel,
+                                               boolean granted, CommercialConsentSource source, Instant recordedAt,
+                                               ClientContext client) {
         CommercialMessageConsent consent = new CommercialMessageConsent();
         consent.setUser(owner);
         consent.setCategory(category);
         consent.setChannel(channel);
         consent.setGranted(granted);
-        consent.setRecordedAt(Instant.now());
+        consent.setRecordedAt(recordedAt);
         consent.setIpAddress(client == null ? null : client.ipAddress());
         consent.setUserAgent(truncate(client == null ? null : client.userAgent()));
         consent.setSource(source);
+        return consent;
+    }
 
-        commercialMessageConsentDao.save(consent);
-        log.info("Commercial message consent {} recorded for user {} on {}", granted, owner.getId(), channel);
+    private boolean hasCommercialOptIn(NotificationChannel channel, Map<String, NotificationPreference> stored) {
+        for (NotificationCategory category : NotificationCategory.values()) {
+            if (category.getKind().isCommercial() && enabledFor(category, stored.get(keyOf(category, channel)))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String truncate(String userAgent) {

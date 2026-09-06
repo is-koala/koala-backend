@@ -1,13 +1,21 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.LegalService;
+import com.exskylab.koala.business.abstracts.IysService;
 import com.exskylab.koala.core.constants.LegalMessages;
+import com.exskylab.koala.core.utilities.iys.IysConsentRequest;
+import com.exskylab.koala.core.utilities.iys.IysPermissionResult;
+import com.exskylab.koala.core.utilities.iys.IysProviderClient;
+import com.exskylab.koala.entities.NotificationChannel;
 import com.exskylab.koala.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import jakarta.persistence.EntityManager;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -16,8 +24,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @Transactional
+@TestPropertySource(properties = {
+        "iys.enabled=true", "iys.api-key=test", "iys.api-hash=test", "iys.brand-code=test",
+        "iys.recipient-encryption-key=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+})
 class AccountDeletionLifecycleIT extends AbstractIntegrationTest {
 
     @Autowired
@@ -25,6 +40,10 @@ class AccountDeletionLifecycleIT extends AbstractIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired private IysService iysService;
+    @Autowired private EntityManager entityManager;
+    @MockitoBean private IysProviderClient iysProviderClient;
 
     @Test
     void aCleanAccountIsAnonymizedIdempotentlyWhileFinancialAndConsentRecordsRemain() {
@@ -43,6 +62,9 @@ class AccountDeletionLifecycleIT extends AbstractIntegrationTest {
         UUID reviewId = UUID.randomUUID();
         UUID blockId = UUID.randomUUID();
         UUID cancellationId = UUID.randomUUID();
+        UUID commercialConsentId = UUID.randomUUID();
+        UUID iysTaskId = UUID.randomUUID();
+        UUID iysStateId = UUID.randomUUID();
 
         UUID countryId = jdbcTemplate.queryForObject("select id from countries limit 1", UUID.class);
         UUID cityId = jdbcTemplate.queryForObject("select id from cities where country_id = ? limit 1",
@@ -112,7 +134,20 @@ class AccountDeletionLifecycleIT extends AbstractIntegrationTest {
                      user_agent, source, created_at, is_deleted)
                 values (?, ?, 'NEWSLETTER', 'EMAIL', true, now(), '198.51.100.5',
                         'commercial-test-agent', 'PREFERENCE_CENTRE', now(), false)
-                """, UUID.randomUUID(), userId);
+                """, commercialConsentId, userId);
+        jdbcTemplate.update("""
+                insert into iys_consent_tasks
+                    (id, user_id, consent_id, channel, recipient, granted, provider_source,
+                     status, attempts, next_attempt_at, last_failure_code, created_at, is_deleted)
+                values (?, ?, ?, 'EMAIL', ?, false, 'HS_WEB', 'PENDING', 1, now(),
+                        'PROVIDER_UNAVAILABLE', now(), false)
+                """, iysTaskId, userId, commercialConsentId, "worker-" + userId + "@example.test");
+        jdbcTemplate.update("""
+                insert into iys_permission_states
+                    (id, user_id, channel, recipient, status, provider_recorded_at, verified_at,
+                     provider_source, created_at, is_deleted)
+                values (?, ?, 'EMAIL', ?, 'GRANTED', now(), now(), 'HS_WEB', now(), false)
+                """, iysStateId, userId, "worker-" + userId + "@example.test");
         jdbcTemplate.update("""
                 insert into unsubscribe_tokens
                     (id, user_id, category, channel, token_digest, expires_at, created_at, is_deleted)
@@ -255,6 +290,38 @@ class AccountDeletionLifecycleIT extends AbstractIntegrationTest {
                 "select is_deleted from unsubscribe_tokens where user_id = ?", Boolean.class, userId)));
         assertTrue(Boolean.TRUE.equals(jdbcTemplate.queryForObject(
                 "select deleted_at is not null from unsubscribe_tokens where user_id = ?", Boolean.class, userId)));
+        assertEquals("[anonymized]", jdbcTemplate.queryForObject(
+                "select recipient from iys_consent_tasks where id = ?", String.class, iysTaskId));
+        assertEquals("PENDING", jdbcTemplate.queryForObject(
+                "select status from iys_consent_tasks where id = ?", String.class, iysTaskId));
+        assertNull(jdbcTemplate.queryForObject(
+                "select last_failure_code from iys_consent_tasks where id = ?", String.class, iysTaskId));
+        String retainedRecipient = jdbcTemplate.queryForObject(
+                "select retained_recipient_ciphertext from iys_consent_tasks where id = ?", String.class, iysTaskId);
+        assertTrue(retainedRecipient != null && retainedRecipient.startsWith("v1:"));
+        assertFalse(retainedRecipient.contains("worker-"));
+        assertTrue(Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                "select recipient_retain_until > now() from iys_consent_tasks where id = ?",
+                Boolean.class, iysTaskId)));
+        String originalRecipient = "worker-" + userId + "@example.test";
+        when(iysProviderClient.lookupConsent(originalRecipient, NotificationChannel.EMAIL))
+                .thenReturn(new IysPermissionResult(originalRecipient, NotificationChannel.EMAIL,
+                        false, Instant.now(), "HS_WEB"));
+        entityManager.flush();
+        entityManager.clear();
+        assertTrue(iysService.runTask(iysTaskId));
+        verify(iysProviderClient).registerConsent(any(IysConsentRequest.class));
+        entityManager.flush();
+        assertEquals("COMPLETED", jdbcTemplate.queryForObject(
+                "select status from iys_consent_tasks where id = ?", String.class, iysTaskId));
+        assertNull(jdbcTemplate.queryForObject(
+                "select retained_recipient_ciphertext from iys_consent_tasks where id = ?", String.class, iysTaskId));
+        assertEquals("[anonymized]", jdbcTemplate.queryForObject(
+                "select recipient from iys_permission_states where id = ?", String.class, iysStateId));
+        assertNull(jdbcTemplate.queryForObject(
+                "select provider_source from iys_permission_states where id = ?", String.class, iysStateId));
+        assertTrue(Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                "select is_deleted from iys_permission_states where id = ?", Boolean.class, iysStateId)));
         assertEquals("ANONYMIZED", jdbcTemplate.queryForObject(
                 "select status from account_deletion_requests where id = ?", String.class, requestId));
         assertNull(jdbcTemplate.queryForObject(

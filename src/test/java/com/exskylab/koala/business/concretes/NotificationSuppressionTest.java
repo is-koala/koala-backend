@@ -1,6 +1,7 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.DeviceService;
+import com.exskylab.koala.business.abstracts.IysService;
 import com.exskylab.koala.business.abstracts.NotificationPreferenceService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.UnsubscribeTokenService;
@@ -41,6 +42,7 @@ class NotificationSuppressionTest {
     private NotificationDao notificationDao;
     private NotificationProducerService producer;
     private NotificationPreferenceService preferences;
+    private IysService iysService;
     private NotificationManager manager;
     private User recipient;
 
@@ -50,11 +52,14 @@ class NotificationSuppressionTest {
         producer = mock(NotificationProducerService.class);
         preferences = mock(NotificationPreferenceService.class);
         when(preferences.isAllowed(any(), any(), any())).thenReturn(true);
-
         recipient = new User();
         recipient.setId(UUID.randomUUID());
         recipient.setFirstName("Ada");
         recipient.setEmail("ada@koala.test");
+
+        iysService = mock(IysService.class);
+        when(iysService.isAllowed(eq(recipient), eq(NotificationChannel.EMAIL), eq(recipient.getEmail())))
+                .thenReturn(true);
 
         SecurityService security = mock(SecurityService.class);
         when(security.getAuthenticatedUserId()).thenReturn(recipient.getId());
@@ -71,7 +76,7 @@ class NotificationSuppressionTest {
 
         manager = new NotificationManager(notificationDao, producer, devices,
                 new ObjectMapper(), security, new PageableSanitizer(),
-                preferences, unsubscribeTokens);
+                preferences, unsubscribeTokens, iysService);
 
         when(notificationDao.save(any())).thenAnswer(call -> call.getArgument(0));
     }
@@ -209,7 +214,7 @@ class NotificationSuppressionTest {
 
         manager = new NotificationManager(notificationDao, producer,
                 mock(DeviceService.class), new ObjectMapper(),
-                mock(SecurityService.class), new PageableSanitizer(), preferences, unsubscribeTokens);
+                mock(SecurityService.class), new PageableSanitizer(), preferences, unsubscribeTokens, iysService);
 
         manager.sendEmail(email(NotificationCategory.NEWSLETTER), DispatchPriority.NORMAL, true);
 
@@ -221,11 +226,31 @@ class NotificationSuppressionTest {
         UnsubscribeTokenService unsubscribeTokens = mock(UnsubscribeTokenService.class);
         manager = new NotificationManager(notificationDao, producer,
                 mock(DeviceService.class), new ObjectMapper(),
-                mock(SecurityService.class), new PageableSanitizer(), preferences, unsubscribeTokens);
+                mock(SecurityService.class), new PageableSanitizer(), preferences, unsubscribeTokens, iysService);
         switchedOff(NotificationCategory.NEWSLETTER, NotificationChannel.EMAIL);
 
         manager.sendEmail(email(NotificationCategory.NEWSLETTER), DispatchPriority.NORMAL, true);
 
         verify(unsubscribeTokens, never()).issueLink(any(), any(), any());
+    }
+
+    @Test
+    void aCommercialEmailWithoutAKnownRecipientIsSuppressedByIys() {
+        SendEmailDto newsletter = email(NotificationCategory.NEWSLETTER);
+        newsletter.setRecipient(null);
+
+        assertNull(manager.sendEmail(newsletter, DispatchPriority.NORMAL, true));
+
+        verify(producer, never()).sendEmailTask(any());
+    }
+
+    @Test
+    void aCommercialEmailCannotBorrowAnotherRecipientsIysPermission() {
+        SendEmailDto newsletter = email(NotificationCategory.NEWSLETTER);
+        newsletter.setDestinationEmail("other@koala.test");
+
+        assertNull(manager.sendEmail(newsletter, DispatchPriority.NORMAL, true));
+
+        verify(producer, never()).sendEmailTask(any());
     }
 }

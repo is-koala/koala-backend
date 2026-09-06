@@ -273,6 +273,33 @@ sms:
     apiHash: ${SMS_API_HASH:}
     sender: ${SMS_SENDER:KOALA}
 
+iys:
+  enabled: ${IYS_ENABLED:false}
+  api-url: ${IYS_API_URL:https://api.iletimerkezi.com/v1/consent}
+  api-key: ${IYS_API_KEY:}
+  api-hash: ${IYS_API_HASH:}
+  brand-code: ${IYS_BRAND_CODE:}
+  sources:
+    web: ${IYS_SOURCE_WEB:HS_WEB}
+    mobile: ${IYS_SOURCE_MOBILE:HS_MOBIL}
+    unknown: ${IYS_SOURCE_UNKNOWN:HS_EORTAM}
+    unsubscribe: ${IYS_SOURCE_UNSUBSCRIBE:HS_EPOSTA}
+  permission-max-age: ${IYS_PERMISSION_MAX_AGE:1h}
+  claim-timeout: ${IYS_CLAIM_TIMEOUT:5m}
+  recipient-encryption-key: ${IYS_RECIPIENT_ENCRYPTION_KEY:}
+  deletion-withdrawal-retention: ${IYS_DELETION_WITHDRAWAL_RETENTION:3d}
+  retry:
+    enabled: ${IYS_RETRY_ENABLED:true}
+    fixed-delay: ${IYS_RETRY_FIXED_DELAY:30s}
+    max-attempts: ${IYS_RETRY_MAX_ATTEMPTS:8}
+    initial-backoff: ${IYS_RETRY_INITIAL_BACKOFF:1m}
+    max-backoff: ${IYS_RETRY_MAX_BACKOFF:6h}
+    batch-size: ${IYS_RETRY_BATCH_SIZE:50}
+  reconciliation:
+    enabled: ${IYS_RECONCILIATION_ENABLED:true}
+    fixed-delay: ${IYS_RECONCILIATION_FIXED_DELAY:15m}
+    batch-size: ${IYS_RECONCILIATION_BATCH_SIZE:50}
+
 storage:
   type: ${STORAGE_TYPE:local}
   bucket: ${STORAGE_BUCKET:}

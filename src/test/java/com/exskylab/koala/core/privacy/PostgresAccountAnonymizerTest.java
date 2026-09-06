@@ -1,5 +1,7 @@
 package com.exskylab.koala.core.privacy;
 
+import com.exskylab.koala.core.properties.IysProperties;
+import com.exskylab.koala.core.utilities.iys.IysRecipientCipher;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -35,7 +37,9 @@ class PostgresAccountAnonymizerTest {
                 any(), any(), any())).thenReturn(List.of(key));
         TransactionSynchronizationManager.initSynchronization();
 
-        new PostgresAccountAnonymizer(jdbcTemplate, outbox)
+        IysProperties properties = new IysProperties();
+        properties.setRecipientEncryptionKey("MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=");
+        new PostgresAccountAnonymizer(jdbcTemplate, outbox, new IysRecipientCipher(properties), properties)
                 .anonymize(userId, UUID.randomUUID());
 
         verify(outbox).enqueue(List.of(key));
