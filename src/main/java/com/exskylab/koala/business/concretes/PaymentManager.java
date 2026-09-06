@@ -126,8 +126,16 @@ public class PaymentManager implements PaymentService {
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void attachProviderSubmerchantKey(Payment payment, String providerSubmerchantKey) {
+        payment.setProviderSubmerchantKey(providerSubmerchantKey);
+        paymentDao.saveAndFlush(payment);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void attachProviderToken(Payment payment, String providerToken) {
         payment.setProviderToken(providerToken);
+        payment.setNextVerificationAt(Instant.now().plus(verificationProperties.getInitialReconciliationDelay()));
         try {
             paymentDao.saveAndFlush(payment);
         } catch (DataIntegrityViolationException exception) {
@@ -180,7 +188,7 @@ public class PaymentManager implements PaymentService {
     @Transactional(readOnly = true)
     public List<UUID> findDueVerificationAttemptIds() {
         return paymentDao.findDueVerificationIds(
-                List.of(PaymentAttemptStatus.VERIFY_PENDING, PaymentAttemptStatus.IN_REVIEW),
+                PENDING_STATUSES,
                 Instant.now(), PageRequest.of(0, verificationProperties.getBatchSize()));
     }
 
@@ -211,18 +219,41 @@ public class PaymentManager implements PaymentService {
             return deferVerification(payment);
         }
 
-        if (!"SUCCESS".equalsIgnoreCase(result.getPaymentStatus())) {
+        String identityMismatch = identityMismatch(payment, result);
+        if (identityMismatch != null) {
+            paymentMetrics.callbackAmountMismatch();
+            log.error("Payment {} remains blocked: provider result does not identify its attempt ({})",
+                    payment.getId(), identityMismatch);
+            return deferVerification(payment);
+        }
+
+        if ("FAILURE".equalsIgnoreCase(result.getPaymentStatus())) {
             paymentMetrics.callbackDeclined();
             log.info("Payment {} was not completed by the provider, paymentStatus={}",
                     payment.getId(), result.getPaymentStatus());
             return fail(payment, "paymentStatus=" + result.getPaymentStatus());
         }
 
+        if (!"SUCCESS".equalsIgnoreCase(result.getPaymentStatus())) {
+            log.warn("Payment {} returned an indeterminate paymentStatus={}",
+                    payment.getId(), result.getPaymentStatus());
+            return deferVerification(payment);
+        }
+
+        String snapshotMismatch = successfulSnapshotMismatch(payment, result);
+        if (snapshotMismatch != null) {
+            paymentMetrics.callbackAmountMismatch();
+            log.error("Payment {} remains blocked: provider result does not match its immutable snapshot ({})",
+                    payment.getId(), snapshotMismatch);
+            return deferVerification(payment);
+        }
+
         if (!VERIFIED_BY_THREE_D_SECURE.equals(result.getMdStatus())) {
             paymentMetrics.callbackThreeDSecureVerificationFailed();
             log.warn("Payment {} rejected: 3-D Secure verification did not succeed, mdStatus={}",
                     payment.getId(), result.getMdStatus());
-            return fail(payment, PaymentMessages.THREE_D_SECURE_FAILED);
+            return scheduleReconciliation(payment, PaymentAttemptStatus.VERIFY_PENDING,
+                    PaymentMessages.THREE_D_SECURE_FAILED);
         }
 
         if (result.getFraudStatus() != null && result.getFraudStatus() == -1) {
@@ -231,18 +262,16 @@ public class PaymentManager implements PaymentService {
             return fail(payment, PaymentMessages.FRAUD_REVIEW);
         }
 
-        String snapshotMismatch = snapshotMismatch(payment, result);
-        if (snapshotMismatch != null) {
-            paymentMetrics.callbackAmountMismatch();
-            log.error("Payment {} remains blocked: provider result does not match its immutable snapshot ({})",
-                    payment.getId(), snapshotMismatch);
-            return deferVerification(payment);
-        }
-
         if (result.getFraudStatus() != null && result.getFraudStatus() == 0) {
             paymentMetrics.callbackInReview();
             log.warn("Payment {} is under fraud review, escrow is not opened yet.", payment.getId());
             return hold(payment, result);
+        }
+
+        if (!Integer.valueOf(1).equals(result.getFraudStatus())) {
+            log.warn("Payment {} returned an indeterminate fraudStatus={}",
+                    payment.getId(), result.getFraudStatus());
+            return deferVerification(payment);
         }
 
         Payment settled = settle(payment, result);
@@ -263,12 +292,18 @@ public class PaymentManager implements PaymentService {
         return paymentDao.findAllByJobAssignmentIdOrderByCreatedAtDesc(jobAssignmentId);
     }
 
-    private String snapshotMismatch(Payment payment, IyzicoPaymentResultResponseDto result) {
+    private String identityMismatch(Payment payment, IyzicoPaymentResultResponseDto result) {
         JobAssignment assignment = payment.getJobAssignment();
         if (!Objects.equals(payment.getConversationId(), result.getConversationId())) return "conversationId";
         if (!Objects.equals(payment.getProviderToken(), result.getToken())) return "token";
         if (!Objects.equals(assignment.getId().toString(), result.getBasketId())) return "basketId";
         if (!Objects.equals(payment.getCurrency(), result.getCurrency())) return "currency";
+        if (result.getPaymentId() == null || result.getPaymentId().isBlank()) return "paymentId";
+        return null;
+    }
+
+    private String successfulSnapshotMismatch(Payment payment, IyzicoPaymentResultResponseDto result) {
+        JobAssignment assignment = payment.getJobAssignment();
         if (different(payment.getTotalCharged(), result.getPrice())) return "price";
         if (different(payment.getTotalCharged(), result.getPaidPrice())) return "paidPrice";
         if (result.getItemCount() != 1) return "itemTransactions count";
@@ -277,7 +312,9 @@ public class PaymentManager implements PaymentService {
         if (different(payment.getTotalCharged(), result.getItemPrice())) return "item price";
         if (different(payment.getTotalCharged(), result.getItemPaidPrice())) return "item paidPrice";
         if (different(payment.getWorkerPayout(), result.getItemSubMerchantPrice())) return "subMerchantPrice";
-        if (result.getPaymentId() == null || result.getPaymentId().isBlank()) return "paymentId";
+        if (!Objects.equals(payment.getProviderSubmerchantKey(), result.getItemSubMerchantKey())) {
+            return "subMerchantKey";
+        }
         if (result.getPaymentTransactionId() == null || result.getPaymentTransactionId().isBlank()) {
             return "paymentTransactionId";
         }

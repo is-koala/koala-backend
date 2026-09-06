@@ -11,6 +11,8 @@ public interface PaymentService {
 
     Payment startAttempt(JobAssignment jobAssignment, CommissionCalculator.Breakdown breakdown);
 
+    void attachProviderSubmerchantKey(Payment payment, String providerSubmerchantKey);
+
     void attachProviderToken(Payment payment, String providerToken);
 
     void markInitiationUncertain(UUID paymentId);

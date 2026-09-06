@@ -37,6 +37,9 @@ public class Payment extends BaseEntity {
     @Column(name = "provider_token", length = 512)
     private String providerToken;
 
+    @Column(name = "provider_submerchant_key", length = 255)
+    private String providerSubmerchantKey;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     private PaymentAttemptStatus status;

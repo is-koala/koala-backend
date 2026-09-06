@@ -6,6 +6,8 @@ import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.exceptions.ValidationException;
+import com.exskylab.koala.core.exceptions.ExternalServiceException;
+import com.exskylab.koala.core.constants.PaymentMessages;
 import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.business.abstracts.PaymentService;
 import com.exskylab.koala.business.abstracts.BadgeService;
@@ -129,6 +131,7 @@ class PaymentSessionAuthorizationTest {
         assertFalse(thrown instanceof ForbiddenException,
                 "Isveren yetki kontrolunden gecmeliydi; sonrasinda adres/IBAN eksikliginden dusmesi beklenir.");
         assertInstanceOf(ValidationException.class, thrown);
+        verify(paymentService, never()).startAttempt(any(), any());
     }
 
     @Test
@@ -324,7 +327,35 @@ class PaymentSessionAuthorizationTest {
         var order = org.mockito.Mockito.inOrder(paymentService, iyzicoPaymentService);
         order.verify(paymentService).startAttempt(any(), any());
         order.verify(iyzicoPaymentService).createSubMerchant(any());
+        order.verify(paymentService).attachProviderSubmerchantKey(any(), org.mockito.ArgumentMatchers.eq("submerchant-key"));
         order.verify(iyzicoPaymentService).initiateCheckoutFormPayment(any());
+    }
+
+    @Test
+    void anExplicitProviderRejectionFailsTheReservedAttemptInsteadOfLeavingItAmbiguous() {
+        Job job = individualJob();
+        job.setAddress(address());
+        employer.setAddress(address());
+        employer.setFirstName("Koala");
+        employer.setLastName("Employer");
+        employer.setEmail("employer@example.test");
+        employer.setPhoneNumber("+905551112233");
+        worker.setIyzicoSubmerchantKey("submerchant-key");
+        JobAssignment assignment = confirmedAssignment(job);
+        com.exskylab.koala.entities.Payment payment = new com.exskylab.koala.entities.Payment();
+        payment.setId(UUID.randomUUID());
+        payment.setConversationId("conversation-1");
+        when(jobAssignmentDao.findById(assignment.getId())).thenReturn(Optional.of(assignment));
+        when(securityService.getAuthenticatedUser()).thenReturn(employer);
+        when(paymentService.startAttempt(any(), any())).thenReturn(payment);
+        when(iyzicoPaymentService.initiateCheckoutFormPayment(any()))
+                .thenThrow(new ExternalServiceException(PaymentMessages.PROVIDER_REJECTED));
+
+        assertThrows(ExternalServiceException.class,
+                () -> manager.initiatePaymentSession(assignment.getId(), "127.0.0.1"));
+
+        verify(paymentService).failInitiation(payment.getId());
+        verify(paymentService, never()).markInitiationUncertain(payment.getId());
     }
 
     private static com.exskylab.koala.entities.Address address() {

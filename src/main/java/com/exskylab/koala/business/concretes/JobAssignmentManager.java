@@ -10,6 +10,7 @@ import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.constants.JobAssignmentMessages;
 import com.exskylab.koala.core.constants.PaymentMessages;
+import com.exskylab.koala.core.exceptions.ExternalServiceException;
 import com.exskylab.koala.core.helpers.Concealment;
 import com.exskylab.koala.core.dtos.jobAssignment.request.AnswerAssignmentDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.PaymentSessionDto;
@@ -242,13 +243,26 @@ public class JobAssignmentManager implements JobAssignmentService {
         }
 
         CommissionCalculator.Breakdown breakdown = pricingService.breakdown(assignment);
+        SubMerchantCreateRequestDto merchantDto = null;
+        if (worker.getIyzicoSubmerchantKey() == null || worker.getIyzicoSubmerchantKey().isBlank()) {
+            merchantDto = createSubMerchantDtoForWorker(worker);
+        }
+
+        PaymentSessionRequestDto iyzicoRequest = new PaymentSessionRequestDto();
+        iyzicoRequest.setPrice(breakdown.totalCharged());
+        iyzicoRequest.setPaidPrice(breakdown.totalCharged());
+        iyzicoRequest.setCurrency("TRY");
+        iyzicoRequest.setBasketId(assignment.getId().toString());
+        iyzicoRequest.setPaymentGroup("PRODUCT");
+        iyzicoRequest.setCallbackUrl(appProperties.apiUrl() + "/payments/callback");
+        fillBuyerAndAddressInfo(iyzicoRequest, job, clientIpAddress, currentUser);
+
         Payment payment = paymentService.startAttempt(assignment, breakdown);
 
-        if (worker.getIyzicoSubmerchantKey() == null || worker.getIyzicoSubmerchantKey().isBlank()){
+        if (merchantDto != null) {
             log.info("Worker {} does not have an iyzico submerchant key. Creating one...", worker.getId());
 
             try {
-                SubMerchantCreateRequestDto merchantDto = createSubMerchantDtoForWorker(worker);
                 SubMerchantCreateResponseDto response = iyzicoPaymentService.createSubMerchant(merchantDto);
 
                 worker.setIyzicoSubmerchantKey(response.getSubMerchantKey());
@@ -260,17 +274,7 @@ public class JobAssignmentManager implements JobAssignmentService {
             }
         }
 
-        PaymentSessionRequestDto iyzicoRequest = new PaymentSessionRequestDto();
-
         iyzicoRequest.setConversationId(payment.getConversationId());
-        iyzicoRequest.setPrice(breakdown.totalCharged());
-        iyzicoRequest.setPaidPrice(breakdown.totalCharged());
-        iyzicoRequest.setCurrency("TRY");
-        iyzicoRequest.setBasketId(assignment.getId().toString());
-        iyzicoRequest.setPaymentGroup("PRODUCT");
-        iyzicoRequest.setCallbackUrl(appProperties.apiUrl() + "/payments/callback");
-
-        fillBuyerAndAddressInfo(iyzicoRequest, job, clientIpAddress, currentUser);
 
         IyzicoBasketItemDto basketItem = new IyzicoBasketItemDto();
         basketItem.setId(job.getId().toString());
@@ -280,9 +284,25 @@ public class JobAssignmentManager implements JobAssignmentService {
         basketItem.setSubMerchantPrice(breakdown.workerPayout());
         iyzicoRequest.setBasketItems(List.of(basketItem));
 
+        try {
+            paymentService.attachProviderSubmerchantKey(payment, worker.getIyzicoSubmerchantKey());
+        } catch (RuntimeException exception) {
+            paymentMetrics.initiationPersistenceError();
+            paymentService.failInitiation(payment.getId());
+            throw exception;
+        }
+
         PaymentSessionResponseDto paymentSession;
         try {
             paymentSession = iyzicoPaymentService.initiateCheckoutFormPayment(iyzicoRequest);
+        } catch (ExternalServiceException exception) {
+            paymentMetrics.initiationProviderError();
+            if (PaymentMessages.PROVIDER_REJECTED.equals(exception.getMessage())) {
+                paymentService.failInitiation(payment.getId());
+            } else {
+                paymentService.markInitiationUncertain(payment.getId());
+            }
+            throw exception;
         } catch (RuntimeException exception) {
             paymentMetrics.initiationProviderError();
             paymentService.markInitiationUncertain(payment.getId());
