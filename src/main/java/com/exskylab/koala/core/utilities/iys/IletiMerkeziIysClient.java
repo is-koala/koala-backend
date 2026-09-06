@@ -1,12 +1,17 @@
 package com.exskylab.koala.core.utilities.iys;
 
 import com.exskylab.koala.core.properties.IysProperties;
+import com.exskylab.koala.core.constants.IysMessages;
+import com.exskylab.koala.core.exceptions.ExternalServiceException;
+import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.entities.NotificationChannel;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -30,12 +35,12 @@ public class IletiMerkeziIysClient implements IysProviderClient {
     @Override
     public void registerConsent(IysConsentRequest consent) {
         if (!properties.isConfigured()) {
-            throw new IllegalStateException("IYS provider is not configured");
+            throw new ExternalServiceException(IysMessages.PROVIDER_NOT_CONFIGURED);
         }
 
         Authentication authentication = new Authentication(properties.getApiKey(), properties.getApiHash());
         ConsentRecord item = new ConsentRecord(consent.recipient(), "BIREYSEL", typeOf(consent.channel()),
-                consent.granted() ? "ONAY" : "RET", properties.getSource(),
+                consent.granted() ? "ONAY" : "RET", consent.source(),
                 CONSENT_DATE.format(consent.recordedAt().atZone(ZoneId.of("Europe/Istanbul"))));
         Request request = new Request(authentication,
                 new ConsentRegistration(properties.getBrandCode(), List.of(item)));
@@ -44,14 +49,14 @@ public class IletiMerkeziIysClient implements IysProviderClient {
 
         if (response == null || response.response() == null || response.response().status() == null
                 || !Integer.valueOf(200).equals(response.response().status().code())) {
-            throw new IllegalStateException("IYS provider rejected the consent request");
+            throw new ExternalServiceException(IysMessages.PROVIDER_REJECTED);
         }
     }
 
     @Override
     public IysPermissionResult lookupConsent(String recipient, NotificationChannel channel) {
         if (!properties.isConfigured()) {
-            throw new IllegalStateException("IYS provider is not configured");
+            throw new ExternalServiceException(IysMessages.PROVIDER_NOT_CONFIGURED);
         }
 
         Request request = new Request(
@@ -62,31 +67,41 @@ public class IletiMerkeziIysClient implements IysProviderClient {
                 ? null : response.response().consent();
         if (response == null || response.response() == null || response.response().status() == null
                 || !Integer.valueOf(200).equals(response.response().status().code()) || consent == null) {
-            throw new IllegalStateException("IYS provider did not return a consent record");
+            throw new ExternalServiceException(IysMessages.INVALID_RESPONSE);
         }
 
         boolean granted = switch (consent.status()) {
             case "ONAY" -> true;
             case "RET" -> false;
-            default -> throw new IllegalStateException("IYS provider returned an unknown consent status");
+            default -> throw new ExternalServiceException(IysMessages.INVALID_RESPONSE);
         };
-        return new IysPermissionResult(consent.recipient(), channel, granted,
-                LocalDateTime.parse(consent.consentDate(), CONSENT_DATE)
-                        .atZone(ZoneId.of("Europe/Istanbul")).toInstant(), consent.source());
+        try {
+            return new IysPermissionResult(consent.recipient(), channel, granted,
+                    LocalDateTime.parse(consent.consentDate(), CONSENT_DATE)
+                            .atZone(ZoneId.of("Europe/Istanbul")).toInstant(), consent.source());
+        } catch (RuntimeException exception) {
+            throw new ExternalServiceException(IysMessages.INVALID_RESPONSE);
+        }
     }
 
     private IletiMerkeziResponse post(String path, Request request) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        return restTemplate.postForObject(properties.getApiUrl() + path,
-                new HttpEntity<>(new Envelope(request), headers), IletiMerkeziResponse.class);
+        try {
+            return restTemplate.postForObject(properties.getApiUrl() + path,
+                    new HttpEntity<>(new Envelope(request), headers), IletiMerkeziResponse.class);
+        } catch (RestClientResponseException exception) {
+            throw new ExternalServiceException(IysMessages.PROVIDER_REJECTED);
+        } catch (RestClientException exception) {
+            throw new ExternalServiceException(IysMessages.PROVIDER_UNAVAILABLE);
+        }
     }
 
     private String typeOf(NotificationChannel channel) {
         return switch (channel) {
             case EMAIL -> "EPOSTA";
             case SMS -> "MESAJ";
-            case PUSH, IN_APP -> throw new IllegalArgumentException("Unsupported IYS channel: " + channel);
+            case PUSH, IN_APP -> throw new ValidationException(IysMessages.CHANNEL_UNSUPPORTED);
         };
     }
 

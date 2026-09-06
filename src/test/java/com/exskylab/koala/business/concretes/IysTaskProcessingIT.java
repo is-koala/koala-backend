@@ -3,6 +3,8 @@ package com.exskylab.koala.business.concretes;
 import com.exskylab.koala.business.abstracts.IysService;
 import com.exskylab.koala.core.utilities.iys.IysProviderClient;
 import com.exskylab.koala.core.utilities.iys.IysPermissionResult;
+import com.exskylab.koala.core.constants.IysMessages;
+import com.exskylab.koala.core.exceptions.ExternalServiceException;
 import com.exskylab.koala.dataAccess.CommercialMessageConsentDao;
 import com.exskylab.koala.dataAccess.IysConsentTaskDao;
 import com.exskylab.koala.dataAccess.UserDao;
@@ -10,6 +12,7 @@ import com.exskylab.koala.entities.CommercialConsentSource;
 import com.exskylab.koala.entities.CommercialMessageConsent;
 import com.exskylab.koala.entities.IysConsentTask;
 import com.exskylab.koala.entities.IysConsentTaskStatus;
+import com.exskylab.koala.entities.IysFailureCode;
 import com.exskylab.koala.entities.NotificationCategory;
 import com.exskylab.koala.entities.NotificationChannel;
 import com.exskylab.koala.entities.User;
@@ -41,8 +44,7 @@ import static org.mockito.Mockito.when;
         "iys.retry.max-attempts=3",
         "iys.api-key=test-key",
         "iys.api-hash=test-hash",
-        "iys.brand-code=test-brand",
-        "iys.source=HS_WEB"
+        "iys.brand-code=test-brand"
 })
 class IysTaskProcessingIT extends AbstractIntegrationTest {
 
@@ -74,7 +76,7 @@ class IysTaskProcessingIT extends AbstractIntegrationTest {
     @Test
     void aProviderFailureSchedulesTheTaskWithExponentialBackoff() {
         IysConsentTask task = pendingTask();
-        doThrow(new IllegalStateException("provider unavailable"))
+        doThrow(new ExternalServiceException(IysMessages.PROVIDER_UNAVAILABLE))
                 .when(providerClient).registerConsent(any());
 
         assertFalse(iysService.runTask(task.getId()));
@@ -83,7 +85,7 @@ class IysTaskProcessingIT extends AbstractIntegrationTest {
         assertEquals(IysConsentTaskStatus.PENDING, retried.getStatus());
         assertEquals(1, retried.getAttempts());
         assertEquals(NOW.plusSeconds(60), retried.getNextAttemptAt());
-        assertEquals("provider unavailable", retried.getLastError());
+        assertEquals(IysFailureCode.PROVIDER_UNAVAILABLE, retried.getLastFailureCode());
         assertNotNull(retried.getUpdatedAt());
         assertFalse(iysService.findDueTaskIds().contains(task.getId()));
 
@@ -115,7 +117,7 @@ class IysTaskProcessingIT extends AbstractIntegrationTest {
         IysConsentTask completed = iysConsentTaskDao.findById(task.getId()).orElseThrow();
         assertEquals(IysConsentTaskStatus.COMPLETED, completed.getStatus());
         assertEquals(NOW, completed.getCompletedAt());
-        assertTrue(iysService.isAllowed(completed.getUser(), NotificationChannel.EMAIL));
+        assertTrue(iysService.isAllowed(completed.getUser(), NotificationChannel.EMAIL, completed.getRecipient()));
     }
 
     @Test
@@ -153,7 +155,7 @@ class IysTaskProcessingIT extends AbstractIntegrationTest {
         consent.setSource(CommercialConsentSource.PREFERENCE_CENTRE);
         commercialMessageConsentDao.save(consent);
 
-        iysService.enqueue(user, consent, NotificationChannel.EMAIL, granted);
+        iysService.enqueue(user, consent, NotificationChannel.EMAIL, granted, null);
         iysConsentTaskDao.flush();
         return iysConsentTaskDao.findAll().stream()
                 .filter(task -> task.getConsent().equals(consent))

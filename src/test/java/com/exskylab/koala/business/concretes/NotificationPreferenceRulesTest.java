@@ -60,6 +60,8 @@ class NotificationPreferenceRulesTest {
 
         user = new User();
         user.setId(userId);
+        user.setEmail("preference-rules@koala.test");
+        user.setEmailVerified(true);
 
         securityService = mock(SecurityService.class);
         when(securityService.getAuthenticatedUser()).thenReturn(user);

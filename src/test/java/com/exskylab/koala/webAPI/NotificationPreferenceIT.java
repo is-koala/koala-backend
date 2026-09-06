@@ -188,17 +188,20 @@ class NotificationPreferenceIT extends AbstractIntegrationTest {
     @Test
     void aCommercialPreferenceUpdateCommitsAnIysOutboxTaskWithoutWaitingForTheProvider() throws Exception {
         User subscriber = saveUser("commercial-outbox@koala.test");
-        String token = login("commercial-outbox@koala.test");
+        String token = login("commercial-outbox@koala.test", "WEB");
 
         mockMvc.perform(put("/users/me/notification-preferences")
                         .header("Authorization", "Bearer " + token)
+                        .header("X-Client-Platform", "WEB")
+                        .header("X-Device-Id", "notification-preference-it-device")
+                        .header("User-Agent", "Koala Notification Preference IT")
                         .contentType(MediaType.APPLICATION_JSON)
                 .content(body("MARKETINGS", "EMAIL", true)))
                 .andExpect(status().isOk());
 
         commercialMessageConsentDao.flush();
         Map<String, Object> task = jdbcTemplate.queryForMap("""
-                select status, channel, granted, recipient
+                select status, channel, granted, recipient, provider_source
                 from iys_consent_tasks
                 where user_id = ?
                 """, subscriber.getId());
@@ -207,6 +210,7 @@ class NotificationPreferenceIT extends AbstractIntegrationTest {
         assertEquals("EMAIL", task.get("channel"));
         assertEquals(true, task.get("granted"));
         assertEquals(subscriber.getEmail(), task.get("recipient"));
+        assertEquals("HS_WEB", task.get("provider_source"));
     }
 
     @Test
@@ -234,6 +238,7 @@ class NotificationPreferenceIT extends AbstractIntegrationTest {
     void aCommercialSmsCannotBypassMissingIysCredentials() throws Exception {
         User subscriber = saveUser("commercial-sms@koala.test");
         subscriber.setPhoneNumber("+905551112233");
+        subscriber.setPhoneVerified(true);
         userDao.saveAndFlush(subscriber);
         String token = login("commercial-sms@koala.test");
         mockMvc.perform(put("/users/me/notification-preferences")
@@ -250,6 +255,22 @@ class NotificationPreferenceIT extends AbstractIntegrationTest {
 
         assertNull(notificationService.sendSms(sms, DispatchPriority.NORMAL, true));
         verify(notificationProducerService, never()).sendSmsTask(any());
+    }
+
+    @Test
+    void aCommercialSmsOptInRequiresAVerifiedPhone() throws Exception {
+        User subscriber = saveUser("commercial-sms-no-phone@koala.test");
+        String token = login(subscriber.getEmail());
+
+        mockMvc.perform(put("/users/me/notification-preferences")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body("MARKETINGS", "SMS", true)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("IYS_VERIFIED_RECIPIENT_REQUIRED"));
+
+        assertEquals(0, jdbcTemplate.queryForObject(
+                "select count(*) from iys_consent_tasks where user_id = ?", Integer.class, subscriber.getId()));
     }
 
     private boolean enabledFor(String accessToken, String category, String channel) throws Exception {
@@ -308,9 +329,14 @@ class NotificationPreferenceIT extends AbstractIntegrationTest {
     }
 
     private String login(String email) throws Exception {
+        return login(email, null);
+    }
+
+    private String login(String email, String platform) throws Exception {
         MvcResult result = mockMvc.perform(post("/auth/login")
                         .header("X-Device-Id", "notification-preference-it-device")
                         .header("User-Agent", "Koala Notification Preference IT")
+                        .header("X-Client-Platform", platform == null ? "" : platform)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + email + "\",\"password\":\"GecerliParola1\"}"))
                 .andExpect(status().isOk())

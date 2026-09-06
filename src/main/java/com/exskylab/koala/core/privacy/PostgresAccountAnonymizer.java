@@ -178,6 +178,21 @@ public class PostgresAccountAnonymizer implements AccountAnonymizer {
         jdbcTemplate.update("update consent_records set ip_address = null, user_agent = null where user_id = ?", userId);
         jdbcTemplate.update("update commercial_message_consents set ip_address = null, user_agent = null where user_id = ?",
                 userId);
+        jdbcTemplate.update("""
+                update iys_consent_tasks
+                   set recipient = ?, last_failure_code = null,
+                       status = case when status in ('PENDING', 'PROCESSING') then 'SUPERSEDED' else status end,
+                       processing_started_at = null,
+                       completed_at = case when status in ('PENDING', 'PROCESSING')
+                                           then coalesce(completed_at, now()) else completed_at end
+                 where user_id = ?
+                """, REDACTED, userId);
+        jdbcTemplate.update("""
+                update iys_permission_states
+                   set recipient = ?, provider_source = null, last_failure_code = null,
+                       is_deleted = true, deleted_at = coalesce(deleted_at, now())
+                 where user_id = ?
+                """, REDACTED, userId);
         jdbcTemplate.update("update unsubscribe_tokens set is_deleted = true, deleted_at = coalesce(deleted_at, now()), expires_at = least(expires_at, now()) where user_id = ?",
                 userId);
     }

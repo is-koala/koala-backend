@@ -25,8 +25,8 @@ public class IysReconciliationScheduler {
             try {
                 reconciliationService.reconcile(target.userId(), target.channel());
             } catch (Exception exception) {
-                log.warn("IYS reconciliation failed for user {} on {}: {}",
-                        target.userId(), target.channel(), exception.getMessage());
+                log.warn("IYS reconciliation failed for user {} on {}; retry was scheduled",
+                        target.userId(), target.channel());
             }
         }
     }

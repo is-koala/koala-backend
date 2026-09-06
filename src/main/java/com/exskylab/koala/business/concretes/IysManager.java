@@ -2,6 +2,10 @@ package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.IysService;
 import com.exskylab.koala.core.properties.IysProperties;
+import com.exskylab.koala.core.helpers.ClientContext;
+import com.exskylab.koala.core.constants.IysMessages;
+import com.exskylab.koala.core.exceptions.ValidationException;
+import com.exskylab.koala.core.exceptions.ExternalServiceException;
 import com.exskylab.koala.core.utilities.iys.IysConsentRequest;
 import com.exskylab.koala.core.utilities.iys.IysPermissionResult;
 import com.exskylab.koala.core.utilities.iys.IysProviderClient;
@@ -11,13 +15,17 @@ import com.exskylab.koala.dataAccess.IysPermissionStateDao;
 import com.exskylab.koala.entities.CommercialMessageConsent;
 import com.exskylab.koala.entities.IysConsentTask;
 import com.exskylab.koala.entities.IysConsentTaskStatus;
+import com.exskylab.koala.entities.IysFailureCode;
 import com.exskylab.koala.entities.IysPermissionState;
 import com.exskylab.koala.entities.IysPermissionStatus;
 import com.exskylab.koala.entities.NotificationChannel;
 import com.exskylab.koala.entities.User;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -33,21 +41,31 @@ public class IysManager implements IysService {
     private final IysPermissionStateDao iysPermissionStateDao;
     private final IysProperties properties;
     private final Clock clock;
+    private final TransactionTemplate transactionTemplate;
 
     public IysManager(IysConsentTaskDao iysConsentTaskDao, IysPermissionStateDao iysPermissionStateDao,
-                      IysProviderClient providerClient, IysProperties properties, Clock clock) {
+                      IysProviderClient providerClient, IysProperties properties, Clock clock,
+                      PlatformTransactionManager transactionManager) {
         this.iysConsentTaskDao = iysConsentTaskDao;
         this.iysPermissionStateDao = iysPermissionStateDao;
         this.providerClient = providerClient;
         this.properties = properties;
         this.clock = clock;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
     @Override
     @Transactional
-    public void enqueue(User user, CommercialMessageConsent consent, NotificationChannel channel, boolean granted) {
+    public void enqueue(User user, CommercialMessageConsent consent, NotificationChannel channel, boolean granted,
+                        ClientContext client) {
         String recipient = recipientOf(user, channel);
-        if (recipient == null) {
+        if (channel == NotificationChannel.PUSH || channel == NotificationChannel.IN_APP) {
+            return;
+        }
+        if (recipient == null || recipient.isBlank()) {
+            if (granted) {
+                throw new ValidationException(IysMessages.VERIFIED_RECIPIENT_REQUIRED);
+            }
             return;
         }
 
@@ -57,95 +75,88 @@ public class IysManager implements IysService {
         task.setChannel(channel);
         task.setRecipient(recipient);
         task.setGranted(granted);
+        task.setProviderSource(properties.sourceFor(consent.getSource(), client == null ? null : client.platform()));
         task.setStatus(IysConsentTaskStatus.PENDING);
         task.setNextAttemptAt(clock.instant());
-        iysConsentTaskDao.save(task);
+        IysConsentTask saved = iysConsentTaskDao.saveAndFlush(task);
+        iysConsentTaskDao.supersedeOlderPending(saved.getId(), clock.instant());
     }
 
     @Override
-    @Transactional
     public boolean runTask(UUID taskId) {
-        IysConsentTask task = iysConsentTaskDao.findWithDetailsById(taskId).orElse(null);
-        if (task == null || task.getStatus() != IysConsentTaskStatus.PENDING) {
-            return false;
-        }
-        if (iysConsentTaskDao.existsNewerDecision(task.getUser().getId(), task.getChannel(),
-                task.getConsent().getRecordedAt())) {
-            task.setStatus(IysConsentTaskStatus.SUPERSEDED);
-            task.setCompletedAt(clock.instant());
-            iysConsentTaskDao.save(task);
-            return false;
-        }
         if (!properties.isConfigured()) {
             return false;
         }
-
-        task.setAttempts(task.getAttempts() + 1);
+        TaskExecution execution = claim(taskId);
+        if (execution == null) {
+            return false;
+        }
         try {
-            providerClient.registerConsent(new IysConsentRequest(task.getRecipient(), task.getChannel(),
-                    task.isGranted(), task.getConsent().getRecordedAt(), task.getConsent().getSource()));
-            var permission = providerClient.lookupConsent(task.getRecipient(), task.getChannel());
-            storePermission(task.getUser(), permission);
-            if (permission.granted() != task.isGranted()) {
-                throw new IllegalStateException("IYS consent is not reflected by the registry yet");
+            providerClient.registerConsent(new IysConsentRequest(execution.recipient(), execution.channel(),
+                    execution.granted(), execution.recordedAt(), execution.providerSource()));
+            var permission = providerClient.lookupConsent(execution.recipient(), execution.channel());
+            if (!sameRecipient(execution.recipient(), permission.recipient())) {
+                throw new ExternalServiceException(IysMessages.INVALID_RESPONSE);
             }
-            task.setStatus(IysConsentTaskStatus.COMPLETED);
-            task.setCompletedAt(clock.instant());
-            task.setLastError(null);
-            iysConsentTaskDao.save(task);
-            return true;
-        } catch (Exception exception) {
-            task.setLastError(truncate(exception.getMessage()));
-            if (task.getAttempts() >= properties.getRetry().getMaxAttempts()) {
-                task.setStatus(IysConsentTaskStatus.EXHAUSTED);
-            } else {
-                task.setNextAttemptAt(clock.instant().plus(backoffFor(task.getAttempts())));
+            if (permission.granted() != execution.granted()) {
+                throw new ExternalServiceException(IysMessages.REGISTRY_PENDING);
             }
-            iysConsentTaskDao.save(task);
+            return complete(taskId, permission);
+        } catch (RuntimeException exception) {
+            fail(taskId, exception instanceof ExternalServiceException external
+                    ? failureCode(external) : IysFailureCode.UNKNOWN);
             return false;
         }
     }
 
     @Override
-    @Transactional(readOnly = true)
     public List<UUID> findDueTaskIds() {
         if (!properties.isConfigured() || !properties.getRetry().isEnabled()) {
             return List.of();
         }
-        return iysConsentTaskDao.findDueIds(IysConsentTaskStatus.PENDING, clock.instant(),
-                PageRequest.of(0, properties.getRetry().getBatchSize()));
+        Instant now = clock.instant();
+        return transactionTemplate.execute(status -> {
+            iysConsentTaskDao.recoverStaleClaims(now.minus(properties.getClaimTimeout()), now);
+            return iysConsentTaskDao.findDueIds(IysConsentTaskStatus.PENDING, now,
+                    PageRequest.of(0, properties.getRetry().getBatchSize()));
+        });
     }
 
     @Override
     @Transactional(readOnly = true)
-    public boolean isAllowed(User user, NotificationChannel channel) {
+    public boolean isAllowed(User user, NotificationChannel channel, String destination) {
         if (user == null || !properties.isConfigured()) {
             return false;
         }
         String recipient = recipientOf(user, channel);
-        if (recipient == null || recipient.isBlank()) {
+        if (!sameRecipient(recipient, destination)) {
             return false;
         }
         return iysPermissionStateDao.findByUserIdAndChannel(user.getId(), channel)
                 .filter(state -> state.getStatus() == IysPermissionStatus.GRANTED)
-                .filter(state -> recipient.equalsIgnoreCase(state.getRecipient()))
+                .filter(state -> sameRecipient(recipient, state.getRecipient()))
                 .filter(state -> !state.getVerifiedAt().isBefore(
                         clock.instant().minus(properties.getPermissionMaxAge())))
                 .isPresent();
     }
 
     @Override
-    @Transactional
     public IysPermissionResult refreshPermission(User user, NotificationChannel channel) {
         if (!properties.isConfigured()) {
-            throw new IllegalStateException("IYS provider is not configured");
+            throw new ExternalServiceException(IysMessages.PROVIDER_NOT_CONFIGURED);
+        }
+        if (channel == NotificationChannel.PUSH || channel == NotificationChannel.IN_APP) {
+            throw new ValidationException(IysMessages.CHANNEL_UNSUPPORTED);
         }
         String recipient = recipientOf(user, channel);
         if (recipient == null || recipient.isBlank()) {
-            throw new IllegalArgumentException("User has no recipient for the IYS channel");
+            throw new ValidationException(IysMessages.VERIFIED_RECIPIENT_REQUIRED);
         }
         var permission = providerClient.lookupConsent(recipient, channel);
-        storePermission(user, permission);
+        if (!sameRecipient(recipient, permission.recipient())) {
+            throw new ExternalServiceException(IysMessages.INVALID_RESPONSE);
+        }
+        transactionTemplate.executeWithoutResult(status -> storePermission(user, permission));
         return permission;
     }
 
@@ -155,12 +166,23 @@ public class IysManager implements IysService {
         if (!properties.isConfigured() || !properties.getReconciliation().isEnabled()) {
             return List.of();
         }
-        Instant staleBefore = clock.instant().minus(properties.getPermissionMaxAge());
-        return iysPermissionStateDao.findByVerifiedAtLessThanEqualOrderByVerifiedAtAsc(staleBefore,
+        return iysPermissionStateDao.findByNextReconciliationAtLessThanEqualOrderByNextReconciliationAtAsc(clock.instant(),
                         PageRequest.of(0, properties.getReconciliation().getBatchSize()))
                 .stream()
                 .map(state -> new IysReconciliationTarget(state.getUser().getId(), state.getChannel()))
                 .toList();
+    }
+
+    @Override
+    public void recordReconciliationFailure(UUID userId, NotificationChannel channel, IysFailureCode failureCode) {
+        transactionTemplate.executeWithoutResult(status -> iysPermissionStateDao
+                .findByUserIdAndChannel(userId, channel).ifPresent(state -> {
+                    int attempts = state.getReconciliationAttempts() + 1;
+                    state.setReconciliationAttempts(attempts);
+                    state.setLastFailureCode(failureCode);
+                    state.setNextReconciliationAt(clock.instant().plus(backoffFor(attempts)));
+                    iysPermissionStateDao.save(state);
+                }));
     }
 
     private void storePermission(User user, IysPermissionResult permission) {
@@ -173,7 +195,81 @@ public class IysManager implements IysService {
         state.setProviderRecordedAt(permission.recordedAt());
         state.setVerifiedAt(clock.instant());
         state.setProviderSource(permission.source());
+        state.setNextReconciliationAt(clock.instant().plus(properties.getPermissionMaxAge()));
+        state.setReconciliationAttempts(0);
+        state.setLastFailureCode(null);
         iysPermissionStateDao.save(state);
+    }
+
+    private TaskExecution claim(UUID taskId) {
+        try {
+            return transactionTemplate.execute(status -> {
+                IysConsentTask task = iysConsentTaskDao.findWithDetailsById(taskId).orElse(null);
+                if (task == null || task.getStatus() != IysConsentTaskStatus.PENDING) {
+                    return null;
+                }
+                if (iysConsentTaskDao.existsNewerDecision(taskId)) {
+                    task.setStatus(IysConsentTaskStatus.SUPERSEDED);
+                    task.setCompletedAt(clock.instant());
+                    iysConsentTaskDao.save(task);
+                    return null;
+                }
+                if (iysConsentTaskDao.claim(taskId, clock.instant()) != 1) {
+                    return null;
+                }
+                IysConsentTask claimed = iysConsentTaskDao.findWithDetailsById(taskId).orElseThrow();
+                return new TaskExecution(claimed.getRecipient(), claimed.getChannel(), claimed.isGranted(),
+                        claimed.getConsent().getRecordedAt(), claimed.getProviderSource());
+            });
+        } catch (DataIntegrityViolationException exception) {
+            return null;
+        }
+    }
+
+    private boolean complete(UUID taskId, IysPermissionResult permission) {
+        return Boolean.TRUE.equals(transactionTemplate.execute(status -> {
+            IysConsentTask task = iysConsentTaskDao.findWithDetailsById(taskId).orElse(null);
+            if (task == null || task.getStatus() != IysConsentTaskStatus.PROCESSING) {
+                return false;
+            }
+            if (iysConsentTaskDao.existsNewerDecision(taskId)) {
+                task.setStatus(IysConsentTaskStatus.SUPERSEDED);
+                task.setCompletedAt(clock.instant());
+                task.setProcessingStartedAt(null);
+                iysConsentTaskDao.save(task);
+                return false;
+            }
+            storePermission(task.getUser(), permission);
+            task.setStatus(IysConsentTaskStatus.COMPLETED);
+            task.setCompletedAt(clock.instant());
+            task.setProcessingStartedAt(null);
+            task.setLastFailureCode(null);
+            iysConsentTaskDao.save(task);
+            return true;
+        }));
+    }
+
+    private void fail(UUID taskId, IysFailureCode failureCode) {
+        transactionTemplate.executeWithoutResult(status -> {
+            IysConsentTask task = iysConsentTaskDao.findById(taskId).orElse(null);
+            if (task == null || task.getStatus() != IysConsentTaskStatus.PROCESSING) {
+                return;
+            }
+            task.setProcessingStartedAt(null);
+            if (iysConsentTaskDao.existsNewerDecision(taskId)) {
+                task.setStatus(IysConsentTaskStatus.SUPERSEDED);
+                task.setCompletedAt(clock.instant());
+            } else {
+                task.setLastFailureCode(failureCode);
+                if (task.getAttempts() >= properties.getRetry().getMaxAttempts()) {
+                    task.setStatus(IysConsentTaskStatus.EXHAUSTED);
+                } else {
+                    task.setStatus(IysConsentTaskStatus.PENDING);
+                    task.setNextAttemptAt(clock.instant().plus(backoffFor(task.getAttempts())));
+                }
+            }
+            iysConsentTaskDao.save(task);
+        });
     }
 
     private Duration backoffFor(int attempts) {
@@ -184,11 +280,14 @@ public class IysManager implements IysService {
                 : backoff;
     }
 
-    private String truncate(String message) {
-        if (message == null) {
-            return null;
-        }
-        return message.length() <= 1000 ? message : message.substring(0, 1000);
+    private IysFailureCode failureCode(ExternalServiceException exception) {
+        return switch (exception.getMessage()) {
+            case IysMessages.PROVIDER_UNAVAILABLE -> IysFailureCode.PROVIDER_UNAVAILABLE;
+            case IysMessages.PROVIDER_REJECTED -> IysFailureCode.PROVIDER_REJECTED;
+            case IysMessages.INVALID_RESPONSE -> IysFailureCode.INVALID_RESPONSE;
+            case IysMessages.REGISTRY_PENDING -> IysFailureCode.REGISTRY_PENDING;
+            default -> IysFailureCode.UNKNOWN;
+        };
     }
 
     private String recipientOf(User user, NotificationChannel channel) {
@@ -197,5 +296,14 @@ public class IysManager implements IysService {
             case SMS -> user.getPhoneNumber();
             case PUSH, IN_APP -> null;
         };
+    }
+
+    private boolean sameRecipient(String left, String right) {
+        return left != null && right != null && !left.isBlank() && !right.isBlank()
+                && left.strip().equalsIgnoreCase(right.strip());
+    }
+
+    private record TaskExecution(String recipient, NotificationChannel channel, boolean granted,
+                                 Instant recordedAt, String providerSource) {
     }
 }

@@ -6,6 +6,7 @@ import com.exskylab.koala.core.utilities.iys.IysPermissionResult;
 import com.exskylab.koala.core.utilities.iys.IysProviderClient;
 import com.exskylab.koala.dataAccess.CommercialMessageConsentDao;
 import com.exskylab.koala.dataAccess.IysConsentTaskDao;
+import com.exskylab.koala.dataAccess.IysPermissionStateDao;
 import com.exskylab.koala.dataAccess.NotificationPreferenceDao;
 import com.exskylab.koala.dataAccess.UserDao;
 import com.exskylab.koala.entities.CommercialConsentSource;
@@ -13,6 +14,9 @@ import com.exskylab.koala.entities.NotificationCategory;
 import com.exskylab.koala.entities.NotificationChannel;
 import com.exskylab.koala.entities.NotificationPreference;
 import com.exskylab.koala.entities.User;
+import com.exskylab.koala.entities.IysFailureCode;
+import com.exskylab.koala.core.constants.IysMessages;
+import com.exskylab.koala.core.exceptions.ExternalServiceException;
 import com.exskylab.koala.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +32,8 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
 @Transactional
@@ -35,8 +41,7 @@ import static org.mockito.Mockito.when;
         "iys.enabled=true",
         "iys.api-key=test-key",
         "iys.api-hash=test-hash",
-        "iys.brand-code=test-brand",
-        "iys.source=HS_WEB"
+        "iys.brand-code=test-brand"
 })
 class IysReconciliationIT extends AbstractIntegrationTest {
 
@@ -57,6 +62,9 @@ class IysReconciliationIT extends AbstractIntegrationTest {
 
     @Autowired
     private IysConsentTaskDao taskDao;
+
+    @Autowired
+    private IysPermissionStateDao permissionStateDao;
 
     @Autowired
     private UserDao userDao;
@@ -82,6 +90,7 @@ class IysReconciliationIT extends AbstractIntegrationTest {
                         false, WITHDRAWN_AT, "HS_WEB"));
 
         reconciliationService.reconcile(user.getId(), NotificationChannel.EMAIL);
+        reconciliationService.reconcile(user.getId(), NotificationChannel.EMAIL);
 
         List<NotificationPreference> preferences = notificationPreferenceDao.findAllByUserId(user.getId());
         assertEquals(2, preferences.size());
@@ -90,7 +99,8 @@ class IysReconciliationIT extends AbstractIntegrationTest {
         assertEquals(2, consentDao.findAllByUserIdOrderByRecordedAtDesc(user.getId()).size());
         assertEquals(CommercialConsentSource.IYS_RECONCILIATION,
                 consentDao.findAllByUserIdOrderByRecordedAtDesc(user.getId()).getFirst().getSource());
-        assertEquals(0, taskDao.count());
+        assertEquals(0, taskDao.findAll().stream()
+                .filter(task -> task.getUser().getId().equals(user.getId())).count());
     }
 
     @Test
@@ -104,12 +114,36 @@ class IysReconciliationIT extends AbstractIntegrationTest {
 
         reconciliationService.reconcile(user.getId(), NotificationChannel.EMAIL);
 
-        assertTrue(iysService.isAllowed(user, NotificationChannel.EMAIL));
+        assertTrue(iysService.isAllowed(user, NotificationChannel.EMAIL, user.getEmail()));
         assertTrue(notificationPreferenceDao.findById(localOptIn.getId()).orElseThrow().isEnabled());
-        assertEquals(0, consentDao.count());
+        assertEquals(0, consentDao.findAllByUserIdOrderByRecordedAtDesc(user.getId()).size());
 
         when(clock.instant()).thenReturn(NOW.plusSeconds(3601));
-        assertFalse(iysService.isAllowed(user, NotificationChannel.EMAIL));
+        assertFalse(iysService.isAllowed(user, NotificationChannel.EMAIL, user.getEmail()));
+    }
+
+    @Test
+    void aFailedReconciliationPersistsBackoffSoItCannotStarveTheNextBatch() {
+        User user = userDao.save(user());
+        when(providerClient.lookupConsent(user.getEmail(), NotificationChannel.EMAIL))
+                .thenReturn(new IysPermissionResult(user.getEmail(), NotificationChannel.EMAIL,
+                        true, WITHDRAWN_AT, "HS_WEB"));
+        reconciliationService.reconcile(user.getId(), NotificationChannel.EMAIL);
+
+        Instant failedAt = NOW.plusSeconds(3601);
+        when(clock.instant()).thenReturn(failedAt);
+        doThrow(new ExternalServiceException(IysMessages.PROVIDER_UNAVAILABLE))
+                .when(providerClient).lookupConsent(user.getEmail(), NotificationChannel.EMAIL);
+
+        assertThrows(ExternalServiceException.class,
+                () -> reconciliationService.reconcile(user.getId(), NotificationChannel.EMAIL));
+
+        var state = permissionStateDao.findByUserIdAndChannel(user.getId(), NotificationChannel.EMAIL).orElseThrow();
+        assertEquals(1, state.getReconciliationAttempts());
+        assertEquals(IysFailureCode.PROVIDER_UNAVAILABLE, state.getLastFailureCode());
+        assertEquals(failedAt.plusSeconds(60), state.getNextReconciliationAt());
+        assertFalse(iysService.findStalePermissions().stream()
+                .anyMatch(target -> target.userId().equals(user.getId())));
     }
 
     private User user() {

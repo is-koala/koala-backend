@@ -43,6 +43,9 @@ class AccountDeletionLifecycleIT extends AbstractIntegrationTest {
         UUID reviewId = UUID.randomUUID();
         UUID blockId = UUID.randomUUID();
         UUID cancellationId = UUID.randomUUID();
+        UUID commercialConsentId = UUID.randomUUID();
+        UUID iysTaskId = UUID.randomUUID();
+        UUID iysStateId = UUID.randomUUID();
 
         UUID countryId = jdbcTemplate.queryForObject("select id from countries limit 1", UUID.class);
         UUID cityId = jdbcTemplate.queryForObject("select id from cities where country_id = ? limit 1",
@@ -112,7 +115,20 @@ class AccountDeletionLifecycleIT extends AbstractIntegrationTest {
                      user_agent, source, created_at, is_deleted)
                 values (?, ?, 'NEWSLETTER', 'EMAIL', true, now(), '198.51.100.5',
                         'commercial-test-agent', 'PREFERENCE_CENTRE', now(), false)
-                """, UUID.randomUUID(), userId);
+                """, commercialConsentId, userId);
+        jdbcTemplate.update("""
+                insert into iys_consent_tasks
+                    (id, user_id, consent_id, channel, recipient, granted, provider_source,
+                     status, attempts, next_attempt_at, last_failure_code, created_at, is_deleted)
+                values (?, ?, ?, 'EMAIL', ?, true, 'HS_WEB', 'PENDING', 1, now(),
+                        'PROVIDER_UNAVAILABLE', now(), false)
+                """, iysTaskId, userId, commercialConsentId, "worker-" + userId + "@example.test");
+        jdbcTemplate.update("""
+                insert into iys_permission_states
+                    (id, user_id, channel, recipient, status, provider_recorded_at, verified_at,
+                     provider_source, created_at, is_deleted)
+                values (?, ?, 'EMAIL', ?, 'GRANTED', now(), now(), 'HS_WEB', now(), false)
+                """, iysStateId, userId, "worker-" + userId + "@example.test");
         jdbcTemplate.update("""
                 insert into unsubscribe_tokens
                     (id, user_id, category, channel, token_digest, expires_at, created_at, is_deleted)
@@ -255,6 +271,18 @@ class AccountDeletionLifecycleIT extends AbstractIntegrationTest {
                 "select is_deleted from unsubscribe_tokens where user_id = ?", Boolean.class, userId)));
         assertTrue(Boolean.TRUE.equals(jdbcTemplate.queryForObject(
                 "select deleted_at is not null from unsubscribe_tokens where user_id = ?", Boolean.class, userId)));
+        assertEquals("[anonymized]", jdbcTemplate.queryForObject(
+                "select recipient from iys_consent_tasks where id = ?", String.class, iysTaskId));
+        assertEquals("SUPERSEDED", jdbcTemplate.queryForObject(
+                "select status from iys_consent_tasks where id = ?", String.class, iysTaskId));
+        assertNull(jdbcTemplate.queryForObject(
+                "select last_failure_code from iys_consent_tasks where id = ?", String.class, iysTaskId));
+        assertEquals("[anonymized]", jdbcTemplate.queryForObject(
+                "select recipient from iys_permission_states where id = ?", String.class, iysStateId));
+        assertNull(jdbcTemplate.queryForObject(
+                "select provider_source from iys_permission_states where id = ?", String.class, iysStateId));
+        assertTrue(Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                "select is_deleted from iys_permission_states where id = ?", Boolean.class, iysStateId)));
         assertEquals("ANONYMIZED", jdbcTemplate.queryForObject(
                 "select status from account_deletion_requests where id = ?", String.class, requestId));
         assertNull(jdbcTemplate.queryForObject(

@@ -72,18 +72,18 @@ public class NotificationManager implements NotificationService {
         this.iysService = iysService;
     }
 
-    private boolean suppressed(User recipient, NotificationCategory category, NotificationChannel channel) {
-        if (recipient == null) {
-            return false;
-        }
-        if (!notificationPreferenceService.isAllowed(recipient.getId(), category, channel)) {
+    private boolean suppressed(User recipient, NotificationCategory category, NotificationChannel channel,
+                               String destination) {
+        if (recipient != null && !notificationPreferenceService.isAllowed(recipient.getId(), category, channel)) {
             log.info("{} notification in category {} suppressed for user {} by preference",
                     channel, category, recipient.getId());
             return true;
         }
-        if (category != null && category.getKind().isCommercial() && !iysService.isAllowed(recipient, channel)) {
-            log.info("{} notification in category {} suppressed for user {} by IYS permission",
-                    channel, category, recipient.getId());
+        if (category != null && category.getKind().isCommercial()
+                && (channel == NotificationChannel.EMAIL || channel == NotificationChannel.SMS)
+                && !iysService.isAllowed(recipient, channel, destination)) {
+            log.info("{} notification in category {} suppressed by IYS permission for user {}",
+                    channel, category, recipient == null ? "unknown" : recipient.getId());
             return true;
         }
         return false;
@@ -102,7 +102,8 @@ public class NotificationManager implements NotificationService {
 
         log.info("Sending email notification to {} destinationEmail: {}", recipientInfo, LogMasks.email(sendEmailDto.getDestinationEmail()));
 
-        if (suppressed(sendEmailDto.getRecipient(), sendEmailDto.getCategory(), NotificationChannel.EMAIL)) {
+        if (suppressed(sendEmailDto.getRecipient(), sendEmailDto.getCategory(), NotificationChannel.EMAIL,
+                sendEmailDto.getDestinationEmail())) {
             return null;
         }
 
@@ -189,7 +190,8 @@ public class NotificationManager implements NotificationService {
     public Notification sendSms(SendSmsDto sendSmsDto, DispatchPriority dispatchPriority, boolean isSystemSms) {
         log.info("Sending SMS notification to userId: {} destinationPhoneNumber: {}", sendSmsDto.getRecipient().getId(), LogMasks.phone(sendSmsDto.getDestinationPhoneNumber()));
 
-        if (suppressed(sendSmsDto.getRecipient(), sendSmsDto.getCategory(), NotificationChannel.SMS)) {
+        if (suppressed(sendSmsDto.getRecipient(), sendSmsDto.getCategory(), NotificationChannel.SMS,
+                sendSmsDto.getDestinationPhoneNumber())) {
             return null;
         }
 
@@ -262,7 +264,7 @@ public class NotificationManager implements NotificationService {
         }
 
         if (suppressed(sendPushToUserDto.getRecipient(), sendPushToUserDto.getCategory(),
-                NotificationChannel.PUSH)) {
+                NotificationChannel.PUSH, null)) {
             return;
         }
 
@@ -414,7 +416,7 @@ public class NotificationManager implements NotificationService {
     @Override
     @Transactional
     public Notification sendInApp(SendInAppDto sendInAppDto) {
-        if (suppressed(sendInAppDto.getRecipient(), sendInAppDto.getCategory(), NotificationChannel.IN_APP)) {
+        if (suppressed(sendInAppDto.getRecipient(), sendInAppDto.getCategory(), NotificationChannel.IN_APP, null)) {
             return null;
         }
 

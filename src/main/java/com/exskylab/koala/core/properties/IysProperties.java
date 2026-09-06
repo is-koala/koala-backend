@@ -1,9 +1,12 @@
 package com.exskylab.koala.core.properties;
 
+import com.exskylab.koala.core.helpers.ClientPlatform;
+import com.exskylab.koala.entities.CommercialConsentSource;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.Set;
 
 @Component
 @ConfigurationProperties(prefix = "iys")
@@ -19,16 +22,19 @@ public class IysProperties {
 
     private String brandCode;
 
-    private String source;
+    private Sources sources = new Sources();
 
     private Duration permissionMaxAge = Duration.ofHours(1);
+
+    private Duration claimTimeout = Duration.ofMinutes(5);
 
     private Retry retry = new Retry();
 
     private Reconciliation reconciliation = new Reconciliation();
 
     public boolean isConfigured() {
-        return enabled && hasText(apiKey) && hasText(apiHash) && hasText(brandCode) && hasText(source);
+        return enabled && hasText(apiKey) && hasText(apiHash) && hasText(brandCode)
+                && sources.isConfigured();
     }
 
     private boolean hasText(String value) {
@@ -75,17 +81,32 @@ public class IysProperties {
         this.brandCode = brandCode;
     }
 
-    public String getSource() {
-        return source;
+    public Sources getSources() {
+        return sources;
     }
 
-    public void setSource(String source) {
-        this.source = source;
+    public void setSources(Sources sources) {
+        this.sources = sources;
+    }
+
+    public String sourceFor(CommercialConsentSource decisionSource, ClientPlatform platform) {
+        if (decisionSource == CommercialConsentSource.UNSUBSCRIBE_LINK) {
+            return sources.unsubscribe;
+        }
+        return switch (platform == null ? ClientPlatform.UNKNOWN : platform) {
+            case WEB -> sources.web;
+            case IOS, ANDROID -> sources.mobile;
+            case UNKNOWN -> sources.unknown;
+        };
     }
 
     public Duration getPermissionMaxAge() {
         return permissionMaxAge;
     }
+
+    public Duration getClaimTimeout() { return claimTimeout; }
+
+    public void setClaimTimeout(Duration claimTimeout) { this.claimTimeout = claimTimeout; }
 
     public void setPermissionMaxAge(Duration permissionMaxAge) {
         this.permissionMaxAge = permissionMaxAge;
@@ -158,6 +179,36 @@ public class IysProperties {
         public void setBatchSize(int batchSize) {
             this.batchSize = batchSize;
         }
+    }
+
+    public static class Sources {
+
+        private static final Set<String> ALLOWED = Set.of(
+                "HS_FIZIKSEL_ORTAM", "HS_ISLAK_IMZA", "HS_ETKINLIK", "HS_EORTAM", "HS_WEB",
+                "HS_MOBIL", "HS_MESAJ", "HS_EPOSTA", "HS_CAGRI_MERKEZI", "HS_SOSYAL_MEDYA",
+                "HS_ATM");
+
+        private String web = "HS_WEB";
+        private String mobile = "HS_MOBIL";
+        private String unknown = "HS_EORTAM";
+        private String unsubscribe = "HS_EPOSTA";
+
+        private boolean isConfigured() {
+            return allowed(web) && allowed(mobile) && allowed(unknown) && allowed(unsubscribe);
+        }
+
+        private static boolean allowed(String value) {
+            return value != null && ALLOWED.contains(value.strip());
+        }
+
+        public String getWeb() { return web; }
+        public void setWeb(String web) { this.web = web; }
+        public String getMobile() { return mobile; }
+        public void setMobile(String mobile) { this.mobile = mobile; }
+        public String getUnknown() { return unknown; }
+        public void setUnknown(String unknown) { this.unknown = unknown; }
+        public String getUnsubscribe() { return unsubscribe; }
+        public void setUnsubscribe(String unsubscribe) { this.unsubscribe = unsubscribe; }
     }
 
     public static class Reconciliation {

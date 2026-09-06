@@ -52,13 +52,14 @@ class NotificationSuppressionTest {
         producer = mock(NotificationProducerService.class);
         preferences = mock(NotificationPreferenceService.class);
         when(preferences.isAllowed(any(), any(), any())).thenReturn(true);
-        iysService = mock(IysService.class);
-        when(iysService.isAllowed(any(), any())).thenReturn(true);
-
         recipient = new User();
         recipient.setId(UUID.randomUUID());
         recipient.setFirstName("Ada");
         recipient.setEmail("ada@koala.test");
+
+        iysService = mock(IysService.class);
+        when(iysService.isAllowed(eq(recipient), eq(NotificationChannel.EMAIL), eq(recipient.getEmail())))
+                .thenReturn(true);
 
         SecurityService security = mock(SecurityService.class);
         when(security.getAuthenticatedUserId()).thenReturn(recipient.getId());
@@ -231,5 +232,25 @@ class NotificationSuppressionTest {
         manager.sendEmail(email(NotificationCategory.NEWSLETTER), DispatchPriority.NORMAL, true);
 
         verify(unsubscribeTokens, never()).issueLink(any(), any(), any());
+    }
+
+    @Test
+    void aCommercialEmailWithoutAKnownRecipientIsSuppressedByIys() {
+        SendEmailDto newsletter = email(NotificationCategory.NEWSLETTER);
+        newsletter.setRecipient(null);
+
+        assertNull(manager.sendEmail(newsletter, DispatchPriority.NORMAL, true));
+
+        verify(producer, never()).sendEmailTask(any());
+    }
+
+    @Test
+    void aCommercialEmailCannotBorrowAnotherRecipientsIysPermission() {
+        SendEmailDto newsletter = email(NotificationCategory.NEWSLETTER);
+        newsletter.setDestinationEmail("other@koala.test");
+
+        assertNull(manager.sendEmail(newsletter, DispatchPriority.NORMAL, true));
+
+        verify(producer, never()).sendEmailTask(any());
     }
 }

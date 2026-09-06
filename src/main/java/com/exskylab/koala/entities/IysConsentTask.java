@@ -32,6 +32,9 @@ public class IysConsentTask extends BaseEntity {
     @Column(name = "id")
     private UUID id;
 
+    @Column(name = "decision_sequence", insertable = false, updatable = false, nullable = false)
+    private Long decisionSequence;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
@@ -50,6 +53,9 @@ public class IysConsentTask extends BaseEntity {
     @Column(name = "granted", nullable = false)
     private boolean granted;
 
+    @Column(name = "provider_source", nullable = false, length = 32)
+    private String providerSource;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 16)
     private IysConsentTaskStatus status;
@@ -60,8 +66,12 @@ public class IysConsentTask extends BaseEntity {
     @Column(name = "next_attempt_at", nullable = false)
     private Instant nextAttemptAt;
 
-    @Column(name = "last_error", length = 1000)
-    private String lastError;
+    @Column(name = "processing_started_at")
+    private Instant processingStartedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "last_failure_code", length = 32)
+    private IysFailureCode lastFailureCode;
 
     @Column(name = "completed_at")
     private Instant completedAt;

@@ -16,5 +16,6 @@ public interface IysPermissionStateDao extends JpaRepository<IysPermissionState,
 
     Optional<IysPermissionState> findByUserIdAndChannel(UUID userId, NotificationChannel channel);
 
-    List<IysPermissionState> findByVerifiedAtLessThanEqualOrderByVerifiedAtAsc(Instant dueBefore, Pageable pageable);
+    List<IysPermissionState> findByNextReconciliationAtLessThanEqualOrderByNextReconciliationAtAsc(
+            Instant dueBefore, Pageable pageable);
 }

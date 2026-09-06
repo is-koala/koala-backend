@@ -1,7 +1,7 @@
 package com.exskylab.koala.core.utilities.iys;
 
 import com.exskylab.koala.core.properties.IysProperties;
-import com.exskylab.koala.entities.CommercialConsentSource;
+import com.exskylab.koala.core.exceptions.ExternalServiceException;
 import com.exskylab.koala.entities.NotificationChannel;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,7 +50,7 @@ class IletiMerkeziIysClientTest {
                         """, MediaType.APPLICATION_JSON));
 
         client.registerConsent(new IysConsentRequest("person@koala.test", NotificationChannel.EMAIL,
-                true, Instant.parse("2026-09-06T18:00:00Z"), CommercialConsentSource.PREFERENCE_CENTRE));
+                true, Instant.parse("2026-09-06T18:00:00Z"), "HS_WEB"));
 
         server.verify();
     }
@@ -84,7 +84,7 @@ class IletiMerkeziIysClientTest {
         properties.setApiHash("");
 
         assertFalse(properties.isConfigured());
-        assertThrows(IllegalStateException.class,
+        assertThrows(ExternalServiceException.class,
                 () -> client.lookupConsent("person@koala.test", NotificationChannel.EMAIL));
         server.verify();
     }
@@ -96,7 +96,6 @@ class IletiMerkeziIysClientTest {
         configured.setApiKey("key");
         configured.setApiHash("hash");
         configured.setBrandCode("brand");
-        configured.setSource("HS_WEB");
         assertTrue(configured.isConfigured());
         return configured;
     }

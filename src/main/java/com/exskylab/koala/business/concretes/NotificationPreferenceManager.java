@@ -7,6 +7,8 @@ import com.exskylab.koala.business.abstracts.UnsubscribeTokenService;
 import com.exskylab.koala.core.dtos.notificationPreference.request.NotificationPreferenceEntryDto;
 import com.exskylab.koala.core.dtos.notificationPreference.request.UpdateNotificationPreferencesDto;
 import com.exskylab.koala.core.dtos.notificationPreference.response.NotificationPreferenceDto;
+import com.exskylab.koala.core.constants.IysMessages;
+import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.helpers.ClientContext;
 import com.exskylab.koala.dataAccess.CommercialMessageConsentDao;
 import com.exskylab.koala.dataAccess.NotificationPreferenceDao;
@@ -76,6 +78,7 @@ public class NotificationPreferenceManager implements NotificationPreferenceServ
         Map<String, NotificationPreference> stored = storedRowsOf(owner.getId());
 
         for (NotificationPreferenceEntryDto entry : request.getPreferences()) {
+            requireVerifiedRecipient(owner, entry);
             apply(owner, entry.getCategory(), entry.getChannel(), entry.getEnabled(), stored);
             recordCommercialDecision(owner, entry.getCategory(), entry.getChannel(), entry.getEnabled(),
                     CommercialConsentSource.PREFERENCE_CENTRE, client, stored);
@@ -84,6 +87,20 @@ public class NotificationPreferenceManager implements NotificationPreferenceServ
         log.info("Notification preferences updated for user {}: {} decisions",
                 owner.getId(), request.getPreferences().size());
         return resolve(stored);
+    }
+
+    private void requireVerifiedRecipient(User owner, NotificationPreferenceEntryDto entry) {
+        if (!entry.getEnabled() || !entry.getCategory().getKind().isCommercial()) {
+            return;
+        }
+        boolean verified = switch (entry.getChannel()) {
+            case EMAIL -> owner.isEmailVerified() && owner.getEmail() != null && !owner.getEmail().isBlank();
+            case SMS -> owner.isPhoneVerified() && owner.getPhoneNumber() != null && !owner.getPhoneNumber().isBlank();
+            case PUSH, IN_APP -> true;
+        };
+        if (!verified) {
+            throw new ValidationException(IysMessages.VERIFIED_RECIPIENT_REQUIRED);
+        }
     }
 
     @Override
@@ -110,9 +127,14 @@ public class NotificationPreferenceManager implements NotificationPreferenceServ
                 continue;
             }
             apply(owner, category, channel, false, stored);
-            CommercialMessageConsent consent = consent(owner, category, channel, false,
-                    CommercialConsentSource.IYS_RECONCILIATION, recordedAt, null);
-            commercialMessageConsentDao.save(consent);
+            if (!commercialMessageConsentDao
+                    .existsByUserIdAndCategoryAndChannelAndGrantedAndSourceAndRecordedAt(
+                            owner.getId(), category, channel, false,
+                            CommercialConsentSource.IYS_RECONCILIATION, recordedAt)) {
+                CommercialMessageConsent consent = consent(owner, category, channel, false,
+                        CommercialConsentSource.IYS_RECONCILIATION, recordedAt, null);
+                commercialMessageConsentDao.save(consent);
+            }
         }
         log.info("IYS withdrawal applied to commercial preferences for user {} on {}", owner.getId(), channel);
     }
@@ -143,7 +165,7 @@ public class NotificationPreferenceManager implements NotificationPreferenceServ
         CommercialMessageConsent consent = consent(owner, category, channel, granted, source, Instant.now(), client);
 
         commercialMessageConsentDao.save(consent);
-        iysService.enqueue(owner, consent, channel, hasCommercialOptIn(channel, stored));
+        iysService.enqueue(owner, consent, channel, hasCommercialOptIn(channel, stored), client);
         log.info("Commercial message consent {} recorded for user {} on {}", granted, owner.getId(), channel);
     }
 

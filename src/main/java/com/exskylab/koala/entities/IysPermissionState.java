@@ -55,4 +55,14 @@ public class IysPermissionState extends BaseEntity {
 
     @Column(name = "provider_source", length = 32)
     private String providerSource;
+
+    @Column(name = "next_reconciliation_at", nullable = false)
+    private Instant nextReconciliationAt;
+
+    @Column(name = "reconciliation_attempts", nullable = false)
+    private int reconciliationAttempts;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "last_failure_code", length = 32)
+    private IysFailureCode lastFailureCode;
 }
