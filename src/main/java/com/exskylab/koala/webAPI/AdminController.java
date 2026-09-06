@@ -131,6 +131,7 @@ public class AdminController {
             @ApiResponse(responseCode = "404", description = "Kullanıcı bulunamadı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
+    @RequiresPermission(StaffPermission.USER_READ)
     @GetMapping("/users/{userId}/roles")
     public ResponseEntity<SuccessDataResult<List<RoleGrantDto>>> userRoles(@PathVariable UUID userId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
@@ -149,6 +150,7 @@ public class AdminController {
             @ApiResponse(responseCode = "409", description = "Sistem kullanıcısının rolleri değiştirilemez",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
+    @RequiresPermission(value = StaffPermission.USER_ROLE_MANAGE, action = "user.role.grant")
     @PostMapping("/users/{userId}/roles")
     public ResponseEntity<SuccessDataResult<List<RoleGrantDto>>> grantUserRole(
             @PathVariable UUID userId, @RequestBody @Valid GrantRoleDto request) {
@@ -169,6 +171,7 @@ public class AdminController {
             @ApiResponse(responseCode = "409", description = "Rol korunuyor",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
+    @RequiresPermission(value = StaffPermission.USER_ROLE_MANAGE, action = "user.role.revoke")
     @DeleteMapping("/users/{userId}/roles/{role}")
     public ResponseEntity<Result> revokeUserRole(@PathVariable UUID userId, @PathVariable Role role) {
         userService.revokeRole(userId, role);

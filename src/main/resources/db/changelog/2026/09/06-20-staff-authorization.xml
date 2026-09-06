@@ -124,6 +124,7 @@
                 ('AUDITOR',          'audit.read'),
                 ('OWNER',            'staff.manage'),
                 ('OWNER',            'role.manage'),
+                ('OWNER',            'user.role.manage'),
                 ('OWNER',            'settings.manage')
             ) AS grant_row(role_code, permission_code)
             JOIN staff_roles r ON r.code = grant_row.role_code
