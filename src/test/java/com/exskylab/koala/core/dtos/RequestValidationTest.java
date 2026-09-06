@@ -13,6 +13,7 @@ import com.exskylab.koala.core.dtos.jobAlert.request.SaveJobAlertDto;
 import com.exskylab.koala.core.dtos.notificationPreference.request.NotificationPreferenceEntryDto;
 import com.exskylab.koala.core.dtos.notificationPreference.request.UpdateNotificationPreferencesDto;
 import com.exskylab.koala.core.dtos.report.request.CreateReportDto;
+import com.exskylab.koala.core.dtos.report.request.ReviewReportDto;
 import com.exskylab.koala.entities.*;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
@@ -154,6 +155,22 @@ class RequestValidationTest {
 
         empty.setJobId(UUID.randomUUID());
         assertTrue(isValid(empty));
+    }
+
+    @Test
+    void aReportCannotBeDecidedWithoutAReason() {
+        ReviewReportDto blank = new ReviewReportDto();
+        blank.setStatus(ReportStatus.ACTIONED);
+
+        assertTrue(messagesFor(blank).contains("{report.review.note.required}"),
+                "Karar gerekcesi sunucuda da zorunlu olmali, yalnizca panelde degil.");
+
+        blank.setNote("   ");
+        assertTrue(messagesFor(blank).contains("{report.review.note.required}"),
+                "Yalnizca bosluktan olusan gerekce de bos sayilmali.");
+
+        blank.setNote("Hesap askiya alindi.");
+        assertTrue(isValid(blank));
     }
 
     @Test

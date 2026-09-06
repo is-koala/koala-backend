@@ -15,9 +15,11 @@ import com.exskylab.koala.business.abstracts.ImageService;
 import com.exskylab.koala.business.abstracts.MessagingService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.constants.ReportMessages;
+import com.exskylab.koala.core.security.StaffPrincipal;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -41,7 +43,8 @@ class ReportRulesTest {
         MessagingService messagingService = mock(MessagingService.class);
 
         manager = new ReportManager(reportDao, userService, jobService, messagingService, securityService,
-                mock(ImageService.class), new com.exskylab.koala.core.helpers.PageableSanitizer());
+                mock(ImageService.class), mock(com.exskylab.koala.core.mappers.ReportMapper.class),
+                new com.exskylab.koala.core.helpers.PageableSanitizer());
 
         when(reportDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(securityService.getAuthenticatedUserId()).thenReturn(reporterId);
@@ -81,7 +84,7 @@ class ReportRulesTest {
         when(securityService.getAuthenticatedUser()).thenReturn(new User());
 
         assertThrows(ConflictException.class,
-                () -> manager.review(report.getId(), ReportStatus.DISMISSED, "yine"));
+                () -> manager.review(null, report.getId(), ReportStatus.DISMISSED, "yine"));
     }
 
     @Test
@@ -95,11 +98,11 @@ class ReportRulesTest {
         admin.setId(UUID.randomUUID());
         when(securityService.getAuthenticatedUser()).thenReturn(admin);
 
-        Report reviewed = manager.review(report.getId(), ReportStatus.ACTIONED, "hesap askıya alındı");
+        manager.review(null, report.getId(), ReportStatus.ACTIONED, "hesap askıya alındı");
 
-        assertEquals(ReportStatus.ACTIONED, reviewed.getStatus());
-        assertEquals(admin.getId(), reviewed.getReviewedBy().getId());
-        assertNotNull(reviewed.getReviewedAt());
+        assertEquals(ReportStatus.ACTIONED, report.getStatus());
+        assertEquals(admin.getId(), report.getReviewedBy().getId());
+        assertNotNull(report.getReviewedAt());
     }
 
     @Test
@@ -111,9 +114,46 @@ class ReportRulesTest {
 
         ReportManager withGhost = new ReportManager(reportDao, userService, mock(JobService.class),
                 mock(MessagingService.class), securityService, mock(ImageService.class),
+                mock(com.exskylab.koala.core.mappers.ReportMapper.class),
                 new com.exskylab.koala.core.helpers.PageableSanitizer());
 
         assertThrows(ResourceNotFoundException.class,
                 () -> withGhost.createReport(ghost, null, null, null, ReportReason.FRAUD, "yok"));
+    }
+
+    @Test
+    void aStaffModeratorCanDecideWithoutBeingAMarketplaceUser() {
+        Report report = new Report();
+        report.setId(UUID.randomUUID());
+        report.setStatus(ReportStatus.OPEN);
+        when(reportDao.findById(report.getId())).thenReturn(Optional.of(report));
+        when(securityService.getAuthenticatedUser())
+                .thenThrow(new ResourceNotFoundException("{user.not.authenticated}"));
+
+        StaffPrincipal moderator = new StaffPrincipal(UUID.randomUUID(), "kc-subject", null,
+                "Moderator", Set.of("MODERATOR"), Set.of());
+
+        manager.review(moderator, report.getId(), ReportStatus.ACTIONED, "Icerik kaldirildi.");
+
+        assertEquals(ReportStatus.ACTIONED, report.getStatus());
+        assertNull(report.getReviewedBy(),
+                "Personel kimliginin pazaryeri kullanicisi yok; reviewedBy bos kalir, "
+                        + "karari kimin verdigini denetim kaydi soyler.");
+    }
+
+    @Test
+    void aBridgeAdminDecisionStillStampsTheMarketplaceUser() {
+        Report report = new Report();
+        report.setId(UUID.randomUUID());
+        report.setStatus(ReportStatus.OPEN);
+        when(reportDao.findById(report.getId())).thenReturn(Optional.of(report));
+
+        User admin = new User();
+        admin.setId(UUID.randomUUID());
+        when(securityService.getAuthenticatedUser()).thenReturn(admin);
+
+        manager.review(null, report.getId(), ReportStatus.ACTIONED, "Hesap askiya alindi.");
+
+        assertEquals(admin.getId(), report.getReviewedBy().getId());
     }
 }

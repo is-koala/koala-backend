@@ -8,4 +8,6 @@ public class ReportMessages {
     public static final String CREATED = "{report.created}";
     public static final String REVIEWED = "{report.reviewed}";
     public static final String LISTED = "{report.listed}";
+    public static final String DETAIL = "{report.detail}";
+    public static final String REVIEW_NOTE_REQUIRED = "{report.review.note.required}";
 }
