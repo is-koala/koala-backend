@@ -2,6 +2,7 @@ package com.exskylab.koala.core.dtos.report.request;
 
 import com.exskylab.koala.core.constants.ReportMessages;
 import com.exskylab.koala.entities.ReportStatus;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
@@ -18,6 +19,7 @@ public class ReviewReportDto {
     @NotNull(message = ReportMessages.TARGET_REQUIRED)
     private ReportStatus status;
 
+    @NotBlank(message = ReportMessages.REVIEW_NOTE_REQUIRED)
     @Size(max = 2000)
     private String note;
 }
