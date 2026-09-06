@@ -70,7 +70,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus
+        include: health,info,metrics,prometheus,loggers
   endpoint:
     health:
       probes:
@@ -90,6 +90,7 @@ logging:
     com.exskylab.koala: ${APP_LOG_LEVEL:INFO}
     org.springframework.security: ${SECURITY_LOG_LEVEL:INFO}
     http.access: ${ACCESS_LOG_LEVEL:INFO}
+    nl.basjes: ${USER_AGENT_LOG_LEVEL:WARN}
   structured:
     ecs:
       service:
