@@ -4,9 +4,14 @@ import com.exskylab.koala.entities.Payment;
 import com.exskylab.koala.entities.PaymentAttemptStatus;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.stereotype.Repository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.domain.Pageable;
+
+import jakarta.persistence.LockModeType;
+import java.time.Instant;
 
 import java.util.List;
 import java.util.Optional;
@@ -16,7 +21,23 @@ import java.util.UUID;
 public interface PaymentDao extends JpaRepository<Payment, UUID> {
 
     @EntityGraph(attributePaths = {"jobAssignment", "jobAssignment.worker", "jobAssignment.job"})
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<Payment> findByProviderToken(String providerToken);
+
+    @EntityGraph(attributePaths = {"jobAssignment", "jobAssignment.worker", "jobAssignment.job"})
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Payment p where p.id = :id")
+    Optional<Payment> findWithDetailsById(@Param("id") UUID id);
+
+    @Query("""
+            select p.id from Payment p
+            where p.status in :statuses
+              and p.nextVerificationAt is not null
+              and p.nextVerificationAt <= :now
+            order by p.nextVerificationAt asc
+            """)
+    List<UUID> findDueVerificationIds(@Param("statuses") List<PaymentAttemptStatus> statuses,
+                                      @Param("now") Instant now, Pageable pageable);
 
     @EntityGraph(attributePaths = {"jobAssignment", "jobAssignment.worker", "jobAssignment.job"})
     Optional<Payment> findByConversationId(String conversationId);

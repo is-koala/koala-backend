@@ -4,9 +4,11 @@ import com.exskylab.koala.support.FallbackSettings;
 import com.exskylab.koala.business.abstracts.CompanyContactService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
+import com.exskylab.koala.core.exceptions.ExternalServiceException;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
 import com.exskylab.koala.core.monitoring.PaymentMetrics;
+import com.exskylab.koala.core.properties.PaymentVerificationProperties;
 import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoPaymentResultResponseDto;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
@@ -20,6 +22,9 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.hibernate.exception.ConstraintViolationException;
+
+import java.sql.SQLException;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -49,7 +54,8 @@ class PaymentMonitoringTest {
         registry = new SimpleMeterRegistry();
         paymentManager = new PaymentManager(paymentDao, iyzicoPaymentService, new PaymentStateMachine(),
                 mock(SecurityService.class), mock(JobAssignmentDao.class),
-                new AssignmentParticipants(mock(CompanyContactService.class)), new PaymentMetrics(registry));
+                new AssignmentParticipants(mock(CompanyContactService.class)), new PaymentMetrics(registry),
+                new PaymentVerificationProperties());
         when(paymentDao.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(paymentDao.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
@@ -92,7 +98,9 @@ class PaymentMonitoringTest {
         assignment.setPricingVersion("2026-09-v1");
         when(paymentDao.existsByJobAssignmentIdAndStatusIn(any(), any())).thenReturn(false);
         when(paymentDao.saveAndFlush(any())).thenThrow(
-                new DataIntegrityViolationException("uk_payments_one_active_attempt"));
+                new DataIntegrityViolationException("duplicate payment attempt",
+                        new ConstraintViolationException("duplicate key", new SQLException(),
+                                "uk_payments_one_active_attempt")));
 
         var breakdown = FallbackSettings.commissionCalculator()
                 .calculate(new BigDecimal("1000.00"));
@@ -102,6 +110,20 @@ class PaymentMonitoringTest {
 
         assertEquals("PAYMENT_ATTEMPT_IN_PROGRESS", thrown.getErrorCode());
         assertEquals(0.0, counter("initiation", "persistence_error"));
+    }
+
+    @Test
+    void aDuplicateProviderTokenIsRejectedAsAnUntrustedProviderResponse() {
+        Payment payment = new Payment();
+        when(paymentDao.saveAndFlush(any())).thenThrow(
+                new DataIntegrityViolationException("duplicate provider token",
+                        new ConstraintViolationException("duplicate key", new SQLException(),
+                                "uk_payments_provider_token")));
+
+        ExternalServiceException thrown = assertThrows(ExternalServiceException.class,
+                () -> paymentManager.attachProviderToken(payment, "duplicate-token"));
+
+        assertEquals("PAYMENT_PROVIDER_RESPONSE_INVALID", thrown.getErrorCode());
     }
 
     @Test

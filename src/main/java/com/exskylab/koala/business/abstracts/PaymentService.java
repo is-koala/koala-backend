@@ -13,7 +13,15 @@ public interface PaymentService {
 
     void attachProviderToken(Payment payment, String providerToken);
 
+    void markInitiationUncertain(UUID paymentId);
+
+    void failInitiation(UUID paymentId);
+
     Payment completeFromCallback(String providerToken);
+
+    List<UUID> findDueVerificationAttemptIds();
+
+    boolean reconcileAttempt(UUID paymentId);
 
     List<Payment> getAttemptsForAssignment(UUID jobAssignmentId);
 

@@ -477,7 +477,13 @@ Testlerde `rate-limit.enabled=false`; açıkça test eden sınıflar `@TestPrope
 
 **Her deneme ayrı kayıt.** `Payment` tablosu bir `JobAssignment` için birden çok deneme tutar. `conversation_id` benzersiz ve **her denemede yeniden üretilir**; eskiden `assignmentId` ile eşitlenmişti ve ikinci deneme birincisiyle çakışıyordu.
 
+**Bir atamanın en fazla bir aktif denemesi vardır.** Aktif küme `INITIATED`, `VERIFY_PENDING` ve `IN_REVIEW`; `uk_payments_one_active_attempt` kısmi benzersiz indeksi bu invariant'ı gerçek yarışta da korur. Ön kontrol yalnızca hızlı hata içindir; doğruluk veritabanındadır. Constraint çevirisi hata mesajı metnine değil Hibernate'in `constraintName` alanına bakar. `ActivePaymentAttemptConstraintIT` iki gerçek transaction'ı aynı anda koşturup birinin başarı, diğerinin `PAYMENT_ATTEMPT_IN_PROGRESS` 409 aldığını sabitler.
+
+**Rezervasyon sağlayıcıdan önce ve ayrı transaction'da yazılır.** `startAttempt(REQUIRES_NEW)`, alt üye işyeri ve checkout initialize çağrılarından önce commit olur. Böylece iki HTTP isteği aynı anda Iyzico'ya gidemez. Initialize sonucu belirsizse satır geri alınmaz; `VERIFY_PENDING` olur ve yeni checkout'u engeller. Token henüz alınamadığı için bu özel durum `conversation_id` ile panelden elle mutabakat ister. Alt üye işyeri çağrısı gibi checkout'un hiç başlamadığı bilinen erken hata ise rezervasyonu terminal `FAILED` yapar.
+
 **Callback artık doğrulanıyor.** Sağlayıcının `paymentStatus`, `fraudStatus`, `paidPrice` ve `currency` değerleri kontrol edilmeden emanet açılıyordu; ayrıntı ve neyin kırık olduğu §2x'te.
+
+**Belirsiz doğrulama başarısızlık değildir.** Retrieve ağ/HTTP/imza hatası veya imzalı yanıttaki immutable snapshot uyuşmazlığı `FAILED` yapılıp yeni ödeme açmaz; `VERIFY_PENDING` durumunda aktif kalır. Token'ı olan satırlar `PaymentVerificationScheduler` tarafından üstel geri çekilmeyle en çok 8 kez yeniden sorulur. Otomatik tavan dolunca satır aktif kalır, `next_verification_at=null` olur ve manuel mutabakat bekler. `IN_REVIEW` aynı döngüyle tekrar sorgulanır.
 
 **Callback idempotent.** Zaten `SUCCEEDED` olan bir ödemeye ikinci callback geldiğinde sağlayıcıya hiç gidilmez, kayıt değiştirilmez. Iyzico aynı callback'i tekrar gönderirse ikinci kez para hareketi işlenmez.
 
@@ -497,7 +503,7 @@ Testlerde `rate-limit.enabled=false`; açıkça test eden sınıflar `@TestPrope
 
 **`verificationStatus` bu dalgada yalnızca ileriye uyumlu veri sözleşmesidir.** Mevcut ve yeni hesaplar `UNVERIFIED` başlar; eski profil ucu bir IBAN'ı değiştirdiğinde durum yeniden `UNVERIFIED` olur ve beyana dayalı `accountHolderName` temizlenir. `PENDING`, `VERIFIED` ve `EXPIRED` değerlerinin geçişleri, zaman aşımı ve ödeme kapısı #71'in sorumluluğundadır; bu koleksiyon yüzeyi bunları uygulamaz ve ödeme semantiğini değiştirmez.
 
-`initiatePaymentSession` bütünüyle `@Transactional`: adres eksikliği ya da Iyzico hatası durumunda `Payment` kaydı da geri alınır, sahipsiz deneme kalmaz.
+`PaymentSessionDto` yalnız güvenilir `paymentPageUrl` ve fiyat kırılımını taşır. Iyzico provider token'ı dahili korelasyon sırrıdır; public yanıttan çıkarıldı ve veritabanında `uk_payments_provider_token` ile benzersizdir.
 
 ## 2l. Sayfalama ve ilan araması
 
@@ -1129,11 +1135,11 @@ Artık `SettlementOperation.REFUND` var ve `/payment/refund` çağrılıyor (`pa
 
 `settlement_tasks.amount` bu yüzden eklendi — `REFUND` dışındaki işlemlerde null.
 
-**Tutar doğrulanmıyordu.** Callback sonrası sağlayıcının döndürdüğü `paidPrice` ve `currency` bizim `totalCharged` ile karşılaştırılmıyordu; sağlayıcı ne derse emanet açılıyordu. Artık uyuşmazlıkta ödeme `FAILED` olur ve log tutarları yazar.
+**Tutar ve immutable snapshot doğrulanmıyordu.** Callback sonrası sağlayıcının döndürdüğü değerler bizim denememizle tam eşleşmeden emanet açılıyordu. Artık resmi response signature doğrulandıktan sonra `conversationId`, token, `basketId`, currency, `price`, `paidPrice`, tek item'ın `itemId`/`price`/`paidPrice`/`subMerchantPrice` değerleri ve provider işlem kimlikleri snapshot'la karşılaştırılır. Uyuşmazlık para çekilmiş olabileceği için terminal değildir: ödeme `VERIFY_PENDING` kalır ve log yalnız uyuşmayan alanın adını yazar.
 
 **`fraudStatus` yok sayılıyordu.** Iyzico `0` derse ödeme dolandırıcılık incelemesindedir ve **sonradan geri çevrilebilir**; doküman "yalnızca 1 iken ürünü gönderin" diyor. Öncesinde `0` da `1` gibi işlenip emanet açılıyor, işçi işe başlayabiliyordu. Artık `1` → emanet, `0` → yeni `PaymentAttemptStatus.IN_REVIEW` (emanet açılmaz), `-1` → `FAILED`.
 
-**`IN_REVIEW`'dan çıkış henüz otomatik değil.** Iyzico incelemeyi bitirince webhook gönderir; o tüketici yazılmadı. Bugün ödeme incelemede kalırsa işveren yeniden denemek zorunda. Kayıt `providerTransactionId` ile duruyor, yani el ile çözülebilir.
+**`IN_REVIEW` otomatik yeniden sorgulanır.** Webhook tüketicisi hâlâ yok, fakat `PaymentVerificationScheduler` vadesi gelen kaydı aynı imzalı retrieve ucundan tekrar okur. Tavan dolarsa aktif kayıt silinmez ya da retryable yapılmaz; manuel mutabakata bırakılır.
 
 **Para artık `double` değil.** `price`, `paidPrice`, `subMerchantPrice` `BigDecimal`'e çevrildi — §2e'nin kuralı buraya hiç uygulanmamıştı, oysa iyzico `price` ile sepet kalemlerinin toplamının **tam** eşitliğini arıyor.
 
@@ -1142,6 +1148,8 @@ Artık `SettlementOperation.REFUND` var ve `/payment/refund` çağrılıyor (`pa
 **Exception yüzeyi §2ag'ye uyduruldu.** `RuntimeException` yerine `ExternalServiceException` (502). Ayrıca `retrieveCheckoutFormResult` **artık reddedilen ödemede exception atmıyor** — sonucu döndürüyor, kararı `PaymentManager` veriyor. Öncesinde "kart reddedildi" ile "sağlayıcıya ulaşılamadı" aynı catch'e düşüyordu.
 
 **`conversationId` artık korelasyon taşıyor.** Approve/disapprove/refund çağrılarında rastgele UUID üretiliyordu; artık ödemenin kendi `conversationId`'si gidiyor, yani iyzico panelindeki kayıt bizdeki `Payment` ile eşleşiyor.
+
+**Response signature ayrıca doğrulanır.** IYZWSv2 request imzası yanıtın doğruluğunu kanıtlamaz. Initialize için resmi `conversationId:token`, retrieve için resmi `paymentStatus:paymentId:currency:basketId:conversationId:paidPrice:price:token` sırası secret key ile HMAC-SHA256 doğrulanır; para değerleri resmi kurala göre sondaki sıfırlardan arındırılır. Initialize URL'si de yalnız configured loopback ya da ortamın resmi iyzico HTTPS hostlarından olabilir.
 
 **Hâlâ sandbox'ta uçtan uca doğrulanmadı.** Yukarıdakiler dokümana karşı doğru; gerçek bir sandbox işlemiyle teyit edilmesi gereken tek şey kısmi iade + disapprove ikilisinin sıralamasıdır. `iyzico.settlementEnabled=false` ile kuyruk tümüyle kapalı tutulabilir.
 
@@ -1172,7 +1180,7 @@ Aynı sayfaların `/payment/v2/3dsecure/auth` şeması bunu tek cümleyle bağl�
 
 **Alan yoksa ödeme reddediliyor — bilinçli olarak kapalı düşülüyor.** iyzico dört ayrı sayfada "`mdStatus` parametresi sadece 3DS işlemlerinde görünecektir" diyor. Yani alanın yokluğunun iki okuması var: (a) işlem 3DS'siz geçti, (b) yanıt beklediğimiz gibi değil. İkisini ayırt edemiyoruz ve ayırt edemediğimiz durumda **parayı korumaktan yana yanılıyoruz** — §2y2'deki ortam kapısıyla aynı yön. Alan yokken başarı saymak, tam olarak kapatmaya çalıştığımız açığın yeniden açılması olurdu: doğrulanmamış bir işlem emanete girer.
 
-Bedeli açıkça yazılı olsun: **Checkout Form bir gün 3DS'siz bir ödeme geçirirse onu da reddederiz.** iyzico'nun CF'nin 3DS'i hangi kurala göre seçtiğini yazmadığı `docs/runbooks/payments.md` §6.3'te duruyor. Böyle bir işlemde sağlayıcı tarafında para çekilmiş olabilir; operasyonel karşılığı tutar uyuşmazlığıyla aynıdır — panelden `conversation_id` ile elle iade (runbook §1). Canlıya geçişte doğrulanacak ilk şey budur; kalıcı çözüm istenirse `forceThreeDS` (§6.3'te belgelenmemiş olarak işaretli) iyzico'dan yazılı teyit alındıktan sonra gönderilir.
+Bedeli açıkça yazılı olsun: **Checkout Form bir gün 3DS'siz bir ödeme geçirirse onu da reddederiz.** iyzico'nun CF'nin 3DS'i hangi kurala göre seçtiğini yazmadığı `docs/runbooks/payments.md` §6.3'te duruyor. Böyle bir işlemde sağlayıcı tarafında para çekilmiş olabilir; operasyonel karşılığı snapshot uyuşmazlığıyla aynıdır — panelden `conversation_id` ile elle iade (runbook §1). Canlıya geçişte doğrulanacak ilk şey budur; kalıcı çözüm istenirse `forceThreeDS` (§6.3'te belgelenmemiş olarak işaretli) iyzico'dan yazılı teyit alındıktan sonra gönderilir.
 
 **Bir çelişki not edilmeli.** CF sorgulama yanıtının OpenAPI şeması (`/odeme-metotlari/odeme-formu/cf-entegrasyonu/cf-sorgulama`) `mdStatus`'u **saymıyor**; ama aynı doküman setindeki CF örnek yanıtı (`.../cf-ornek-entegrasyon`) `"mdStatus": 1` içeriyor ve resmî `iyzipay-java` SDK'sında `CheckoutForm`, `PaymentResource`'tan `getMdStatus()`'u miras alıyor. İkisi de iyzico. Alanın geleceğini varsayıyoruz ama şema garanti etmediği için okuma null'a dayanıklı ve karar fail-closed.
 
@@ -2126,6 +2134,8 @@ Kural: bu tür testlerde başlangıç zamanı `LocalDateTime.now(POLICY_ZONE)` �
 
 **Iyzico protokol testleri.** `IyzicoProtocolTest` on kural sabitliyor — sahte bir HTTP sunucusuna karşı gerçek `RestTemplate` ile: uç yolları dokümandaki değerlerden sapmıyor, sorgulama doğru adrese gidiyor, her istekte `x-iyzi-rnd` var, başlıktaki rastgele anahtar imzalanan anahtarla aynı, imza `randomKey + yol + gövde` üzerinden üretiliyor, reddedilen ödeme exception değil sonuç döndürüyor, işlem kimliği ve tutar `itemTransactions[0]`'dan okunuyor, `status: failure` gövdesi 502'ye çevriliyor, 400 ile dönen hata gövdesi yine de ayrıştırılıyor, iade ondalık tutarla gidiyor. `PaymentCallbackTest` beş yeni kural kazandı: reddedilen ödeme emanet açmaz, dolandırıcılık reddi düşer, inceleme `IN_REVIEW`'da bekler, eksik tahsilat reddedilir, farklı para birimi reddedilir. `PayoutReleaseTest` iade yolunu sabitliyor: tam iade karta döner ve disapprove gerektirmez, kısmi iade her ikisini de kuyruğa alır.
 
+**Ödeme hardening testleri.** `IyzicoProtocolTest` initialize/retrieve response signature sıralarını, trusted checkout URL'sini ve item snapshot alanlarını gerçek HTTP adapter'ında sabitler. `PaymentCallbackTest` belirsiz provider sonucunun aktif kaldığını, bütün snapshot eşleşmeden escrow açılmadığını, bounded retry tavanını ve sonradan başarılı mutabakatı kapsar. `ActivePaymentAttemptConstraintIT` gerçek Postgres'te iki eşzamanlı rezervasyon ve structured constraint→409 yolunu çalıştırır; ayrıca aktif durum/provider token indekslerini okur. `PaymentSessionContractTest` provider token'ın public DTO'ya dönmemesini korur.
+
 **Faz 25 testleri.** `EmployerSurfaceRulesTest` beş kural sabitliyor: profil sokak adresini asla taşımaz, yabancı `cvUrl` görmez, başvurulan işveren görür, kişi kendi bağlantısını her zaman görür, özgeçmiş yoksa alan null kalır. `RateLimitBucketTest` yedi kural: okuma sınırlanmaz, yüklemeler kaynaklar arası tek bütçeden düşer, kovalar birbirini tüketmez, mesajın kendi bütçesi var, listelenmemiş yazma ucu da kapsanır, giriş yol bazlı kalır, iki istemci bütçe paylaşmaz. `UploadValidatorTest` sıkıştırma bombası savunmasını ve uzantı beyaz listesini sabitliyor.
 
 **Faz 24 testleri.** `ApiDocumentationTest` dört kural sabitliyor: her uçta `@Operation`, her uçta `@ApiResponse`, her controller'da `@Tag`, ve dokümandaki açık/korumalı ayrımının `SecurityConfig` ile uyuşması. `OpenApiDocumentIT` belgeyi gerçekten üretip beş özelliğini doğruluyor. `EmailTemplateTest` şablon adı–dosya eşleşmesini, her şablonun işlenebildiğini ve `/api` kalıntısı kalmadığını koruyor.
@@ -2266,7 +2276,7 @@ Denetim bulguları `K-01`…`K-42` kodlarıyla numaralandırılmış; commit mes
 | Faz | Kapsam | Neye bağlı |
 |---|---|---|
 | **20** | **Referans veri olgunlaştırma.** Ayrıntı aşağıda | ürün + veri |
-| **7C** | **Iyzico kalanları.** Dolandırıcılık incelemesi (`fraudStatus=0`) webhook tüketicisi — `IN_REVIEW`'daki ödeme bugün kendiliğinden çözülmüyor (§2x). Ayrıca kısmi iade + disapprove sıralamasının sandbox'ta teyidi | sandbox erişimi |
+| **7C** | **Iyzico kalanları.** Dolandırıcılık webhook tüketicisi olmadan `IN_REVIEW` artık bounded retrieve ile çözülüyor; kalan dış kabul işi gerçek sandbox'ta ödeme→emanet→çıkış ve kısmi iade + disapprove sıralamasının teyidi | sandbox erişimi |
 | **9B** | Yasal kalanlar: anonimleştirme adımı, `Invoice`, `AuditLog`, İYS entegrasyonu, ETBİS, depolama saklama politikası (§8) | **hukuk** |
 | **11D** | **Çok örneklilik.** Beş yerde tek örnek varsayımı: hız sınırı sayacı (§2j), otomatik tamamlama zamanlayıcısı (§2u), mutabakat zamanlayıcısı (§2y), presence haritası ve STOMP basit broker'ı (§2z). **Şu an tek örnek çalışacak, ertelendi** — Redis + `ShedLock` + RabbitMQ STOMP relay | ertelendi |
 

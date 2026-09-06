@@ -241,20 +241,24 @@ public class JobAssignmentManager implements JobAssignmentService {
             throw new ConflictException(PaymentMessages.ATTEMPT_IN_PROGRESS);
         }
 
+        CommissionCalculator.Breakdown breakdown = pricingService.breakdown(assignment);
+        Payment payment = paymentService.startAttempt(assignment, breakdown);
+
         if (worker.getIyzicoSubmerchantKey() == null || worker.getIyzicoSubmerchantKey().isBlank()){
             log.info("Worker {} does not have an iyzico submerchant key. Creating one...", worker.getId());
 
-            SubMerchantCreateRequestDto merchantDto = createSubMerchantDtoForWorker(worker);
-            SubMerchantCreateResponseDto response = iyzicoPaymentService.createSubMerchant(merchantDto);
+            try {
+                SubMerchantCreateRequestDto merchantDto = createSubMerchantDtoForWorker(worker);
+                SubMerchantCreateResponseDto response = iyzicoPaymentService.createSubMerchant(merchantDto);
 
-            worker.setIyzicoSubmerchantKey(response.getSubMerchantKey());
-            userService.save(worker);
-            log.info("Worker {} has been created with iyzico submerchant key.}", worker.getId());
+                worker.setIyzicoSubmerchantKey(response.getSubMerchantKey());
+                userService.save(worker);
+                log.info("Worker {} has been created with iyzico submerchant key.}", worker.getId());
+            } catch (RuntimeException exception) {
+                paymentService.failInitiation(payment.getId());
+                throw exception;
+            }
         }
-
-
-        CommissionCalculator.Breakdown breakdown = pricingService.breakdown(assignment);
-        Payment payment = paymentService.startAttempt(assignment, breakdown);
 
         PaymentSessionRequestDto iyzicoRequest = new PaymentSessionRequestDto();
 
@@ -281,12 +285,14 @@ public class JobAssignmentManager implements JobAssignmentService {
             paymentSession = iyzicoPaymentService.initiateCheckoutFormPayment(iyzicoRequest);
         } catch (RuntimeException exception) {
             paymentMetrics.initiationProviderError();
+            paymentService.markInitiationUncertain(payment.getId());
             throw exception;
         }
         try {
             paymentService.attachProviderToken(payment, paymentSession.getToken());
         } catch (RuntimeException exception) {
             paymentMetrics.initiationPersistenceError();
+            paymentService.markInitiationUncertain(payment.getId());
             throw exception;
         }
         paymentMetrics.initiationSucceeded();
