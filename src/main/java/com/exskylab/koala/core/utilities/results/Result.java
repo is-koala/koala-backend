@@ -16,7 +16,6 @@ public class Result {
     private String path;
     private Instant timeStamp = Instant.now();
     private String requestId;
-    private String correlationId;
 
     public boolean isSuccess() {
         return success;
@@ -46,10 +45,6 @@ public class Result {
         return requestId;
     }
 
-    public String getCorrelationId() {
-        return correlationId;
-    }
-
     public Result(boolean success, String message, HttpStatus httpStatus) {
         this.success = success;
         this.message = message;
@@ -57,7 +52,6 @@ public class Result {
         HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
         this.path = request.getRequestURI();
         this.requestId = MDC.get(LogContext.REQUEST_ID);
-        this.correlationId = this.requestId;
     }
 
     public Result(boolean success, HttpStatus httpStatus) {
@@ -66,6 +60,5 @@ public class Result {
         HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
         this.path = request.getRequestURI();
         this.requestId = MDC.get(LogContext.REQUEST_ID);
-        this.correlationId = this.requestId;
     }
 }

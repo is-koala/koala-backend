@@ -31,7 +31,7 @@ public class CorsConfig {
         config.setAllowedMethods(List.of("GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Origin", "Content-Type", "Accept", "Authorization"));
 
-        config.setExposedHeaders(List.of("X-Correlation-Id", "Authorization"));
+        config.setExposedHeaders(List.of("X-Request-Id", "Authorization"));
 
         source.registerCorsConfiguration("/**", config);
 

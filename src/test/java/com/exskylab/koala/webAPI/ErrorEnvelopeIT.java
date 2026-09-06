@@ -28,7 +28,7 @@ class ErrorEnvelopeIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.errorCode").value("PAYMENT_NOT_FOUND"))
                 .andExpect(jsonPath("$.path").value("/payments/callback"))
                 .andExpect(jsonPath("$.timeStamp").exists())
-                .andExpect(jsonPath("$.correlationId").exists());
+                .andExpect(jsonPath("$.requestId").exists());
     }
 
     @Test

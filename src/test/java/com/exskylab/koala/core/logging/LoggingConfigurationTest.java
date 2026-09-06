@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LoggingConfigurationTest {
@@ -72,7 +71,6 @@ class LoggingConfigurationTest {
         String config = Files.readString(LOGBACK, StandardCharsets.UTF_8);
 
         assertTrue(config.contains("%X{requestId"), "Konsol deseni requestId basmiyor");
-        assertFalse(config.contains("%X{correlationId"), "Konsol deseni hala correlationId basiyor");
     }
 
     @Test
