@@ -5,6 +5,7 @@ import com.exskylab.koala.core.constants.PaymentMessages;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
+import com.exskylab.koala.core.monitoring.PaymentMetrics;
 import com.exskylab.koala.core.properties.CommissionProperties;
 import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoPaymentResultResponseDto;
@@ -14,6 +15,7 @@ import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
 import com.exskylab.koala.dataAccess.PaymentDao;
 import com.exskylab.koala.entities.*;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -43,7 +45,8 @@ class PaymentCallbackTest {
         jobAssignmentDao = mock(JobAssignmentDao.class);
         paymentManager = new PaymentManager(paymentDao, iyzicoPaymentService, new PaymentStateMachine(),
                 mock(SecurityService.class), jobAssignmentDao,
-                new AssignmentParticipants(mock(CompanyContactService.class)));
+                new AssignmentParticipants(mock(CompanyContactService.class)),
+                new PaymentMetrics(new SimpleMeterRegistry()));
 
         when(paymentDao.save(any())).thenAnswer(i -> i.getArgument(0));
     }

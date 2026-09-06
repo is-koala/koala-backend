@@ -28,9 +28,15 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
     })
     Optional<JobAssignment> findWithDetailsForPaymentById(UUID id);
 
-    boolean existsByWorkerIdAndPaymentStatus(UUID workerId, PaymentStatus paymentStatus);
+    @Query("select count(a) > 0 from JobAssignment a where "
+            + "(a.worker.id = :userId or a.job.creator.id = :userId) and a.paymentStatus = :paymentStatus")
+    boolean existsMoneyForUser(@Param("userId") UUID userId,
+                               @Param("paymentStatus") PaymentStatus paymentStatus);
 
-    boolean existsByWorkerIdAndStatusIn(UUID workerId, java.util.List<AssignmentStatus> statuses);
+    @Query("select count(a) > 0 from JobAssignment a where "
+            + "(a.worker.id = :userId or a.job.creator.id = :userId) and a.status in :statuses")
+    boolean existsActiveForUser(@Param("userId") UUID userId,
+                                @Param("statuses") java.util.List<AssignmentStatus> statuses);
 
     @EntityGraph(attributePaths = {"job", "job.category", "job.address", "job.company", "worker", "worker.profilePicture"})
     Page<JobAssignment> findAllByWorkerId(UUID workerId, Pageable pageable);
@@ -41,6 +47,15 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
     long countByWorkerIdAndStatus(UUID workerId, AssignmentStatus status);
 
     boolean existsByJobIdAndStatusIn(UUID jobId, java.util.Collection<AssignmentStatus> statuses);
+
+    boolean existsByJobIdAndWorkerIdAndStatusIn(UUID jobId, UUID workerId,
+                                                 java.util.Collection<AssignmentStatus> statuses);
+
+    @Query("select distinct a.job.id from JobAssignment a where a.job.id in :jobIds "
+            + "and a.worker.id = :workerId and a.status in :statuses")
+    List<UUID> findVisibleAddressJobIds(@Param("jobIds") java.util.Collection<UUID> jobIds,
+                                        @Param("workerId") UUID workerId,
+                                        @Param("statuses") java.util.Collection<AssignmentStatus> statuses);
 
     long countByJobCreatorIdAndStatus(UUID creatorId, AssignmentStatus status);
 

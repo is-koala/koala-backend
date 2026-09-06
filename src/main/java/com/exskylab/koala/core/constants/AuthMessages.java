@@ -26,6 +26,7 @@ public class AuthMessages {
     public static final String REFRESH_TOKEN_AND_SESSION_MISMATCH = "{auth.refresh.token.and.session.mismatch}";
     public static final String REFRESH_TOKEN_EXPIRED = "{auth.refresh.token.expired}";
     public static final String REFRESH_TOKEN_SUCCESS = "{auth.refresh.token.success}";
+    public static final String WEB_DEVICE_ID_REQUIRED = "{auth.web.device.id.required}";
     public static final String SESSION_NOT_FOUND_OR_INACTIVE = "{auth.session.not.found.or.inactive}";
     public static final String LOGOUT_SUCCESS = "{auth.logout.success}";
     public static final String DEVICE_NOT_FOUND_FOR_SESSION = "{auth.device.not.found.for.session}";

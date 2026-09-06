@@ -55,7 +55,8 @@ class StaffIdentityIT extends AbstractStaffIntegrationTest {
                 .andExpect(jsonPath("$.data.roles", containsInAnyOrder(
                         "DISPUTE_HANDLER", "MODERATOR", "SUPPORT_AGENT", "TRUST_LEAD")))
                 .andExpect(jsonPath("$.data.permissions", containsInAnyOrder(
-                        "content.moderate", "dispute.resolve", "user.read", "user.read_pii")));
+                        "content.moderate", "dispute.resolve", "user.deletion.manage",
+                        "user.read", "user.read_pii")));
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.exskylab.koala.business.concretes;
 import java.util.Locale;
 import com.exskylab.koala.business.abstracts.DeviceService;
 import com.exskylab.koala.core.helpers.DeviceIdentity;
+import com.exskylab.koala.core.helpers.ClientPlatform;
 import com.exskylab.koala.dataAccess.DeviceDao;
 import com.exskylab.koala.entities.Device;
 import com.exskylab.koala.entities.DeviceType;
@@ -13,6 +14,8 @@ import nl.basjes.parse.useragent.UserAgentAnalyzer;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.DeviceMessages;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
+import com.exskylab.koala.core.exceptions.ValidationException;
+import com.exskylab.koala.core.constants.AuthMessages;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -50,8 +53,13 @@ public class DeviceManager implements DeviceService {
 
     @Override
     @Transactional
-    public Device findOrCreateDevice(User user, String ipAddress, String userAgent, String clientDeviceId) {
+    public Device findOrCreateDevice(User user, String ipAddress, String userAgent, String clientDeviceId,
+                                     ClientPlatform platform) {
         String deviceId = DeviceIdentity.sanitize(clientDeviceId);
+
+        if (platform == ClientPlatform.WEB && deviceId == null) {
+            throw new ValidationException(AuthMessages.WEB_DEVICE_ID_REQUIRED);
+        }
 
         if (deviceId != null) {
             Optional<Device> byClientId = deviceDao.findByUser_IdAndClientDeviceId(user.getId(), deviceId);
@@ -59,10 +67,10 @@ public class DeviceManager implements DeviceService {
                 Device device = byClientId.get();
                 device.setLastSeenAt(Instant.now());
                 device.setName(describe(userAgent));
-                device.setType(typeOf(userAgent));
+                device.setType(platform == ClientPlatform.WEB ? DeviceType.WEB_BROWSER : typeOf(userAgent));
                 return deviceDao.save(device);
             }
-            return deviceDao.save(newDevice(user, userAgent, deviceId));
+            return deviceDao.save(newDevice(user, userAgent, deviceId, platform));
         }
 
         return findOrCreateByUserAgent(user, userAgent);
@@ -70,8 +78,13 @@ public class DeviceManager implements DeviceService {
 
     @Override
     @Transactional(readOnly = true)
-    public Optional<Device> findDevice(User user, String userAgent, String clientDeviceId) {
+    public Optional<Device> findDevice(User user, String userAgent, String clientDeviceId,
+                                       ClientPlatform platform) {
         String deviceId = DeviceIdentity.sanitize(clientDeviceId);
+
+        if (platform == ClientPlatform.WEB && deviceId == null) {
+            return Optional.empty();
+        }
 
         if (deviceId != null) {
             return deviceDao.findByUser_IdAndClientDeviceId(user.getId(), deviceId);
@@ -121,12 +134,12 @@ public class DeviceManager implements DeviceService {
         }
     }
 
-    private Device newDevice(User user, String userAgent, String clientDeviceId) {
+    private Device newDevice(User user, String userAgent, String clientDeviceId, ClientPlatform platform) {
         Device device = new Device();
         device.setUser(user);
         device.setClientDeviceId(clientDeviceId);
         device.setName(describe(userAgent));
-        device.setType(typeOf(userAgent));
+        device.setType(platform == ClientPlatform.WEB ? DeviceType.WEB_BROWSER : typeOf(userAgent));
         device.setPushToken(null);
         device.setFirstSeenAt(Instant.now());
         device.setLastSeenAt(Instant.now());

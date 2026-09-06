@@ -17,7 +17,10 @@ import com.exskylab.koala.core.dtos.legal.request.ConsentDecisionDto;
 import com.exskylab.koala.core.dtos.legal.request.DeleteAccountRequestDto;
 import com.exskylab.koala.core.dtos.legal.response.AgreementVersionDto;
 import com.exskylab.koala.core.dtos.legal.response.ConsentRecordDto;
+import com.exskylab.koala.core.dtos.legal.response.AccountDeletionDto;
 import com.exskylab.koala.core.helpers.ClientContext;
+import com.exskylab.koala.core.helpers.ClientIpResolver;
+import com.exskylab.koala.core.helpers.MessageResolver;
 import com.exskylab.koala.core.mappers.LegalMapper;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.core.utilities.results.SuccessResult;
@@ -37,12 +40,17 @@ public class LegalController {
     private final LegalService legalService;
     private final LegalMapper legalMapper;
     private final SecurityService securityService;
+    private final ClientIpResolver clientIpResolver;
+    private final MessageResolver messageResolver;
 
     public LegalController(LegalService legalService, LegalMapper legalMapper,
-                           SecurityService securityService) {
+                           SecurityService securityService, ClientIpResolver clientIpResolver,
+                           MessageResolver messageResolver) {
         this.legalService = legalService;
         this.legalMapper = legalMapper;
         this.securityService = securityService;
+        this.clientIpResolver = clientIpResolver;
+        this.messageResolver = messageResolver;
     }
 
     @SecurityRequirements
@@ -84,23 +92,42 @@ public class LegalController {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
                 legalMapper.toConsentRecordDtoList(legalService.recordConsents(
-                        securityService.getAuthenticatedUser(), decisions, ClientContext.from(request))),
+                        securityService.getAuthenticatedUser(), decisions,
+                        ClientContext.from(request, clientIpResolver))),
                 LegalMessages.CONSENTS_RECORDED, HttpStatus.OK));
     }
 
     @Operation(summary = "Hesap silme talebi oluştur",
-            description = "Düz silme değildir. Açık yükümlülük varken reddedilir: emanette bekleyen para ya da devam eden iş varsa hesap silinemez. Fatura ve ödeme kayıtlarının saklanma yükümlülüğü olduğu için asıl işlem anonimleştirmedir.")
+            description = "Talep kaydedilir. Açık yükümlülük varsa durum yanıtında bekleme gerekçesi görünür; yükümlülük kapandıktan ve bekleme süresi dolduktan sonra anonimleştirme otomatik ilerler.")
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Talep alındı"),
-            @ApiResponse(responseCode = "409", description = "Emanette para ya da devam eden iş var",
+            @ApiResponse(responseCode = "200", description = "Talep alındı"),
+            @ApiResponse(responseCode = "409", description = "Bekleyen talep zaten var",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping("/account-deletion")
-    public ResponseEntity<SuccessResult> requestAccountDeletion(
+    public ResponseEntity<SuccessDataResult<AccountDeletionDto>> requestAccountDeletion(
             @RequestBody @Valid DeleteAccountRequestDto request) {
 
-        legalService.requestAccountDeletion(securityService.getAuthenticatedUser(), request.getReason());
+        var deletion = legalService.requestAccountDeletion(
+                securityService.getAuthenticatedUser(), request.getReason());
 
-        return ResponseEntity.ok(new SuccessResult(LegalMessages.DELETION_REQUESTED, HttpStatus.OK));
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                legalMapper.toAccountDeletionDto(deletion, messageResolver),
+                LegalMessages.DELETION_REQUESTED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "Hesap silme talebimin durumu")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Talep durumu döndü"),
+            @ApiResponse(responseCode = "404", description = "Talep bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @GetMapping("/account-deletion")
+    public ResponseEntity<SuccessDataResult<AccountDeletionDto>> accountDeletionStatus() {
+        var deletion = legalService.getCurrentDeletionRequest(securityService.getAuthenticatedUserId());
+
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                legalMapper.toAccountDeletionDto(deletion, messageResolver),
+                LegalMessages.DELETIONS_LISTED, HttpStatus.OK));
     }
 }

@@ -131,6 +131,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/legal/consents/me").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/legal/consents").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/legal/account-deletion").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/legal/account-deletion").hasAnyRole("USER", "ADMIN")
 
                         //reference data (public)
                         .requestMatchers(HttpMethod.GET, "/reference/**").permitAll()

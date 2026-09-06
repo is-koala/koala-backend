@@ -91,7 +91,7 @@ public class SettingsManager implements SettingsService {
         if (value == null || value.isBlank()) {
             throw new ValidationException(SettingMessages.VALUE_REQUIRED);
         }
-        if (SettingKeys.MINIMUM_APP_VERSION.equals(key)) {
+        if (key.startsWith(SettingKeys.MINIMUM_APP_VERSION)) {
             if (!AppVersion.isParsable(value.trim())) {
                 throw new ValidationException(SettingMessages.VALUE_NOT_A_VERSION);
             }

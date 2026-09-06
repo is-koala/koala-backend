@@ -64,6 +64,9 @@ public class Job extends BaseEntity{
     @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private Address address;
 
+    @Column(name = "address_public", nullable = false)
+    private boolean addressPublic;
+
     @Enumerated(EnumType.STRING)
     private JobType type;
 

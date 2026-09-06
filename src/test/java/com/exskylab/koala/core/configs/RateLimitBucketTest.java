@@ -2,6 +2,9 @@ package com.exskylab.koala.core.configs;
 
 import com.exskylab.koala.core.helpers.RateLimiter;
 import com.exskylab.koala.core.properties.RateLimitProperties;
+import com.exskylab.koala.core.helpers.ClientIpResolver;
+import com.exskylab.koala.core.properties.TrustedProxyProperties;
+import tools.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -10,11 +13,13 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 import java.util.UUID;
+import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 
 class RateLimitBucketTest {
 
@@ -25,7 +30,8 @@ class RateLimitBucketTest {
     void setUp() {
         properties = new RateLimitProperties();
         filter = new RateLimitFilter(new RateLimiter(properties), properties,
-                mock(HandlerExceptionResolver.class));
+                mock(HandlerExceptionResolver.class), new ClientIpResolver(new TrustedProxyProperties()),
+                new ObjectMapper());
     }
 
     private MockHttpServletRequest request(String method, String uri, String ip) {
@@ -51,12 +57,20 @@ class RateLimitBucketTest {
 
     @Test
     void readsAreNotLimited() throws Exception {
-        assertEquals(200, passing("GET", "/jobs", "10.0.0.1", 200));
+        assertEquals(200, passing("GET", "/users/me/notifications", "10.0.0.1", 200));
+    }
+
+    @Test
+    void publicJobReadsShareALooseButFiniteAllowance() throws Exception {
+        properties.getPublic().setMaxAttempts(2);
+
+        assertEquals(2, passing("GET", "/jobs", "10.0.0.11", 5));
+        assertEquals(0, passing("GET", "/jobs/" + UUID.randomUUID(), "10.0.0.11", 1));
     }
 
     @Test
     void addressAutocompleteHasItsOwnAllowanceIncludingReads() throws Exception {
-        properties.getAddressSearch().setMaxAttempts(3);
+        properties.getPublic().setMaxAttempts(3);
         properties.getWrite().setMaxAttempts(50);
 
         assertEquals(3, passing("GET", "/locations/address-search-sessions/"
@@ -65,7 +79,7 @@ class RateLimitBucketTest {
 
     @Test
     void reverseGeocodingSharesTheCostControlBucket() throws Exception {
-        properties.getAddressSearch().setMaxAttempts(2);
+        properties.getPublic().setMaxAttempts(2);
 
         assertEquals(1, passing("GET", "/locations/address-search-sessions/"
                 + UUID.randomUUID() + "/suggestions", "10.0.0.10", 1));
@@ -126,10 +140,78 @@ class RateLimitBucketTest {
     }
 
     @Test
+    void loginTargetsBehindOneIpDoNotLockEachOtherOut() throws Exception {
+        properties.setMaxAttempts(1);
+
+        assertEquals(1, passingLogin("first@example.com", 2));
+        assertEquals(1, passingLogin("second@example.com", 1));
+    }
+
+    @Test
+    void identityVerificationTargetsBehindOneIpDoNotLockEachOtherOut() throws Exception {
+        properties.setMaxAttempts(1);
+
+        assertEquals(1, passingAuth("/users/me/identity-verification",
+                "{\"tcIdentityNumber\":\"11111111110\"}", 2));
+        assertEquals(1, passingAuth("/users/me/identity-verification",
+                "{\"tcIdentityNumber\":\"22222222220\"}", 1));
+    }
+
+    @Test
+    void oversizedChunkedAuthBodiesAreRejectedBeforeTheRequestIsBuffered() throws Exception {
+        byte[] body = new byte[128 * 1024];
+        Arrays.fill(body, (byte) 'a');
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/auth/login") {
+            @Override
+            public int getContentLength() {
+                return -1;
+            }
+
+            @Override
+            public long getContentLengthLong() {
+                return -1;
+            }
+        };
+        request.setRemoteAddr("10.0.0.12");
+        request.setContentType("application/json");
+        request.setContent(body);
+        FilterChain call = mock(FilterChain.class);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, call);
+
+        assertEquals(413, response.getStatus());
+        verify(call, never()).doFilter(any(), any());
+    }
+
+    @Test
     void twoClientsDoNotShareAnAllowance() throws Exception {
         properties.getWrite().setMaxAttempts(2);
 
         assertEquals(2, passing("POST", "/reports", "10.0.0.7", 5));
         assertEquals(2, passing("POST", "/reports", "10.0.0.8", 5));
+    }
+
+    private int passingLogin(String email, int attempts) throws Exception {
+        return passingAuth("/auth/login",
+                "{\"email\":\"" + email + "\",\"password\":\"secret\"}", attempts);
+    }
+
+    private int passingAuth(String uri, String json, int attempts) throws Exception {
+        int passed = 0;
+        for (int i = 0; i < attempts; i++) {
+            FilterChain call = mock(FilterChain.class);
+            MockHttpServletRequest request = request("POST", uri, "10.0.0.12");
+            request.setContentType("application/json");
+            request.setContent(json.getBytes());
+            filter.doFilter(request, new MockHttpServletResponse(), call);
+            try {
+                verify(call).doFilter(any(), any());
+                passed++;
+            } catch (AssertionError refused) {
+                continue;
+            }
+        }
+        return passed;
     }
 }

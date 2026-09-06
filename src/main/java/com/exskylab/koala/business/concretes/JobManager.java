@@ -18,6 +18,7 @@ import com.exskylab.koala.core.dtos.gallery.response.GalleryImageDto;
 import org.springframework.web.multipart.MultipartFile;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
+import com.exskylab.koala.core.helpers.JobAddressVisibility;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -66,6 +67,7 @@ public class JobManager implements JobService {
     private final MessageResolver messageResolver;
     private final JobSearchProperties searchProperties;
     private final PricingService pricingService;
+    private final JobAddressVisibility addressVisibility = new JobAddressVisibility();
 
     public JobManager(JobDao jobDao, SecurityService securityService, JobCategoryService jobCategoryService, AddressService addressService, CompanyService companyService, JobMapper jobMapper,
                       PageableSanitizer pageableSanitizer, CompanyContactService companyContactService,
@@ -150,6 +152,7 @@ public class JobManager implements JobService {
         job.setDuties(usersMeJobsPostRequestDto.getDuties());
         job.setInsuranceRequired(false);
         job.setAddress(address);
+        job.setAddressPublic(false);
         job.setType(type);
         job.setStartDateTime(usersMeJobsPostRequestDto.getStartDateTime());
         job.setEndDateTime(usersMeJobsPostRequestDto.getEndDateTime());
@@ -227,6 +230,7 @@ public class JobManager implements JobService {
         job.setDuties(companiesCompanyIdJobsPostRequestDto.getDuties());
         job.setInsuranceRequired(companiesCompanyIdJobsPostRequestDto.getInsuranceRequired());
         job.setAddress(address);
+        job.setAddressPublic(companiesCompanyIdJobsPostRequestDto.isAddressPublic());
         job.setType(type);
         job.setStartDateTime(companiesCompanyIdJobsPostRequestDto.getStartDateTime());
         job.setEndDateTime(companiesCompanyIdJobsPostRequestDto.getEndDateTime());
@@ -275,6 +279,10 @@ public class JobManager implements JobService {
             java.util.EnumSet.of(AssignmentStatus.CONFIRMED, AssignmentStatus.IN_PROGRESS,
                     AssignmentStatus.COMPLETED);
 
+    private static final Set<AssignmentStatus> ADDRESS_VISIBLE_ASSIGNMENT_STATUSES =
+            java.util.EnumSet.of(AssignmentStatus.PENDING_CONFIRMATION, AssignmentStatus.CONFIRMED,
+                    AssignmentStatus.IN_PROGRESS);
+
     private static final Set<String> SORTABLE_FIELDS =
             Set.of("createdAt", "salary", "startDateTime", "title");
 
@@ -282,9 +290,11 @@ public class JobManager implements JobService {
 
     @Override
     @Transactional(readOnly = true)
-    public JobDetailDto getJobDetail(UUID jobId) {
-        JobDetailDto detail = jobMapper.toJobDetailDto(getDetailedById(jobId));
+    public JobDetailDto getJobDetail(UUID jobId, UUID viewerId) {
+        Job job = getDetailedById(jobId);
+        JobDetailDto detail = jobMapper.toJobDetailDto(job);
         detail.setHiredCount(jobAssignmentDao.countByJobIdAndStatusIn(jobId, HIRED_STATUSES));
+        addressVisibility.protect(job, detail, viewerId, hasAddressAccess(jobId, viewerId));
         return detail;
     }
 
@@ -297,7 +307,7 @@ public class JobManager implements JobService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageDto<JobSummaryDto> search(JobSearchCriteriaDto criteria, Pageable requested) {
+    public PageDto<JobSummaryDto> search(JobSearchCriteriaDto criteria, Pageable requested, UUID viewerId) {
         pageableSanitizer.rejectUnknownSort(requested, SORTABLE_FIELDS);
         Pageable pageable = pageableSanitizer.sanitize(requested, SORTABLE_FIELDS, DEFAULT_SORT);
 
@@ -321,7 +331,14 @@ public class JobManager implements JobService {
                 criteria.getMaxLongitude(),
                 pageable);
 
-        return enrich(PageDto.of(ids, jobMapper.toJobSummaryDtoList(inIdOrder(ids.getContent()))));
+        List<Job> jobs = inIdOrder(ids.getContent());
+        Set<UUID> assignedJobIds = assignedJobIds(ids.getContent(), viewerId);
+        List<JobSummaryDto> summaries = jobs.stream().map(job -> {
+            JobSummaryDto summary = jobMapper.toJobSummaryDto(job);
+            addressVisibility.protect(job, summary, viewerId, assignedJobIds.contains(job.getId()));
+            return summary;
+        }).toList();
+        return enrich(PageDto.of(ids, summaries));
     }
 
     @Override
@@ -330,8 +347,13 @@ public class JobManager implements JobService {
         pageableSanitizer.rejectUnknownSort(requested, SORTABLE_FIELDS);
         Pageable pageable = pageableSanitizer.sanitize(requested, SORTABLE_FIELDS, DEFAULT_SORT);
 
-        Page<Job> jobs = jobDao.findAllByCreatorId(securityService.getAuthenticatedUserId(), pageable);
-        return enrich(PageDto.of(jobs, jobMapper::toJobSummaryDto));
+        UUID viewerId = securityService.getAuthenticatedUserId();
+        Page<Job> jobs = jobDao.findAllByCreatorId(viewerId, pageable);
+        return enrich(PageDto.of(jobs, job -> {
+            JobSummaryDto summary = jobMapper.toJobSummaryDto(job);
+            addressVisibility.protect(job, summary, viewerId, false);
+            return summary;
+        }));
     }
 
     @Override
@@ -468,6 +490,17 @@ public class JobManager implements JobService {
 
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private boolean hasAddressAccess(UUID jobId, UUID viewerId) {
+        return viewerId != null && jobAssignmentDao.existsByJobIdAndWorkerIdAndStatusIn(
+                jobId, viewerId, ADDRESS_VISIBLE_ASSIGNMENT_STATUSES);
+    }
+
+    private Set<UUID> assignedJobIds(List<UUID> jobIds, UUID viewerId) {
+        return viewerId == null || jobIds.isEmpty() ? Set.of()
+                : Set.copyOf(jobAssignmentDao.findVisibleAddressJobIds(
+                        jobIds, viewerId, ADDRESS_VISIBLE_ASSIGNMENT_STATUSES));
     }
 
 }

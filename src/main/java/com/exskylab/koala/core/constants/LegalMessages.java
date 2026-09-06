@@ -10,4 +10,10 @@ public class LegalMessages {
     public static final String DELETION_ALREADY_REQUESTED = "{legal.deletion.already.requested}";
     public static final String DELETION_BLOCKED_BY_ACTIVE_WORK = "{legal.deletion.blocked.by.active.work}";
     public static final String DELETION_BLOCKED_BY_ESCROW = "{legal.deletion.blocked.by.escrow}";
+    public static final String DELETION_BLOCKED_BY_DISPUTE = "{legal.deletion.blocked.by.dispute}";
+    public static final String DELETION_BLOCKED_BY_PENDING_PAYMENT = "{legal.deletion.blocked.by.pending.payment}";
+    public static final String DELETION_NOT_FOUND = "{legal.deletion.not.found}";
+    public static final String DELETION_ALREADY_PROCESSED = "{legal.deletion.already.processed}";
+    public static final String DELETION_REJECTED = "{legal.deletion.rejected}";
+    public static final String DELETIONS_LISTED = "{legal.deletions.listed}";
 }

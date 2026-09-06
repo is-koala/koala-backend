@@ -18,4 +18,6 @@ public interface PaymentService {
     List<Payment> getAttemptsForAssignment(UUID jobAssignmentId);
 
     Payment getSettledPaymentFor(UUID jobAssignmentId);
+
+    boolean hasPendingPaymentForUser(UUID userId);
 }

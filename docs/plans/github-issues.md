@@ -25,5 +25,3 @@ Mobil #5 mevcut beyaz harita kaydıdır; yeniden açılmadı ve mevcut üst ili�
 2. Backend #4 altında SMTP alıcı güvenliği + uyumlu kuyruk retry/DLQ + testler. Bu, paket 1'in backend alt adımıdır; tek başına paket 1'i kapatmaz.
 3. Mobil #7 altında açık ortam seçimi, uygulama kimlikleri ve gerçek giriş. Mobil branch: `feat/staging-real-auth`.
 4. Sonraki her paket kendi kabul kanıtı ve commit/PR sınırıyla ilerler; paket içi bağımsız düzeltmeler de ayrılır.
-
-Backend main üzerinde kalır. Mobil setup PR #3 henüz birleşmediğinden özellik branch'inin tabanı PR birleştirme şekline göre kontrol edilmelidir; bu işlem otomatik rebase/merge yetkisi vermez. Kullanıcıya commit kapsamı ve test sonucu sunulmadan commit, tag veya push yapılmaz. Backend push'u Dokploy dağıtımını tetikleyebildiği için ayrıca ele alınır.

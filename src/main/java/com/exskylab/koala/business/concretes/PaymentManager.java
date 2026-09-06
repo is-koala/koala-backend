@@ -8,6 +8,7 @@ import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
+import com.exskylab.koala.core.monitoring.PaymentMetrics;
 import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoPaymentResultRequestDto;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoPaymentResultResponseDto;
@@ -32,6 +33,8 @@ public class PaymentManager implements PaymentService {
 
     private static final String CURRENCY = "TRY";
     private static final Integer VERIFIED_BY_THREE_D_SECURE = 1;
+    private static final List<PaymentAttemptStatus> PENDING_STATUSES =
+            List.of(PaymentAttemptStatus.INITIATED, PaymentAttemptStatus.IN_REVIEW);
 
     private final PaymentDao paymentDao;
     private final IyzicoPaymentService iyzicoPaymentService;
@@ -39,16 +42,19 @@ public class PaymentManager implements PaymentService {
     private final SecurityService securityService;
     private final JobAssignmentDao jobAssignmentDao;
     private final AssignmentParticipants assignmentParticipants;
+    private final PaymentMetrics paymentMetrics;
 
     public PaymentManager(PaymentDao paymentDao, IyzicoPaymentService iyzicoPaymentService,
                           PaymentStateMachine stateMachine, SecurityService securityService,
-                          JobAssignmentDao jobAssignmentDao, AssignmentParticipants assignmentParticipants) {
+                          JobAssignmentDao jobAssignmentDao, AssignmentParticipants assignmentParticipants,
+                          PaymentMetrics paymentMetrics) {
         this.paymentDao = paymentDao;
         this.iyzicoPaymentService = iyzicoPaymentService;
         this.stateMachine = stateMachine;
         this.securityService = securityService;
         this.jobAssignmentDao = jobAssignmentDao;
         this.assignmentParticipants = assignmentParticipants;
+        this.paymentMetrics = paymentMetrics;
     }
 
     @Override
@@ -65,7 +71,13 @@ public class PaymentManager implements PaymentService {
         payment.setCommissionRate(breakdown.rate());
         payment.setTotalCharged(breakdown.totalCharged());
 
-        Payment saved = paymentDao.save(payment);
+        Payment saved;
+        try {
+            saved = paymentDao.save(payment);
+        } catch (RuntimeException exception) {
+            paymentMetrics.initiationPersistenceError();
+            throw exception;
+        }
         log.info("Payment attempt {} started for assignment {}", saved.getId(), jobAssignment.getId());
         return saved;
     }
@@ -80,10 +92,14 @@ public class PaymentManager implements PaymentService {
     @Override
     @Transactional
     public Payment completeFromCallback(String providerToken) {
-        Payment payment = paymentDao.findByProviderToken(providerToken)
-                .orElseThrow(() -> new ResourceNotFoundException(PaymentMessages.NOT_FOUND));
+        Payment payment = paymentDao.findByProviderToken(providerToken).orElse(null);
+        if (payment == null) {
+            paymentMetrics.callbackUnknownToken();
+            throw new ResourceNotFoundException(PaymentMessages.NOT_FOUND);
+        }
 
         if (payment.getStatus() == PaymentAttemptStatus.SUCCEEDED) {
+            paymentMetrics.callbackAlreadySucceeded();
             log.info("Payment {} already settled, callback ignored.", payment.getId());
             return payment;
         }
@@ -96,39 +112,47 @@ public class PaymentManager implements PaymentService {
         try {
             result = iyzicoPaymentService.retrieveCheckoutFormResult(request);
         } catch (RuntimeException e) {
+            paymentMetrics.callbackProviderError();
             log.warn("Payment {} could not be verified with the provider: {}", payment.getId(), e.getMessage());
             return fail(payment, e.getMessage());
         }
 
         if (!"SUCCESS".equalsIgnoreCase(result.getPaymentStatus())) {
+            paymentMetrics.callbackDeclined();
             log.info("Payment {} was not completed by the provider, paymentStatus={}",
                     payment.getId(), result.getPaymentStatus());
             return fail(payment, "paymentStatus=" + result.getPaymentStatus());
         }
 
         if (!VERIFIED_BY_THREE_D_SECURE.equals(result.getMdStatus())) {
+            paymentMetrics.callbackThreeDSecureVerificationFailed();
             log.warn("Payment {} rejected: 3-D Secure verification did not succeed, mdStatus={}",
                     payment.getId(), result.getMdStatus());
             return fail(payment, PaymentMessages.THREE_D_SECURE_FAILED);
         }
 
         if (result.getFraudStatus() != null && result.getFraudStatus() == -1) {
+            paymentMetrics.callbackFraudRejected();
             log.warn("Payment {} was rejected by fraud filters.", payment.getId());
             return fail(payment, PaymentMessages.FRAUD_REVIEW);
         }
 
         if (result.getFraudStatus() != null && result.getFraudStatus() == 0) {
+            paymentMetrics.callbackInReview();
             log.warn("Payment {} is under fraud review, escrow is not opened yet.", payment.getId());
             return hold(payment, result);
         }
 
         String amountMismatch = amountMismatch(payment, result);
         if (amountMismatch != null) {
+            paymentMetrics.callbackAmountMismatch();
             log.error("Payment {} rejected: {}", payment.getId(), amountMismatch);
             return fail(payment, amountMismatch);
         }
 
-        return settle(payment, result);
+        Payment settled = settle(payment, result);
+        paymentMetrics.callbackSucceeded();
+        return settled;
     }
 
     @Override
@@ -209,5 +233,11 @@ public class PaymentManager implements PaymentService {
                 .filter(payment -> payment.getStatus() == PaymentAttemptStatus.SUCCEEDED)
                 .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException(PayoutMessages.NO_SETTLED_PAYMENT));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasPendingPaymentForUser(UUID userId) {
+        return paymentDao.existsPendingForUser(userId, PENDING_STATUSES);
     }
 }

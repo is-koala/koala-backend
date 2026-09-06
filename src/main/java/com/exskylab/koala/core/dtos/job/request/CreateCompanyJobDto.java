@@ -9,17 +9,16 @@ import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 
 import jakarta.validation.constraints.AssertTrue;
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.validator.constraints.UUID;
 
 import java.time.LocalDateTime;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 @Getter
 @Setter
-@AllArgsConstructor
 @NoArgsConstructor
 public class CreateCompanyJobDto {
 
@@ -42,6 +41,10 @@ public class CreateCompanyJobDto {
     @NotNull(message = JobMessages.ADDRESS_NOT_NULL)
     @Valid
     private AddressWriteDto address;
+
+    @Schema(description = "Bu ilanda doğrulanmış tam işyeri adresinin herkese gösterilip gösterilmeyeceği.",
+            defaultValue = "false")
+    private boolean addressPublic;
 
     @NotBlank(message = JobMessages.TYPE_NOT_BLANK)
     private String type;

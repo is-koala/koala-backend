@@ -17,6 +17,7 @@ public class RateLimitProperties {
     private Bucket message = new Bucket(30, Duration.ofMinutes(1));
     private Bucket write = new Bucket(60, Duration.ofMinutes(1));
     private Bucket addressSearch = new Bucket(60, Duration.ofMinutes(1));
+    private Bucket publicBucket = new Bucket(120, Duration.ofMinutes(1));
 
     public static class Bucket {
 
@@ -78,6 +79,14 @@ public class RateLimitProperties {
 
     public void setWrite(Bucket write) {
         this.write = write;
+    }
+
+    public Bucket getPublic() {
+        return publicBucket;
+    }
+
+    public void setPublic(Bucket publicBucket) {
+        this.publicBucket = publicBucket;
     }
 
     public Bucket getAuth() {
