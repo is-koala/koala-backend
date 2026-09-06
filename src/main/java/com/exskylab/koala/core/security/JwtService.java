@@ -1,7 +1,6 @@
 package com.exskylab.koala.core.security;
 
 import com.exskylab.koala.entities.User;
-import com.exskylab.koala.core.dtos.realtime.response.RealtimeCredentialDto;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
@@ -20,7 +19,8 @@ import java.time.Instant;
 @Service
 public class JwtService {
 
-    private static final Set<String> STOMP_AUDIENCE = Set.of("stomp");
+    private static final String STOMP_AUDIENCE = "stomp";
+    private static final Set<String> STOMP_AUDIENCES = Set.of(STOMP_AUDIENCE);
     private static final Duration REALTIME_CREDENTIAL_TTL = Duration.ofSeconds(90);
 
     @Value("${jwt.secret}")
@@ -105,14 +105,14 @@ public class JwtService {
                 .compact();
     }
 
-    public RealtimeCredentialDto generateRealtimeCredential(UserPrincipal principal) {
+    public RealtimeCredential generateRealtimeCredential(UUID userId, UUID sessionId) {
         Instant issuedAt = Instant.now();
         Instant expiresAt = issuedAt.plus(REALTIME_CREDENTIAL_TTL);
 
         String token = Jwts.builder()
-                .subject(principal.id().toString())
-                .id(principal.sessionId().toString())
-                .audience().add("stomp")
+                .subject(userId.toString())
+                .id(sessionId.toString())
+                .audience().add(STOMP_AUDIENCE)
                 .and()
                 .issuedAt(Date.from(issuedAt))
                 .expiration(Date.from(expiresAt))
@@ -120,7 +120,7 @@ public class JwtService {
                 .signWith(getSignKey(), Jwts.SIG.HS256)
                 .compact();
 
-        return new RealtimeCredentialDto(token, expiresAt);
+        return new RealtimeCredential(token, expiresAt);
     }
 
     public JwtIdentity extractHttpIdentity(String token) {
@@ -132,7 +132,7 @@ public class JwtService {
     public JwtIdentity extractRealtimeIdentity(String token) {
         Claims claims = extractAllClaims(token);
         Set<String> audience = claims.getAudience();
-        if (audience != null && !audience.isEmpty() && !STOMP_AUDIENCE.equals(audience)) {
+        if (audience != null && !audience.isEmpty() && !STOMP_AUDIENCES.equals(audience)) {
             throw new UnsupportedJwtException("Token audience is not valid for realtime authentication");
         }
         return identityFrom(claims);
