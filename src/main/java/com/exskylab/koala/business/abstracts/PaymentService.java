@@ -11,13 +11,25 @@ public interface PaymentService {
 
     Payment startAttempt(JobAssignment jobAssignment, CommissionCalculator.Breakdown breakdown);
 
+    void attachProviderSubmerchantKey(Payment payment, String providerSubmerchantKey);
+
     void attachProviderToken(Payment payment, String providerToken);
 
+    void markInitiationUncertain(UUID paymentId);
+
+    void failInitiation(UUID paymentId);
+
     Payment completeFromCallback(String providerToken);
+
+    List<UUID> findDueVerificationAttemptIds();
+
+    boolean reconcileAttempt(UUID paymentId);
 
     List<Payment> getAttemptsForAssignment(UUID jobAssignmentId);
 
     Payment getSettledPaymentFor(UUID jobAssignmentId);
+
+    boolean hasPendingAttemptForAssignment(UUID jobAssignmentId);
 
     boolean hasPendingPaymentForUser(UUID userId);
 }

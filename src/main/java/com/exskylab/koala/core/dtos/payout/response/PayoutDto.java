@@ -6,7 +6,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -17,7 +16,7 @@ import java.util.UUID;
 public class PayoutDto {
     private UUID id;
     private UUID jobAssignmentId;
-    private BigDecimal amount;
+    private String amount;
     private String currency;
     private PayoutStatus status;
     private String failureReason;

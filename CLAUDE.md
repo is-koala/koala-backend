@@ -29,7 +29,8 @@ Bu dosya projeyi konu konu anlatır: mimari, alınmış kararlar ve gerekçeleri
 5. **SMS sağlayıcı anahtarı** — `SMS_API_KEY` boşken telefon doğrulama kodu üretilir ama teslim edilmez.
 6. **Dokploy'dan `QA_MARKETPLACE_SEED_VERSION`, `QA_WORKER_EMAIL`, `QA_WORKER_PASSWORD`, `QA_EMPLOYER_EMAIL`, `QA_EMPLOYER_PASSWORD` kaldırılmalı** — seed kaldırıldı (ADR-0008), bu değişkenler işlevsiz ve parola taşıyorlar.
 7. **İlk admin ve iş kategorisi kataloğu** — taze bir veritabanında ilk yönetici `ADMIN_BOOTSTRAP_EMAIL` verilip uygulama yeniden başlatılarak doğar (§2f3); değişken ilk admin oluştuktan sonra kaldırılmalı. Kategori seed'i kaldırıldı (§2m). Prod ve taze veritabanları kategorisiz; kategori ilanın zorunlu alanı olduğu için katalog `POST /admin/job-categories` ile kurulmadan **hiç ilan açılamaz**. Mobil istemcinin ikon eşlemesi `code` üzerinden gittiği için eski kodların (`PHOTOGRAPHY`, `WAITER`, `PET_CARE`, `DESIGN`, `BARISTA`) yeniden verilmesi gerekebilir.
-8. **R2'deki mevcut nesnelerin S3'e kopyalanması** (§2ab), yasal metinlerin avukattan gelmesi, ve prod'da WebSocket'in `wss://` üzerinden servis edildiğinin teyidi (§2ai).
+8. **`BANK_VERIFICATION_COLLECTION_IBAN` verilmeden lansman yapılamaz.** İşçinin IBAN sahipliği, kendi hesabından Koala'ya yaptığı küçük transferle kanıtlanıyor (§2k2) ve o transferin gideceği hesap bu değişkenle veriliyor. Boşken doğrulama **başlatılamıyor** (`VERIFICATION_UNAVAILABLE`), doğrulanmamış IBAN ise alt üye işyeri açtırmıyor — yani **hiçbir işveren ödeme oturumu açamaz**. Kilit çift yönlü: değer girilmeden ne doğrulama başlar ne para akar. Bilinçli olarak bayrak arkasına alınmadı; bayrak, kapının sessizce kapalı kalmasının yolu olurdu.
+9. **R2'deki mevcut nesnelerin S3'e kopyalanması** (§2ab), yasal metinlerin avukattan gelmesi, ve prod'da WebSocket'in `wss://` üzerinden servis edildiğinin teyidi (§2ai).
 
 **Açık kalan kararlar** (ayrıntı §7'de):
 - **Rozet eşikleri** yer tutucu (5 / 25 tamamlanmış iş). Yapı hazır, sayı ürün kararı.
@@ -46,7 +47,11 @@ Bu dosya projeyi konu konu anlatır: mimari, alınmış kararlar ve gerekçeleri
 Faz 15'te yüzey baştan geçirildi. Bunlar **kural**, `ApiConventionTest` bunları derleme zamanında değil test zamanında koruyor:
 
 - **Yönetim işlemleri `/admin/**` altında, istisnasız.** `@PreAuthorize` kullanılmadığı, tüm yetki `SecurityConfig`'te path matcher olduğu için prefix tek satırlık koruma sağlıyor: `.requestMatchers("/admin/**").hasRole("ADMIN")`. Prefix olmasaydı her yeni admin ucunu tek tek korumayı hatırlamak gerekirdi ve unutulan uç sessizce her `USER`'a açık kalırdı. **Test, ADMIN'e kısıtlayan her kuralın yolunun `/admin` ile başladığını doğruluyor — `hasRole("ADMIN")` ve tek rolü ADMIN olan `hasAnyRole("ADMIN")`, ikisi de.** İki yazım anlamca aynıdır; tarama birini görüp diğerini görmezse geriye korunduğu **sanılan** bir alan kalır (#72). Çok rollü `hasAnyRole("USER", "ADMIN")` ADMIN'e kısıtlama değildir, kapsam dışıdır.
-  - **Bu kapının hangi token'ı kabul ettiği ayrı bir sorudur** ve cevabı tek yerde yazılıdır: [ADR-0010](docs/adr/0010-split-staff-identity-from-koala-authorization.md) §Geçiş. Marketplace `ROLE_ADMIN` ile Keycloak `koala-staff` kimliğinin hangi aşamada geçerli olduğunu, `ROLE_ADMIN` yolunun ömrünü ve kesim koşullarını orada oku — buraya kopyalama.
+  - **Bu kapının hangi token'ı kabul ettiği ayrı bir sorudur** ve cevabı tek yerde yazılıdır: [ADR-0010](docs/adr/0010-split-staff-identity-from-koala-authorization.md) §Geçiş. Marketplace `ROLE_ADMIN` ile personel kimliğinin hangi aşamada geçerli olduğunu, `ROLE_ADMIN` yolunun ömrünü ve kesim koşullarını orada oku — buraya kopyalama. ADR-0010 [ADR-0014](docs/adr/0014-keep-staff-identity-in-koala.md) ile yerine geçildi (Keycloak kullanılmıyor, kimlik de Koala'da) ama köprü tarifi aynen geçerli: köprü, personel girişi inince `koala.staff.bridge.open` kapatılarak kapanacak.
+- **`/admin/**` altındaki bir metot `securityService.getAuthenticated*` çağıramaz — log satırında bile.** `StaffPrincipal` bir `UserPrincipal` değildir; `SecurityManager` personel kimliği görünce artık `IllegalStateException` atıyor (eskiden `{user.not.authenticated}` → **404**'tü ve "kaynak yok" gibi görünüyordu, #95). Aktörü `@AuthenticationPrincipal StaffPrincipal actor` ile parametre olarak al: `actor == null` köprü yolu (marketplace `ROLE_ADMIN`), doluysa personel yolu. Kullanıcı kimliğine bağlı alanlar (`approvedBy`, `reviewedBy`, `granted_by_id`) yalnız köprü yolunda damgalanır — hepsi `users`'a yabancı anahtar taşıyor ve personelin orada satırı yok (ADR-0014). Personel yolunda "kim yaptı" sorusunu admin denetim kaydı (§2av) cevaplıyor.
+  - **Kuralı `AdminStaffPrincipalGuardIT` koruyor** (#88'in dersi: yazılı kural test değildir): her `/admin/**` mapping'inin handler gövdesinden `\w+Service.\w+(` çağrıları çıkarılıyor, servis alanının gerçek bean sınıfı Spring'den çözülüyor ve o manager metodunun kaynağında tuzak aranıyor. `StaffPrincipal` parametresi alan bir metotta `actor == null` dalındaki çağrı köprü yolu sayılıp geçiliyor. **Tarama bir seviye derin — handler → manager metodu; manager başka bir manager'ı ya da kendi özel yardımcısını çağırır ve tuzak orada olursa test görmez**, o zincirler `CompanyAdministrationRulesTest` / `RoleGrantRulesTest` gibi davranış testlerine emanet. İkinci bir test taramanın en az 30 manager metoduna ulaştığını ve #95'in dört metodunu gördüğünü doğruluyor, yani çözümleme bozulursa değişmez sessizce boşa koşmuyor.
+  - **Kullanıcı kimliğine bağlı alanlar yalnız köprü yolunda damgalanır ve sebebi şema.** `authorities.granted_by_id`, `disputes.resolved_by`, `reports.reviewed_by` — üçü de `users`'a yabancı anahtar taşıyor, personelin ise orada satırı yok (ADR-0014: personel marketplace kullanıcılarından ayrı). Personel yolunda sütun boş bırakılır; `grantRole` bunun için zaten var olan `stampRoleGrantTime` sorgusunu kullanıyor. "Kim yaptı" sorusunu admin denetim kaydı (§2av) cevaplıyor — `resolved_by_staff_id` / `reviewed_by_staff_id` kolonları geldiğinde bu dallar oraya yazacak.
+  - **Aktörü marketplace kullanıcısıyla karşılaştıran kurallar personel yolunda vakumda kalır.** `revokeRole`'ün "kendi `ROLE_ADMIN`'ini alamazsın" kuralı hedefi aktörle karşılaştırıyor; personel aktör hiçbir zaman bir `users` satırı olmadığı için hedefle çakışamaz. Kural `actor == null` dalına alındı — koşulsuz çalıştırmak `securityService`'e uzanmak, yani yukarıdaki tuzağa düşmek demekti. Son admini koruyan sayım ise koşulsuz, iki yolda da çalışıyor.
 - **İç içelik daima üst kaynaktan aşağı.** `/job-assignments/{id}/reviews`, `/users/{id}/badges` — asla `/reviews/job-assignments/{id}` değil.
 - **Durum değiştiren işlem kendi POST ucunu alır.** `/respond`, `/complete`, `/cancel`, `/confirm`. Tek bir `PATCH .../status` ucuna hepsini yığmak yerine, her geçişin `SecurityConfig`'te kendi satırı olsun diye.
 - **Uç yolları sondaki eğik çizgi taşımaz** (§4'teki tuzak), **aynı fiil+yol iki handler'da olamaz.**
@@ -473,7 +478,13 @@ Testlerde `rate-limit.enabled=false`; açıkça test eden sınıflar `@TestPrope
 
 **Her deneme ayrı kayıt.** `Payment` tablosu bir `JobAssignment` için birden çok deneme tutar. `conversation_id` benzersiz ve **her denemede yeniden üretilir**; eskiden `assignmentId` ile eşitlenmişti ve ikinci deneme birincisiyle çakışıyordu.
 
+**Bir atamanın en fazla bir aktif denemesi vardır.** Aktif küme `INITIATED`, `VERIFY_PENDING` ve `IN_REVIEW`; `uk_payments_one_active_attempt` kısmi benzersiz indeksi bu invariant'ı gerçek yarışta da korur. Ön kontrol yalnızca hızlı hata içindir; doğruluk veritabanındadır. Constraint çevirisi hata mesajı metnine değil Hibernate'in `constraintName` alanına bakar. `ActivePaymentAttemptConstraintIT` iki gerçek transaction'ı aynı anda koşturup birinin başarı, diğerinin `PAYMENT_ATTEMPT_IN_PROGRESS` 409 aldığını sabitler.
+
+**Rezervasyon sağlayıcıdan önce ve ayrı transaction'da yazılır.** `startAttempt(REQUIRES_NEW)`, alt üye işyeri ve checkout initialize çağrılarından önce commit olur. Böylece iki HTTP isteği aynı anda Iyzico'ya gidemez. Initialize sonucu belirsizse satır geri alınmaz; `VERIFY_PENDING` olur ve yeni checkout'u engeller. Token henüz alınamadığı için bu özel durum `conversation_id` ile panelden elle mutabakat ister. Alt üye işyeri çağrısı gibi checkout'un hiç başlamadığı bilinen erken hata ise rezervasyonu terminal `FAILED` yapar.
+
 **Callback artık doğrulanıyor.** Sağlayıcının `paymentStatus`, `fraudStatus`, `paidPrice` ve `currency` değerleri kontrol edilmeden emanet açılıyordu; ayrıntı ve neyin kırık olduğu §2x'te.
+
+**Belirsiz doğrulama başarısızlık değildir.** Retrieve ağ/HTTP/imza hatası veya imzalı yanıttaki immutable snapshot uyuşmazlığı `FAILED` yapılıp yeni ödeme açmaz; `VERIFY_PENDING` durumunda aktif kalır. Token'ı olan satırlar `PaymentVerificationScheduler` tarafından üstel geri çekilmeyle en çok 8 kez yeniden sorulur. Otomatik tavan dolunca satır aktif kalır, `next_verification_at=null` olur ve manuel mutabakat bekler. `IN_REVIEW` aynı döngüyle tekrar sorgulanır.
 
 **Callback idempotent.** Zaten `SUCCEEDED` olan bir ödemeye ikinci callback geldiğinde sağlayıcıya hiç gidilmez, kayıt değiştirilmez. Iyzico aynı callback'i tekrar gönderirse ikinci kez para hareketi işlenmez.
 
@@ -487,13 +498,121 @@ Testlerde `rate-limit.enabled=false`; açıkça test eden sınıflar `@TestPrope
 
 **IBAN artık `User` üzerinde değil.** `BankAccount` entity'sinde; birincil hesap `is_primary` ile işaretli, doğrulama `BankAccountManager` içinde. `users.iban` kolonu mevcut veriler `bank_accounts`'a kopyalandıktan sonra düşürüldü — iki kaynak bırakılmadı.
 
-**Banka hesabı HTTP yüzeyi koleksiyon tabanlı.** `GET/POST /users/me/bank-accounts`, `POST /users/me/bank-accounts/{accountId}/primary` ve `DELETE /users/me/bank-accounts/{accountId}` yalnızca oturum sahibinin kayıtlarına çalışır. DTO ham IBAN taşımaz; `maskedIban`, `id`, `primary` ve ilerideki sahiplik doğrulama akışına ayrılmış `verificationStatus` döner. İlk etkin hesap otomatik birincildir. Veritabanındaki kısmi benzersiz indeks aktif ve silinmemiş hesaplarda kullanıcı başına en fazla bir birincil kaydı garanti eder; kullanıcıya ait yazmalar transaction-scoped advisory lock ile seri hale getirildiği için eşzamanlı birincil seçimleri de bu invariant'ı bozmaz.
+**Banka hesabı HTTP yüzeyi koleksiyon tabanlı.** `GET/POST /users/me/bank-accounts`, `POST /users/me/bank-accounts/{accountId}/primary`, `POST /users/me/bank-accounts/{accountId}/verification` (§2k2) ve `DELETE /users/me/bank-accounts/{accountId}` yalnızca oturum sahibinin kayıtlarına çalışır. DTO ham IBAN taşımaz; `maskedIban`, `id`, `primary` ve ilerideki sahiplik doğrulama akışına ayrılmış `verificationStatus` döner. İlk etkin hesap otomatik birincildir. Veritabanındaki kısmi benzersiz indeks aktif ve silinmemiş hesaplarda kullanıcı başına en fazla bir birincil kaydı garanti eder; kullanıcıya ait yazmalar transaction-scoped advisory lock ile seri hale getirildiği için eşzamanlı birincil seçimleri de bu invariant'ı bozmaz.
 
 **Eski profil yazma sözleşmesi geçiş boyunca korunuyor.** `PATCH /users/me { iban }` yeni bir IBAN gelirse mevcut birincil kaydı yerinde günceller, aynı IBAN ikincil hesaplarda zaten varsa yeni kayıt açmadan onu birincil yapar. `GET /users/me` içindeki `maskedIban` her zaman koleksiyonun mevcut birincil hesabından üretilir; `users.iban` geri getirilmez ve ikinci bir doğruluk kaynağı oluşmaz. Yeni koleksiyon ucuna yalnızca Türkiye IBAN'ı (`TR`, 26 karakter, mod-97) kabul edilir; ham değer yanıta, hata mesajına, telemetry'ye veya log'a yazılmaz.
 
-**`verificationStatus` bu dalgada yalnızca ileriye uyumlu veri sözleşmesidir.** Mevcut ve yeni hesaplar `UNVERIFIED` başlar; eski profil ucu bir IBAN'ı değiştirdiğinde durum yeniden `UNVERIFIED` olur ve beyana dayalı `accountHolderName` temizlenir. `PENDING`, `VERIFIED` ve `EXPIRED` değerlerinin geçişleri, zaman aşımı ve ödeme kapısı #71'in sorumluluğundadır; bu koleksiyon yüzeyi bunları uygulamaz ve ödeme semantiğini değiştirmez.
+**`verificationStatus` artık ileriye uyumlu bir veri sözleşmesi değil, para yolunun kapısı** — geçişleri, zaman aşımı, yeniden deneme ve kapının yeri §2k2'de.
 
-`initiatePaymentSession` bütünüyle `@Transactional`: adres eksikliği ya da Iyzico hatası durumunda `Payment` kaydı da geri alınır, sahipsiz deneme kalmaz.
+`PaymentSessionDto` yalnız güvenilir `paymentPageUrl` ve fiyat kırılımını taşır. Iyzico provider token'ı dahili korelasyon sırrıdır; public yanıttan çıkarıldı ve veritabanında `uk_payments_provider_token` ile benzersizdir.
+
+## 2k2. IBAN sahipliği doğrulaması — para yolunu kapatan kontrol
+
+Zarar üç halkalı (`docs/research/uzaktan-kimlik-dogrulama.md` §7.1): kimlik iddiası, kartın gerçekliği ve
+**paranın gideceği hesabın sahipliği**. Üçüncüsü hiç sorulmuyordu: `IbanValidator` yalnızca uzunluk, ülke kodu
+ve mod-97 kontrol hanesine bakıyor, yani "bu IBAN geçerli bir IBAN mı" sorusunu cevaplıyor — "bu IBAN senin mi"
+sorusunu değil. Elinde başkasının gerçek kartı olan biri kurbanın TCKN'siyle ama **kendi IBAN'ıyla** alt üye
+işyeri açtırabiliyordu.
+
+**Yön (a) seçildi: kullanıcı kendi kayıtlı IBAN'ından Koala'ya küçük tutarlı bir transfer yapar.** Issue iki yön
+öneriyordu; (b) — Koala'dan kullanıcıya gönderim + dönen hesap sahibi adının karşılaştırılması — bankadan
+dönen adı okuma yeteneği gerektiriyor ve o yetenek bugün elimizde olduğu **doğrulanmış değil**. (a)'da kanıt
+kendiliğinden sağlam: gönderen IBAN kayıtlı IBAN'la eşleşmezse doğrulama geçmez, üçüncü tarafa bağımlılık yok.
+Bu, BDDK m.7/3 ve MASAK Tebliğ 19 m.6/4'ün "çip doğrulanamadığında ilk finansal hareket kişinin kendi banka
+hesabından yapılsın" çözümünün kopyası.
+
+**Durum modeli dört değerli, ve `is_verified` boolean'ı bilerek kullanılmadı.** "Hiç denenmedi" ile "denendi,
+tutmadı" ayrımı gerekiyor (§2n'deki rıza kaydı gerekçesinin aynısı): `UNVERIFIED` (hiç denenmedi),
+`PENDING` (transfer bekleniyor), `VERIFIED` (gönderen IBAN eşleşti), `EXPIRED` (denendi, tutmadı ya da süresi
+doldu). `bank_accounts` üzerine beklenen tutar, tekil referans, başlangıç/bitiş anı, doğrulanma anı, harcanan
+deneme sayısı ve `account_holder_name_verified` bayrağı eklendi.
+
+**Süresi dolmuş `PENDING` veritabanında beklemez, okunurken hesaplanır.** `BankAccountVerificationPolicy.effectiveStatus`
+`PENDING` + `expiresAt` geçmişte ise `EXPIRED` döndürüyor; kalıcı geçiş bir sonraki başlatmada yazılıyor. Bir
+zamanlayıcı eklenmedi — süpürme işi olmadan da hem kapı hem yanıt doğru davranıyor ve tek örnek varsayımına
+bir zamanlayıcı daha eklemeye değmedi (§7, Faz 11D).
+
+**Zaman aşımı 72 saat, deneme bütçesi 5.** İkisi de `bank.verification.*` altından, yani `.env` ile
+ayarlanabiliyor. Beklenen tutar `1.01`–`1.99` TL arasında rastgele bir kuruş; sabit tutar seçilmedi çünkü
+kuruş hanesi referansın yanında ikinci bir eşleştirme kanıtı veriyor. Tutar `BigDecimal`, ölçek 2 (§2e).
+Referans `KOALA-` + 8 karakter, karışabilen harfler (I, O, 0, 1) alfabede yok ve `verification_reference`
+üzerinde kısmi benzersiz indeks var.
+
+**Yeniden deneme kuralı: bekleyen bir doğrulama varken yeniden başlatmak yeni deneme harcamaz** — aynı tutar ve
+referans döner (idempotent). Deneme ancak `UNVERIFIED` ya da `EXPIRED` durumundan başlatıldığında harcanır.
+Gönderen IBAN ya da tutar tutmazsa o deneme `EXPIRED`'a düşer ve kullanıcı bütçesi bitene kadar yeniden
+başlatabilir. Başarısız deneme **kalıcı olmalı**, yoksa bütçe hiç tükenmezdi: `confirmVerification`
+`@Transactional(noRollbackFor = ValidationException.class)` taşıyor, aksi hâlde reddi yazan `UPDATE` de geri
+alınırdı.
+
+**IBAN değişince doğrulama düşer, ve bu kural entity'nin içinde.** `BankAccount.setIban` değeri
+karşılaştırıyor ve değiştiyse `forgetVerification()` çağırıyor: durum, referans, tutar, süreler, doğrulanma anı,
+deneme sayısı, hesap sahibi adı ve adın doğrulanmışlık bayrağı birlikte sıfırlanıyor. Kural manager'a yazılsaydı
+ikinci bir yazma yolu eklendiği gün sessizce atlanabilirdi — **doğru bir kararın sonradan eklenen bir
+mekanizmayla geçersiz kılınması** bu depodaki tekrar eden kusur (§2d2, #77). Hibernate `@Id` alan üzerinde
+olduğu için alan erişimi kullanıyor, yani veritabanından yükleme bu setter'a uğramıyor ve doğrulama
+hidrasyonda kaybolmuyor (`BankAccountIT` ve `IbanOwnershipGateIT` bunu gerçek Postgres'te doğruluyor).
+Deneme sayısının da sıfırlanması bilinçli: yeni IBAN yeni bütçe hak ediyor, aynı IBAN yeniden yazıldığında ise
+`Objects.equals` yüzünden hiçbir şey sıfırlanmıyor.
+
+**`accountHolderName` artık kullanıcının kendi adından türetilmiyor.** Alan yalnızca doğrulama bir ad
+döndürdüğünde doluyor: personel ekstredeki hesap sahibi adını `senderName` ile bildirirse yazılıyor ve
+`account_holder_name_verified` `true` oluyor; bildirmezse alan `null` kalıyor ve bayrak `false` — yani
+"doğrulanmamış" hâli, uydurma bir değerle değil **boşlukla** temsil ediliyor.
+
+### Transferin sisteme nasıl bildirildiği — seçilen yol ve eksik kalan
+
+**En basit çalışan yol seçildi: elle personel onayı.** `POST /admin/bank-account-verifications/{reference}/confirm`,
+ekstredeki gelen transferin gönderen IBAN'ını, tutarını ve varsa hesap sahibi adını alıyor; karşılaştırmayı
+Koala yapıyor. Uydurma bir banka entegrasyonu yazılmadı.
+
+Uç yeni bir `StaffPermission` ile korunuyor: `bank.account.verify` (`FINANCIAL`, mutating), seed'de yalnız
+`FINANCE_OFFICER`'a veriliyor (§2au'daki görev ayrılığı: ekstre okumak finans dalının işi). Mevcut bir iznin
+altına sokulmadı — `payout.release` para çıkarmayı, `payment.read` okumayı adlandırıyor; ikisi de bu eylem
+değil. Uç `/admin/**` altında olduğu için denetim kaydına giriyor (§2av).
+
+**Eksik kalanlar, açıkça:**
+
+1. **Banka bildirimi yok.** Koala'nın tahsilat hesabına gelen transferi kimse otomatik okumuyor; personel
+   ekstreye bakıp ucu çağırmak zorunda. Banka API'si ya da MT940/CAMT ekstre beslemesi geldiğinde aynı
+   `confirmVerification` çağrısı bir tüketiciden yapılabilir — servis imzası bunu zaten kaldırıyor.
+2. **Tahsilat IBAN'ı henüz yok.** `BANK_VERIFICATION_COLLECTION_IBAN` boşken doğrulama hiç başlatılamıyor
+   (502, `bank.account.verification.unavailable`) ve **hiçbir işçi emanetten para alamıyor**. Değer girilmeden
+   canlıya çıkılamaz; `.env.example` bunu yazıyor.
+3. **Gelen transferin iadesi düşünülmedi.** Doğrulama tutarı Koala'da kalıyor; kullanıcıya geri gönderilmesi ya
+   da ilk hakedişine eklenmesi ürün kararı.
+4. **Alt üye işyeri kaydındaki IBAN'ın tazelenmesi.** `UserProducerService` profil güncellemesinde birincil
+   IBAN'ı olduğu gibi kuyruğa yazıyor ve `IyzicoSynchronizationConsumer` onu alt üye işyerine geçiriyor;
+   bu yol **doğrulanmamış bir IBAN'ı sağlayıcıya taşıyabiliyor**. Emanet kapısı parayı yine durduruyor ama
+   sağlayıcıdaki kayıt bayat kalabiliyor. Kapatmak, doğrulanmış IBAN yokken güncellemenin ne göndereceğine
+   (atla mı, null mı) karar vermeyi gerektiriyor ve o karar Iyzico'nun cevabına bağlı (§2x, Faz 7C).
+5. **KKB IBAN Doğrulama Hizmeti** erişimi gelirse bu akışın yerini alabilir ya da onu tamamlayabilir; başvuru
+   insan işi ve #71'de duruyor.
+
+### Kapı nereye kondu ve neden
+
+**Karar: emanet çıkışı — `PayoutManager.releaseToWorker`.** Doğrulanmış birincil hesabı olmayan işçiye emanetten
+para çıkmıyor (409, `payout.worker.iban.not.verified`) ve `Payout.bankAccount` artık `orElse(null)` değil,
+doğrulanmış hesabın kendisi.
+
+**`JobApplicationManager.assertReadyToWork` bilerek değiştirilmedi.** Orada bugün yalnız IBAN'ın *varlığına*
+bakılıyor (§2ar) ve öyle kalıyor. Gerekçe: başvuruyu engellemek kullanıcıyı **zararın doğmasından çok önce**
+durdurur — henüz kimse ona para göndermeyecekken bankasına gönderir, üstelik hiç iş alamayacak bir kullanıcı
+için doğrulama transferi yaptırmak boşa iş. Zarar parayla doğuyor, kapı da tam orada kesiyor. Araştırmanın
+kendi ifadesi de bu: "işçinin **ilk emanet çıkışı** serbest bırakılmadan önce".
+
+**Ama emanet kapısı tek başına kâğıttan olurdu, bu yüzden ikinci bir nokta kapatıldı.** Paranın gerçekte gittiği
+IBAN Koala'nın tablosunda değil, Iyzico'daki alt üye işyeri kaydında duruyor ve o kayıt
+`JobAssignmentManager.createSubMerchantDtoForWorker` ile yazılıyor. Doğrulanmamış bir IBAN oraya bir kez
+yazıldıktan sonra emanet kapısı kilidi başka kapıda olan bir kapıyı bekliyor olurdu. O yüzden alt üye işyeri
+kaydına yalnız doğrulanmış IBAN gidiyor — hemen altındaki `isIdentityVerified` kontrolüyle **aynı desende**,
+kendi anahtarıyla (`job.assignment.iban.not.verified.for.worker`).
+
+**Bunun bedeli yazılı olsun:** işçinin IBAN'ı doğrulanmamışken **işveren ödeme oturumu açamıyor**, yani kapı
+pratikte işe alım anına da düşüyor. Kabul edildi çünkü depo aynı noktada aynı kararı zaten vermiş: iki satır
+aşağıda kimliği doğrulanmamış işçi için ödeme aynı şekilde reddediliyor. İstemcinin yapması gereken, işçiyi
+başvuru sonrası doğrulamaya yönlendirmek — `assertReadyToWork` bu yüzden serbest bırakıldı.
+
 
 ## 2l. Sayfalama ve ilan araması
 
@@ -615,11 +734,15 @@ Kurallar (`cancellation.*` env'lerinden ayarlanır):
 
 İptal atama başına tektir (`uk_cancellations_assignment_active`), yalnızca `PENDING_CONFIRMATION`/`CONFIRMED`/`IN_PROGRESS` durumlarında mümkün.
 
+**İptal iadesi atamanın "son iadesi" değildir.** İptal akışı ürettiği `Refund` kaydını aynı transaction içinde `cancellations.refund_id` ile doğrudan bağlar; cevap da yalnız bu bağlantının durumunu taşır. Controller iptalden sonra `refunds` tablosuna ikinci bir sorgu atmaz. Böylece sonradan açılan bir uyuşmazlık ya da personel iadesi, geçmiş iptalin yaşam döngüsü diye gösterilemez. Migration öncesi iptallerde güvenilir bir nedensellik anahtarı bulunmadığı için `refund_id` bilinçli olarak nullable'dır ve eski kaydın `refundStatus`/`refundCompletedAt` alanları `null` dönebilir; tutar veya zamana bakarak tahmin yapılmaz.
+
+**İptal para alanları JSON'da exact decimal string'dir.** `CancellationPreviewDto` ve `CancellationDto` içindeki `feeRate`, `feeAmount` ve `refundAmount` `BigDecimal.toPlainString()` eşdeğeriyle çıkar; bilimsel gösterim kullanılmaz ve veritabanındaki ölçek korunur. Hesap ve kalıcılık katmanında para yine `BigDecimal`'dır (§2e).
+
 **Açık uyuşmazlık emaneti dondurur.** `PayoutManager.releaseToWorker` artık `disputeDao.existsByJobAssignmentIdAndStatusIn(..., ACTIVE)` kontrolü yapıyor; açık uyuşmazlık varsa para işçiye çıkmaz. Bu kontrol `PaymentStateMachine`'in içine konmadı çünkü state machine para durumunu bilir, uyuşmazlığı bilmez.
 
 Uyuşmazlık yalnızca **emanette para varken** açılabilir, atama başına aynı anda bir tane açık kalabilir (`uk_disputes_assignment_open` kısmi indeksi `status <> 'RESOLVED'` ile). Çözüm admin'de: `RELEASE_TO_WORKER` parayı çıkarır, `REFUND_EMPLOYER` iade eder, `DISMISSED` emanete dokunmaz.
 
-**Uyuşmazlık çözümü parayı hareket ettiriyorsa finansal izin de ister.** `dispute.resolve` `NORMAL` hassasiyetinde ve tek başına `RELEASE_TO_WORKER`/`REFUND_EMPLOYER` çalıştırabiliyordu: `payout.release` ve `payment.refund`'ın **hiçbirine** sahip olmayan bir uyuşmazlık görevlisi emanetten gerçek para çıkarabiliyordu — `keycloak-setup.md` §3'ün görev ayrılığı kuralının tam ihlali, üstelik iki finansal iznin 10 yıllık denetim izini de atlanarak. `DisputeManager` artık parayı `PayoutService` yerine `StaffPayoutService` facade'ından geçiriyor ve kararın **yönüne göre** izin istiyor: `RELEASE_TO_WORKER` → `payout.release`, `REFUND_EMPLOYER` → `payment.refund`, `DISMISSED` → hiçbiri.
+**Uyuşmazlık çözümü parayı hareket ettiriyorsa finansal izin de ister.** `dispute.resolve` `NORMAL` hassasiyetinde ve tek başına `RELEASE_TO_WORKER`/`REFUND_EMPLOYER` çalıştırabiliyordu: `payout.release` ve `payment.refund`'ın **hiçbirine** sahip olmayan bir uyuşmazlık görevlisi emanetten gerçek para çıkarabiliyordu — [ADR-0014](docs/adr/0014-keep-staff-identity-in-koala.md) §Rol grafiği'ndeki görev ayrılığı kuralının tam ihlali, üstelik iki finansal iznin 10 yıllık denetim izini de atlanarak. `DisputeManager` artık parayı `PayoutService` yerine `StaffPayoutService` facade'ından geçiriyor ve kararın **yönüne göre** izin istiyor: `RELEASE_TO_WORKER` → `payout.release`, `REFUND_EMPLOYER` → `payment.refund`, `DISMISSED` → hiçbiri.
 
 **Eşleme `DisputeResolution` enum'unda (`getMoneyPermission`), controller anotasyonunda değil.** `@RequiresPermission` statiktir ve `containsAll` ile çalışır; gövdeye bağlı bir kural oraya yazılamaz. Yazılabilseydi bile üç sonucu birden kapsayan tek bir liste `DISMISSED` için de finansal izin isterdi ve güven dalını zorunlu olarak finans dalına taşırdı — kaçınılmak istenen şeyin aynısı.
 
@@ -684,7 +807,7 @@ sorgusu bu kolondan geçiyor.
 **`POST /admin/reports/{id}/review` personel kimliğiyle çalışmıyordu — 404 dönüyordu.** §2p'nin yukarıda
 `DisputeManager` için anlattığı tuzağın aynısı, ve bu dosyada "`ReportManager.reviewedBy` de aynı boşlukta
 duruyor" diye yazılıydı: `securityService.getAuthenticatedUser()` bir `StaffPrincipal` görünce
-`{user.not.authenticated}` fırlatıyor, yani Keycloak kimliğiyle gelen bir moderatör şikayeti **hiç karara
+`{user.not.authenticated}` fırlatıyor, yani personel kimliğiyle gelen bir moderatör şikayeti **hiç karara
 bağlayamıyordu**. `review` artık `StaffPrincipal actor` alıyor ve `reviewedBy` yalnız aktör `null` iken
 (köprü, marketplace `ROLE_ADMIN`) yazılıyor. Personel kararında satır boş kalıyor ve "kim karar verdi"
 sorusunu admin denetim kaydı cevaplıyor. ADR-0010'un öngördüğü `reviewed_by_staff_id` kolonu hâlâ yok;
@@ -1121,11 +1244,11 @@ Artık `SettlementOperation.REFUND` var ve `/payment/refund` çağrılıyor (`pa
 
 `settlement_tasks.amount` bu yüzden eklendi — `REFUND` dışındaki işlemlerde null.
 
-**Tutar doğrulanmıyordu.** Callback sonrası sağlayıcının döndürdüğü `paidPrice` ve `currency` bizim `totalCharged` ile karşılaştırılmıyordu; sağlayıcı ne derse emanet açılıyordu. Artık uyuşmazlıkta ödeme `FAILED` olur ve log tutarları yazar.
+**Tutar ve immutable snapshot doğrulanmıyordu.** Callback sonrası sağlayıcının döndürdüğü değerler bizim denememizle tam eşleşmeden emanet açılıyordu. Artık resmi response signature doğrulandıktan sonra `conversationId`, token, `basketId`, currency, `price`, `paidPrice`, tek item'ın `itemId`/`price`/`paidPrice`/`subMerchantPrice` değerleri ve provider işlem kimlikleri snapshot'la karşılaştırılır. Uyuşmazlık para çekilmiş olabileceği için terminal değildir: ödeme `VERIFY_PENDING` kalır ve log yalnız uyuşmayan alanın adını yazar.
 
 **`fraudStatus` yok sayılıyordu.** Iyzico `0` derse ödeme dolandırıcılık incelemesindedir ve **sonradan geri çevrilebilir**; doküman "yalnızca 1 iken ürünü gönderin" diyor. Öncesinde `0` da `1` gibi işlenip emanet açılıyor, işçi işe başlayabiliyordu. Artık `1` → emanet, `0` → yeni `PaymentAttemptStatus.IN_REVIEW` (emanet açılmaz), `-1` → `FAILED`.
 
-**`IN_REVIEW`'dan çıkış henüz otomatik değil.** Iyzico incelemeyi bitirince webhook gönderir; o tüketici yazılmadı. Bugün ödeme incelemede kalırsa işveren yeniden denemek zorunda. Kayıt `providerTransactionId` ile duruyor, yani el ile çözülebilir.
+**`IN_REVIEW` otomatik yeniden sorgulanır.** Webhook tüketicisi hâlâ yok, fakat `PaymentVerificationScheduler` vadesi gelen kaydı aynı imzalı retrieve ucundan tekrar okur. Tavan dolarsa aktif kayıt silinmez ya da retryable yapılmaz; manuel mutabakata bırakılır.
 
 **Para artık `double` değil.** `price`, `paidPrice`, `subMerchantPrice` `BigDecimal`'e çevrildi — §2e'nin kuralı buraya hiç uygulanmamıştı, oysa iyzico `price` ile sepet kalemlerinin toplamının **tam** eşitliğini arıyor.
 
@@ -1134,6 +1257,8 @@ Artık `SettlementOperation.REFUND` var ve `/payment/refund` çağrılıyor (`pa
 **Exception yüzeyi §2ag'ye uyduruldu.** `RuntimeException` yerine `ExternalServiceException` (502). Ayrıca `retrieveCheckoutFormResult` **artık reddedilen ödemede exception atmıyor** — sonucu döndürüyor, kararı `PaymentManager` veriyor. Öncesinde "kart reddedildi" ile "sağlayıcıya ulaşılamadı" aynı catch'e düşüyordu.
 
 **`conversationId` artık korelasyon taşıyor.** Approve/disapprove/refund çağrılarında rastgele UUID üretiliyordu; artık ödemenin kendi `conversationId`'si gidiyor, yani iyzico panelindeki kayıt bizdeki `Payment` ile eşleşiyor.
+
+**Response signature ayrıca doğrulanır.** IYZWSv2 request imzası yanıtın doğruluğunu kanıtlamaz. Initialize için resmi `conversationId:token`, retrieve için resmi `paymentStatus:paymentId:currency:basketId:conversationId:paidPrice:price:token` sırası secret key ile HMAC-SHA256 doğrulanır; para değerleri resmi kurala göre sondaki sıfırlardan arındırılır. Initialize URL'si de yalnız configured loopback ya da ortamın resmi iyzico HTTPS hostlarından olabilir.
 
 **Hâlâ sandbox'ta uçtan uca doğrulanmadı.** Yukarıdakiler dokümana karşı doğru; gerçek bir sandbox işlemiyle teyit edilmesi gereken tek şey kısmi iade + disapprove ikilisinin sıralamasıdır. `iyzico.settlementEnabled=false` ile kuyruk tümüyle kapalı tutulabilir.
 
@@ -1164,15 +1289,15 @@ Aynı sayfaların `/payment/v2/3dsecure/auth` şeması bunu tek cümleyle bağl�
 
 **Alan yoksa ödeme reddediliyor — bilinçli olarak kapalı düşülüyor.** iyzico dört ayrı sayfada "`mdStatus` parametresi sadece 3DS işlemlerinde görünecektir" diyor. Yani alanın yokluğunun iki okuması var: (a) işlem 3DS'siz geçti, (b) yanıt beklediğimiz gibi değil. İkisini ayırt edemiyoruz ve ayırt edemediğimiz durumda **parayı korumaktan yana yanılıyoruz** — §2y2'deki ortam kapısıyla aynı yön. Alan yokken başarı saymak, tam olarak kapatmaya çalıştığımız açığın yeniden açılması olurdu: doğrulanmamış bir işlem emanete girer.
 
-Bedeli açıkça yazılı olsun: **Checkout Form bir gün 3DS'siz bir ödeme geçirirse onu da reddederiz.** iyzico'nun CF'nin 3DS'i hangi kurala göre seçtiğini yazmadığı `docs/runbooks/payments.md` §6.3'te duruyor. Böyle bir işlemde sağlayıcı tarafında para çekilmiş olabilir; operasyonel karşılığı tutar uyuşmazlığıyla aynıdır — panelden `conversation_id` ile elle iade (runbook §1). Canlıya geçişte doğrulanacak ilk şey budur; kalıcı çözüm istenirse `forceThreeDS` (§6.3'te belgelenmemiş olarak işaretli) iyzico'dan yazılı teyit alındıktan sonra gönderilir.
+Bedeli açıkça yazılı olsun: **Checkout Form bir gün 3DS'siz bir ödeme geçirirse onu da reddederiz.** iyzico'nun CF'nin 3DS'i hangi kurala göre seçtiğini yazmadığı `docs/runbooks/payments.md` §6.3'te duruyor. Böyle bir işlemde sağlayıcı tarafında para çekilmiş olabilir; operasyonel karşılığı snapshot uyuşmazlığıyla aynıdır — panelden `conversation_id` ile elle iade (runbook §1). Canlıya geçişte doğrulanacak ilk şey budur; kalıcı çözüm istenirse `forceThreeDS` (§6.3'te belgelenmemiş olarak işaretli) iyzico'dan yazılı teyit alındıktan sonra gönderilir.
 
 **Bir çelişki not edilmeli.** CF sorgulama yanıtının OpenAPI şeması (`/odeme-metotlari/odeme-formu/cf-entegrasyonu/cf-sorgulama`) `mdStatus`'u **saymıyor**; ama aynı doküman setindeki CF örnek yanıtı (`.../cf-ornek-entegrasyon`) `"mdStatus": 1` içeriyor ve resmî `iyzipay-java` SDK'sında `CheckoutForm`, `PaymentResource`'tan `getMdStatus()`'u miras alıyor. İkisi de iyzico. Alanın geleceğini varsayıyoruz ama şema garanti etmediği için okuma null'a dayanıklı ve karar fail-closed.
 
-**Kapı dolandırıcılık dalından önce.** `mdStatus != 1` ve `fraudStatus == 0` birlikte gelirse ödeme `IN_REVIEW`'da beklemez, `FAILED` olur: `IN_REVIEW`'dan çıkış zaten otomatik değil ve doğrulanmamış bir işlemi "belki sonra onaylanır" diye tutmanın anlamı yok.
+**Kapı dolandırıcılık dalından önce.** `mdStatus != 1` ve `fraudStatus == 0` birlikte gelirse ödeme `IN_REVIEW`'a geçmez, `VERIFY_PENDING` kalır. Tahsilat ihtimali dışlanamadığı için bu durum terminal yapılmaz; aktif deneme yeni checkout'u engeller ve bounded reconciliation aynı imzalı sonucu yeniden kontrol eder.
 
 **Ret sebebi mesaj anahtarı, ham değer değil.** `payments.failure_reason` istemciye `GET /job-assignments/{id}/payments` ile aynen dönüyor (`PaymentAttemptDto`), yani sağlayıcı detayı için uygun bir yer değil. Kayda `{payment.3ds.verification.failed}` yazılıyor; sayısal `mdStatus` yalnız log satırında (`Payment {} rejected: 3-D Secure verification did not succeed, mdStatus={}`). Operatör için korelasyon yine `conversation_id`.
 
-**Reddedilen deneme sıradan bir başarısız denemedir.** `payments.status = FAILED`, `completed_at` damgalı, atama `PENDING_COLLECTION`/`FAILED` → `FAILED`; emanet açılmaz, atamaya kırılım yazılmaz, `JobAssignmentDao`'ya hiç dokunulmaz. İşveren yeniden deneyebilir. Zaten `SUCCEEDED` olan ödemede idempotanlık kısa devresi önce çalıştığı için ikinci callback sağlayıcıya hiç gitmez (§2k); reddedilen denemede ise kısa devre yok, tekrar sorulur ve sonuç yine `FAILED` olur.
+**3DS doğrulaması olmayan deneme terminal değildir.** `payments.status = VERIFY_PENDING`, `completed_at = null`; emanet açılmaz ve atamaya kırılım yazılmaz. Tahsilat ihtimali dışlanamadığı için işveren yeni checkout açamaz. Bounded reconciliation aynı imzalı sonucu yeniden kontrol eder, tavan dolunca satır manuel inceleme için aktif ve zamanlanmamış kalır. `SUCCEEDED` ve `FAILED` denemeler terminaldir; tekrar callback geldiğinde sağlayıcıya gidilmeden aynı sonuç döner (§2k).
 
 **Sandbox'ta doğrulanmadı.** `4131111111111117` ile gerçek bir sandbox işlemi yapılmadı; kural iyzico dokümantasyonuna ve sahte sağlayıcı yanıtlarına karşı sabitlendi (`PaymentCallbackTest`, `IyzicoProtocolTest`).
 
@@ -1186,9 +1311,9 @@ Artık `PayoutManager` sağlayıcıyı hiç çağırmıyor; `SettlementService.e
 
 **Üstel geri çekilme, tavanlı.** `initial-backoff` (1 dk) her denemede ikiye katlanır, `max-backoff` (6 saat) ile sınırlanır. `max-attempts` (8) aşılınca görev `FAILED`'a düşer ve **sessizce durur** — sonsuza kadar sağlayıcıyı dövmez. `FAILED` görevler elle incelenmek üzere tabloda kalır.
 
-**`Payout` ve `Refund` durumunu sağlayıcı yanıtı belirler.** Release anında `Payout` `PENDING` yazılır, görev başarılı olduğunda `PROCESSING`'e geçer. İade tarafında `DISAPPROVE` görevi başarılı olduğunda `Refund` `COMPLETED` olur ve `completedAt` damgalanır. **Görev deneme limitini aştığında ilgili kayıt `FAILED` işaretlenir.**
+**`Payout` ve `Refund` durumunu sağlayıcı akışı belirler.** Release anında `Payout` `PENDING` yazılır, görev başarılı olduğunda `PROCESSING`'e geçer. İade `PENDING` (talep edildi) başlar; scheduler provider çağrısından hemen önce `RefundProgressManager` ile ayrı bir transaction'da `PROCESSING` (işleniyor) yapar. `REFUND` görevi başarılı olduğunda `Refund` `COMPLETED` olur ve `completedAt` damgalanır. **Görev deneme limitini aştığında ilgili kayıt `FAILED` işaretlenir.**
 
-Bir süre bu yarım kaldı: `markPayoutProcessing` yalnızca `APPROVE` için çalışıyordu, `Refund` sonsuza kadar `PENDING`'de duruyordu ve görev `FAILED`'a düştüğünde `Payout` `PROCESSING`'de kalıyordu. Yani operatör "yolda", "ulaştı" ve "kalıcı olarak başarısız" hâllerini ayırt edemiyordu.
+İade tarafındaki ayrı `PROCESSING` commit'i kullanıcı sözleşmesindeki “talep edildi → işleniyor → iade edildi” ayrımını gerçekten gözlenebilir kılar. Uygulama provider çağrısı sırasında kapanırsa refund `PROCESSING`, settlement görevi `PENDING` kalabilir; kalıcı görev aynı çağrıyı retry eder, tavan dolarsa `FAILED` ile kapanır.
 
 **`PayoutStatus.COMPLETED` bilerek kullanılmıyor.** Sağlayıcı `approve` çağrısı yalnızca talimatın kabul edildiğini söyler; paranın işçinin banka hesabına geçtiğini söyleyen bir geri bildirim yok. O geçiş Iyzico ödeme raporuyla mutabakat gerektiriyor, Faz 11B'nin kalan parçası.
 
@@ -1678,7 +1803,27 @@ Liste üç ayda bir güncelleniyor; `scripts/fetch-csca-anchors.sh` çalıştır
 
 **Sertifikaların sekizi explicit EC parameters kullanıyor** ve JDK'nın varsayılan `CertificateFactory`'si bunları `Only named ECParameters supported` ile reddediyor — üstelik reddedilenler en güncel olanları. Bu yüzden hem `CscaTrustStore` hem zincir doğrulaması **açıkça BouncyCastle sağlayıcısını** kullanıyor. Varsayılan sağlayıcıyla 12 sertifikanın yalnızca 4'ü yükleniyordu; sessizce eksik güven kümesiyle çalışmak, doğru kartı reddetmek demekti.
 
-**Açık soru: kimlik kartı hangi CSCA'ya zincirleniyor?** Listedeki sertifikaların çoğu adında "Passport" taşıyor. TCKK ICAO 9303 uyumlu bir eMRTD ama Document Signer'ının bu CSCA'lardan birine bağlanıp bağlanmadığı **doğrulanmadı**. Bağlanmıyorsa `UNTRUSTED_DOCUMENT_SIGNER` alınır ve NVİ'den kimlik kartına özel CSCA istenmesi gerekir. **Gerçek bir kartla test edilecek ilk şey bu.**
+**Kimlik kartı hangi CSCA'ya zincirleniyor — cevaplandı (6 Eylül 2026).** Gerçek bir kartla değil, kartı okuyan bir uygulamanın (ReadID Me) teşhis ekranından öğrenildi: Document Signer'ın issuer'ı `CN=T.C. Seyahat Belgesi Kök Sertifika Hizmet Sağlayıcısı – Sürüm 1, OU=Nüfus ve Vatandaşlık İşleri Genel Müdürlüğü, O=Türkiye Cumhuriyeti İçişleri Bakanlığı, C=TR`.
+
+**Paketlenen ilk 12 çıpanın hiçbiri bu değildi.** Sekizi `CN=Passport CSCA Turkey`, dördü `CN=CSCA Turkey`; hepsi pasaport kökleri. Kimlik kartının kökü ayrı ve BSI master list'inde yok — ReadID de (ICAO master list'iyle) zincir kuramadı, yani eksiklik bizim listemize özgü değildi.
+
+**Kök NVİ'nin kendi açık deposunda yayımlanıyor:** `https://sbdepo.tckk.gov.tr/`. Üçü de indirildi, SHA-256 parmak izleri sayfada yayımlananla doğrulandı ve `csca/` altına kondu:
+
+| dosya | kök | geçerlilik |
+|---|---|---|
+| `csca-tr-12.der` | Seyahat Belgesi Kök — Sürüm 1 | 2014-08-25 → **2029-08-25** |
+| `csca-tr-13.der` | Seyahat Belgesi Kök — Sürüm 2 | 2023-02-14 → 2038-02-10 |
+| `csca-tr-14.der` | Seyahat Belgesi Kök **Mavi Kart** — Sürüm 1 | 2022-08-27 → 2037-08-27 |
+
+Sürüm 1'in doğru kök olduğunun ikinci kanıtı tarihte: karttaki DS sertifikası `2029-08-25 07:46:43 GMT`'de bitiyor, `csca-tr-12` de **aynı saniyede**. Bir DS sertifikası kökünden uzun yaşayamaz.
+
+`BundledTrustAnchorsTest.theTravelDocumentRootThatSignsIdentityCardsIsBundled` bu çıpayı SHA-256 parmak iziyle sabitliyor. **Bu testi doğrularken tuzak var:** `target/classes/csca/` bayat kalıyor, çıpayı kaynak ağacından silmek testi kırmızıya döndürmüyor. `rm -rf target/classes/csca` gerekiyor — §1'in `rm -rf target/test-classes` uyarısının kaynak dosyalar için karşılığı.
+
+**`csca-tr-00` ve `csca-tr-03`'ün süresi 2026-07-28'de doldu** ve kimse yenilemedi, çünkü `scripts/fetch-csca-anchors.sh` git'e hiç alınmadı. Liste üç ayda bir güncelleniyor; betiğin commit edilmemiş olması sessiz bir tek-kişi bağımlılığı.
+
+**Gerçek kartın teşhisinden çıkan diğer cevaplar:** erişim kontrolü **BAC** (PACE şart değil), veri grupları **1, 2, 5, 11, 12, 15** (DG11 ve DG15 ikisi de var), **Active Authentication çalışıyor** (imza doğrulandı), Chip Authentication yok, LDS 1.7, bütün DG hash'leri SOD ile eşleşiyor. Yani `sod`/`dg1`/`dg11`/`dg15` zincirinin tamamı gerçek kartta karşılığını buluyor; eksik olan tek şey çıpaydı.
+
+**Kalan doğrulama:** bu çıpalarla `RealChipVerificationTest`'in gerçekten `SONUC : DOGRULANDI` vermesi henüz görülmedi — ham `sod.b64`/`dg1.b64` dökümü gerekiyor (is-koala/koala-backend#70).
 
 **Gerçek kart dökümü tek komutla denenir:**
 
@@ -1696,13 +1841,17 @@ KOALA_CHIP_DIR=/tmp/chip KOALA_CSCA_DIR=src/main/resources/csca ./mvnw test -Dte
 
 **İki imza şeması destekleniyor:** RSA için ISO 9796-2 (mesaj kurtarmalı, ICAO'nun tarif ettiği biçim) ve ECDSA için düz imza. Hangisinin kullanıldığı karta göre değişiyor, ikisi de deneniyor.
 
-⚠️ **Doğrulama anahtarına GÜVENİLMİYOR — bu paragraf yanlıştı ve düzeltildi.** Önceki metin *"DG15'in hash'i SOD'da, yani Passive Authentication zaten onu imzalı kabul ediyor; uydurma bir DG15 gönderen kişi SOD hash kontrolüne takılır"* diyordu. **Kod bunu yapmıyor.** `PassiveAuthenticationVerifier`'ın iki `verify` aşırı yüklemesi de (`:45`, `:49`) DG15 almıyor; `hashForDataGroup` yalnız DG1 (`:62`) ve DG11 (`:84`) için çağrılıyor. `UserManager:463` istemciden gelen `dg15`'i çözüp doğrudan `verifyChipPresence` → `IdentityChallengeManager` → `ActiveAuthentication.verify` zincirine veriyor.
+**Doğrulama anahtarı artık gerçekten SOD'a bağlanıyor — ama bu paragraf iki kez yanlıştı, o yüzden nasıl yapıldığı yazılı.** İlk metin *"DG15'in hash'i SOD'da, yani Passive Authentication zaten onu imzalı kabul ediyor"* diyordu ve kod bunu **yapmıyordu**; ikinci metin kusuru doğru anlatıyordu ama düzeltme is-koala/koala-backend#74 ile indi.
 
-**Sonucu:** Active Authentication, imzayı **saldırganın seçtiği bir anahtara** karşı doğruluyor. Bir kez alınmış `sod`+`dg1` dökümü olan biri kendi anahtar çiftini üretir, açık anahtarı `dg15` diye gönderir, sunucunun sayısını kendi özel anahtarıyla imzalar ve geçer. **Yani AA bugünkü hâliyle kapatmak için var olduğu tekrar oynatma açığını kapatmıyor.**
+**Ne yapılıyor.** `PassiveAuthenticationVerifier.verify` dört parametreli bir aşırı yükleme kazandı (`sod`, `dg1`, `dg11`, `dg15`) ve `UserManager.verifyChipEvidence` istekten çözdüğü `dg15`'i artık **oraya** veriyor. Doğrulayıcı, DG1 ve DG11 için yazılmış desenin aynısını uyguluyor: DG15'in hash'i `LDSSecurityObject`'teki 15 numaralı girdiyle karşılaştırılıyor, tutmazsa `IdentityMessages.DATA_GROUP_TAMPERED`. Kontrol PA zincirinin **içinde**, yani `UserManager`'ın `verifyChipPresence`'ı çağırdığı satırdan önce; doğrulanmamış bir anahtar `ActiveAuthentication.verify`'a hiç ulaşmıyor.
 
-`ActiveAuthenticationTest`'in *"başka çipin anahtarı doğrulamaz"* kuralı bu boşluğu görmüyor: sentetik testte anahtar sabit veriliyor, oysa üretimde anahtarı istemci seçiyor.
+**Anahtar gönderilmediğinde doğrulayıcı hiçbir şey yapmıyor, ve bu bilinçli.** "Kart DG15 taşımıyor" ile "istemci DG15 göndermedi" burada ayırt edilemez ve ikisi de saldırı değil; kararı veren tek yer `active-authentication-required` bayrağı (`verifyChipPresence`). **Bayrak kapalıyken DG15'siz bir kart yüzünden kimse reddedilmemeli** — bu, gerçek kart teyidi gelmeden (is-koala/koala-backend#70) akışı bozmamanın şartı.
 
-Düzeltme is-koala/koala-backend#74'ün ilk iş maddesi: DG15 de SOD'a karşı hash'lenmeli. **O düzeltme inmeden `active-authentication-required` açılmamalı** — açmak, kapanmamış bir açık için kapandı güvencesi üretir.
+**Ama DG15 gönderilmiş ve SOD onu imzalamamışsa reddediliyor: `identity.chip.key.unsigned`.** Fail-closed yön bu: aksi hâlde saldırgan SOD'da hiç bulunmayan bir veri grubu göndererek kontrolü atlar — hash karşılaştırması yapılacak bir "beklenen" değer olmadığı için sessizce geçerdi. `DATA_GROUP_TAMPERED`'dan **ayrı bir anahtar** kullanılıyor çünkü iki hâl farklı: biri "gönderdiğin anahtar kartın imzasındakinden başka" (kurcalama), diğeri "kartın imzası hiç anahtar taşımıyor, gönderdiğin şey uydurma". Operatör ve istemci ikisini ayırt edebilmeli.
+
+`ActiveAuthenticationTest`'in *"başka çipin anahtarı doğrulamaz"* kuralı bu boşluğu görmüyordu: sentetik testte anahtar sabit veriliyor, oysa üretimde anahtarı istemci seçiyor. Boşluğu kapatan testler `PassiveAuthenticationTest` içinde ve **düzeltmeden önce yazılıp kırmızıya döndüğü görüldü**: geçerli `sod`+`dg1` ile saldırganın kendi anahtar çiftinden gelen DG15 reddedilir, SOD'un hiç imzalamadığı DG15 reddedilir, kartın kendi DG15'i doğrulanır, DG15 gönderilmeyen okuma (kart taşısın ya da taşımasın) bozulmadan geçer. `IdentityVerificationRulesTest` `UserManager` tarafını sabitliyor: çözülen `dg15` doğrulayıcıya **geçiriliyor**, ve doğrulayıcı reddederse `IdentityChallengeService`'e hiç dokunulmuyor.
+
+**Bayrağın açılması hâlâ bekliyor.** Bu düzeltme #74'ün "Tuzak 2" yarısı; `IDENTITY_ACTIVE_AUTH_REQUIRED=true` için gerçek bir kartla DG15'in varlığının teyidi (is-koala/koala-backend#70) ve PA'nın açılması (is-koala/koala-backend#73) gerekiyor. **Bayrak açılana kadar tekrar oynatma açığı pratikte duruyor** — ama artık açıldığında gerçekten kapanacak.
 
 **Varsayılan zorunlu değil** (`identity.passive-authentication.active-authentication-required=false`): TCKK'da DG15'in bulunduğu henüz gerçek kartla doğrulanmadı. İmza gelirse doğrulanır, gelmezse geçilir. Kart DG15 taşıdığı teyit edilince bayrak açılmalı — o noktaya kadar tekrar oynatma açığı duruyor.
 
@@ -1949,13 +2098,13 @@ taşıması ve dış ön koşulların tek kaynağı `docs/runbooks/iys.md` dosya
 
 **`StaffPermission` metadata taşır.** Her sabit `code`, `mutating` ve `sensitivity` (`NORMAL`/`PERSONAL_DATA`/`FINANCIAL`) verir; denetim kaydı bunları okuyarak neyin yazılacağına ve satırın ne kadar saklanacağına karar veriyor (§2av). `@RequiresPermission` ayrıca non-GET uçlarda bir `action` adı ister. `AdminPermissionMappingIT` dört şeyi birden sabitliyor: her `/admin` mapping'i anotasyon taşır, adı geçen her izin gerçek bir sabittir, her non-GET bir eylem adı verir ve **bir yazma ucu okuma izniyle korunamaz**. İzin adı vermeyen tek anotasyon `/admin/me`'dedir; test bunun başka yerde kullanılmamasını da kontrol eder.
 
-**Roller ADR-0010 gereği Keycloak'ta, izinler Koala'da.** Rol grafiği `06-20-staff-authorization.xml` ile seed'lenir çünkü Keycloak kapısı açıldığı anda arkası boş olmamalıdır. Grafik `koala-admin/docs/keycloak-setup.md` §3'teki composite rollerle birebir aynıdır ve görev ayrılığı (OWNER dışında hiçbir rol hem trust hem finans dalını kapsayamaz) testle sabitlenir.
+**Rollerin ne yapabildiği Koala'da; kimin hangi rolde olduğu bugün hiçbir yerde.** Rol grafiği `06-20-staff-authorization.xml` ile seed'lenir ve grafik [ADR-0014](docs/adr/0014-keep-staff-identity-in-koala.md) §Rol grafiği ile birebir aynıdır; görev ayrılığı (OWNER dışında hiçbir rol hem trust hem finans dalını kapsayamaz) `StaffRoleGraphSeedTest` ile sabitlenir. **Üyelik tablosu henüz yok:** ADR-0010 üyeliği Keycloak'a vermişti, ADR-0014 onu Koala'ya geri aldı ama `staff_members` ↔ `staff_roles` tablosu ve personel girişi yazılmadı. O inene kadar `/admin/**` yalnız marketplace `ROLE_ADMIN` köprüsüyle çalışıyor.
 
 **Bilinen 12 izne üç tane eklendi.** `content.moderate` (şikayet incelemesi ve görsel kaldırma), `badge.manage`, `settings.manage`. Sebep: `AdminPermissionMappingIT` her yönetim ucunun bir izin adı vermesini şart koşuyor ve bu üç yüzey listedeki hiçbir izne düşmüyordu. Alternatif, şikayet incelemesini `dispute.resolve` ile korumak olurdu; o da `DISPUTE_HANDLER`'a görsel silme yetkisi verirdi.
 
 **Dördüncüsü `user.role.manage`.** #35'in açtığı üç uç (§2f3) bu dilim indikten sonra izinsiz kaldı; anotasyon yoksa zincir reddettiği için `UserRoleGrantIT`'in sekiz HTTP testi 403 aldı — kapı doğru çalıştı, eksik olan izin adıydı. `GET /admin/users/{userId}/roles` mevcut `user.read`'e düşüyor; `POST` ve `DELETE` yeni `user.role.manage` (mutating, `NORMAL`) ile korunuyor, denetim eylem adları `user.role.grant` ve `user.role.revoke`.
 
-**`role.manage` bilinçli olarak kullanılmadı.** `role.manage` personel tarafındaki rol→izin DAG'ını yönetir; `user.role.manage` ise marketplace kullanıcısına `ROLE_ADMIN` verir. İkisi aynı izin olsaydı, personel rollerinin izinlerini düzenleyebilen biri aynı yetkiyle marketplace admini basabilirdi; `keycloak-setup.md` §3'ün görev ayrılığı kuralı tam burada delinirdi. Gerekçe ADR-0010'un `staff.manage`/`role.manage` ayrımını yapma gerekçesiyle aynı. `user.read_pii` de uygun değildi: rol listesi kişisel veri değil, ayrıca okuma izni yazma ucunu koruyamıyor (`AdminPermissionMappingIT`).
+**`role.manage` bilinçli olarak kullanılmadı.** `role.manage` personel tarafındaki rol→izin DAG'ını yönetir; `user.role.manage` ise marketplace kullanıcısına `ROLE_ADMIN` verir. İkisi aynı izin olsaydı, personel rollerinin izinlerini düzenleyebilen biri aynı yetkiyle marketplace admini basabilirdi; ADR-0014 §Rol grafiği'ndeki görev ayrılığı kuralı tam burada delinirdi. Gerekçe ADR-0010'un `staff.manage`/`role.manage` ayrımını yapma gerekçesiyle aynı. `user.read_pii` de uygun değildi: rol listesi kişisel veri değil, ayrıca okuma izni yazma ucunu koruyamıyor (`AdminPermissionMappingIT`).
 
 **`user.role.manage` yalnız `OWNER`'a seed'lendi.** Marketplace `ROLE_ADMIN` basmak sistemdeki en geniş etkili işlem; `staff.manage` ve `role.manage` de aynı sebeple yalnız `OWNER`'da. Destek ya da güven dalına verilseydi, kendi hesabına admin rolü yazıp bütün izin grafiğini atlamak tek istek olurdu. `SUPPORT_AGENT` rol listesini zaten `user.read` üzerinden görebiliyor; yazma ayrı bir karar olarak `OWNER`'da bırakıldı.
 
@@ -2007,11 +2156,11 @@ Kurallar (`grantPermission`, `revokePermission`, `includeRole`) #14 ile indi ama
 
 `requireTheActorKeepsRoleManagement` kalan sahipleri **saymıyor**: `role.manage` taşıyan ikinci bir rol varken bile aktörün kendi ulaştığı rolden izni alması reddediliyor. İlk yazılışında anahtar `ROLE_MANAGE_LAST_HOLDER`, test adı da `theLastRoleManagementHolderCannotRevoke...` idi; ikisi de yalan söylüyordu, çünkü seed'deki `OWNER` da `role.manage` taşıyor, yani senaryoda hep iki sahip vardı ve kanıtlanan şey "kendi ulaştığın rolden alamazsın"dı. Kod doğruydu, ad yanlıştı — anahtar `staff.role.manage.self.lockout`, test adı `roleManagementCannotBeRevokedFromARoleTheActorReachesItself` oldu ve test artık grafikte başka bir `role.manage` sahibi kaldığını da doğruluyor. Aynı geçişte `managesRoles(roleId)` de `reachesRoleManagement(roleId)` oldu: eski ad "bu rol rolleri yönetir" diye de "bu rolü kim yönetir" diye de okunabiliyordu, oysa sorduğu şey tek bir şey — rolün kapanışı `role.manage`'e **ulaşıyor mu**.
 
-**Gerçek bir "son sahip" sayımı bugün kurulamaz.** Rol *üyeliği* Koala'da bilinmiyor, ADR-0010 gereği Keycloak'ta; "sistemde kaç kişi `role.manage` taşıyor" sorusu buradan cevaplanamıyor. Sayılabilecek tek şey rol satırı olurdu ("kaç rol bu izni taşıyor") ve o da yanlış soru: iki rol taşıyıp ikisinin de üyesi olmasa sistem yine kilitli kalırdı. Aktörün kendi erişimi üzerinden ifade edilen kural, sayılamayan üyelikten bağımsız olarak kilitlenmeyi gerçekten engelleyen tek kural. koala-admin#9'un "son yetkili kendi iznini kaldıramaz" kabul maddesi bu daha güçlü kuralla karşılanmış sayılıyor; harfi harfine bir sahip sayımı isteniyorsa üyeliğin Koala'ya taşınması gerekir ve o ADR-0010'u değiştiren ayrı bir karardır.
+**Gerçek bir "son sahip" sayımı bugün kurulamaz.** Rol *üyeliği* Koala'da bilinmiyor — ADR-0010 onu Keycloak'a vermişti, ADR-0014 Koala'ya geri aldı ama tablo henüz yazılmadı; "sistemde kaç kişi `role.manage` taşıyor" sorusu bugün buradan cevaplanamıyor. Sayılabilecek tek şey rol satırı olurdu ("kaç rol bu izni taşıyor") ve o da yanlış soru: iki rol taşıyıp ikisinin de üyesi olmasa sistem yine kilitli kalırdı. Aktörün kendi erişimi üzerinden ifade edilen kural, sayılamayan üyelikten bağımsız olarak kilitlenmeyi gerçekten engelleyen tek kural. koala-admin#9'un "son yetkili kendi iznini kaldıramaz" kabul maddesi bu daha güçlü kuralla karşılanmış sayılıyor; harfi harfine bir sahip sayımı isteniyorsa üyelik tablosunun inmesi gerekir; ADR-0014 o kararı verdi, uygulaması ayrı bir iş.
 
 Kural bir üst garantiyi de veriyor: **grafik son `role.manage` satırını hiçbir zaman kaybedemez.** `requireGrantable` aktörden `role.manage` istiyor, yani aktör her zaman o izne ulaşan bir role sahip; izni son taşıyan rolü düzenliyorsa kural ateşleniyor, düzenlemiyorsa grafikte hâlâ başka bir kaynak var. Ayrı bir "grafikte en az bir satır kalsın" kontrolü bu yüzden yazılmadı. Aktörün ulaşmadığı bir rolden `role.manage` alınabilir (`roleManagementMayStillBeRevokedFromARoleTheActorDoesNotReach`); kural fazladan kapatmıyor.
 
-**Rol yaratma/silme ucu açılmadı.** Roller `06-20-staff-authorization.xml` ile seed'leniyor ve `koala-admin/docs/keycloak-setup.md` §3'teki composite rollerle birebir eşleşmek zorunda; panelden yeni rol açmak Keycloak tarafında karşılığı olmayan bir rol üretirdi. Issue de rol listesini okuma olarak istiyor.
+**Rol yaratma/silme ucu açılmadı.** Roller `06-20-staff-authorization.xml` ile seed'leniyor ve [ADR-0014](docs/adr/0014-keep-staff-identity-in-koala.md) §Rol grafiği ile birebir eşleşmek zorunda; grafik görev ayrılığını taşıyor ve panelden serbestçe rol açmak onu ADR'de yazılı olmayan bir şekle sokardı. Issue de rol listesini okuma olarak istiyor.
 
 ---
 
@@ -2112,9 +2261,31 @@ Kural: bu tür testlerde başlangıç zamanı `LocalDateTime.now(POLICY_ZONE)` �
 
 **Kimlik kapısı testleri.** `IdentityVerificationRulesTest` altı kural: doğrulama artık hiçbir dış servise bağlı değil, ad Türkçe locale ile büyütülüyor, belge numarası saklanıyor, başka hesapta kayıtlı TCKN 409 alıyor, ikinci doğrulama hâlâ reddediliyor, rozet/bildirim/Iyzico senkronizasyon event'i çalışmaya devam ediyor. `EmployerIdentityGateTest` üç kural: doğrulanmış bireysel işveren ilan açabilir, doğrulanmamış açamaz, kapı adres oluşturulmadan önce çalışır. `PaymentSessionAuthorizationTest` iki kural kazandı: doğrulanmamış bireysel işveren ödeme başlatamaz ve alt üye işyeri hiç açılmaz, şirket ilanı bu kapıdan etkilenmez.
 
+**IBAN sahipliği testleri (§2k2).** `IbanVerificationRulesTest` on üç kural: başlatma tekil referans ve kuruş
+ölçekli bir tutar üretir, bekleyen doğrulama yeniden sorulduğunda aynı talimatı döndürür ve deneme harcamaz,
+**başka hesaptan gelen transfer doğrulamaz**, yanlış tutar doğrulamaz, kayıtlı hesaptan gelen transfer doğrular,
+ekstre ad taşımıyorsa `accountHolderName` doğrulanmamış kalır, taşıyorsa yazılır ve doğrulanmış işaretlenir,
+**süresi dolan doğrulama yeni talimatla yeniden başlatılabilir**, süresi geçtikten sonra gelen transfer
+reddedilir, deneme bütçesi tükenir, doğrulanmış hesap bankaya geri gönderilmez, tanınmayan referans 404,
+tahsilat hesabı tanımsızken doğrulama başlatılamaz. `BankAccountTest` üç kural kazandı: **doğrulanmış IBAN'ın
+üstüne yeni IBAN yazılınca doğrulamanın her izi düşer** (durum, referans, tutar, süre, deneme sayısı, ad),
+aynı IBAN yeniden gönderildiğinde doğrulama korunur, yalnız doğrulanmış birincil hesap doğrulanmış sayılır.
+`PayoutReleaseTest` iki kural kazandı: doğrulanmamış IBAN'lı işçiye emanet çıkmaz ve kuyruğa hiçbir mutabakat
+görevi girmez, çıkan `Payout` doğrulanmış hesabı gösterir.
+
+`IbanOwnershipGateIT` kapıyı **gerçek Postgres üzerinde** kanıtlıyor: emanetteki para doğrulanmamış IBAN'a
+çıkmıyor ve `payment_status` `HELD_IN_ESCROW` kalıyor, doğrulandığında çıkıyor, doğrulanmış IBAN'ın üstüne
+`savePrimaryAccount` ile yeni IBAN yazıldığında satırdaki bütün doğrulama izleri siliniyor ve kapı yeniden
+kapanıyor. `IbanVerificationIT` akışın tamamını HTTP üzerinden koşuyor: talimat üretimi ham IBAN'ı yankılamıyor,
+başka IBAN'dan gelen transfer `BANK_ACCOUNT_VERIFICATION_SENDER_MISMATCH` ile reddediliyor, kayıtlı IBAN'dan
+geleni doğruluyor, düşen deneme yeniden başlatılıp başarıya ulaşabiliyor, doğrulanmış hesap 409 alıyor,
+finans dalında olmayan personel onaylayamıyor, ve `PATCH /users/me` ile IBAN değiştirmek doğrulamayı düşürüyor.
+
 **Faz 26 testleri.** `OutboundHttpClientTest` giden HTTP istemcisinin JDK olanı olmadığını ve Boot varsayılanının hâlâ o olduğunu sabitliyor. `ApplicationReadinessTest` altı kural: hazır işçi başvurabilir, kimliği doğrulanmamış başvuramaz, adressiz başvuramaz, IBAN'sız başvuramaz, boş IBAN eksik sayılır, kimlik IBAN'dan önce kontrol edilir. `CancellationPreviewTest` sekiz kural: işçi kesintisiz tam iade görür, işveren pencere içinde kesintisiz, pencere dışında geç iptal oranıyla, iş başladıysa iade yok, zaten iptal edilmiş ve tamamlanmış atama `cancellableNow: false` döner (409 değil), önizleme hiçbir iz bırakmaz, taraf olmayan 404 alır. `AnonymousReviewMappingTest` ve `ReviewRulesTest` anonim değerlendirmeyi sabitliyor: adlı değerlendirme yazarını taşır, anonim taşımaz, liste eşlemesi de gizler, anonim kayıt yazarını veritabanında tutar, puanı ortalamaya girer, ikinci değerlendirme anonim de olsa 409 alır.
 
 **Iyzico protokol testleri.** `IyzicoProtocolTest` on kural sabitliyor — sahte bir HTTP sunucusuna karşı gerçek `RestTemplate` ile: uç yolları dokümandaki değerlerden sapmıyor, sorgulama doğru adrese gidiyor, her istekte `x-iyzi-rnd` var, başlıktaki rastgele anahtar imzalanan anahtarla aynı, imza `randomKey + yol + gövde` üzerinden üretiliyor, reddedilen ödeme exception değil sonuç döndürüyor, işlem kimliği ve tutar `itemTransactions[0]`'dan okunuyor, `status: failure` gövdesi 502'ye çevriliyor, 400 ile dönen hata gövdesi yine de ayrıştırılıyor, iade ondalık tutarla gidiyor. `PaymentCallbackTest` beş yeni kural kazandı: reddedilen ödeme emanet açmaz, dolandırıcılık reddi düşer, inceleme `IN_REVIEW`'da bekler, eksik tahsilat reddedilir, farklı para birimi reddedilir. `PayoutReleaseTest` iade yolunu sabitliyor: tam iade karta döner ve disapprove gerektirmez, kısmi iade her ikisini de kuyruğa alır.
+
+**Ödeme hardening testleri.** `IyzicoProtocolTest` initialize/retrieve response signature sıralarını, trusted checkout URL'sini ve item snapshot alanlarını gerçek HTTP adapter'ında sabitler. `PaymentCallbackTest` belirsiz provider sonucunun aktif kaldığını, bütün snapshot eşleşmeden escrow açılmadığını, bounded retry tavanını ve sonradan başarılı mutabakatı kapsar. `ActivePaymentAttemptConstraintIT` gerçek Postgres'te iki eşzamanlı rezervasyon ve structured constraint→409 yolunu çalıştırır; ayrıca aktif durum/provider token indekslerini okur. `PaymentSessionContractTest` provider token'ın public DTO'ya dönmemesini korur.
 
 **Faz 25 testleri.** `EmployerSurfaceRulesTest` beş kural sabitliyor: profil sokak adresini asla taşımaz, yabancı `cvUrl` görmez, başvurulan işveren görür, kişi kendi bağlantısını her zaman görür, özgeçmiş yoksa alan null kalır. `RateLimitBucketTest` yedi kural: okuma sınırlanmaz, yüklemeler kaynaklar arası tek bütçeden düşer, kovalar birbirini tüketmez, mesajın kendi bütçesi var, listelenmemiş yazma ucu da kapsanır, giriş yol bazlı kalır, iki istemci bütçe paylaşmaz. `UploadValidatorTest` sıkıştırma bombası savunmasını ve uzantı beyaz listesini sabitliyor.
 
@@ -2256,7 +2427,7 @@ Denetim bulguları `K-01`…`K-42` kodlarıyla numaralandırılmış; commit mes
 | Faz | Kapsam | Neye bağlı |
 |---|---|---|
 | **20** | **Referans veri olgunlaştırma.** Ayrıntı aşağıda | ürün + veri |
-| **7C** | **Iyzico kalanları.** Dolandırıcılık incelemesi (`fraudStatus=0`) webhook tüketicisi — `IN_REVIEW`'daki ödeme bugün kendiliğinden çözülmüyor (§2x). Ayrıca kısmi iade + disapprove sıralamasının sandbox'ta teyidi | sandbox erişimi |
+| **7C** | **Iyzico kalanları.** Dolandırıcılık webhook tüketicisi olmadan `IN_REVIEW` artık bounded retrieve ile çözülüyor; kalan dış kabul işi gerçek sandbox'ta ödeme→emanet→çıkış ve kısmi iade + disapprove sıralamasının teyidi | sandbox erişimi |
 | **9B** | Yasal kalanlar: anonimleştirme adımı, `Invoice`, `AuditLog`, İYS entegrasyonu, ETBİS, depolama saklama politikası (§8) | **hukuk** |
 | **11D** | **Çok örneklilik.** Beş yerde tek örnek varsayımı: hız sınırı sayacı (§2j), otomatik tamamlama zamanlayıcısı (§2u), mutabakat zamanlayıcısı (§2y), presence haritası ve STOMP basit broker'ı (§2z). **Şu an tek örnek çalışacak, ertelendi** — Redis + `ShedLock` + RabbitMQ STOMP relay | ertelendi |
 
@@ -2283,10 +2454,13 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 | `Review.anonymous` artık var: `POST /job-assignments/{id}/reviews` gövdesinde opsiyonel, `ReviewDto.author` anonimde `null` | §2am |
 | İptal kutusunda `GET /job-assignments/{id}/cancellation-preview` ile kesinti gösterilmeli | §2p |
 | Başvuru ekranı: kimlik/adres/IBAN eksikse "Başvur" kapalı olmalı, uç 400 döndürüyor | §2ar |
+| IBAN sahipliği doğrulaması: `POST /users/me/bank-accounts/{id}/verification` talimatı verir (tutar, referans, hedef IBAN, son tarih); doğrulanmamış IBAN'lı işçi için emanet çıkışı 409 (`PAYOUT_WORKER_IBAN_NOT_VERIFIED`) ve ödeme oturumu 400 (`JOB_ASSIGNMENT_IBAN_NOT_VERIFIED_FOR_WORKER`) döner | §2k2 |
+| `BankAccountDto.verificationStatus` artık gerçek bir kapı: `UNVERIFIED`/`PENDING`/`VERIFIED`/`EXPIRED` | §2k2 |
 | Bireysel ilan açma ekranı: kimlik doğrulanmamışsa kapalı olmalı (`JOB_INDIVIDUAL_EMPLOYER_IDENTITY_NOT_VERIFIED`) | §2aq |
 | Kimlik doğrulamada `sod` + `dg1` (base64) gönderilmeli — bayrak açıldığında zorunlu olacak | §2aq2 |
 | `dg11` gönderilirse ad ulusal karakterlerle çipten alınır, gönderilmezse istekteki ad korunur | §2aq2 |
 | Çip doğrulaması: `POST /users/me/identity-verification/challenge` → çipe imzalat → `dg15` + `challenge` + `activeAuthenticationSignature` | §2aq2 |
+| Gönderilen `dg15` artık SOD'a karşı doğrulanıyor: çipten okunan ham DG15 dosyası aynen gönderilmeli — SOD'un imzalamadığı bir anahtar `IDENTITY_CHIP_KEY_UNSIGNED`, tutmayan hash `IDENTITY_DATA_GROUP_TAMPERED` alır | §2aq2 |
 | `UserMeResponseDto.tcIdentityNumber` → `maskedTcIdentityNumber`, değer artık `***********` | §2aq |
 | İlan listesinde `applicationCount` var, ilan başına istek atma | §2ap |
 | İlan silme değil `POST /jobs/{id}/cancel` | kayıt korunur, başvuranlara bildirim gider (§2ap) |

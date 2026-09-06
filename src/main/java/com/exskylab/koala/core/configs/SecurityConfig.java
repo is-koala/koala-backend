@@ -108,6 +108,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/users/me/bank-accounts").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/users/me/bank-accounts").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/users/me/bank-accounts/{accountId}/primary").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/users/me/bank-accounts/{accountId}/verification").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/users/me/bank-accounts/{accountId}").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/notification-preferences/unsubscribe").permitAll()
                         .requestMatchers(HttpMethod.GET, "/users/me/work").hasAnyRole("USER", "ADMIN")

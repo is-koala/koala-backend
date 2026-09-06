@@ -72,7 +72,8 @@ class AssignmentOperationsAuthorizationTest {
         CancellationPolicy policy = new CancellationPolicy(new CancellationProperties(), passthroughSettings());
 
         cancellationManager = new CancellationManager(cancellationDao, jobAssignmentService, userService,
-                securityService, participants, policy, payoutService, mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class));
+                securityService, participants, policy, payoutService, disputeService,
+                mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class));
         disputeManager = new DisputeManager(disputeDaoStub, jobAssignmentService, userService,
                 securityService, participants, new StaffPayoutManager(payoutService, StaffBridges.open()),
                 mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class),
@@ -129,6 +130,7 @@ class AssignmentOperationsAuthorizationTest {
 
         when(jobAssignmentDao.findWithDetailsForPaymentById(a.getId())).thenReturn(Optional.of(a));
         when(jobAssignmentService.getDetailedById(a.getId())).thenReturn(a);
+        when(jobAssignmentService.getDetailedByIdForUpdate(a.getId())).thenReturn(a);
         when(jobAssignmentDao.findById(a.getId())).thenReturn(Optional.of(a));
         when(jobAssignmentDao.save(any())).thenAnswer(i -> i.getArgument(0));
         return a;
@@ -160,11 +162,16 @@ class AssignmentOperationsAuthorizationTest {
     void anEmployerCancellingEarlyGetsAFullRefundAndTheAssignmentClosed() {
         JobAssignment a = assignment(AssignmentStatus.CONFIRMED, PaymentStatus.HELD_IN_ESCROW, inHours(48));
         when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
+        Refund refund = new Refund();
+        refund.setId(UUID.randomUUID());
+        when(payoutService.refundEmployer(eq(a.getId()), eq(new BigDecimal("1075.00")), any()))
+                .thenReturn(refund);
 
         Cancellation cancellation = cancellationManager.cancelAssignment(a.getId(), "iş iptal");
 
         assertEquals(CancellationParty.EMPLOYER, cancellation.getCancelledByParty());
         assertEquals(0, cancellation.getFeeAmount().signum());
+        assertSame(refund, cancellation.getRefund());
         assertEquals(AssignmentStatus.CANCELLED, a.getStatus());
         verify(payoutService).refundEmployer(eq(a.getId()), eq(new BigDecimal("1075.00")), any());
     }
@@ -202,6 +209,21 @@ class AssignmentOperationsAuthorizationTest {
     }
 
     @Test
+    void anActiveDisputeFreezesCancellationBeforeAnyStateOrMoneyMoves() {
+        JobAssignment a = assignment(AssignmentStatus.CONFIRMED, PaymentStatus.HELD_IN_ESCROW, inHours(48));
+        when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
+        when(disputeService.hasActiveDispute(a.getId())).thenReturn(true);
+
+        assertThrows(ConflictException.class,
+                () -> cancellationManager.cancelAssignment(a.getId(), "uyuşmazlık sürerken iptal"));
+
+        assertEquals(AssignmentStatus.CONFIRMED, a.getStatus());
+        verify(cancellationDao, never()).save(any());
+        verify(payoutService, never()).refundEmployer(any(), any(), any());
+        verify(jobAssignmentService).getDetailedByIdForUpdate(a.getId());
+    }
+
+    @Test
     void aStrangerCannotOpenADispute() {
         JobAssignment a = assignment(AssignmentStatus.COMPLETED, PaymentStatus.HELD_IN_ESCROW, inHours(-4));
         when(securityService.getAuthenticatedUserId()).thenReturn(stranger.getId());
@@ -224,6 +246,7 @@ class AssignmentOperationsAuthorizationTest {
         when(disputeDaoStub.existsByJobAssignmentIdAndStatusIn(a.getId(), DisputeManager.ACTIVE)).thenReturn(true);
 
         assertThrows(ConflictException.class, () -> disputeManager.openDispute(a.getId(), "tekrar"));
+        verify(jobAssignmentService).getDetailedByIdForUpdate(a.getId());
     }
 
     @Test
@@ -269,6 +292,8 @@ class AssignmentOperationsAuthorizationTest {
         dispute.setJobAssignment(a);
         dispute.setStatus(DisputeStatus.OPEN);
         when(disputeDaoStub.findById(dispute.getId())).thenReturn(Optional.of(dispute));
+        when(disputeDaoStub.findJobAssignmentIdById(dispute.getId())).thenReturn(Optional.of(a.getId()));
+        when(disputeDaoStub.findByIdForUpdate(dispute.getId())).thenReturn(Optional.of(dispute));
         return dispute;
     }
 

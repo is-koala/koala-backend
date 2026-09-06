@@ -9,6 +9,8 @@ import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.constants.JobAssignmentMessages;
+import com.exskylab.koala.core.constants.PaymentMessages;
+import com.exskylab.koala.core.exceptions.ExternalServiceException;
 import com.exskylab.koala.core.helpers.Concealment;
 import com.exskylab.koala.core.dtos.jobAssignment.request.AnswerAssignmentDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.PaymentSessionDto;
@@ -20,6 +22,7 @@ import com.exskylab.koala.business.abstracts.PricingService;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
 import com.exskylab.koala.core.helpers.AddressFormatter;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
+import com.exskylab.koala.core.helpers.BankAccountVerificationPolicy;
 import com.exskylab.koala.core.properties.AppProperties;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
@@ -236,32 +239,43 @@ public class JobAssignmentManager implements JobAssignmentService {
             }
         }
 
-        if (worker.getIyzicoSubmerchantKey() == null || worker.getIyzicoSubmerchantKey().isBlank()){
-            log.info("Worker {} does not have an iyzico submerchant key. Creating one...", worker.getId());
-
-            SubMerchantCreateRequestDto merchantDto = createSubMerchantDtoForWorker(worker);
-            SubMerchantCreateResponseDto response = iyzicoPaymentService.createSubMerchant(merchantDto);
-
-            worker.setIyzicoSubmerchantKey(response.getSubMerchantKey());
-            userService.save(worker);
-            log.info("Worker {} has been created with iyzico submerchant key.}", worker.getId());
+        if (paymentService.hasPendingAttemptForAssignment(assignmentId)) {
+            throw new ConflictException(PaymentMessages.ATTEMPT_IN_PROGRESS);
         }
 
-
         CommissionCalculator.Breakdown breakdown = pricingService.breakdown(assignment);
-        Payment payment = paymentService.startAttempt(assignment, breakdown);
+        SubMerchantCreateRequestDto merchantDto = null;
+        if (worker.getIyzicoSubmerchantKey() == null || worker.getIyzicoSubmerchantKey().isBlank()) {
+            merchantDto = createSubMerchantDtoForWorker(worker);
+        }
 
         PaymentSessionRequestDto iyzicoRequest = new PaymentSessionRequestDto();
-
-        iyzicoRequest.setConversationId(payment.getConversationId());
         iyzicoRequest.setPrice(breakdown.totalCharged());
         iyzicoRequest.setPaidPrice(breakdown.totalCharged());
         iyzicoRequest.setCurrency("TRY");
         iyzicoRequest.setBasketId(assignment.getId().toString());
         iyzicoRequest.setPaymentGroup("PRODUCT");
         iyzicoRequest.setCallbackUrl(appProperties.apiUrl() + "/payments/callback");
-
         fillBuyerAndAddressInfo(iyzicoRequest, job, clientIpAddress, currentUser);
+
+        Payment payment = paymentService.startAttempt(assignment, breakdown);
+
+        if (merchantDto != null) {
+            log.info("Worker {} does not have an iyzico submerchant key. Creating one...", worker.getId());
+
+            try {
+                SubMerchantCreateResponseDto response = iyzicoPaymentService.createSubMerchant(merchantDto);
+
+                worker.setIyzicoSubmerchantKey(response.getSubMerchantKey());
+                userService.save(worker);
+                log.info("Worker {} has been created with iyzico submerchant key.}", worker.getId());
+            } catch (RuntimeException exception) {
+                paymentService.failInitiation(payment.getId());
+                throw exception;
+            }
+        }
+
+        iyzicoRequest.setConversationId(payment.getConversationId());
 
         IyzicoBasketItemDto basketItem = new IyzicoBasketItemDto();
         basketItem.setId(job.getId().toString());
@@ -271,17 +285,35 @@ public class JobAssignmentManager implements JobAssignmentService {
         basketItem.setSubMerchantPrice(breakdown.workerPayout());
         iyzicoRequest.setBasketItems(List.of(basketItem));
 
+        try {
+            paymentService.attachProviderSubmerchantKey(payment, worker.getIyzicoSubmerchantKey());
+        } catch (RuntimeException exception) {
+            paymentMetrics.initiationPersistenceError();
+            paymentService.failInitiation(payment.getId());
+            throw exception;
+        }
+
         PaymentSessionResponseDto paymentSession;
         try {
             paymentSession = iyzicoPaymentService.initiateCheckoutFormPayment(iyzicoRequest);
+        } catch (ExternalServiceException exception) {
+            paymentMetrics.initiationProviderError();
+            if (PaymentMessages.PROVIDER_REJECTED.equals(exception.getMessage())) {
+                paymentService.failInitiation(payment.getId());
+            } else {
+                paymentService.markInitiationUncertain(payment.getId());
+            }
+            throw exception;
         } catch (RuntimeException exception) {
             paymentMetrics.initiationProviderError();
+            paymentService.markInitiationUncertain(payment.getId());
             throw exception;
         }
         try {
             paymentService.attachProviderToken(payment, paymentSession.getToken());
         } catch (RuntimeException exception) {
             paymentMetrics.initiationPersistenceError();
+            paymentService.markInitiationUncertain(payment.getId());
             throw exception;
         }
         paymentMetrics.initiationSucceeded();
@@ -375,8 +407,14 @@ public class JobAssignmentManager implements JobAssignmentService {
         }else {
             throw new ValidationException(JobAssignmentMessages.ADDRESS_NOT_PROVIDED_FOR_WORKER);
         }
-        merchantDto.setIban(bankAccountService.findPrimaryIban(worker.getId())
-                .orElseThrow(() -> new ValidationException(JobAssignmentMessages.IBAN_NOT_PROVIDED_FOR_WORKER)));
+        BankAccount workerAccount = bankAccountService.findPrimaryAccount(worker.getId())
+                .orElseThrow(() -> new ValidationException(JobAssignmentMessages.IBAN_NOT_PROVIDED_FOR_WORKER));
+        if (!BankAccountVerificationPolicy.isVerified(workerAccount)) {
+            log.warn("Sub merchant refused for worker {}: the bank account ownership is not proven.",
+                    worker.getId());
+            throw new ValidationException(JobAssignmentMessages.IBAN_NOT_VERIFIED_FOR_WORKER);
+        }
+        merchantDto.setIban(workerAccount.getIban());
         merchantDto.setSubMerchantType(SubMerchantType.PERSONAL);
         if (worker.isIdentityVerified()){
             merchantDto.setIdentityNumber(worker.getTcIdentityNumber());
@@ -507,6 +545,15 @@ public class JobAssignmentManager implements JobAssignmentService {
     @Override
     @Transactional(readOnly = true)
     public JobAssignment getDetailedById(UUID assignmentId) {
+        return jobAssignmentDao.findWithDetailsForPaymentById(assignmentId)
+                .orElseThrow(() -> new ResourceNotFoundException(JobAssignmentMessages.NOT_FOUND));
+    }
+
+    @Override
+    @Transactional
+    public JobAssignment getDetailedByIdForUpdate(UUID assignmentId) {
+        jobAssignmentDao.findByIdForUpdate(assignmentId)
+                .orElseThrow(() -> new ResourceNotFoundException(JobAssignmentMessages.NOT_FOUND));
         return jobAssignmentDao.findWithDetailsForPaymentById(assignmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(JobAssignmentMessages.NOT_FOUND));
     }

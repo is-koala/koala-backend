@@ -6,6 +6,7 @@ import com.exskylab.koala.core.helpers.LogMasks;
 
 import com.exskylab.koala.business.abstracts.*;
 import com.exskylab.koala.core.constants.AdminMessages;
+import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.core.constants.SystemUser;
 import com.exskylab.koala.core.constants.UserMessages;
 import com.exskylab.koala.core.dtos.address.request.AddressWriteDto;
@@ -46,7 +47,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-
 @Service
 @Slf4j
 public class UserManager implements UserService {
@@ -54,7 +54,6 @@ public class UserManager implements UserService {
     private static final Set<String> USER_SORTABLE = Set.of("createdAt", "firstName", "lastName");
 
     private static final Sort USER_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
-
 
     private static final Locale TURKISH = Locale.of("tr", "TR");
 
@@ -210,7 +209,6 @@ public class UserManager implements UserService {
             currentUser.setGender(gender);
             }
 
-
         if (userMePatchRequestDto.getPhoneNumber() != null){
             if (!userMePatchRequestDto.getPhoneNumber().equals(currentUser.getPhoneNumber())) {
                 log.info("Phone change requested for user id: {}", currentUser.getId());
@@ -276,7 +274,6 @@ public class UserManager implements UserService {
             return new UserUpdateResponseDto(toMeDto(savedUser), pendingVerifications);
     }
 
-
     @Override
     @Transactional
     public void updateCurrentUserPassword(ChangePasswordDto userMeChangePasswordPutRequestDto, UUID currentSessionId) {
@@ -288,7 +285,6 @@ public class UserManager implements UserService {
             log.warn("New password is the same as the current password. No need to update.");
             throw new ValidationException(UserMessages.NEW_PASSWORD_CANNOT_BE_SAME_AS_CURRENT_PASSWORD);
         }
-
 
         if (!userMeChangePasswordPutRequestDto.getConfirmNewPassword().equals(userMeChangePasswordPutRequestDto.getNewPassword())){
             log.warn("New password does not match the confirmed new password. No need to update.");
@@ -468,7 +464,7 @@ public class UserManager implements UserService {
 
         PassiveAuthenticationResult result;
         try {
-            result = cscaTrustStore.verifier().verify(securityObject, dataGroup1, dataGroup11);
+            result = cscaTrustStore.verifier().verify(securityObject, dataGroup1, dataGroup11, dataGroup15);
         } catch (PassiveAuthenticationException e) {
             log.warn("Passive authentication failed: {}", e.getMessage());
             throw new ValidationException(e.getMessageKey());
@@ -521,8 +517,6 @@ public class UserManager implements UserService {
         return addressMapper.toAddressDto(address);
     }
 
-
-
     private UserMeResponseDto toMeDto(User user) {
         String maskedIban = bankAccountService.findPrimaryIban(user.getId())
                 .map(LogMasks::iban)
@@ -562,7 +556,7 @@ public class UserManager implements UserService {
 
     @Override
     @Transactional
-    public List<UserDao.RoleGrantView> grantRole(UUID userId, Role role) {
+    public List<UserDao.RoleGrantView> grantRole(StaffPrincipal actor, UUID userId, Role role) {
         User target = getById(userId);
         rejectSystemUser(target);
 
@@ -571,17 +565,22 @@ public class UserManager implements UserService {
             return userDao.findRoleGrants(target.getId());
         }
 
-        UUID grantedById = securityService.getAuthenticatedUserId();
         addRole(target, role);
-        userDao.stampRoleGrant(target.getId(), role.name(), Instant.now(), grantedById);
-        log.info("Role {} granted to user {} by {}", role, target.getId(), grantedById);
+        if (actor == null) {
+            UUID grantedById = securityService.getAuthenticatedUserId();
+            userDao.stampRoleGrant(target.getId(), role.name(), Instant.now(), grantedById);
+            log.info("Role {} granted to user {} by bridge admin {}", role, target.getId(), grantedById);
+        } else {
+            userDao.stampRoleGrantTime(target.getId(), role.name(), Instant.now());
+            log.info("Role {} granted to user {} by staff {}", role, target.getId(), actor.subject());
+        }
 
         return userDao.findRoleGrants(target.getId());
     }
 
     @Override
     @Transactional
-    public void revokeRole(UUID userId, Role role) {
+    public void revokeRole(StaffPrincipal actor, UUID userId, Role role) {
         User target = getById(userId);
         rejectSystemUser(target);
 
@@ -594,7 +593,7 @@ public class UserManager implements UserService {
         }
 
         if (role == Role.ROLE_ADMIN) {
-            if (target.getId().equals(securityService.getAuthenticatedUserId())) {
+            if (actor == null && target.getId().equals(securityService.getAuthenticatedUserId())) {
                 throw new ConflictException(AdminMessages.OWN_ADMIN_ROLE_PROTECTED);
             }
             if (userDao.countUsersWithRole(Role.ROLE_ADMIN.name()) <= 1) {

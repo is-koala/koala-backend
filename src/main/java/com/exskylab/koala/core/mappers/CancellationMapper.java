@@ -10,5 +10,10 @@ import org.mapstruct.Mapping;
 public interface CancellationMapper {
 
     @Mapping(target = "jobAssignmentId", source = "jobAssignment.id")
+    @Mapping(target = "feeRate", expression = "java(com.exskylab.koala.core.helpers.PlainDecimalStringConverter.convert(cancellation.getFeeRate()))")
+    @Mapping(target = "feeAmount", expression = "java(com.exskylab.koala.core.helpers.PlainDecimalStringConverter.convert(cancellation.getFeeAmount()))")
+    @Mapping(target = "refundAmount", expression = "java(com.exskylab.koala.core.helpers.PlainDecimalStringConverter.convert(cancellation.getRefundAmount()))")
+    @Mapping(target = "refundStatus", source = "refund.status")
+    @Mapping(target = "refundCompletedAt", source = "refund.completedAt")
     CancellationDto toCancellationDto(Cancellation cancellation);
 }

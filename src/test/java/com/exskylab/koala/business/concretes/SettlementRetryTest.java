@@ -33,6 +33,7 @@ class SettlementRetryTest {
     private IyzicoPaymentService iyzicoPaymentService;
     private IyzicoProperties iyzicoProperties;
     private SettlementRetryProperties retryProperties;
+    private RefundManager refundManager;
     private SettlementManager manager;
 
     private Payment payment;
@@ -47,9 +48,10 @@ class SettlementRetryTest {
         iyzicoPaymentService = mock(IyzicoPaymentService.class);
         iyzicoProperties = new IyzicoProperties();
         retryProperties = new SettlementRetryProperties();
+        refundManager = mock(RefundManager.class);
 
         manager = new SettlementManager(settlementTaskDao, payoutDao, refundDao, iyzicoPaymentService,
-                iyzicoProperties, retryProperties);
+                iyzicoProperties, retryProperties, refundManager);
 
         payment = new Payment();
         payment.setId(UUID.randomUUID());
@@ -108,6 +110,19 @@ class SettlementRetryTest {
     }
 
     @Test
+    void aRefundBecomesProcessingBeforeTheProviderCall() {
+        pendingRefund();
+        SettlementTask task = pendingTask(SettlementOperation.REFUND);
+        when(iyzicoPaymentService.refund(any())).thenReturn(refundResponse());
+
+        manager.runTask(task.getId());
+
+        var order = inOrder(refundManager, iyzicoPaymentService);
+        order.verify(refundManager).markProcessing(payment.getId());
+        order.verify(iyzicoPaymentService).refund(any());
+    }
+
+    @Test
     void givingUpOnAnApprovalMarksThePayoutFailed() {
         Payout payout = pendingPayout();
         SettlementTask task = pendingTask(SettlementOperation.APPROVE);
@@ -119,6 +134,8 @@ class SettlementRetryTest {
 
         assertEquals(SettlementTaskStatus.FAILED, task.getStatus());
         assertEquals(PayoutStatus.FAILED, payout.getStatus());
+        assertEquals(com.exskylab.koala.core.constants.PayoutMessages.SETTLEMENT_FAILED,
+                payout.getFailureReason());
     }
 
     @Test

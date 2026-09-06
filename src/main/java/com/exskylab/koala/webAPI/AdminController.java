@@ -1,5 +1,7 @@
 package com.exskylab.koala.webAPI;
 
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.core.security.RequiresPermission;
 import com.exskylab.koala.entities.StaffPermission;
 import com.exskylab.koala.core.utilities.results.ErrorResult;
@@ -10,11 +12,16 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
+import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.business.abstracts.CompanyService;
 import com.exskylab.koala.business.abstracts.GalleryService;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.constants.AdminMessages;
+import com.exskylab.koala.core.constants.BankAccountMessages;
+import com.exskylab.koala.core.dtos.bankAccount.request.ConfirmIbanTransferDto;
+import com.exskylab.koala.core.dtos.bankAccount.response.BankAccountDto;
+import com.exskylab.koala.core.mappers.BankAccountMapper;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.company.request.ApproveCompanyDto;
 import com.exskylab.koala.core.dtos.company.request.RejectCompanyDto;
@@ -55,11 +62,14 @@ public class AdminController {
     private final GalleryService galleryService;
     private final RoleGrantMapper roleGrantMapper;
     private final JobAssignmentService jobAssignmentService;
+    private final BankAccountService bankAccountService;
+    private final BankAccountMapper bankAccountMapper;
 
     public AdminController(CompanyService companyService, UserService userService,
                            CompanyMapper companyMapper, UserMapper userMapper,
                            GalleryService galleryService, RoleGrantMapper roleGrantMapper,
-                           JobAssignmentService jobAssignmentService) {
+                           JobAssignmentService jobAssignmentService,
+                           BankAccountService bankAccountService, BankAccountMapper bankAccountMapper) {
         this.companyService = companyService;
         this.userService = userService;
         this.companyMapper = companyMapper;
@@ -67,6 +77,8 @@ public class AdminController {
         this.galleryService = galleryService;
         this.roleGrantMapper = roleGrantMapper;
         this.jobAssignmentService = jobAssignmentService;
+        this.bankAccountService = bankAccountService;
+        this.bankAccountMapper = bankAccountMapper;
     }
 
     @Operation(summary = "Atama özeti",
@@ -96,6 +108,26 @@ public class AdminController {
     public ResponseEntity<Result> removeImage(@PathVariable UUID imageId) {
         galleryService.removeImageEverywhere(imageId);
         return ResponseEntity.ok(new SuccessResult(GalleryMessages.IMAGE_REMOVED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "IBAN doğrulama transferini onayla",
+            description = "Ekstredeki gelen transferin gönderen IBAN'ı ve tutarı bildirilir. Gönderen IBAN kayıtlı IBAN'la eşleşmezse ya da tutar tutmazsa doğrulama denemesi düşer. Ekstre bir hesap sahibi adı taşıyorsa gönderilebilir; gönderilmezse ad doğrulanmamış kalır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Doğrulama tamamlandı"),
+            @ApiResponse(responseCode = "400", description = "Gönderen IBAN ya da tutar eşleşmiyor, doğrulama süresi dolmuş",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "Referansla eşleşen bekleyen doğrulama yok",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "Hesap zaten doğrulanmış",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(value = StaffPermission.BANK_ACCOUNT_VERIFY, action = "bank.account.verify")
+    @PostMapping("/bank-account-verifications/{reference}/confirm")
+    public ResponseEntity<SuccessDataResult<BankAccountDto>> confirmIbanVerification(
+            @PathVariable String reference, @RequestBody @Valid ConfirmIbanTransferDto request) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                bankAccountMapper.toBankAccountDto(bankAccountService.confirmVerification(reference, request)),
+                BankAccountMessages.VERIFICATION_CONFIRMED, HttpStatus.OK));
     }
 
     @Operation(summary = "Şirketleri onay durumuna göre listele",
@@ -134,11 +166,12 @@ public class AdminController {
     @PostMapping("/companies/{companyId}/approve")
     public ResponseEntity<SuccessDataResult<CompanyReviewDto>> approveCompany(
             @PathVariable UUID companyId,
-            @RequestBody(required = false) @Valid ApproveCompanyDto request) {
+            @RequestBody(required = false) @Valid ApproveCompanyDto request,
+            @AuthenticationPrincipal StaffPrincipal actor) {
 
         String note = request == null ? null : request.getNote();
         return ResponseEntity.ok(new SuccessDataResult<>(
-                companyMapper.toCompanyReviewDto(companyService.approveCompany(companyId, note)),
+                companyMapper.toCompanyReviewDto(companyService.approveCompany(actor, companyId, note)),
                 AdminMessages.COMPANY_APPROVED, HttpStatus.OK));
     }
 
@@ -158,10 +191,11 @@ public class AdminController {
     @PostMapping("/companies/{companyId}/reject")
     public ResponseEntity<SuccessDataResult<CompanyReviewDto>> rejectCompany(
             @PathVariable UUID companyId,
-            @RequestBody @Valid RejectCompanyDto request) {
+            @RequestBody @Valid RejectCompanyDto request,
+            @AuthenticationPrincipal StaffPrincipal actor) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
-                companyMapper.toCompanyReviewDto(companyService.rejectCompany(companyId, request.getReason())),
+                companyMapper.toCompanyReviewDto(companyService.rejectCompany(actor, companyId, request.getReason())),
                 AdminMessages.COMPANY_REJECTED, HttpStatus.OK));
     }
 
@@ -211,10 +245,11 @@ public class AdminController {
     @RequiresPermission(value = StaffPermission.USER_ROLE_MANAGE, action = "user.role.grant")
     @PostMapping("/users/{userId}/roles")
     public ResponseEntity<SuccessDataResult<List<RoleGrantDto>>> grantUserRole(
-            @PathVariable UUID userId, @RequestBody @Valid GrantRoleDto request) {
+            @PathVariable UUID userId, @RequestBody @Valid GrantRoleDto request,
+            @AuthenticationPrincipal StaffPrincipal actor) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
-                roleGrantMapper.toRoleGrantDtoList(userService.grantRole(userId, request.getRole())),
+                roleGrantMapper.toRoleGrantDtoList(userService.grantRole(actor, userId, request.getRole())),
                 AdminMessages.USER_ROLE_GRANTED, HttpStatus.OK));
     }
 
@@ -231,8 +266,9 @@ public class AdminController {
     })
     @RequiresPermission(value = StaffPermission.USER_ROLE_MANAGE, action = "user.role.revoke")
     @DeleteMapping("/users/{userId}/roles/{role}")
-    public ResponseEntity<Result> revokeUserRole(@PathVariable UUID userId, @PathVariable Role role) {
-        userService.revokeRole(userId, role);
+    public ResponseEntity<Result> revokeUserRole(@PathVariable UUID userId, @PathVariable Role role,
+                                                 @AuthenticationPrincipal StaffPrincipal actor) {
+        userService.revokeRole(actor, userId, role);
         return ResponseEntity.ok(new SuccessResult(AdminMessages.USER_ROLE_REVOKED, HttpStatus.OK));
     }
 }

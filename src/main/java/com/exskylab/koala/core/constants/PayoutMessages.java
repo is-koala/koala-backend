@@ -7,7 +7,10 @@ public class PayoutMessages {
     public static final String NOT_REFUNDABLE = "{payout.not.refundable}";
     public static final String NO_SETTLED_PAYMENT = "{payout.no.settled.payment}";
     public static final String INVALID_REFUND_AMOUNT = "{payout.invalid.refund.amount}";
+    public static final String SETTLEMENT_NOT_QUEUED = "{payout.settlement.not.queued}";
     public static final String RELEASED = "{payout.released}";
     public static final String REFUNDED = "{payout.refunded}";
     public static final String LISTED = "{payout.listed}";
+    public static final String SETTLEMENT_FAILED = "{payout.settlement.failed}";
+    public static final String WORKER_IBAN_NOT_VERIFIED = "{payout.worker.iban.not.verified}";
 }

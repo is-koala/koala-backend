@@ -5,7 +5,7 @@
         xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
 
-    <changeSet id="2026-09-06-82-iys-delivery-state" author="koala">
+    <changeSet id="2026-09-06-86-iys-delivery-state" author="koala">
         <addColumn tableName="iys_consent_tasks">
             <column name="registration_accepted_at" type="TIMESTAMPTZ"/>
             <column name="retained_recipient_ciphertext" type="TEXT"/>
