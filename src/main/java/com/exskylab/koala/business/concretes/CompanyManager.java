@@ -98,7 +98,6 @@ public class CompanyManager implements CompanyService {
             throw new ValidationException(CompanyMessages.INVALID_COMPANY_TYPE);
         }
 
-        log.info("Adding new company with name: {}", createCompanyRequestDto.getName());
         var user = securityService.getAuthenticatedUser();
         log.info("User with id: {} is adding a new company.", user.getId());
 
