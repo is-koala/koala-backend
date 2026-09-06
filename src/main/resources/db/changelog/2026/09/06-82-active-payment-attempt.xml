@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-06-82-active-payment-attempt" author="codex">
+        <comment>Keep only the newest unresolved payment attempt, then enforce one active attempt per assignment.</comment>
+        <sql><![CDATA[
+            WITH ranked_active AS (
+                SELECT id,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY job_assignment_id
+                           ORDER BY created_at DESC, id DESC
+                       ) AS position
+                FROM payments
+                WHERE is_deleted = false
+                  AND status IN ('INITIATED', 'IN_REVIEW')
+            )
+            UPDATE payments AS payment
+               SET status = 'FAILED',
+                   completed_at = COALESCE(payment.completed_at, CURRENT_TIMESTAMP),
+                   failure_reason = 'Superseded while enforcing one active payment attempt.'
+              FROM ranked_active
+             WHERE payment.id = ranked_active.id
+               AND ranked_active.position > 1;
+
+            CREATE UNIQUE INDEX uk_payments_one_active_attempt
+                ON payments (job_assignment_id)
+                WHERE is_deleted = false
+                  AND status IN ('INITIATED', 'IN_REVIEW');
+        ]]></sql>
+        <rollback>
+            <sql>DROP INDEX IF EXISTS uk_payments_one_active_attempt;</sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>
