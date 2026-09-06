@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-06-79-bank-account-verification-status" author="koala">
+        <addColumn tableName="bank_accounts">
+            <column name="verification_status" type="VARCHAR(32)" defaultValue="UNVERIFIED">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="bank_accounts" columnName="verification_status"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-06-79-one-primary-bank-account" author="koala">
+        <sql>
+            WITH ranked_primary AS (
+                SELECT id,
+                       row_number() OVER (PARTITION BY user_id ORDER BY created_at, id) AS position
+                FROM bank_accounts
+                WHERE is_primary = true AND is_active = true AND is_deleted = false
+            )
+            UPDATE bank_accounts account
+            SET is_primary = false
+            FROM ranked_primary ranked
+            WHERE account.id = ranked.id AND ranked.position &gt; 1;
+        </sql>
+        <sql>
+            CREATE UNIQUE INDEX uk_bank_accounts_one_primary_active
+                ON bank_accounts (user_id)
+                WHERE is_primary = true AND is_active = true AND is_deleted = false;
+        </sql>
+        <rollback>
+            <sql>DROP INDEX IF EXISTS uk_bank_accounts_one_primary_active;</sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

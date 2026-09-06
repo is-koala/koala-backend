@@ -56,6 +56,11 @@ class IbanValidatorTest {
     }
 
     @Test
+    void rejectsAValidChecksumWhenTheCountryIsNotTurkey() {
+        assertFalse(IbanValidator.isValid("DE070006200119000006672315"));
+    }
+
+    @Test
     void normalizeStripsWhitespaceAndToleratesNull() {
         assertEquals("TR180006200119000006672315",
                 IbanValidator.normalize("TR18 0006 2001 1900 0006 6723 15"));

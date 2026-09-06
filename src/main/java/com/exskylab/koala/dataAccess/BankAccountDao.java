@@ -2,6 +2,8 @@ package com.exskylab.koala.dataAccess;
 
 import com.exskylab.koala.entities.BankAccount;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -14,4 +16,21 @@ public interface BankAccountDao extends JpaRepository<BankAccount, UUID> {
     Optional<BankAccount> findByUserIdAndPrimaryAccountTrueAndActiveTrue(UUID userId);
 
     List<BankAccount> findAllByUserIdAndActiveTrue(UUID userId);
+
+    List<BankAccount> findAllByUserIdAndActiveTrueOrderByPrimaryAccountDescCreatedAtAsc(UUID userId);
+
+    boolean existsByUserIdAndActiveTrue(UUID userId);
+
+    Optional<BankAccount> findByIdAndUserIdAndActiveTrue(UUID accountId, UUID userId);
+
+    Optional<BankAccount> findByUserIdAndIbanAndActiveTrue(UUID userId, String iban);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update BankAccount account set account.primaryAccount = false "
+            + "where account.user.id = :userId and account.primaryAccount = true and account.active = true")
+    int clearPrimary(UUID userId);
+
+    @Query(value = "select true from pg_advisory_xact_lock(hashtextextended(cast(:userId as text), 0))",
+            nativeQuery = true)
+    boolean lockUserAccounts(UUID userId);
 }
