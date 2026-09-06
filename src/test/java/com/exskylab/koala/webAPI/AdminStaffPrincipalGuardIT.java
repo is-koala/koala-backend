@@ -31,22 +31,6 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * #95: {@code SecurityManager.getAuthenticatedPrincipal()} marketplace bir {@code UserPrincipal} bekler.
- * {@code StaffPrincipal} bir {@code UserPrincipal} değildir; bu yüzden {@code /admin/**} altındaki bir
- * metodun {@code securityService.getAuthenticated*} çağırması — bir log satırında bile — personel
- * kimliğiyle gelen isteği öldürür. Dört örnek düzeltildi, bu test beşincisinin sessizce eklenmesini
- * engeller: CLAUDE.md §0b'deki yazılı kural tek başına koruma değildir (#88).
- *
- * <p><b>Kapsam bir seviye derindir: handler → handler'ın çağırdığı manager metodu.</b> Manager başka
- * bir manager'ı ya da kendi özel yardımcısını çağırır ve tuzak orada olursa bu tarama görmez. Görülen
- * şey #95'in dört örneğinin de sahip olduğu biçimdir; daha derin çağrı zincirleri hâlâ
- * {@code CompanyAdministrationRulesTest} ve {@code RoleGrantRulesTest} gibi davranış testlerine emanet.</p>
- *
- * <p>Köprü yolu bilinçli istisnadır: aktörünü {@code StaffPrincipal} parametresiyle alan bir metot
- * {@code actor == null} dalında securityService'e uzanabilir, çünkü orada kimlik zaten bir marketplace
- * kullanıcısıdır. Parametreyi almayan metotta böyle bir dal yoktur, çağrı koşulsuzdur.</p>
- */
 class AdminStaffPrincipalGuardIT extends AbstractIntegrationTest {
 
     private static final String ADMIN_PREFIX = "/admin";

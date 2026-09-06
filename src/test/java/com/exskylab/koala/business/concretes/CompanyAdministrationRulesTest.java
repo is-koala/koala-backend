@@ -246,16 +246,12 @@ class CompanyAdministrationRulesTest {
         assertThrows(ConflictException.class, () -> manager.approveCompany(null, company.getId(), null));
     }
 
-    // --- personel yolu (#95) ---
-
     @Test
     void approvalAndRejectionWorkForAStaffActorWithoutTouchingTheMarketplacePrincipal() {
         StaffPrincipal actor = StaffPrincipal.unregistered("kc-subject-1", java.util.Set.of("COMPANY_APPROVER"));
 
         assertTrue(manager.approveCompany(actor, company.getId(), null).getApprovalStatus().isApproved());
 
-        // securityService'e uzanmak IllegalStateException demekti: aktör bir UserPrincipal değil.
-        // Log satırında bile çağrılmamalı — #95'in tuzağı tam buydu.
         verify(securityService, never()).getAuthenticatedUserId();
         verify(securityService, never()).getAuthenticatedUser();
     }

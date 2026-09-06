@@ -194,8 +194,6 @@ class RoleGrantRulesTest {
         assertThrows(ResourceNotFoundException.class, () -> userManager.bootstrapAdminRole("yok@koala.test"));
     }
 
-    // --- personel yolu (#95): aktör bir StaffPrincipal ise securityService'e hiç uzanılmamalı ---
-
     private static StaffPrincipal staff() {
         return StaffPrincipal.unregistered("kc-subject-1", Set.of("OWNER"));
     }
@@ -206,11 +204,8 @@ class RoleGrantRulesTest {
 
         userManager.grantRole(staff(), target.getId(), Role.ROLE_ADMIN);
 
-        // granted_by_id users'a FK taşıyor ve personelin orada satırı yok — zaman damgası yazılır, kimlik yazılmaz.
         verify(userDao).stampRoleGrantTime(eq(target.getId()), eq(Role.ROLE_ADMIN.name()), any());
         verify(userDao, never()).stampRoleGrant(any(), any(), any(), any());
-        // Asıl iddia: personel yolunda securityService'e hiç dokunulmuyor. Dokunulsaydı
-        // getAuthenticatedPrincipal IllegalStateException atardı ve uç 500 dönerdi.
         verify(securityService, never()).getAuthenticatedUserId();
         verify(securityService, never()).getAuthenticatedUser();
     }
@@ -223,8 +218,6 @@ class RoleGrantRulesTest {
         userManager.revokeRole(staff(), target.getId(), Role.ROLE_ADMIN);
 
         assertFalse(target.getAuthorities().contains(Role.ROLE_ADMIN));
-        // "kendi rolünü alamazsın" kuralı personel yolunda vakumda: aktör hiçbir zaman bir users satırı
-        // değil, yani hedefle çakışamaz. Kontrolü çalıştırmak securityService'e uzanmak demekti.
         verify(securityService, never()).getAuthenticatedUserId();
         verify(securityService, never()).getAuthenticatedUser();
     }

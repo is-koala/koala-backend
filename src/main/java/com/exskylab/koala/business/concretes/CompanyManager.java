@@ -47,7 +47,6 @@ public class CompanyManager implements CompanyService {
 
     private static final Sort COMPANY_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
 
-
     private final PageableSanitizer pageableSanitizer;
     private final CompanyDao companyDao;
     private final UserService userService;
@@ -64,7 +63,6 @@ public class CompanyManager implements CompanyService {
     private final CompanyFollowService companyFollowService;
     private final ActivityNotificationService activityNotificationService;
     
-
     public CompanyManager(CompanyDao companyDao, UserService userService,
                           NotificationService notificationService, ImageService imageService,
                           CompanyContactInvitationService companyContactInvitationService,
@@ -111,8 +109,6 @@ public class CompanyManager implements CompanyService {
         Address address = addressService.createAddress(createCompanyRequestDto.getAddress());
         log.info("Address created for company with addressId: {}", address.getId());
 
-
-
         var company = new Company();
         company.setName(createCompanyRequestDto.getName());
         company.setEmail(createCompanyRequestDto.getEmail());
@@ -131,7 +127,6 @@ public class CompanyManager implements CompanyService {
         }
         log.info("New company with id: {} added successfully.", company.getId());
 
-
         var companyContact = new CompanyContact();
         companyContact.setRole(CompanyContactRole.ADMIN);
         companyContact.setUser(user);
@@ -145,19 +140,14 @@ public class CompanyManager implements CompanyService {
 
         entityManager.clear();
 
-
         sendCompanyCreatedMail(savedCompany, companyContact);
 
         log.info("Notification sent to user with id: {} for company with id: {}", user.getId(), company.getId());
-
-
 
         var returnCompany = companyDao.findById(savedCompany.getId()).orElseThrow(() -> {
             log.error("Company with id: {} not found after saving.", company.getId());
             return new ResourceNotFoundException(CompanyMessages.COMPANY_NOT_FOUND);
         });
-
-
 
         return companyMapper.toCompanyDto(returnCompany);
 
@@ -177,9 +167,7 @@ public class CompanyManager implements CompanyService {
             throw new ValidationException(CompanyMessages.INVALID_COMPANY_CONTACT_ROLE);
         }
 
-
         var currentUser = securityService.getAuthenticatedUser();
-
 
         var company = companyDao.findById(companyId).orElseThrow(() -> {
             log.error("Company with id: {} not found.", companyId);
@@ -367,11 +355,6 @@ public class CompanyManager implements CompanyService {
         return saved;
     }
 
-    /**
-     * Log satırı için aktörün kim olduğu. Personel yolunda marketplace kullanıcı kimliği yoktur;
-     * {@code securityService}'e uzanmak o yolda {@link IllegalStateException} demek olurdu.
-     * "Kim karar verdi" sorusunun asıl cevabı her iki yolda da admin denetim kaydında (§2av).
-     */
     private String actorLabel(StaffPrincipal actor) {
         return actor == null ? "bridge admin " + securityService.getAuthenticatedUserId() : "staff " + actor.subject();
     }
