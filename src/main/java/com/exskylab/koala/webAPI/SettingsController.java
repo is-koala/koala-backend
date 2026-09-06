@@ -1,5 +1,7 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.core.security.RequiresPermission;
+import com.exskylab.koala.entities.StaffPermission;
 import com.exskylab.koala.core.utilities.results.ErrorResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -39,6 +41,7 @@ public class SettingsController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Ayarlar listelendi")
     })
+    @RequiresPermission(StaffPermission.SETTINGS_MANAGE)
     @GetMapping
     public ResponseEntity<SuccessDataResult<List<SettingDto>>> settings() {
         return ResponseEntity.ok(new SuccessDataResult<>(
@@ -55,6 +58,7 @@ public class SettingsController {
                     description = "Tanımsız anahtar, sayısal olmayan değer ya da aralık dışı oran",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
+    @RequiresPermission(value = StaffPermission.SETTINGS_MANAGE, action = "setting.update")
     @PutMapping("/{key}")
     public ResponseEntity<SuccessDataResult<SettingDto>> update(
             @PathVariable String key, @RequestBody @Valid UpdateSettingDto request) {
