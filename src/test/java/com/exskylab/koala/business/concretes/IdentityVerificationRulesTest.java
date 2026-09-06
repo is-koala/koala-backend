@@ -183,7 +183,7 @@ class IdentityVerificationRulesTest {
     @Test
     void aVerifiedChipStampsTheEvidenceOnTheAccount() {
         PassiveAuthenticationVerifier verifier = mock(PassiveAuthenticationVerifier.class);
-        when(verifier.verify(any(), any(), any())).thenReturn(new PassiveAuthenticationResult(TCKN, LocalDate.of(1998, 4, 12), chipZone(), null, "CN=Turkiye Document Signer", "abc123"));
+        when(verifier.verify(any(), any(), any(), any())).thenReturn(new PassiveAuthenticationResult(TCKN, LocalDate.of(1998, 4, 12), chipZone(), null, "CN=Turkiye Document Signer", "abc123"));
         enablePassiveAuthentication(verifier);
 
         manager.verificateIdentityofAuthenticatedUser(requestWithChip());
@@ -196,7 +196,7 @@ class IdentityVerificationRulesTest {
     @Test
     void anIdentityNumberThatDisagreesWithTheChipIsRefused() {
         PassiveAuthenticationVerifier verifier = mock(PassiveAuthenticationVerifier.class);
-        when(verifier.verify(any(), any(), any())).thenReturn(new PassiveAuthenticationResult("99999999999", LocalDate.of(1998, 4, 12), chipZone(), null, "CN=DS", "abc123"));
+        when(verifier.verify(any(), any(), any(), any())).thenReturn(new PassiveAuthenticationResult("99999999999", LocalDate.of(1998, 4, 12), chipZone(), null, "CN=DS", "abc123"));
         enablePassiveAuthentication(verifier);
 
         ValidationException thrown = assertThrows(ValidationException.class,
@@ -209,7 +209,7 @@ class IdentityVerificationRulesTest {
     @Test
     void aBirthDateThatDisagreesWithTheChipIsRefused() {
         PassiveAuthenticationVerifier verifier = mock(PassiveAuthenticationVerifier.class);
-        when(verifier.verify(any(), any(), any())).thenReturn(new PassiveAuthenticationResult(TCKN, LocalDate.of(1970, 1, 1), chipZone(), null, "CN=DS", "abc123"));
+        when(verifier.verify(any(), any(), any(), any())).thenReturn(new PassiveAuthenticationResult(TCKN, LocalDate.of(1970, 1, 1), chipZone(), null, "CN=DS", "abc123"));
         enablePassiveAuthentication(verifier);
 
         ValidationException thrown = assertThrows(ValidationException.class,
@@ -221,7 +221,7 @@ class IdentityVerificationRulesTest {
     @Test
     void aCryptographicFailureIsSurfacedWithItsOwnCode() {
         PassiveAuthenticationVerifier verifier = mock(PassiveAuthenticationVerifier.class);
-        when(verifier.verify(any(), any(), any())).thenThrow(
+        when(verifier.verify(any(), any(), any(), any())).thenThrow(
                 new PassiveAuthenticationException("{identity.untrusted.document.signer}", "unknown csca"));
         enablePassiveAuthentication(verifier);
 
@@ -249,7 +249,7 @@ class IdentityVerificationRulesTest {
     @Test
     void aNameThatDisagreesWithTheChipIsRefused() {
         PassiveAuthenticationVerifier verifier = mock(PassiveAuthenticationVerifier.class);
-        when(verifier.verify(any(), any(), any())).thenReturn(new PassiveAuthenticationResult(
+        when(verifier.verify(any(), any(), any(), any())).thenReturn(new PassiveAuthenticationResult(
                 TCKN, LocalDate.of(1998, 4, 12), chipZone(), null, "CN=DS", "abc123"));
         enablePassiveAuthentication(verifier);
 
@@ -266,7 +266,7 @@ class IdentityVerificationRulesTest {
     @Test
     void theIdentityFieldsAreTakenFromTheChipNotFromTheRequestBody() {
         PassiveAuthenticationVerifier verifier = mock(PassiveAuthenticationVerifier.class);
-        when(verifier.verify(any(), any(), any())).thenReturn(new PassiveAuthenticationResult(
+        when(verifier.verify(any(), any(), any(), any())).thenReturn(new PassiveAuthenticationResult(
                 TCKN, LocalDate.of(1998, 4, 12), chipZone(), null, "CN=DS", "abc123"));
         enablePassiveAuthentication(verifier);
 
@@ -286,7 +286,7 @@ class IdentityVerificationRulesTest {
                 AdditionalPersonalDetails.parse(dataGroup11("ÇAĞRI", "İLKER")).orElseThrow();
 
         PassiveAuthenticationVerifier verifier = mock(PassiveAuthenticationVerifier.class);
-        when(verifier.verify(any(), any(), any())).thenReturn(new PassiveAuthenticationResult(
+        when(verifier.verify(any(), any(), any(), any())).thenReturn(new PassiveAuthenticationResult(
                 TCKN, LocalDate.of(1998, 4, 12), chipZone(), fromChip, "CN=DS", "abc123"));
         enablePassiveAuthentication(verifier);
 
@@ -303,7 +303,7 @@ class IdentityVerificationRulesTest {
     @Test
     void withoutDataGroup11TheSubmittedNameIsKept() {
         PassiveAuthenticationVerifier verifier = mock(PassiveAuthenticationVerifier.class);
-        when(verifier.verify(any(), any(), any())).thenReturn(new PassiveAuthenticationResult(
+        when(verifier.verify(any(), any(), any(), any())).thenReturn(new PassiveAuthenticationResult(
                 TCKN, LocalDate.of(1998, 4, 12), chipZone(), null, "CN=DS", "abc123"));
         enablePassiveAuthentication(verifier);
 
@@ -327,7 +327,7 @@ class IdentityVerificationRulesTest {
     @Test
     void withoutTheActiveGateAChipReadWithoutASignatureIsAccepted() {
         PassiveAuthenticationVerifier verifier = mock(PassiveAuthenticationVerifier.class);
-        when(verifier.verify(any(), any(), any())).thenReturn(new PassiveAuthenticationResult(
+        when(verifier.verify(any(), any(), any(), any())).thenReturn(new PassiveAuthenticationResult(
                 TCKN, LocalDate.of(1998, 4, 12), chipZone(), null, "CN=DS", "abc123"));
         enablePassiveAuthentication(verifier);
 
@@ -338,7 +338,7 @@ class IdentityVerificationRulesTest {
     @Test
     void withTheActiveGateOnAChipReadWithoutASignatureIsRefused() {
         PassiveAuthenticationVerifier verifier = mock(PassiveAuthenticationVerifier.class);
-        when(verifier.verify(any(), any(), any())).thenReturn(new PassiveAuthenticationResult(
+        when(verifier.verify(any(), any(), any(), any())).thenReturn(new PassiveAuthenticationResult(
                 TCKN, LocalDate.of(1998, 4, 12), chipZone(), null, "CN=DS", "abc123"));
         enablePassiveAuthentication(verifier);
         identityProperties.setActiveAuthenticationRequired(true);
@@ -353,7 +353,7 @@ class IdentityVerificationRulesTest {
     @Test
     void aSuppliedSignatureIsCheckedAgainstTheIssuedChallenge() {
         PassiveAuthenticationVerifier verifier = mock(PassiveAuthenticationVerifier.class);
-        when(verifier.verify(any(), any(), any())).thenReturn(new PassiveAuthenticationResult(
+        when(verifier.verify(any(), any(), any(), any())).thenReturn(new PassiveAuthenticationResult(
                 TCKN, LocalDate.of(1998, 4, 12), chipZone(), null, "CN=DS", "abc123"));
         enablePassiveAuthentication(verifier);
 
@@ -365,5 +365,43 @@ class IdentityVerificationRulesTest {
         manager.verificateIdentityofAuthenticatedUser(dto);
 
         verify(identityChallengeService).consume(eq(current), eq("BBBBBBBBBBA="), any(), any());
+    }
+
+    @Test
+    void theSuppliedChipKeyIsHandedToPassiveAuthenticationBeforeItIsTrusted() {
+        PassiveAuthenticationVerifier verifier = mock(PassiveAuthenticationVerifier.class);
+        when(verifier.verify(any(), any(), any(), any())).thenReturn(new PassiveAuthenticationResult(
+                TCKN, LocalDate.of(1998, 4, 12), chipZone(), null, "CN=DS", "abc123"));
+        enablePassiveAuthentication(verifier);
+
+        VerifyIdentityDto dto = requestWithChip();
+        dto.setDg15("AAECAw==");
+        dto.setChallenge("BBBBBBBBBBA=");
+        dto.setActiveAuthenticationSignature("CQoLDA==");
+
+        manager.verificateIdentityofAuthenticatedUser(dto);
+
+        verify(verifier).verify(any(), any(), any(),
+                org.mockito.AdditionalMatchers.aryEq(new byte[]{0, 1, 2, 3}));
+    }
+
+    @Test
+    void aChipKeyTheSecurityObjectNeverSignedNeverReachesTheChallenge() {
+        PassiveAuthenticationVerifier verifier = mock(PassiveAuthenticationVerifier.class);
+        when(verifier.verify(any(), any(), any(), any())).thenThrow(
+                new PassiveAuthenticationException("{identity.chip.key.unsigned}", "dg15 not in sod"));
+        enablePassiveAuthentication(verifier);
+
+        VerifyIdentityDto dto = requestWithChip();
+        dto.setDg15("AAECAw==");
+        dto.setChallenge("BBBBBBBBBBA=");
+        dto.setActiveAuthenticationSignature("CQoLDA==");
+
+        ValidationException thrown = assertThrows(ValidationException.class,
+                () -> manager.verificateIdentityofAuthenticatedUser(dto));
+
+        assertEquals("IDENTITY_CHIP_KEY_UNSIGNED", thrown.getErrorCode());
+        assertFalse(current.isIdentityVerified());
+        verifyNoInteractions(identityChallengeService);
     }
 }
