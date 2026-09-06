@@ -172,6 +172,7 @@ Servis ve controller katmanı düz anahtar kullanır: `"{user.not.found}"`. Çö
   "resource": "callback",
   "resourceId": null,
   "path": "/payments/callback",
+  "requestId": "70fbd6d0-…",
   "correlationId": "70fbd6d0-…",
   "timeStamp": "2026-08-28T03:10:35",
   "details": [{ "field": "email", "message": "E-posta boş olamaz." }]
@@ -186,7 +187,7 @@ Servis ve controller katmanı düz anahtar kullanır: `"{user.not.found}"`. Çö
 
 **HTTP kodu exception'ın kendisinde.** `KoalaException` bir `HttpStatus` taşır; alt sınıflar constructor'da belirler (404, 403, 409, 401, 502). `errorCode` sınıf adından türetilir: `UserNotFoundException` → `USER_NOT_FOUND`. Eskiden hepsi ayrımsız 400 dönüyordu.
 
-**İstemciye iç detay sızmaz.** Beklenmeyen hatalarda gövdeye sabit bir metin yazılır, exception yalnızca correlation ID ile loglanır.
+**İstemciye iç detay sızmaz.** Beklenmeyen hatalarda gövdeye sabit bir metin yazılır, exception yalnızca `requestId` ile loglanır. Zarftaki `correlationId` bir sürüm boyunca `requestId`'nin kopyasıdır (§2i).
 
 ## 2d2. Var olma gizlemesi — eşitlenen şey yanıt, durum kodu değil
 
@@ -254,7 +255,7 @@ dalına düşüyor: hem 403 hem `MESSAGING_SUBSCRIPTION_NOT_ALLOWED` ortak. Tara
 `ExistenceConcealmentIT` **yanıtı** sabitliyor: dokuz uçta yabancı bir kullanıcı aynı isteği iki kez atıyor —
 rastgele bir UUID'ye ve gerçekten var olan ama başkasına ait bir kaynağa. İki yanıt gövdesi, istemcinin kendi
 gönderdiği id yer tutucuya çevrildikten ve istek başına zorunlu olarak değişen iki alan (`timeStamp`,
-`correlationId`) düşüldükten sonra **birebir aynı** olmak zorunda. Sekiz alanı birden sabitliyor, kırmızıya
+`requestId`/`correlationId`) düşüldükten sonra **birebir aynı** olmak zorunda. Sekiz alanı birden sabitliyor, kırmızıya
 dönme biçimi de öğretici (düzeltme öncesi dokuzunun dokuzu kırmızıydı). **Yakalayamadığı:** listesinde
 olmayan uçlar ve sonradan eklenen uçlar.
 
@@ -417,21 +418,69 @@ Gerekçe: (b) elle SQL yazmayı ortadan kaldırmıyor, yalnızca kopyalanacak bi
 
 ## 2i. Loglama
 
-**Bir istek = bir satır.** `RequestLoggingFilter` (`http.access` logger'ı) metot, yol, durum, süre ve kullanıcı id'si basar; 4xx WARN, 5xx ERROR. Güvenlik zincirinin dışında durur ki 401/403 de loglansın; SecurityContext o noktada boş olduğu için kullanıcı id'sini `SessionAuthFilter` istek niteliğine (`app.userId`) bırakır. Sağlık uçları loglanmaz.
+**Bir istek = bir satır.** `RequestLoggingFilter` metot, yol, durum, süre ve kullanıcı id'si basar; 4xx WARN, 5xx ERROR. Güvenlik zincirinin dışında durur ki 401/403 de loglansın; SecurityContext o noktada boş olduğu için kullanıcı id'sini `SessionAuthFilter` istek niteliğine (`app.userId`) bırakır. Sağlık uçları loglanmaz.
 
-**Okuma yolu DEBUG.** `Getting/Fetching/Retrieving/Listing` ile başlayan 18 manager logu DEBUG'a indirildi — erişim logu geldikten sonra bunlar gürültüydü. Yazma işlemleri INFO kalır, denetim izi onlar.
+**Erişim logunun adı gerçekten `http.access` — bir süre değildi.** Filtre `@Slf4j` kullanıyordu, yani logger adı sınıfın FQCN'iydi ve `logging.level.http.access: ${ACCESS_LOG_LEVEL:INFO}` satırı **var olmayan bir logger'ı** adlandırıyordu: erişim logunun seviyesi `APP_LOG_LEVEL` ile birlikte oynuyor, `ACCESS_LOG_LEVEL` sessizce yok sayılıyordu. Bu bölüm de aynı yanlışı yazıyordu — ölü config'in belgelenmiş hâli. Filtre artık `LoggerFactory.getLogger("http.access")` ile adlandırılmış bir logger kullanıyor; §1'in "logger `@Slf4j` ile gelir" kuralının **tek istisnası** bu, çünkü adlandırılmış bir logger'ı Lombok üretemez. `LoggingConfigurationTest` ayarın gerçek bir logger'ı gösterdiğini, `AccessLogTest` satırın o logger'dan çıktığını sabitliyor.
+
+### `correlationId` → `requestId`
+
+**Doğru ad `requestId`, ve geçiş eklemeli.** Araştırmanın hükmü net (`docs/research/logging-and-request-correlation.md`): `correlationId` mesajlaşma terimidir ve sahibi olan her spesifikasyon (EIP, JMS `JMSCorrelationID`, AMQP 1.0, Spring Integration) **aynı değerin birden fazla mesajda görünmesini** şart koşar. Koala'da değer her istekte yeniden üretiliyor ve hiçbir yere taşınmıyordu, yani fiilen bir request id'ydi.
+
+**Kırıcı değişiklik yapılmadı.** `Result` zarfına `requestId` **eklendi**, `correlationId` aynı değerle dönmeye devam ediyor; yanıt hem `X-Request-Id` hem `X-Correlation-Id` başlığını taşıyor. Alan mobil sözleşmede belgeli (`koala-mobile/lib/product/network/api_response.dart`) ama ayrıştırılmıyor; yine de yayımlanmış bir sözleşme olduğu için **bir sürüm boyunca** kopya kalıyor. `RequestIdIT` ikisinin de döndüğünü ve eşit olduğunu sabitliyor — kaldırma ayrı bir karar ve mobil güncellendikten sonra.
+
+**`X-Correlation-Id` artık istemciden gelen güvenilmez ikincil alan.** Öncesinde istemcinin gönderdiği değer — regex'ten geçtiği sürece — doğrudan `correlationId` oluyordu; yani sunucunun "istek kimliği" dediği şey tümüyle istemci kontrolündeydi ve iki farklı istek aynı id'yi taşıyabiliyordu. `RequestIdFilter` artık `requestId`'yi **her zaman sunucuda** üretiyor; istemcinin gönderdiği `X-Request-Id`/`X-Correlation-Id` aynı `[A-Za-z0-9._-]{1,64}` doğrulamasından geçip ayrı bir MDC alanına (`clientCorrelationId`) yazılıyor. Log forging savunması yerinde duruyor, ama değer artık hiçbir kararı beslemiyor.
+
+**Sunucu tarafındaki her yer birlikte değişti:** MDC anahtarı, `logback-spring.xml` deseni (`%X{requestId:-}`) ve `GlobalExceptionHandler`'ın iki log satırı. Kibana sorguları ve log tabanlı alarmlar `correlationId` yerine `requestId` alanına bakmalı.
+
+### MDC
+
+**Dokuz alan, hepsi düz — noktasız.** `requestId`, `clientCorrelationId`, `userId`, `sessionId`, `deviceId`, `method`, `path`, `status`, `durationMs`, `clientIp`. Anahtarlar ve temizlik tek yerde: `core/logging/LogContext`. `RequestIdFilter` en dışta durup istek bitince hepsini siliyor, yani havuzdan gelen Tomcat iş parçacığı bir sonraki isteğe bayat bağlam taşımıyor.
+
+**Anahtarların düz olması bilinçli, ve ECS'in bir tuzağı var.** Spring Boot'un ECS formatlayıcısı MDC çiftlerini `ContextPairs.nested(...)` ile ekliyor: **anahtarda nokta varsa iç içe JSON üretiyor.** Yani `trace.id` doğru ECS alanını verir, `traceId` düz bir alan olarak çıkar ve ECS alanı **değildir**. Koala bugün `traceId` üretmiyor (§Kapsam dışı) ve seçilen anahtarlar ECS alan adları değil, o yüzden hepsi düz. `EcsStructuredLoggingTest` bunu gerçek encoder'la ölçüyor: `requestId` düz çıkıyor, `trace.id` `{"trace":{"id":"…"}}` oluyor. İleride ECS alan adlarına geçilecekse anahtara nokta koymak yeterli — ama o gün dashboard alan adları da değişir.
+
+**`status` ve `durationMs` yalnızca erişim satırında dolu.** İkisi de istek bitmeden bilinmiyor; `RequestLoggingFilter` bunları `finally` bloğunda, satırı yazmadan hemen önce koyuyor.
+
+### MDC'nin süreç sınırlarını geçmesi
+
+**MDC bir `ThreadLocal`, yani hiçbir yere kendiliğinden gitmez.** Kuyruğa atılan bir e-posta ya da gece çalışan bir cron, isteği tetikleyen kullanıcıyla log üzerinden ilişkilendirilemiyordu.
+
+**RabbitMQ'da iki yön de bağlandı.** `LogContextPublishPostProcessor` (RabbitTemplate'in `beforePublishPostProcessors`'ı) taşınabilir alanları (`requestId`, `clientCorrelationId`, `userId`, `sessionId`, `deviceId`) `x-koala-log-*` başlıklarına yazıyor ve AMQP `correlation-id` özelliğine `requestId`'yi koyuyor — **`correlationId` adı burada doğru**, çünkü değer artık gerçekten birden fazla mesajda görünüyor (araştırma §7.2). `LogContextListenerAdvice` dört tüketicinin hepsinde (e-posta, SMS, push, iyzico senkronizasyonu) bağlamı geri kuruyor ve iş bitince siliyor. Başlıksız gelen — yani bu değişiklikten önce kuyruğa girmiş — mesaj bağlamsız kalmıyor, kendi `requestId`'sini alıyor.
+
+**Advice, yeniden deneme sarmalayıcısının dışında.** `factory.setAdviceChain(logContextListenerAdvice, retryInterceptor)` sırası bilinçli: bağlam bir teslimatın tüm deneme turlarını kapsıyor, her denemede yeniden kurulmuyor.
+
+**Zamanlanmış işler `taskScheduler` üzerinden ve kendi `requestId`'lerini alıyor.** `ScheduledLogContextDecorator` her koşuya taze bir id veriyor ve bitişte MDC'yi temizliyor. On zamanlayıcının hepsi kapsanıyor — tek tek sarmalamak yerine dekoratör kullanıldı, böylece yeni bir `@Scheduled` metodu eklendiğinde hatırlanacak bir şey kalmıyor.
+
+**Bunu yaparken bir tuzak çıktı ve düzeltildi: `@Scheduled` işleri STOMP kalp atışı zamanlayıcısını paylaşıyordu.** Spring Boot'un `taskScheduler` bean'i `@ConditionalOnMissingBean({TaskScheduler.class, ScheduledExecutorService.class})` ile geliyor; WebSocket mesaj brokeri (§2z) `messageBrokerTaskScheduler` adında bir `TaskScheduler` yayımladığı için Boot'un bean'i **hiç oluşturulmuyordu** ve on cron işi brokerin tek iş parçacığında çalışıyordu. Sonucu yalnız loglama değil: uzun süren bir mutabakat koşusu STOMP kalp atışlarını geciktirip soketleri düşürebilirdi. `ScheduledLogContextConfig` artık `taskScheduler` bean'ini açıkça tanımlıyor; `ScheduledJobLogContextIT` ikisinin ayrı olduğunu sabitliyor. `ThreadPoolTaskSchedulerCustomizer` ile çözülemezdi — Boot o customizer'ı hiç oluşturmadığı bir bean'e uygulayamaz.
+
+### Yapısal format ve desen
+
+**`SPRING_PROFILES_ACTIVE=json` ile çıktı ECS JSON'una döner.** Encoder Spring Boot'un kendi `StructuredLogEncoder`'ı (`<format>ecs</format>`); üçüncü parti encoder yok ve gerekmiyor. Varsayılan bilerek metin.
+
+**Appender'lar artık profil bloklarının içinde.** İkisi de dışarıdaydı ve `json` profili kapalıyken Logback her açılışta `Appender named [CONSOLE_JSON] not referenced. Skipping further processing.` uyarısı basıyordu — başlangıç çıktısında sürekli duran, hiçbir şey ifade etmeyen bir satır. `LoggingConfigurationTest` her appender'ın tanımlandığı profil bloğunda referans edilmesini şart koşuyor.
+
+**Konsol deseni tarih ve saat dilimi taşıyor.** `%d{HH:mm:ss.SSS}` yalnız saat basıyordu: iki günlük bir log dökümünde satırların hangi güne ait olduğu, UTC çalışan bir konteynerde ise hangi saat diliminde olduğu okunamıyordu. Desen Spring Boot'un kendi `LOG_DATEFORMAT_PATTERN` değişkenine bağlandı (varsayılanı `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`), yani `LOG_DATEFORMAT_PATTERN` ile ortamdan değiştirilebiliyor.
+
+**Seviyeler `APP_LOG_LEVEL`, `ACCESS_LOG_LEVEL`, `SECURITY_LOG_LEVEL`, `USER_AGENT_LOG_LEVEL` ile ayarlanır.**
+
+**`/actuator/loggers` ADMIN korumalı açık.** Seviye değiştirmek için yeniden dağıtım gerekmiyor. Ayrı bir güvenlik kuralı yazılmadı: `/actuator/**` zaten `hasRole("ADMIN")` ve `/actuator/**`'ın kimlik modeli ayrı bir kararın (is-koala/koala-backend#49) konusu, burada yeni bir yetki modeli icat edilmedi.
+
+**Yauaa `WARN`'a çekildi.** `nl.basjes` user-agent kural setini yüklerken açılışın ~22 saniyesini INFO satırlarıyla dolduruyor (§9). `USER_AGENT_LOG_LEVEL` ile geri açılabilir.
+
+### İstisnalar
+
+**`log.error` yakalanan istisnayı logger'a vermek zorunda.** 96 `log.error` çağrısının yalnız beşi bunu yapıyordu; 29'u `e.getMessage()` geçiyor, birkaçı istisnaya hiç dokunmuyordu. SLF4J yığın izini **yalnızca son argüman bir `Throwable` ise** basar, yani bu satırların hepsi "bir şey patladı" deyip nerede patladığını yutuyordu — üç para taşıyan zamanlayıcı (mutabakat, ödeme doğrulama, ödenmemiş atama düşürme) dahil. 43 çağrı düzeltildi: mesajdaki `Error: {}` yer tutucusu kaldırıldı ve istisna nesnesi son argüman olarak geçirildi.
+
+**`EmailConsumer` bir istisnayı gerçekten yutuyordu.** `log.error("... ID: {}. Aborting request.", emailTaskDto.id(), e.getMessage())` — bir yer tutucu, iki argüman. SLF4J fazladan argümanı `Throwable` sanmadığı (o bir `String`) için sessizce atıyordu; bildirimin neden bulunamadığı hiçbir yere yazılmıyordu. `UserManager`'da da aynı sınıftan ikinci bir hata vardı, ters yönde: `"... UserId: "` yer tutucusu unutulmuş, argüman kaybolmuştu.
+
+**`LogDiagnosabilityTest` ikisini de yapısal olarak koruyor.** Kaynak kodu tarıyor (yorumları ve metin bloklarını maskeleyerek): bir `catch` bloğunun içindeki her `log.error` yakalanan değişkeni son argüman olarak vermek zorunda, ve her log çağrısının yer tutucu sayısı argüman sayısına eşit olmak zorunda — sondaki `Throwable` hariç. Üçüncü bir test taramanın boşa koşmadığını (400'den fazla çağrı, 40'tan fazla catch içi çağrı gördüğünü) doğruluyor.
+
+**`ExternalServiceException` (502) yığın izi taşımıyor.** Kendi yığın izi hiçbir zaman bilgi vermiyordu — fırlatıldığı satırı zaten `errorCode` söylüyor — ama `GlobalExceptionHandler` 5xx'i `log.error(..., ex)` ile bastığı için her sağlayıcı hatası tam bir yığın izi üretiyordu. `UnconfiguredPushService` her push'ta bu istisnayı fırlattığı için (§2s) gürültü sabit bir maliyetti, üstelik yukarıdaki `log.error` düzeltmesi tüketici tarafında bunu **çoğaltacaktı**. İstisna artık `writableStackTrace = false` ile kuruluyor: tek satır çıkıyor, gerçek teşhis ise fırlatma noktasındaki `log.error(..., e)` satırında duruyor.
+
+**Diğer log kuralları yerinde:** okuma yolu DEBUG, akış anlatımı DEBUG, durum değişikliği INFO; PII `core/helpers/LogMasks` üzerinden maskelenir ve `LogPrivacyTest` bunu kaynak kodda tarar; kimlik gerektiğinde kullanıcı **id**'si yazılır.
 
 **Erişim logu istemci IP'sini taşır.** İstemci IP'si tek yerden gelir: `ClientIpResolver`. Doğrudan bağlantı `getRemoteAddr()` değeridir; `Forwarded` veya `X-Forwarded-For` yalnız doğrudan kaynak `app.trusted-proxies` içindeki bir IP/CIDR ise okunur. Güvenilmeyen istemcinin başlığı yok sayılır. Spring'in başlığı güven sınırı bilmeden tüketmemesi için `forward-headers-strategy: none`; zinciri yalnız bu çözücü işler. BFF gelen yönlendirme başlıklarını kopyalamaz, bağlantı IP'siyle tek değer yazar.
 
-**PII maskelenir.** `core/helpers/LogMasks`: e-posta yerel kısmı maskeli (`y***@gmail.com`, alan adı kalır ki başarısız giriş takip edilebilsin), telefonun son dört hanesi, IBAN'ın baş ve sonu, TCKN hiç. Kimlik gerektiğinde kullanıcı **id**'si yazılır.
-
-**`LogPrivacyTest` bunu yapısal olarak koruyor.** Kaynak kodu tarayıp hiçbir log çağrısının maskelenmemiş e-posta, telefon, IBAN, TCKN veya parola taşımadığını doğrular. Yazıldığında `NotificationManager` içinde gözden kaçmış bir SMS logunu yakaladı.
-
-**Logger `@Slf4j` ile geliyor.** Faz 19'da elle `LoggerFactory.getLogger(...)` çağıran 59 dosya Lombok'un `@Slf4j` anotasyonuna geçti; alan adı her yerde `log`. Öncesinde dört farklı tanım biçimi vardı (instance/static karışık, hatta `this.getClass()` — static bir alanda derlenmiyordu bile). Spring projelerinde yaygın olan biçim bu.
-
-**Akış anlatımı DEBUG, durum değişikliği INFO.** "Creating address…", "Checking if user is a contact", "Starting registration" gibi 12 anlatı logu daha DEBUG'a indi. INFO artık *olan biteni* kaydediyor: hangi kayıt, hangi id, hangi karar. Erişim logu (§ yukarıda) zaten her isteği bir satırla yazıyor.
-
-**Yapısal format opsiyonel.** `SPRING_PROFILES_ACTIVE=json` ile çıktı ECS JSON'una döner. Varsayılan bilerek metin. Seviyeler `APP_LOG_LEVEL`, `ACCESS_LOG_LEVEL`, `SECURITY_LOG_LEVEL` ile ayarlanır.
+**Kapsam dışı: `micrometer-tracing` + OpenTelemetry.** `traceId`/`spanId` W3C Trace Context'in terimleridir ve **servisler arası** izleme içindir; ikinci bir servis olmadan eklenen bağımlılık karşılıksız kalır. Gerçek dağıtık izleme geldiğinde `traceparent` başlığı kabul edilir ve MDC anahtarları `trace.id`/`span.id` biçiminde (noktalı, yukarıdaki tuzak) yazılır.
 
 ## 2j. Hız sınırı
 
@@ -2326,7 +2375,7 @@ Birim testlerde `CommissionCalculator` artık `FallbackSettings.commissionCalcul
 **Davet kanalı testleri (§2s3).** `CompanyInvitationDeliveryTest` beş kural: davet edilen kişinin akışına `COMPANY_CONTACT_INVITATION` hedefi ve davetin kimliğiyle bir kayıt düşer, akış kaydı yazılamazsa ne davet ne e-posta kaybolur, davet e-postasının konusu dolu, kabul ve ret makbuzlarının ikisi de kendi konusunu taşır. `CompanyInvitationDeliveryIT` iki kural — uçtan uca: davet edilen kişi `GET /users/me/notifications` yanıtındaki `targetId` ile `GET /contact-invitations/{id}` çağırıp davetine ulaşır, ve hem e-posta hem akış kaydı `notifications.subject` sütununu dolu bırakır.
 
 **Yetkili daveti testleri (§2s2).** `CompanyContactInvitationRulesTest` yedi kural: şirket yöneticisi listeyi okur, üye olmayan okuyamaz, davet edilen/daveti gönderen/şirket yöneticisi tekil daveti okur, UUID'yi elinde tutan yabancı okuyamaz, yabancı davetin durumuna hiç bakılmadan reddedilir. `CompanyInvitationSendingRulesTest` beş kural: ilk davet gider, zaten yetkili olan kişi 409, bekleyen davet varken ikinci davet 409, cevaplanmış davet yeni daveti engellemez, yönetici olmayan davet edilecek kişinin durumuna hiç bakılmadan reddedilir. `CompanyContactInvitationAccessIT` sekiz kural — gerçek filtre zinciri üzerinden: yalnız `ROLE_USER` taşıyan şirket yöneticisi listeye 200 ile ulaşır, `STAFF` yetkilisi ve üye olmayan listeyi var olmayan bir şirketten ayırt edemez, üç taraf da daveti okur, yabancı ve `STAFF` daveti rastgele bir UUID'den ayırt edemez, başkasının davetini cevaplamak var olmayan daveti cevaplamakla aynı yanıtı verir, şirket yöneticisi daveti okuyabilir ama cevaplayamaz. Ayırt edilemezlik durum koduyla değil `errorCode` ile sabitleniyor.
-**Var olma gizlemesi testleri (§2d2).** `ExistenceConcealmentIT` dokuz uçta tek bir kuralı sabitliyor: yabancının var olmayan bir kaynağa aldığı yanıt ile başkasına ait gerçek bir kaynağa aldığı yanıt, istemcinin gönderdiği id yer tutucuya çevrildikten ve `timeStamp`/`correlationId` düşüldükten sonra **birebir aynı** — konuşma mesajları, iptal, iptal kaydı, iptal önizlemesi, puantaj, check-in, tamamlama, değerlendirme ve iş şablonu. `ExistenceConcealmentRulesTest` aynı kuralı kaynak kodda tarıyor, dört kural: hiçbir manager metodu iki farklı 404 anahtarı döndürmez, `Concealment.notFound`'a verilen her anahtar `NOT_FOUND` ile biter, gizlenen yanıt tek yerde ve log satırıyla birlikte üretilir, muafiyet listesi bayatlamaz. İkisinin de yakalayamadıkları §2d2'de yazılı.
+**Var olma gizlemesi testleri (§2d2).** `ExistenceConcealmentIT` dokuz uçta tek bir kuralı sabitliyor: yabancının var olmayan bir kaynağa aldığı yanıt ile başkasına ait gerçek bir kaynağa aldığı yanıt, istemcinin gönderdiği id yer tutucuya çevrildikten ve `timeStamp`/`requestId`/`correlationId` düşüldükten sonra **birebir aynı** — konuşma mesajları, iptal, iptal kaydı, iptal önizlemesi, puantaj, check-in, tamamlama, değerlendirme ve iş şablonu. `ExistenceConcealmentRulesTest` aynı kuralı kaynak kodda tarıyor, dört kural: hiçbir manager metodu iki farklı 404 anahtarı döndürmez, `Concealment.notFound`'a verilen her anahtar `NOT_FOUND` ile biter, gizlenen yanıt tek yerde ve log satırıyla birlikte üretilir, muafiyet listesi bayatlamaz. İkisinin de yakalayamadıkları §2d2'de yazılı.
 
 **Şikayet inceleme testleri (§2p).** `ReportModerationIT` on sekiz kural sabitliyor — gerçek Postgres üzerinde: susuz kuyruk her durumu döndürür, durum verilince daralır, şikayet edileni olmayan satır susuz kuyruktan düşmez, gerekçe süzgeci daraltır, dört hedef tipi birbirinden ayrılır, aynı kişi hakkındaki şikayetler durumdan bağımsız gruplanır, satır şikayet edeni ve şikayet edileni adlandırır, kararı veren yalnız karardan sonra dolar, geçmiş sayısı kişinin tüm kayıtlarını sayar, **sayfa boyutu bire indiğinde sayı yine iki gelir** (sayfa kapsamlı olamaz), sonuçlanmış şikayet de geçmişe sayılır, ilan şikayetinin detayı başlığı, mesaj şikayetininki gövdeyi, görsel şikayetininki URL'i taşır, detay kuyruktaki kimlik ve sayıyı tekrarlar, bilinmeyen şikayetin detayı yok, ve **personel kimliğiyle gelen moderatör şikayeti karara bağlayabilir** (yanıt kuyruk satırının tamamı, `reviewedBy` boş). `ReportRulesTest` iki kural kazandı: personel kararı `reviewedBy` yazmaz, köprü kararı yazar — ikincisi olmadan düzeltme sessizce köprü yolunu da kapatabilirdi. `ReportModerationPrivacyTest` yüzeyin taşıdığı alan adlarını geçişli tarayıp e-posta/telefon/IBAN/TCKN taşımadığını sabitliyor ve kırmızıya dönebildiğini sentetik bir sızıntı DTO'suyla gösteriyor.
 
@@ -2382,7 +2431,7 @@ Bu depodaki yapısal korumaların hepsi kaynağı **düz metin** tarıyor, yani 
 - **Uç yolları sondaki eğik çizgi taşımaz.** Spring Boot 3'ten beri `/companies/` ile `/companies` aynı şey değil. Bir mapping'e eğik çizgi eklersen istemciler 404 alır.
 - **Eşleşmeyen yol 404, desteklenmeyen metot 405 döner.** İkisinin de handler'ı var; yoksa `Exception` yakalayıcısına düşüp 500 dönüyorlardı.
 - **Eksik ya da tip uyumsuz query parametresi 400 döner.** `MissingServletRequestParameterException` handler'ı yoksa 500 dönüyordu.
-- **Gövdesi okunamayan istek 400 döner.** `HttpMessageNotReadableException` handler'ı `GlobalExceptionHandler`'da; eskiden bozuk JSON 500 döndürüyor ve ayrıştırma hatasının metnini istemciye yansıtıyordu. Jackson ayrıştırma mesajı ham gövdedeki token'ı taşıyabildiği için exception/cause metni loglanmaz; yalnızca sabit hata tipi/kodu ve correlation ID yazılır.
+- **Gövdesi okunamayan istek 400 döner.** `HttpMessageNotReadableException` handler'ı `GlobalExceptionHandler`'da; eskiden bozuk JSON 500 döndürüyor ve ayrıştırma hatasının metnini istemciye yansıtıyordu. Jackson ayrıştırma mesajı ham gövdedeki token'ı taşıyabildiği için exception/cause metni loglanmaz; yalnızca sabit hata tipi/kodu ve `requestId` yazılır.
 - **Kayıt akışı e-posta varlığını açığa vurmaz.** `startRegistration` kayıtlı bir adres için de aynı 200 yanıtını döner, sessizce çıkar. Buraya "bu e-posta zaten kayıtlı" hatası geri eklenirse enumeration açığı geri gelir. Frontend'in mesajı bu yüzden genel olmalı: "Adres kayıtlı değilse doğrulama e-postası gönderildi."
 - **Aynı adrese ikinci kayıt denemesi yeniden gönderim sayılır.** Bekleyen kayıt siliniyor, yenisi oluşturuluyor. Eskiden hata dönüyordu ve ilk e-postayı alamayan kullanıcı sıkışıyordu.
 - **İstek DTO'larında primitive sayısal/mantıksal alan bırakma.** `@NotNull` primitive'de etkisizdir; eksik alan sessizce `false`/`0` olur. Sarmalayıcı tip + `@NotNull` kullan.
