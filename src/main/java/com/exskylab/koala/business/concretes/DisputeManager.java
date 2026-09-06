@@ -64,7 +64,7 @@ public class DisputeManager implements DisputeService {
     @Override
     @Transactional
     public Dispute openDispute(UUID jobAssignmentId, String reason) {
-        JobAssignment assignment = jobAssignmentService.getDetailedById(jobAssignmentId);
+        JobAssignment assignment = jobAssignmentService.getDetailedByIdForUpdate(jobAssignmentId);
 
         UUID actorId = securityService.getAuthenticatedUserId();
         if (!participants.isParticipant(assignment, actorId)) {
@@ -99,6 +99,7 @@ public class DisputeManager implements DisputeService {
                 .orElseThrow(() -> new ResourceNotFoundException(DisputeMessages.NOT_FOUND));
 
         UUID assignmentId = dispute.getJobAssignment().getId();
+        jobAssignmentService.getDetailedByIdForUpdate(assignmentId);
 
         if (resolution.movesMoney()) {
             staffPayoutService.requirePermission(actor, resolution.getMoneyPermission(), assignmentId);

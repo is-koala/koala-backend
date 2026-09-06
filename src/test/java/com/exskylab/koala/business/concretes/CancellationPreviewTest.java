@@ -27,6 +27,7 @@ class CancellationPreviewTest {
     private CancellationDao cancellationDao;
     private SecurityService securityService;
     private JobAssignmentService jobAssignmentService;
+    private DisputeService disputeService;
     private CancellationManager manager;
 
     private static final ZoneId POLICY_ZONE = new CancellationProperties().getZoneId();
@@ -39,11 +40,12 @@ class CancellationPreviewTest {
         cancellationDao = mock(CancellationDao.class);
         securityService = mock(SecurityService.class);
         jobAssignmentService = mock(JobAssignmentService.class);
+        disputeService = mock(DisputeService.class);
 
         manager = new CancellationManager(cancellationDao, jobAssignmentService, mock(UserService.class),
                 securityService, new AssignmentParticipants(mock(CompanyContactService.class)),
                 new CancellationPolicy(new CancellationProperties(), passthroughSettings()),
-                mock(PayoutService.class), mock(ActivityNotificationService.class));
+                mock(PayoutService.class), disputeService, mock(ActivityNotificationService.class));
     }
 
     private static LocalDateTime startsInHours(long hours) {
@@ -130,6 +132,15 @@ class CancellationPreviewTest {
     void aCompletedAssignmentPreviewsAsNotCancellableInsteadOfThrowing() {
         JobAssignment a = assignment(AssignmentStatus.COMPLETED, startsInHours(-24));
         when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
+
+        assertFalse(manager.previewCancellation(a.getId()).cancellableNow());
+    }
+
+    @Test
+    void anActiveDisputePreviewsAsNotCancellable() {
+        JobAssignment a = assignment(AssignmentStatus.CONFIRMED, startsInHours(48));
+        when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
+        when(disputeService.hasActiveDispute(a.getId())).thenReturn(true);
 
         assertFalse(manager.previewCancellation(a.getId()).cancellableNow());
     }

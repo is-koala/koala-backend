@@ -2,6 +2,7 @@ package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.exceptions.ConflictException;
+import com.exskylab.koala.core.exceptions.ExternalServiceException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
 import com.exskylab.koala.business.abstracts.SettlementService;
@@ -57,6 +58,8 @@ class PayoutReleaseTest {
         when(payoutDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(refundDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(bankAccountService.findPrimaryAccount(any())).thenReturn(Optional.empty());
+        when(settlementService.enqueue(any(), any(), any())).thenReturn(Optional.of(new SettlementTask()));
+        when(settlementService.enqueueRefund(any(), any(), any())).thenReturn(Optional.of(new SettlementTask()));
     }
 
     private JobAssignment assignment(AssignmentStatus status, PaymentStatus paymentStatus) {
@@ -71,7 +74,7 @@ class PayoutReleaseTest {
         assignment.setWorkerPayout(new BigDecimal("1000.00"));
         assignment.setTotalCharged(new BigDecimal("1075.00"));
 
-        when(jobAssignmentDao.findById(assignmentId)).thenReturn(Optional.of(assignment));
+        when(jobAssignmentDao.findByIdForUpdate(assignmentId)).thenReturn(Optional.of(assignment));
         return assignment;
     }
 
@@ -86,6 +89,35 @@ class PayoutReleaseTest {
 
     private Payment settledPaymentFor(JobAssignment assignment) {
         return settledPaymentExists();
+    }
+
+    @Test
+    void anActiveDisputeFreezesAnEmployerRefund() {
+        JobAssignment assignment = assignment(AssignmentStatus.CONFIRMED, PaymentStatus.HELD_IN_ESCROW);
+        settledPaymentFor(assignment);
+        when(disputeDao.existsByJobAssignmentIdAndStatusIn(assignmentId, DisputeManager.ACTIVE))
+                .thenReturn(true);
+
+        assertThrows(ConflictException.class,
+                () -> payoutManager.refundEmployer(assignmentId, null, "uyuşmazlık sürüyor"));
+
+        assertEquals(PaymentStatus.HELD_IN_ESCROW, assignment.getPaymentStatus());
+        verify(refundDao, never()).save(any());
+        verify(settlementService, never()).enqueueRefund(any(), any(), any());
+        verify(jobAssignmentDao).findByIdForUpdate(assignmentId);
+    }
+
+    @Test
+    void refundIsNotReportedWhenItCannotBeQueued() {
+        JobAssignment assignment = assignment(AssignmentStatus.CONFIRMED, PaymentStatus.HELD_IN_ESCROW);
+        settledPaymentFor(assignment);
+        when(settlementService.enqueueRefund(any(), any(), any())).thenReturn(Optional.empty());
+
+        assertThrows(ExternalServiceException.class,
+                () -> payoutManager.refundEmployer(assignmentId, null, "tam iade"));
+
+        assertEquals(PaymentStatus.HELD_IN_ESCROW, assignment.getPaymentStatus());
+        verify(refundDao, never()).save(any());
     }
 
     @Test
@@ -106,6 +138,19 @@ class PayoutReleaseTest {
         settledPaymentExists();
 
         assertThrows(ConflictException.class, () -> payoutManager.releaseToWorker(assignmentId));
+
+        assertEquals(PaymentStatus.HELD_IN_ESCROW, assignment.getPaymentStatus());
+        verify(payoutDao, never()).save(any());
+    }
+
+    @Test
+    void releaseIsNotReportedWhenItCannotBeQueued() {
+        JobAssignment assignment = assignment(AssignmentStatus.COMPLETED, PaymentStatus.HELD_IN_ESCROW);
+        settledPaymentExists();
+        when(settlementService.enqueue(any(), any(), eq(SettlementOperation.APPROVE)))
+                .thenReturn(Optional.empty());
+
+        assertThrows(ExternalServiceException.class, () -> payoutManager.releaseToWorker(assignmentId));
 
         assertEquals(PaymentStatus.HELD_IN_ESCROW, assignment.getPaymentStatus());
         verify(payoutDao, never()).save(any());
