@@ -10,7 +10,7 @@ Never paste a secret into a terminal transcript, Git diff, issue, pull request, 
 4. Revoke the old credential and verify old-credential attempts fail without exposing the value.
 5. Record the new creation/expiry metadata and next rotation date in the private operations system.
 
-This sequence applies to database/Rabbit users, Iyzico, storage, backup, mail, SMS, Sentry auth and Keycloak client secrets when the provider supports overlapping credentials. Google keys require API restriction, application restriction, quota and budget-alert verification before old-key revocation. Mobile/web releases must propagate the replacement key before revocation.
+This sequence applies to database/Rabbit users, Iyzico, storage, backup, mail, SMS and Sentry auth secrets when the provider supports overlapping credentials. Google keys require API restriction, application restriction, quota and budget-alert verification before old-key revocation. Mobile/web releases must propagate the replacement key before revocation.
 
 ## Type-specific checks
 
@@ -20,7 +20,7 @@ This sequence applies to database/Rabbit users, Iyzico, storage, backup, mail, S
 - Google backend: create a server key, restrict to the exact egress IPs and two approved APIs, deploy and verify Places/Geocoding before deleting the old key.
 - Google Android/iOS/web: create the matching package/signing certificate, bundle identifier or HTTPS-referrer restriction, ship through the relevant environment, verify telemetry, then revoke after the old client population is below the approved threshold.
 - SMTP and SMS: add a provider credential scoped to the approved sender, send to an allowlisted synthetic recipient, roll instances, then revoke the previous credential.
-- Keycloak and Sentry: overlap the client credential/auth token, verify OIDC or release upload, then revoke the old version. DSN rotation also requires updating ingestion rules and a sanitized synthetic event.
+- Sentry: overlap the auth token, verify a release upload, then revoke the old version. DSN rotation also requires updating ingestion rules and a sanitized synthetic event.
 - Apple and Play release credentials: create the least-privilege upload identity, update CI, perform a non-production validation/upload check, then revoke the old identity.
 
 ## JWT exception

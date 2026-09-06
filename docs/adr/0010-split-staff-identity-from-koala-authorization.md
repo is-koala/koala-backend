@@ -1,6 +1,8 @@
 # Personel kimliğini Keycloak'a, yetkilendirmeyi Koala'da tut
 
-Durum: Kabul edildi — 5 Eylül 2026. Geçiş bölümü eklendi — 6 Eylül 2026: `/admin/**`'ın hangi token'ı kabul ettiği bu ADR'de, "Geçiş" başlığı altında yazılıdır.
+Durum: **[ADR-0014](0014-keep-staff-identity-in-koala.md) ile yerine geçildi — 6 Eylül 2026.** Keycloak kullanılmıyor; personel kimliği de Koala'da tutuluyor. Aşağıdaki *yetkilendirme* kararları (rol→izin tablosu, kapsama grafiği, izinlerin token'a gömülmemesi, personelin marketplace kullanıcılarından ayrı olması) hâlâ geçerli ve ADR-0014 tarafından aynen devralındı; değişen yalnız kimliğin ve rol üyeliğinin nerede durduğu. Bu dosya kayıt için bırakıldı, uygulanacak karar değil.
+
+Kabul edildi — 5 Eylül 2026. Geçiş bölümü eklendi — 6 Eylül 2026: `/admin/**`'ın hangi token'ı kabul ettiği bu ADR'de, "Geçiş" başlığı altında yazılıdır.
 
 ## Karar
 
