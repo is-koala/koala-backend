@@ -4,6 +4,7 @@ import com.exskylab.koala.business.abstracts.CompanyContactService;
 import com.exskylab.koala.business.abstracts.NotificationService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
+import com.exskylab.koala.core.helpers.MessageResolver;
 import com.exskylab.koala.core.mappers.CompanyContactInvitationMapper;
 import com.exskylab.koala.dataAccess.CompanyContactInvitationDao;
 import com.exskylab.koala.entities.Company;
@@ -44,7 +45,8 @@ class CompanyContactInvitationRulesTest {
         companyContactService = mock(CompanyContactService.class);
 
         manager = new CompanyContactInvitationManager(invitationDao, mock(NotificationService.class),
-                securityService, companyContactService, mock(CompanyContactInvitationMapper.class));
+                securityService, companyContactService, mock(CompanyContactInvitationMapper.class),
+                mock(MessageResolver.class));
 
         company = new Company();
         company.setId(UUID.randomUUID());

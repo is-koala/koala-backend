@@ -661,6 +661,59 @@ doğruluyor — şirket yetkisi servis katmanında denetlenir. Mevcut `ADMIN_RUL
 yakalayacak biçimde genişletilmesi **bilerek yapılmadı**: genişletme `POST /images` satırını kırmızıya
 düşürür ve o ayrı bir ürün kararı — is-koala/koala-backend#72.
 
+## 2s3. Davetin kullanıcıya ulaşması — `IN_APP` kanalı ve e-posta konuları
+
+§2s2 daveti *okunabilir* yaptı; bu bölüm daveti **ulaşılabilir** yapıyor (is-koala/koala#41). Öncesinde
+davet gönderiliyor ama davet edilen kişiye hiçbir yoldan ulaşmıyordu:
+
+- `inviteUserToCompany` yalnız `notificationService.sendEmail` çağırıyordu, yani kayıt `NotificationChannel.EMAIL`
+  olarak yazılıyordu; `GET /users/me/notifications` ise **yalnız `IN_APP`** döndürüyor (§2s). Uygulama içi
+  bildirim listesi davetten hiç haberdar olmuyordu.
+- Davet e-postası *"Daveti Koala uygulamasındaki bildirimler bölümünden kabul edebilir ya da reddedebilirsin"*
+  diyordu; orada hiçbir şey yoktu. `CompaniesController` de Swagger'da *"uygulama içi bildirim gider"*
+  yazıyordu — gitmiyordu.
+- Bildirime düşse bile tıklanamazdı: `NotificationTargetType` şirket ya da davet tanımıyordu.
+
+**`NotificationTargetType.COMPANY_CONTACT_INVITATION` eklendi.** Enum `@Enumerated(EnumType.STRING)` ile
+yazıldığı için veri göçü gerekmedi; yeni sabit yalnız yeni satırlarda görünüyor. Mobil ve web tarafındaki
+karşılığı yazılmadan bu satır istemcide `none`'a düşer ve tıklanamaz kalır — is-koala/koala#40 ve
+is-koala/koala-web#31'in listesinde.
+
+**Davet artık e-postanın yanında bir akış kaydı da üretiyor:** alıcı davet edilen kişi, `subject` şirketin
+adı, `body` i18n anahtarından çözülmüş metin, `targetType` yeni sabit, `targetId` davetin kimliği.
+`NotificationManager.sendInApp` bu alanları zaten kaydediyordu. Sonuç: davet edilen kişi kimliği hiçbir
+yerden kopyalamadan `GET /contact-invitations/{targetId}` ile davetine ulaşabiliyor.
+
+**Fan-out `ActivityNotificationService`'e taşınmadı, desen yerinde uygulandı — gerekçesi şu.** O sınıfın her
+ucu `notify(...)` üzerinden geçiyor ve **üç kanala birden** gönderiyor: in-app, push, e-posta. Davet ise
+kendi şablonuna, kendi parametrelerine ve `DispatchPriority.CRITICAL`'e sahip özel bir e-posta gönderiyor.
+`notify` çağırmak o e-postanın yanına ikinci bir düz metin e-postası ve bir push daha koyardı — yani
+kullanıcı tek olay için üç yerine beş teslimat alırdı. `ActivityNotificationManager`'a yalnız in-app gönderen
+bir istisna metot eklemek de o sınıfın tek kuralını (her olay üç kanala gider) bozardı. Bu yüzden yalnız
+`inApp` bacağının deseni — `try/catch` içinde, `NotificationService` üzerinden — `CompanyContactInvitationManager`
+içinde tekrarlandı. §2ae'nin aggregate sınırı korunuyor: başka aggregate'in DAO'suna uzanılmıyor.
+
+**`try/catch`'in sınırı yazılı olsun.** Akış kaydının yazılamaması daveti ve e-postayı düşürmüyor; ama çağrı
+`CompanyManager.inviteContactToCompany`'nin `@Transactional` sınırı içinde olduğu için hata bir veritabanı
+hatasıysa transaction rollback-only işaretlenir ve yakalamak commit'i kurtarmaz. Aynı sınır
+`ActivityNotificationManager` için de geçerli (§2s); ayrı bir kural icat edilmedi.
+
+**Üç davet e-postasının konusu `null`'dı.** `SendEmailDto.setSubject` hiç çağrılmıyordu; `NotificationManager`
+şablon adı verildiğinde konuyu `sendEmailDto.getSubject()`'ten okuyup `notification.setSubject(...)` ile
+kaydettiği için hem gönderilen e-postanın konusu hem `notifications.subject` sütunu boş kalıyordu. Davet,
+cevap makbuzu ve davet edene giden bildirim — üçü de artık i18n anahtarından gelen konu taşıyor; kabul ve ret
+ayrı anahtarlar kullanıyor.
+
+**E-posta şablonundaki cümle artık doğru.** *"Bildirimler bölümünden kabul edebilirsin"* bu değişiklikten
+sonra gerçeği söylüyor, o yüzden metne dokunulmadı. **E-postaya bağlantı konmadı:** derin bağlantı sözleşmesi
+üç depoyu birden ilgilendiriyor (`koala-mobile/docs/deep-links.md` kanonik host tablosu, `koala-web`'in
+`AppDestination` birleşimi ve `.well-known` yolları) ve o sözleşme güncellenmeden bağlantı üretmek kırık bir
+yol açardı.
+
+**#52 bu işin önkoşuluydu.** `COMPANY_UPDATES` `ALERT` iken kullanıcı kategoriyi kapatabiliyordu ve
+`sendInApp` de aynı kapıdan geçtiği için (§2at) yeni akış kaydı da susturulabilirdi — çıkmaz sokak aynen geri
+gelirdi. Kategori `TRANSACTIONAL` olduğu için `isAllowed` satıra hiç bakmadan `true` dönüyor.
+
 ## 2t. Iyzico mutabakat tetiği
 
 `approvePaymentSettlement` yazılmıştı ama **hiç çağrılmıyordu** — emanetteki para Iyzico tarafında alt üye işyerine hiç açılmıyordu. Faz 8B bunu bağladı:
@@ -1501,6 +1554,10 @@ yok — ve daveti listeleyen bir uç da yok: `GET /companies/{companyId}/contact
 yetkilisi olmayı, `GET /contact-invitations/{invitationId}` davetin UUID'sini bilmeyi gerektiriyor. Yani
 bastırılan e-posta daveti bozmuyor, **erişilemez hâle getiriyordu.**
 
+**Bu paragraf #52'nin çözdüğü günün durumunu anlatıyor; iki cümlesi artık geçmiş zaman.** Liste ucu o gün
+platform `ROLE_ADMIN`'e kilitliydi ve şirketin kendi yöneticisi bile listeyi göremiyordu — düzeltmesi §2s2'de.
+Davet bugün e-postanın yanında bir `IN_APP` kaydı da üretiyor — §2s3.
+
 **Kategori bölünmedi, yeniden sınıflandırıldı.** İlk düşünülen yön ikiye bölmekti — `COMPANY_UPDATES` haber
 olarak `ALERT` kalır, üyelik eylemleri yeni bir işlemsel kategoriye taşınır. Bölünmedi: geriye `COMPANY_UPDATES`
 yalnızca `CompanyManager`'daki iki oluşturma postasını yönetir hâlde kalıyordu ve **o ikisi `setRecipient`
@@ -1725,6 +1782,8 @@ Birim testlerde `CommissionCalculator` artık `FallbackSettings.commissionCalcul
 `AdminAuditTrailIT` on dokuz kural — gerçek HTTP üzerinden: izin verilen değişiklik aktör/izin/eylem/kayıt ile yazılır, detay gövde-IP-istemciyi taşır, `cancellation.late-fee-rate` artık iz bırakmadan değişmez, reddedilen istek `allowed = false` yazar, filtreli kullanıcı araması yazılır, filtresiz yükleme yazılmaz, sayfa çevirmek arama değildir, tek kayıt okuması yazılır, finansal satır 10 yıl normal satır 2 yıl saklanır, anonim istek tabloyu doldurmaz, köprü admini de denetlenir, denetim kaydını okumak yazılır ama kendi satırını döndürmez, ikinci okuma tek satır ekler, uç `audit.read` istiyor ve reddi de yazılıyor, çekirdek alanların hepsi dönüyor, detay silinince çekirdek dönmeye devam ediyor, beş süzgecin hepsi sunucuda daraltıyor, aktör süzgeci bir kişinin yaptıklarını buluyor, tanınmayan sıralama alanı 400 dönüyor.
 
 `AdminAuditStorageIT` bölünmeyi gerçek Postgres'te doğruluyor (çekirdek detay silinince kalır, cascade ters yönde çalışır, iki yarı kendi tarihini taşır); `AdminAuditRetentionIT` saklama ve KVKK silmesini (10 yıl / 24 ay / 6 ay damgaları, süresi dolan detay çekirdeği bırakır, süresi dolan çekirdek detayı götürür, penceredeki satıra dokunulmaz, silme talebi yalnız o kişinin detayını siler, ikinci silme zararsız). KVKK tetiği `LegalConsentTest` içinde: kabul edilen talep silme çağırır, engellenen talep hiçbir şey silmez.
+
+**Davet kanalı testleri (§2s3).** `CompanyInvitationDeliveryTest` beş kural: davet edilen kişinin akışına `COMPANY_CONTACT_INVITATION` hedefi ve davetin kimliğiyle bir kayıt düşer, akış kaydı yazılamazsa ne davet ne e-posta kaybolur, davet e-postasının konusu dolu, kabul ve ret makbuzlarının ikisi de kendi konusunu taşır. `CompanyInvitationDeliveryIT` iki kural — uçtan uca: davet edilen kişi `GET /users/me/notifications` yanıtındaki `targetId` ile `GET /contact-invitations/{id}` çağırıp davetine ulaşır, ve hem e-posta hem akış kaydı `notifications.subject` sütununu dolu bırakır.
 
 **Yetkili daveti testleri (§2s2).** `CompanyContactInvitationRulesTest` yedi kural: şirket yöneticisi listeyi okur, üye olmayan okuyamaz, davet edilen/daveti gönderen/şirket yöneticisi tekil daveti okur, UUID'yi elinde tutan yabancı okuyamaz, yabancı davetin durumuna hiç bakılmadan reddedilir. `CompanyInvitationSendingRulesTest` beş kural: ilk davet gider, zaten yetkili olan kişi 409, bekleyen davet varken ikinci davet 409, cevaplanmış davet yeni daveti engellemez, yönetici olmayan davet edilecek kişinin durumuna hiç bakılmadan reddedilir. `CompanyContactInvitationAccessIT` sekiz kural — gerçek filtre zinciri üzerinden: yalnız `ROLE_USER` taşıyan şirket yöneticisi listeye 200 ile ulaşır, `STAFF` yetkilisi ve üye olmayan listeyi var olmayan bir şirketten ayırt edemez, üç taraf da daveti okur, yabancı ve `STAFF` daveti rastgele bir UUID'den ayırt edemez, başkasının davetini cevaplamak var olmayan daveti cevaplamakla aynı yanıtı verir, şirket yöneticisi daveti okuyabilir ama cevaplayamaz. Ayırt edilemezlik durum koduyla değil `errorCode` ile sabitleniyor.
 
