@@ -41,9 +41,11 @@ class StaffAuthorizationIT extends AbstractIntegrationTest {
                 + "(select id from staff_roles where code = 'AUDITOR') and permission_code <> 'audit.read'");
     }
 
-    private void role(String code) {
+    private UUID role(String code) {
+        UUID id = UUID.randomUUID();
         jdbcTemplate.update("insert into staff_roles (id, code, name, created_at) values (?, ?, ?, now())",
-                UUID.randomUUID(), code, code);
+                id, code, code);
+        return id;
     }
 
     private static StaffPrincipal actor(String... roles) {
@@ -110,17 +112,17 @@ class StaffAuthorizationIT extends AbstractIntegrationTest {
 
     @Test
     void aPermissionYouDoNotHoldCannotBeGranted() {
-        role("TEST_TARGET");
+        UUID target = role("TEST_TARGET");
 
         StaffPrincipal moderator = actor("MODERATOR");
 
         assertThrows(ForbiddenException.class,
-                () -> staffAuthorizationService.grantPermission(moderator, "TEST_TARGET", StaffPermission.PAYOUT_RELEASE));
+                () -> staffAuthorizationService.grantPermission(moderator, target, StaffPermission.PAYOUT_RELEASE));
     }
 
     @Test
     void roleManagementAloneIsNotEnoughToGrantSomethingYouDoNotHold() {
-        role("TEST_TARGET");
+        UUID target = role("TEST_TARGET");
         role("TEST_ROLE_ADMIN");
         jdbcTemplate.update("insert into staff_role_permissions (id, staff_role_id, permission_code, created_at) "
                         + "select ?, id, 'role.manage', now() from staff_roles where code = 'TEST_ROLE_ADMIN'",
@@ -129,14 +131,14 @@ class StaffAuthorizationIT extends AbstractIntegrationTest {
         StaffPrincipal roleAdmin = actor("TEST_ROLE_ADMIN");
 
         assertThrows(ForbiddenException.class,
-                () -> staffAuthorizationService.grantPermission(roleAdmin, "TEST_TARGET", StaffPermission.PAYOUT_RELEASE));
+                () -> staffAuthorizationService.grantPermission(roleAdmin, target, StaffPermission.PAYOUT_RELEASE));
     }
 
     @Test
     void theOwnerCanGrantWhatTheOwnerHolds() {
-        role("TEST_TARGET");
+        UUID target = role("TEST_TARGET");
 
-        staffAuthorizationService.grantPermission(actor("OWNER"), "TEST_TARGET", StaffPermission.CATEGORY_MANAGE);
+        staffAuthorizationService.grantPermission(actor("OWNER"), target, StaffPermission.CATEGORY_MANAGE);
 
         assertEquals(Set.of(StaffPermission.CATEGORY_MANAGE),
                 staffAuthorizationService.resolve(List.of("TEST_TARGET")).permissions());
@@ -144,23 +146,23 @@ class StaffAuthorizationIT extends AbstractIntegrationTest {
 
     @Test
     void anInclusionThatWouldCloseALoopIsRefused() {
-        role("TEST_PARENT");
-        role("TEST_CHILD");
-        staffAuthorizationService.includeRole(actor("OWNER"), "TEST_PARENT", "TEST_CHILD");
+        UUID parent = role("TEST_PARENT");
+        UUID child = role("TEST_CHILD");
+        staffAuthorizationService.includeRole(actor("OWNER"), parent, child);
 
         StaffPrincipal owner = actor("OWNER");
 
         assertThrows(ConflictException.class,
-                () -> staffAuthorizationService.includeRole(owner, "TEST_CHILD", "TEST_PARENT"));
+                () -> staffAuthorizationService.includeRole(owner, child, parent));
     }
 
     @Test
     void anActorWithoutAStaffRecordCannotWriteTheGraph() {
-        role("TEST_TARGET");
+        UUID target = role("TEST_TARGET");
 
         StaffPrincipal stranger = StaffPrincipal.unregistered("sub-stranger", Set.of("OWNER"));
 
         assertThrows(ForbiddenException.class,
-                () -> staffAuthorizationService.grantPermission(stranger, "TEST_TARGET", StaffPermission.CATEGORY_MANAGE));
+                () -> staffAuthorizationService.grantPermission(stranger, target, StaffPermission.CATEGORY_MANAGE));
     }
 }
