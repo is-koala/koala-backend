@@ -1,6 +1,7 @@
 package com.exskylab.koala.business.concretes;
 
 import lombok.extern.slf4j.Slf4j;
+import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.helpers.LogMasks;
@@ -335,7 +336,7 @@ public class CompanyManager implements CompanyService {
 
     @Override
     @Transactional
-    public Company approveCompany(UUID companyId, String note) {
+    public Company approveCompany(StaffPrincipal actor, UUID companyId, String note) {
         Company company = getCompanyById(companyId);
 
         if (company.getApprovalStatus() == CompanyApprovalStatus.APPROVED) {
@@ -343,14 +344,14 @@ public class CompanyManager implements CompanyService {
         }
 
         Company saved = decide(company, CompanyApprovalStatus.APPROVED, note);
-        log.info("Company {} approved by admin {}", companyId, securityService.getAuthenticatedUserId());
+        log.info("Company {} approved by {}", companyId, actorLabel(actor));
         activityNotificationService.companyApprovalDecided(saved);
         return saved;
     }
 
     @Override
     @Transactional
-    public Company rejectCompany(UUID companyId, String reason) {
+    public Company rejectCompany(StaffPrincipal actor, UUID companyId, String reason) {
         Company company = getCompanyById(companyId);
 
         if (company.getApprovalStatus() == CompanyApprovalStatus.APPROVED) {
@@ -361,9 +362,18 @@ public class CompanyManager implements CompanyService {
         }
 
         Company saved = decide(company, CompanyApprovalStatus.REJECTED, reason);
-        log.info("Company {} rejected by admin {}", companyId, securityService.getAuthenticatedUserId());
+        log.info("Company {} rejected by {}", companyId, actorLabel(actor));
         activityNotificationService.companyApprovalDecided(saved);
         return saved;
+    }
+
+    /**
+     * Log satırı için aktörün kim olduğu. Personel yolunda marketplace kullanıcı kimliği yoktur;
+     * {@code securityService}'e uzanmak o yolda {@link IllegalStateException} demek olurdu.
+     * "Kim karar verdi" sorusunun asıl cevabı her iki yolda da admin denetim kaydında (§2av).
+     */
+    private String actorLabel(StaffPrincipal actor) {
+        return actor == null ? "bridge admin " + securityService.getAuthenticatedUserId() : "staff " + actor.subject();
     }
 
     private Company decide(Company company, CompanyApprovalStatus status, String note) {

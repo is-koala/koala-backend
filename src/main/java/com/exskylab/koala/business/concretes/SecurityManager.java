@@ -26,9 +26,20 @@ public class SecurityManager implements SecurityService {
     public UserPrincipal getAuthenticatedPrincipal() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
-        if (authentication == null || !authentication.isAuthenticated()
-                || !(authentication.getPrincipal() instanceof UserPrincipal principal)) {
+        if (authentication == null || !authentication.isAuthenticated()) {
             throw new ResourceNotFoundException("{user.not.authenticated}");
+        }
+
+        if (!(authentication.getPrincipal() instanceof UserPrincipal principal)) {
+            // Kimlik var ama marketplace kullanıcısı değil — neredeyse her zaman bir StaffPrincipal.
+            // Bunu "kaynak bulunamadı" diye 404'e çevirmek teşhisi imkânsız kılıyordu: personel
+            // kimliğiyle gelen bir /admin ucu, iş mantığına hiç girmeden "bulunamadı" diyordu ve
+            // sebep hiçbir yerde yazmıyordu. Bu bir yapılandırma hatasıdır, kullanıcı hatası değil.
+            throw new IllegalStateException(
+                    "securityService.getAuthenticated* marketplace kullanıcısı bekliyor ama kimlik "
+                            + authentication.getPrincipal().getClass().getSimpleName()
+                            + ". /admin/** altındaki bir metot bunu çağıramaz — log satırında bile. "
+                            + "Aktörü StaffPrincipal olarak parametreyle al.");
         }
 
         return principal;
