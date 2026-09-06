@@ -10,6 +10,8 @@ import org.hibernate.annotations.SQLRestriction;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.EnumSet;
+import java.util.Set;
 import java.util.UUID;
 
 @SQLDelete(sql = "UPDATE work_sessions SET is_deleted = true, deleted_at = now() WHERE id = ?")
@@ -34,8 +36,36 @@ public class WorkSession extends BaseEntity {
     @Column(name = "check_in_at", nullable = false)
     private Instant checkInAt;
 
+    @Column(name = "check_in_client_event_id")
+    private UUID checkInClientEventId;
+
+    @Column(name = "check_in_captured_at")
+    private Instant checkInCapturedAt;
+
+    @Column(name = "check_in_received_at")
+    private Instant checkInReceivedAt;
+
+    @Convert(converter = TimesheetPlausibilityFlagsConverter.class)
+    @Column(name = "check_in_plausibility_flags")
+    private Set<TimesheetPlausibilityFlag> checkInPlausibilityFlags =
+            EnumSet.noneOf(TimesheetPlausibilityFlag.class);
+
     @Column(name = "check_out_at")
     private Instant checkOutAt;
+
+    @Column(name = "check_out_client_event_id")
+    private UUID checkOutClientEventId;
+
+    @Column(name = "check_out_captured_at")
+    private Instant checkOutCapturedAt;
+
+    @Column(name = "check_out_received_at")
+    private Instant checkOutReceivedAt;
+
+    @Convert(converter = TimesheetPlausibilityFlagsConverter.class)
+    @Column(name = "check_out_plausibility_flags")
+    private Set<TimesheetPlausibilityFlag> checkOutPlausibilityFlags =
+            EnumSet.noneOf(TimesheetPlausibilityFlag.class);
 
     @Column(name = "check_in_latitude", precision = 9, scale = 6)
     private BigDecimal checkInLatitude;

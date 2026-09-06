@@ -82,4 +82,15 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.components.schemas.AddressCandidateDto.properties.candidateToken").exists())
                 .andExpect(jsonPath("$.components.schemas.AddressSuggestionDto.properties.placeId").doesNotExist());
     }
+
+    @Test
+    void timesheetDocumentsOfflineEventIdentityAndAuditFields() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath("$.components.schemas.CheckPointDto.properties.clientEventId").exists())
+                .andExpect(jsonPath("$.components.schemas.CheckPointDto.properties.capturedAt").exists())
+                .andExpect(jsonPath("$.components.schemas.WorkSessionDto.properties.checkInReceivedAt").exists())
+                .andExpect(jsonPath("$.components.schemas.WorkSessionDto.properties.checkInPlausibilityFlags").exists())
+                .andExpect(jsonPath("$.components.schemas.WorkSessionDto.properties.checkOutReceivedAt").exists())
+                .andExpect(jsonPath("$.components.schemas.WorkSessionDto.properties.checkOutPlausibilityFlags").exists());
+    }
 }
