@@ -60,4 +60,5 @@
     <include file="db/changelog/2026/09/06-11-notification-preferences.xml"/>
     <include file="db/changelog/2026/09/06-20-staff-authorization.xml"/>
     <include file="db/changelog/2026/09/06-34-authorities-key-and-grant-provenance.xml"/>
+    <include file="db/changelog/2026/09/06-40-admin-audit-log.xml"/>
 </databaseChangeLog>
