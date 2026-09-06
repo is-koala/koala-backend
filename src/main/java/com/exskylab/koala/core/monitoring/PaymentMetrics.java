@@ -20,6 +20,7 @@ public class PaymentMetrics {
         register("callback", "unknown_token");
         register("callback", "provider_error");
         register("callback", "declined");
+        register("callback", "three_ds_verification_failed");
         register("callback", "fraud_rejected");
         register("callback", "in_review");
         register("callback", "amount_mismatch");
@@ -55,6 +56,10 @@ public class PaymentMetrics {
 
     public void callbackDeclined() {
         record("callback", "declined");
+    }
+
+    public void callbackThreeDSecureVerificationFailed() {
+        record("callback", "three_ds_verification_failed");
     }
 
     public void callbackFraudRejected() {

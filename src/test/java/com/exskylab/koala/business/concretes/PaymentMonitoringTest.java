@@ -8,6 +8,7 @@ import com.exskylab.koala.core.helpers.CommissionCalculator;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
 import com.exskylab.koala.core.monitoring.PaymentMetrics;
 import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
+import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoPaymentResultResponseDto;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
 import com.exskylab.koala.dataAccess.PaymentDao;
 import com.exskylab.koala.entities.AssignmentStatus;
@@ -80,6 +81,21 @@ class PaymentMonitoringTest {
         paymentManager.completeFromCallback(TOKEN);
 
         assertEquals(1.0, counter("callback", "provider_error"));
+    }
+
+    @Test
+    void aThreeDSecureVerificationFailureIncrementsTheCriticalCallbackMetric() {
+        Payment payment = pendingPayment();
+        IyzicoPaymentResultResponseDto result = new IyzicoPaymentResultResponseDto();
+        result.setPaymentStatus("SUCCESS");
+        result.setMdStatus(0);
+        result.setFraudStatus(1);
+        when(paymentDao.findByProviderToken(TOKEN)).thenReturn(Optional.of(payment));
+        when(iyzicoPaymentService.retrieveCheckoutFormResult(any())).thenReturn(result);
+
+        paymentManager.completeFromCallback(TOKEN);
+
+        assertEquals(1.0, counter("callback", "three_ds_verification_failed"));
     }
 
     private double counter(String operation, String outcome) {

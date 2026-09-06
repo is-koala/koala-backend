@@ -77,6 +77,7 @@ class OperationalRunbookContractTest {
         assertTrue(alerts.contains("KoalaBackupStale"));
         assertTrue(alerts.contains("koala_payment_operations_total"));
         assertTrue(alerts.contains("increase(koala_payment_operations_total"));
+        assertTrue(alerts.contains("three_ds_verification_failed"));
         assertTrue(alerts.contains("[5m])) > 0"));
         assertTrue(alerts.contains("email\\\\.queue|sms\\\\.queue|push\\\\.queue"));
         assertEquals(12, inventory.lines().filter(line -> line.startsWith("| GOOGLE_KEY_")).count());

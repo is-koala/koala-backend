@@ -125,6 +125,7 @@ public class PaymentManager implements PaymentService {
         }
 
         if (!VERIFIED_BY_THREE_D_SECURE.equals(result.getMdStatus())) {
+            paymentMetrics.callbackThreeDSecureVerificationFailed();
             log.warn("Payment {} rejected: 3-D Secure verification did not succeed, mdStatus={}",
                     payment.getId(), result.getMdStatus());
             return fail(payment, PaymentMessages.THREE_D_SECURE_FAILED);
