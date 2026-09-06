@@ -37,7 +37,7 @@ public class CompanyContactInvitationsController {
 
 
     @Operation(summary = "Daveti kabul et ya da reddet",
-            description = "Hem davet edilene hem davet edene bildirim gider.")
+            description = "Yalnızca davet edilen cevaplayabilir; hem davet edilene hem davet edene bildirim gider.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Davet cevaplandı"),
             @ApiResponse(responseCode = "404", description = "Davet bulunamadı ya da size ait değil",
@@ -60,7 +60,8 @@ public class CompanyContactInvitationsController {
     }
 
 
-    @Operation(summary = "Davet detayı")
+    @Operation(summary = "Davet detayı",
+            description = "Yalnızca davet edilen, daveti gönderen ve şirketin ADMIN yetkilisi okuyabilir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Davet döndürüldü"),
             @ApiResponse(responseCode = "404", description = "Davet bulunamadı ya da size ait değil",

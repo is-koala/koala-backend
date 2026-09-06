@@ -51,4 +51,16 @@ public class CompanyContactInvitation extends BaseEntity{
     @Column(name = "answered_at")
     private Instant answeredAt;
 
+    public boolean wasSentTo(User user) {
+        return invitedUser.getId().equals(user.getId());
+    }
+
+    public boolean isPartyTo(User user) {
+        return wasSentTo(user) || invitedBy.getId().equals(user.getId());
+    }
+
+    public UUID companyId() {
+        return company.getId();
+    }
+
 }

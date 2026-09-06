@@ -15,6 +15,8 @@ public interface CompanyContactInvitationService {
 
     List<CompanyContactInvitation> getInvitationsByCompanyId(UUID companyId);
 
+    boolean hasPendingInvitation(UUID companyId, UUID invitedUserId);
+
     GetCompanyContactInvitationDto answerToInvitation(UUID invitationId, boolean accepted);
 
     GetCompanyContactInvitationDto getInvitationById(UUID invitationId);

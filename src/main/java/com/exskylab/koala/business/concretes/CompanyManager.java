@@ -15,7 +15,6 @@ import com.exskylab.koala.core.dtos.gallery.response.GalleryImageDto;
 import com.exskylab.koala.core.dtos.companyContact.request.InviteContactToCompanyDto;
 import com.exskylab.koala.core.dtos.notification.request.SendEmailDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
-import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.mappers.CompanyMapper;
 import com.exskylab.koala.dataAccess.CompanyDao;
 import com.exskylab.koala.entities.*;
@@ -164,6 +163,7 @@ public class CompanyManager implements CompanyService {
     public void inviteContactToCompany(UUID companyId, InviteContactToCompanyDto contactToCompanyDto) {
         log.info("Inviting contact to company with id: {}", companyId);
 
+        requireCompanyAdmin(companyId);
 
         CompanyContactRole role;
         try {
@@ -181,16 +181,6 @@ public class CompanyManager implements CompanyService {
             return new ResourceNotFoundException(CompanyMessages.COMPANY_NOT_FOUND);
         });
 
-        boolean isAdmin = company.getContacts().stream()
-                .anyMatch(contact ->
-                        contact.getUser().getId().equals(currentUser.getId()) &&
-                        contact.getRole().equals(CompanyContactRole.ADMIN));
-
-        if (!isAdmin){
-            log.warn("User with id: {} is not an admin of company with id: {}, terminating request!", currentUser.getId(), companyId);
-            throw new ForbiddenException(CompanyMessages.USER_NOT_ASSOCIATED_WITH_COMPANY);
-        }
-
         var userToInvite = userService.getByEmail(contactToCompanyDto.getEmail());
 
         boolean isContactAlreadyExists = company.getContacts().stream()
@@ -198,7 +188,12 @@ public class CompanyManager implements CompanyService {
 
         if (isContactAlreadyExists){
             log.warn("User with id: {} is already a contact of company with id: {}, terminating request!", userToInvite.getId(), companyId);
-            throw new ValidationException(CompanyMessages.USER_ALREADY_A_CONTACT);
+            throw new ConflictException(CompanyMessages.USER_ALREADY_A_CONTACT);
+        }
+
+        if (companyContactInvitationService.hasPendingInvitation(companyId, userToInvite.getId())){
+            log.warn("User with id: {} already has a pending invitation for company with id: {}, terminating request!", userToInvite.getId(), companyId);
+            throw new ConflictException(CompanyMessages.INVITATION_ALREADY_PENDING);
         }
 
         if (userToInvite.getTcIdentityNumber() == null) {

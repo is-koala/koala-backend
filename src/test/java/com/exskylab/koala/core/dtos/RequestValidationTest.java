@@ -6,6 +6,7 @@ import com.exskylab.koala.core.dtos.address.request.AddressPositionRequestDto;
 import com.exskylab.koala.core.dtos.address.request.AddressWriteDto;
 import com.exskylab.koala.core.dtos.address.request.ConfirmedPositionSource;
 import com.exskylab.koala.core.dtos.badge.request.SaveBadgeDto;
+import com.exskylab.koala.core.dtos.companyContact.request.InviteContactToCompanyDto;
 import com.exskylab.koala.core.dtos.education.request.SaveEducationDto;
 import com.exskylab.koala.core.dtos.experience.request.SaveExperienceDto;
 import com.exskylab.koala.core.dtos.jobAlert.request.SaveJobAlertDto;
@@ -48,6 +49,22 @@ class RequestValidationTest {
 
     private boolean isValid(Object dto) {
         return validator.validate(dto).isEmpty();
+    }
+
+    @Test
+    void aContactInvitationNamesTheEmailFieldAndRejectsAMalformedAddress() {
+        InviteContactToCompanyDto invite = new InviteContactToCompanyDto();
+        invite.setTcIdentityNumber("10000000146");
+        invite.setRole(CompanyContactRole.STAFF.name());
+
+        assertTrue(messagesFor(invite).contains("{companyContact.email.notBlank}"));
+        assertFalse(messagesFor(invite).contains("{companyContact.firstName.notBlank}"));
+
+        invite.setEmail("bu-bir-eposta-degil");
+        assertTrue(messagesFor(invite).contains("{companyContact.email.invalid}"));
+
+        invite.setEmail("davetli@ornek.test");
+        assertTrue(isValid(invite));
     }
 
     @Test
