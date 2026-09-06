@@ -5,6 +5,8 @@ import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.JobService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.dtos.jobApplication.request.AnswerApplicationDto;
+import com.exskylab.koala.core.exceptions.ConflictException;
+import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.mappers.JobApplicationMapper;
 import com.exskylab.koala.dataAccess.JobApplicationDao;
@@ -69,7 +71,7 @@ class JobApplicationAuthorizationTest {
         when(jobApplicationDao.findById(application.getId())).thenReturn(Optional.of(application));
         when(securityService.getAuthenticatedUser()).thenReturn(stranger);
 
-        assertThrows(RuntimeException.class,
+        assertThrows(ResourceNotFoundException.class,
                 () -> manager.respondToApplication(application.getId(), accept()));
 
         verify(jobAssignmentService, never()).save(any());
@@ -81,7 +83,7 @@ class JobApplicationAuthorizationTest {
         when(jobApplicationDao.findById(application.getId())).thenReturn(Optional.of(application));
         when(securityService.getAuthenticatedUser()).thenReturn(stranger);
 
-        assertThrows(RuntimeException.class,
+        assertThrows(ResourceNotFoundException.class,
                 () -> manager.respondToApplication(application.getId(), reject()));
     }
 
@@ -112,7 +114,7 @@ class JobApplicationAuthorizationTest {
         when(securityService.getAuthenticatedUser()).thenReturn(stranger);
         when(companyContactService.isUserAContactOfCompany(companyId, stranger.getId())).thenReturn(false);
 
-        assertThrows(RuntimeException.class,
+        assertThrows(ResourceNotFoundException.class,
                 () -> manager.respondToApplication(application.getId(), accept()));
 
         verify(jobAssignmentService, never()).save(any());
@@ -127,6 +129,65 @@ class JobApplicationAuthorizationTest {
         when(companyContactService.isUserAContactOfCompany(companyId, jobOwner.getId())).thenReturn(true);
 
         assertDoesNotThrow(() -> manager.respondToApplication(application.getId(), reject()));
+    }
+
+    @Test
+    void aStrangerLearnsNothingFromTheStateOfAnAlreadyAnsweredApplication() {
+        JobApplication application = individualJobApplication();
+        application.setStatus(ApplicationStatus.ACCEPTED);
+        when(jobApplicationDao.findById(application.getId())).thenReturn(Optional.of(application));
+        when(securityService.getAuthenticatedUser()).thenReturn(stranger);
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> manager.respondToApplication(application.getId(), accept()));
+    }
+
+    @Test
+    void aStrangerLearnsNothingFromTheStateOfAWithdrawnApplication() {
+        JobApplication application = individualJobApplication();
+        application.setStatus(ApplicationStatus.WITHDRAWN);
+        when(jobApplicationDao.findById(application.getId())).thenReturn(Optional.of(application));
+        when(securityService.getAuthenticatedUser()).thenReturn(stranger);
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> manager.respondToApplication(application.getId(), accept()));
+    }
+
+    @Test
+    void aStrangerLearnsNothingFromTheStateOfAnAnsweredCompanyJobApplication() {
+        JobApplication application = companyJobApplication();
+        application.setStatus(ApplicationStatus.REJECTED);
+        UUID companyId = application.getJob().getCompany().getId();
+        when(jobApplicationDao.findById(application.getId())).thenReturn(Optional.of(application));
+        when(securityService.getAuthenticatedUser()).thenReturn(stranger);
+        when(companyContactService.isUserAContactOfCompany(companyId, stranger.getId())).thenReturn(false);
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> manager.respondToApplication(application.getId(), accept()));
+    }
+
+    @Test
+    void theOwnerAnsweringAnAlreadyAnsweredApplicationGetsAConflict() {
+        JobApplication application = individualJobApplication();
+        application.setStatus(ApplicationStatus.ACCEPTED);
+        when(jobApplicationDao.findById(application.getId())).thenReturn(Optional.of(application));
+        when(securityService.getAuthenticatedUser()).thenReturn(jobOwner);
+
+        assertThrows(ConflictException.class,
+                () -> manager.respondToApplication(application.getId(), accept()));
+
+        verify(jobAssignmentService, never()).save(any());
+    }
+
+    @Test
+    void theOwnerAnsweringAWithdrawnApplicationGetsAConflict() {
+        JobApplication application = individualJobApplication();
+        application.setStatus(ApplicationStatus.WITHDRAWN);
+        when(jobApplicationDao.findById(application.getId())).thenReturn(Optional.of(application));
+        when(securityService.getAuthenticatedUser()).thenReturn(jobOwner);
+
+        assertThrows(ConflictException.class,
+                () -> manager.respondToApplication(application.getId(), accept()));
     }
 
     private JobApplication individualJobApplication() {

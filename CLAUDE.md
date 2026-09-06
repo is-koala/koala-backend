@@ -1067,15 +1067,25 @@ Sıkıştırma yalnızca Swagger için değil: `application/json` de kapsamda, y
 
 **`CompanyContactsController` silindi** — hiçbir uç taşımayan, yalnızca bir servis enjekte eden ölü sınıftı.
 
-## 2ao2. Kontenjan — sayı var, kapı yok
+## 2ao2. Kontenjan — kapı kondu, gerekçe para
 
-`Job.headcount` **isteğe bağlı bir hedef sayı**, bir kota değil. Null bırakılabilir; bırakıldığında hiçbir davranış değişmez.
+**Bu başlık bir kararı tersine çeviriyor.** Önceki hâli "sayı var, kapı yok" idi: `Job.headcount` isteğe bağlı bir hedef sayıydı, hiçbir yerde zorlanmıyordu ve `JobHeadcountRulesTest` bu **yokluğu** sabitliyordu. Gerekçesi ürün tarafındaydı ve hâlâ geçerli bir kaygı: ihtiyaç iş sırasında değişir, biri gelmez, iş büyür; sunucunun "3 dedin, 4. kişiyi alamazsın" demesi işvereni platformun dışına iter.
 
-**Hiçbir yerde zorlanmıyor, bilerek.** Kontenjan dolduğunda başvuru kabulü reddedilmez, ilan kapanmaz, iş başladıktan sonra da işe alım yapılabilir. Gerekçe ürün tarafından: ihtiyaç iş sırasında değişir — biri gelmez, iş büyür, ekibe sonradan katılan olur. Sunucunun "3 dedin, 4. kişiyi alamazsın" demesi işvereni platformun dışına iter. `JobHeadcountRulesTest` bu **yokluğu** sabitliyor: dört testin dördü de "engellenmiyor" doğruluyor, yani ileride buraya bir kapı konursa test kırmızıya döner.
+**Kararı değiştiren şey esneklik tartışması değil, tahsilat.** Kapı yokken `headcount = 1` olan bir ilanda işveren beş başvuruyu da kabul edebiliyordu. Her kabul bir `JobAssignment` doğuruyor, her atama işçi tarafından `CONFIRMED`'a çekilebiliyor ve **her biri kendi ödeme oturumunu açıyordu** — yani bir kişilik iş için beş kez tahsilat. Boşluk ayrıca ADR-0003'e dokunuyordu: her fazladan atama tam adresi bir kişiye daha açıyordu (§2m). Esneklik gerekçesi bu iki sonucu karşılamıyor.
+
+**Kapı yalnızca kabul anında, yalnızca `headcount` bildirilmişse.** `JobApplicationManager.assertOpeningAvailable` ilanın dolu olup olmadığını ölçer ve doluysa `ConflictException` (409, `job.application.job.headcount.full`) atar. Reddedilen başvuru `APPLIED` kalır, `JobAssignment` doğmaz.
+
+**`headcount == null` bugünkü davranışı korur: sınırsız.** Null'ı "bir kişi" saymak ayrı bir ürün kararı ve burada verilmedi; null ilanda sayım sorgusu **hiç çalıştırılmaz**. `JobHeadcountRulesTest` bunu iki testle sabitliyor.
+
+**"Yer tutan atama" kümesi adres kümesiyle aynı değil, karıştırma.** Yer tutma `PENDING_CONFIRMATION` + `CONFIRMED` + `IN_PROGRESS` + `COMPLETED`; adres görünürlüğü (§2m) `COMPLETED`'ı **dışlar**. Yani tamamlanmış bir atama yeri doldurmaya devam eder ama adresi artık göstermez. `PENDING_CONFIRMATION`'ın sayıma dahil olması kuralın işe yaramasının şartı: sayılmasaydı işveren beş teklifi aynı anda açıp beşini de onaylatabilir ve sınır hiç işlemezdi. Küme `JobAssignmentManager.SLOT_OCCUPYING_STATUSES` içinde **tek yerde** duruyor; sayım `JobAssignmentService.countOccupiedSlots` üzerinden alınıyor, çünkü `JobApplicationManager` kendi olmayan `JobAssignmentDao`'ya uzanamaz (§2ae).
+
+**Kapı sayıp-sonra-yazıyor, kilit yok — bilinen boşluk.** `countOccupiedSlots` ile `save` arasında ne pessimistic lock ne kısmi benzersiz indeks var. Aynı anda gelen iki kabul isteği de `occupied` değerini aynı okur ve ikisi de geçer; yani kapı **sıralı** çağrıda kontenjanı garanti ediyor, eşzamanlı çağrıda değil. Tüm testler sıralı. Kapatmak için ilan satırının `SELECT ... FOR UPDATE` ile kilitlenmesi (ve §2ae gereği bunun `JobService` üzerinden verilmesi) ya da `job_assignments` üzerinde sayıyı zorlayan bir kısıt gerekir; ikisi de bu dilimin dışında bırakıldı. Pratikte pencere dar — işverenin iki kabule aynı anda tıklaması gerekir — ama **bu boşluk kapının kapatmak için var olduğu çift tahsilatın ta kendisi**, yani kapanmadan "garanti" denmemeli.
+
+**Kontenjan dolunca ilan kapanmaz.** Otomatik kapanma ayrı bir ürün kararı; `reachingTheHeadcountDoesNotCloseTheJob` bu yokluğu korumaya devam ediyor. `hiredCount` de değişmedi — hâlâ `CONFIRMED`/`IN_PROGRESS`/`COMPLETED` sayıyor, yani istemcinin gördüğü "2/3 alındı" göstergesi ile kapının saydığı sayı **bilerek farklı**: gösterge işe alınmış kişiyi sayar, kapı yer tutan teklifi de sayar.
 
 **Sonradan alınan kişi ekibe de katılır.** `CrewConversationListener` atama `CONFIRMED` olduğunda tetikleniyor ve tarih kontrolü yok (§2o); iş başladıktan sonra işe alınan biri de gruba girer. Mesajlaşma penceresi yalnızca `endDateTime` + grace ile kapanır.
 
-**`hiredCount` türetilir, saklanmaz.** `CONFIRMED`/`IN_PROGRESS`/`COMPLETED` atamalar sayılır — teklif edilmiş ama kabul edilmemiş (`PENDING_CONFIRMATION`) kişi "alınmış" sayılmaz. Listede `countHiredByJobIds` ile **tek sorguda** toplanıyor (`JobManager.enrich`, kapak ve başvuru sayısıyla aynı yerde, §2ap); detayda tekil `countByJobIdAndStatusIn`.
+**`hiredCount` türetilir, saklanmaz.** `CONFIRMED`/`IN_PROGRESS`/`COMPLETED` atamalar sayılır — teklif edilmiş ama kabul edilmemiş (`PENDING_CONFIRMATION`) kişi "alınmış" sayılmaz (kontenjan kapısının saydığı küme bundan geniş, yukarı bak). Listede `countHiredByJobIds` ile **tek sorguda** toplanıyor (`JobManager.enrich`, kapak ve başvuru sayısıyla aynı yerde, §2ap); detayda tekil `countByJobIdAndStatusIn`.
 
 **Detay eşlemesi controller'dan manager'a taşındı.** `GET /jobs/{id}` artık `jobService.getJobDetail(jobId)` çağırıyor; `hiredCount` mapper'da `ignore`, manager dolduruyor. §2al'deki kararın aynısı — eşleme controller'da kalsaydı sayıyı doldurmanın yeri olmazdı.
 
@@ -1255,6 +1265,39 @@ KOALA_CHIP_DIR=/tmp/chip KOALA_CSCA_DIR=/opt/koala/csca ./mvnw test -Dtest=RealC
 **İşverene bildirim gidiyor.** `ActivityNotificationService.applicationWithdrawn` mevcut altyapıyı kullanıyor (in-app + push + e-posta, hepsi ayrı ayrı try/catch içinde). Alıcı `job.getCreator()` — `assignmentAnswered` ile aynı işveren tanımı.
 
 **Mobil istemci bu ucu kullanmadan önce enum'unu genişletmeli.** `koala-mobile` `ApplicationStatus.values.firstWhere` ile ayrıştırıyor; `WITHDRAWN` bilinmeyen bir değerken sunucu bunu döndürürse istemci düşer. Sıra: önce istemcide enum, sonra düğme.
+
+## 2ar3. Kabul/ret kararı — sıra, ilan durumu ve tek bildirim
+
+`POST /job-applications/{applicationId}/respond` üç ayrı kusuru birden taşıyordu; üçü de aynı metodun ilk on beş satırındaydı.
+
+**Yetki artık durum kontrollerinden önce çalışıyor.** Eski sıra `findById` → `WITHDRAWN` mı (409) → cevaplanmış mı (400) → **yetki** idi. Yani ilgisiz bir kullanıcı başkasının ilanındaki bir başvuru id'sini denediğinde 404 yerine 400 ya da 409 alıyor, hem başvurunun var olduğunu hem hangi durumda olduğunu öğreniyordu — §0b'nin "yetkisiz kullanıcıya 404, varlık sızmaz" kuralının ihlali. Sıra tersine çevrildi: `findById` → yetki → durum. **Kural genel:** yetkilendirme daima durum kontrolünden önce gelir, yoksa hata kodunun kendisi bir okuma kanalı olur.
+
+**Şirket dalı da 404 atıyor, ve iki dal aynı `errorCode`'u taşıyor.** `assertCurrentUserIsEmployerOf` şirket ilanında `ForbiddenException` (403), bireysel ilanda `ResourceNotFoundException` (404) atıyordu; aynı metot, aynı "yetkin yok" hâli, ilan tipine göre iki farklı kod. Şirket ilanında 403 dönmek o başvurunun var olduğunu doğrulamak demekti.
+
+**Durum kodunu eşitlemek yetmedi.** İki dal 404'e çekildikten sonra bile bireysel dal `job.application.user.not.creator.of.individual.job.to.view.applications` anahtarını taşıyordu; §2d gereği `errorCode` istemciye hata zarfının içinde gidiyor, yani var olmayan bir başvuru `JOB_APPLICATION_NOT_FOUND` alırken başkasının başvurusu `JOB_APPLICATION_USER_NOT_CREATOR_...` alıyordu. **Aynı 404, farklı kod — varlık yine sızıyordu.** İki dal da artık `job.application.not.found` atıyor. `ApplicationDecisionIT` bunu durum koduyla değil `errorCode` ile sabitliyor: yabancının denediği gerçek başvuru ile rastgele bir UUID **ayırt edilemez** yanıt döndürüyor, şirket ilanında da bireysel ilanda da. Eski anahtar `GET /jobs/{jobId}/applications` içinde kullanılmaya devam ediyor.
+
+**Kural:** varlık sızmasını kapatırken durum kodunu eşitlemek yarım iştir; ayırt edici bir `errorCode` de aynı bilgiyi verir.
+
+**Kardeş uçta aynı kusur duruyor ve bilerek dokunulmadı.** `GET /jobs/{jobId}/applications` (`getJobApplicationsByIdJobId`) şirket ilanında yetkisi olmayana hâlâ `ValidationException` (**400**) atıyor, oysa `JobsController` o uç için 404 belgeliyor ve §0b 404 istiyor. Aynı aile, ayrı uç, ayrı istemci sözleşmesi; bu dilimin kapsamı `POST /job-applications/{id}/respond` ile sınırlı tutuldu. Düzeltilmesi tek satır ama `koala-web`'in 400'e bakan bir dalı varsa onu da kırar — kendi issue'sunu hak ediyor.
+
+**"Zaten cevaplanmış" 400 değil 409.** `ValidationException` bir girdi şekli hatasını anlatır; bu bir durum çakışması (§2ah). `JOB_APPLICATION_ALREADY_RESPONDED` anahtarı korundu, yalnız tip değişti. `koala-web#36` ve `#37` zaten 409 bekliyordu.
+
+**İlan durumu artık iki yerde okunuyor, ve ikisi farklı davranıyor:**
+
+| | `CLOSED` ilan | `CANCELLED` ilan |
+|---|---|---|
+| Yeni başvuru (`applyToJob`) | **409** `job.application.job.not.open` | **409** aynı anahtar |
+| Mevcut başvuruya karar (`respondToApplication`) | **geçer** | **409** `job.application.job.cancelled` |
+
+Kapatma yalnızca yeni başvuruyu durdurur — `JobsController` bunu zaten böyle belgeliyordu ama **kod durdurmuyordu**, kapalı ilana başvuru hâlâ 201 dönüyordu. İptal ise kararın kendisini de durdurur: `cancelJob` canlı atama varken iptali reddediyor (§2ap) ama sıra tersine çevrilebiliyordu — önce iptal et, sonra bekleyen bir başvuruyu kabul et, iptal edilmiş ilan üzerinde canlı atama doğsun. Bu kapı onu kapatıyor ve `JobAssignment` hiç oluşmuyor.
+
+**Kural bugünkü gerçeğe göre yazıldı.** `JobStatus` beş değer taşıyor ama `src/main` yalnız `OPEN`, `CLOSED`, `CANCELLED` atıyor; `IN_PROGRESS` ve `COMPLETED` için dal açılmadı (§2ao2'deki aynı gerekçe).
+
+**Kabul edilen işçi tek bildirim alıyor.** Kabul dalı `assignmentOffered` **ve** `applicationAnswered` çağırıyordu; ikisi de aynı kişiye, aynı kategoride (`APPLICATION_UPDATES`), aynı transaction içinde. `notify` her çağrıda in-app + push + e-posta gönderdiği için kabul edilen işçi tek olay için **altı teslimat** alıyordu. Kabul dalında `assignmentOffered` kaldı (atama id'sini taşıdığı için tıklanabilir hedefi doğru), ret dalı `applicationAnswered` kullanmaya devam ediyor. Seçim `ApplicationDecisionRulesTest` ile sabit.
+
+**İstemciye görünen bir yan etki var: kabul bildiriminin tipi değişti.** Kabul dalı artık `applicationAnswered` çağırmadığı için akış kaydı `APPLICATION_ACCEPTED` yerine `ASSIGNMENT_OFFERED` tipiyle düşüyor ve `targetType` `JOB_APPLICATION` değil `JOB_ASSIGNMENT` oluyor. `ActivityMessages.APPLICATION_ACCEPTED` anahtarı kodda duruyor ama **üretimde artık ulaşılamıyor** — `applicationAnswered` yalnız ret dalından çağrılıyor. Bildirimi tipe göre ayrıştıran istemciler (mobil ve web) kabul olayını `ASSIGNMENT_OFFERED` altında beklemeli.
+
+**Adres ifşası bu kararın yan etkisi, ayrı bir yol değil.** Kabul `PENDING_CONFIRMATION` bir atama doğurur ve o an işçiye tam adres açılır (§2m). Yani kontenjan kapısı ve iptal kapısı aynı zamanda birer adres kapısıdır: reddedilen kabul hiçbir adresi açmaz. `ApplicationDecisionIT` bunu uçtan uca sabitliyor — `headcount = 2` ilanda kabul edilen **iki** işçinin ikisi de `GET /jobs/{jobId}` üzerinden tam adresi görüyor (ADR-0003 çoklu atamada da doğru), kontenjan dolu olduğu için reddedilen üçüncü kişi `APPROXIMATE` almaya devam ediyor.
 
 ## 2as. Asgari istemci sürümü kapısı
 
@@ -1513,7 +1556,7 @@ Bu sessiz bir tavandır ve **çarpma bir gün tutmaz**: #35 ile paket on context
 
 **Faz 11C testleri.** `WorkerToolsRulesTest` on yedi kural sabitliyor: deneyim sahipliği ve tarih tutarlılığı, müsaitlik aralıklarının toptan değişmesi ve çakışma reddi, geçmiş tarihe istisna yasağı, talent pool'da kendini ekleme yasağı ve idempotanlık, şablonun başkasının ilanından çıkarılamaması, kriteri olmayan alarmın reddi ve alarm sayısı sınırı. `UserProfileContractTest` deneyimin artık yapılandırılmış döndüğünü doğruluyor.
 
-**Kontenjan, ödenmemiş atama ve değerlendirme bildirimi testleri.** `JobHeadcountRulesTest` dört kural sabitliyor, hepsi bir **yokluğu** koruyor: kontenjansız ilan da işe alır, kontenjanın üstüne çıkmak engellenmez, kontenjan dolunca ilan kapanmaz, iş başladıktan sonra da işe alım yapılabilir. `UnpaidExpiryRulesTest` dokuz kural: ödenmemiş atama düşer, başarısız ödeme denemesi de düşer, emanetteki para dokunulmaz kalır, kabul edilmemiş teklife dokunulmaz, kayıt işveren tarafına sıfır tutarla yazılır, iki tarafa da bildirim gider, ikinci koşu zararsız, bir atamadaki hata partiyi düşürmez, kapalıyken hiç çalışmaz. Değerlendirme bildirimi `ReviewRulesTest` içinde: puan verildiğinde gider, reddedilen değerlendirmede hiç gitmez.
+**Kontenjan, ödenmemiş atama ve değerlendirme bildirimi testleri.** `JobHeadcountRulesTest` dokuz kural sabitliyor (§2ao2): kontenjansız ilan sınırsız işe alır ve sayım sorgusu hiç çalışmaz, son yer doldurulabilir, dolu ilan 409 verir ve başvuru `APPLIED` kalır, kontenjanın üstüne çıkmış ilan da reddeder, dolu ilan **reddetmeye** devam edebilir, kontenjan dolunca ilan kapanmaz, iş başladıktan sonra da işe alım yapılabilir, kabul yayınlanmış fiyatı atamaya kopyalar. `UnpaidExpiryRulesTest` dokuz kural: ödenmemiş atama düşer, başarısız ödeme denemesi de düşer, emanetteki para dokunulmaz kalır, kabul edilmemiş teklife dokunulmaz, kayıt işveren tarafına sıfır tutarla yazılır, iki tarafa da bildirim gider, ikinci koşu zararsız, bir atamadaki hata partiyi düşürmez, kapalıyken hiç çalışmaz. Değerlendirme bildirimi `ReviewRulesTest` içinde: puan verildiğinde gider, reddedilen değerlendirmede hiç gitmez.
 
 **Duvar saati kuran testler yapılandırılmış zaman dilimini kullanmak zorunda.** `Job.startDateTime` ve `endDateTime` duvar saati (§2h); `CancellationPolicy`, otomatik tamamlama ve ödenmemiş atama zamanlayıcısı bunları **`Europe/Istanbul` varsayarak** `Instant`'a çeviriyor. Test `LocalDateTime.now().plusHours(2)` yazarsa sonuç makinenin saat dilimine bağlı olur: geliştirme makinesi Istanbul'da yeşil, **CI runner'ı UTC'de kırmızı** — üç saat geriye kayan değer geçmişe düşüp cezasız pencereyi geç iptal cezasına çevirir. `CancellationPreviewTest` tam olarak böyle kırıldı.
 
@@ -1681,7 +1724,7 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 | Şirket logosu `PUT/DELETE /companies/{id}/logo` | §2ap |
 | Aday profili `GET /users/{userId}` | giriş ister, tam adres dönmez, `cvUrl` ilişkiye bağlı (§2ap) |
 | Bireysel ilanda sigorta alanı **olmayacak** | ürün kuralı, §2ap |
-| İlan formuna isteğe bağlı `headcount`, kartta `hiredCount`/`headcount` göstergesi | §2ao2 — sunucu kotayı zorlamaz, gösterge istemcide |
+| İlan formuna isteğe bağlı `headcount`, kartta `hiredCount`/`headcount` göstergesi; kontenjan dolu ilanda kabul artık 409 (`JOB_APPLICATION_JOB_HEADCOUNT_FULL`) | §2ao2 — sunucu kontenjanı zorluyor, gösterge yine istemcide |
 | Atama `CANCELLED` + iptal sebebi `{cancellation.payment.not.collected}` ise "ödeme yapılmadı" olarak göster | §2u2 |
 | Bildirim tercihleri ekranı: `GET/PUT /users/me/notification-preferences`; `editable=false` satırlar kapatılamaz | §2at |
 | Web'de `/bildirim-tercihleri/cikis?token=...` sayfası açılışta `POST /notification-preferences/unsubscribe` çağırmalı — giriş istemez | §2at |

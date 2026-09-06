@@ -21,6 +21,7 @@ import com.exskylab.koala.entities.ApplicationStatus;
 import com.exskylab.koala.entities.Job;
 import com.exskylab.koala.entities.JobApplication;
 import com.exskylab.koala.entities.JobEmployerType;
+import com.exskylab.koala.entities.JobStatus;
 import com.exskylab.koala.entities.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -75,6 +76,7 @@ class ApplicationWithdrawalTest {
         job.setTitle("Barista aranıyor");
         job.setCreator(employer);
         job.setEmployerType(JobEmployerType.INDIVIDUAL);
+        job.setStatus(JobStatus.OPEN);
         when(jobService.getById(job.getId())).thenReturn(job);
 
         when(securityService.getAuthenticatedUser()).thenReturn(applicant);

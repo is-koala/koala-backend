@@ -12,7 +12,6 @@ import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicantDto;
 import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationDto;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
-import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.mappers.JobApplicationMapper;
 import com.exskylab.koala.dataAccess.JobApplicationDao;
 import com.exskylab.koala.core.dtos.common.PageDto;
@@ -81,6 +80,11 @@ public class JobApplicationManager implements JobApplicationService {
     public JobApplicationDto applyToJob(UUID jobId, CreateJobApplicationDto jobsJobIdApplicationsPostRequestDto) {
         log.info("Applying to job with id: {}", jobId);
         var job = jobService.getById(jobId);
+
+        if (job.getStatus() != JobStatus.OPEN) {
+            log.info("Job {} is not open for applications, status: {}", jobId, job.getStatus());
+            throw new ConflictException(JobApplicationMessages.JOB_NOT_OPEN);
+        }
 
         User authenticatedUser = securityService.getAuthenticatedUser();
         log.info("Applying to job with id: {} for userId: {}", jobId, authenticatedUser.getId());
@@ -157,6 +161,14 @@ public class JobApplicationManager implements JobApplicationService {
             return new ResourceNotFoundException(JobApplicationMessages.JOB_APPLICATION_NOT_FOUND);
         });
 
+        assertCurrentUserIsEmployerOf(jobApplication.getJob());
+
+        boolean accepted = status == ApplicationStatus.ACCEPTED;
+
+        if (!accepted && status != ApplicationStatus.REJECTED) {
+            log.error("Invalid status transition attempted: {}", status);
+            throw new ValidationException(JobApplicationMessages.INVALID_STATUS_TRANSITION);
+        }
 
         if (jobApplication.getStatus() == ApplicationStatus.WITHDRAWN) {
             log.error("Job application with id: {} has been withdrawn by its applicant", applicationId);
@@ -165,17 +177,23 @@ public class JobApplicationManager implements JobApplicationService {
 
         if (jobApplication.getStatus() == ApplicationStatus.ACCEPTED || jobApplication.getStatus() == ApplicationStatus.REJECTED) {
             log.error("Job application with id: {} has already been responded to", applicationId);
-            throw new ValidationException(JobApplicationMessages.JOB_APPLICATION_ALREADY_RESPONDED);
+            throw new ConflictException(JobApplicationMessages.JOB_APPLICATION_ALREADY_RESPONDED);
         }
 
-        assertCurrentUserIsEmployerOf(jobApplication.getJob());
+        if (jobApplication.getJob().getStatus() == JobStatus.CANCELLED) {
+            log.error("Job application with id: {} belongs to a cancelled job", applicationId);
+            throw new ConflictException(JobApplicationMessages.JOB_CANCELLED);
+        }
 
+        if (accepted) {
+            assertOpeningAvailable(jobApplication.getJob());
+        }
 
         jobApplication.setStatus(status);
         jobApplication.setAnsweredDateTime(Instant.now());
         JobAssignment assignmentToReturn = null;
 
-        if (status.equals(ApplicationStatus.ACCEPTED)){
+        if (accepted) {
             JobAssignment jobAssignment = new JobAssignment();
             jobAssignment.setJob(jobApplication.getJob());
             jobAssignment.setWorker(jobApplication.getUser());
@@ -187,15 +205,9 @@ public class JobApplicationManager implements JobApplicationService {
             assignmentToReturn = jobAssignmentService.save(jobAssignment);
             log.info("Job application with id: {} accepted", applicationId);
 
-            activityNotificationService.assignmentOffered(assignmentToReturn);
-
-        }else if (status.equals(ApplicationStatus.REJECTED)){
+        } else {
             jobApplication.setRejectionReason(jobApplicationsApplicationIdPatchRequestDto.getRejectionReason());
             log.info("Job application with id: {} rejected", applicationId);
-
-        } else {
-            log.error("Invalid status transition attempted: {}", status);
-            throw new ValidationException(JobApplicationMessages.INVALID_STATUS_TRANSITION);
         }
 
         jobApplication.setAssignment(assignmentToReturn);
@@ -203,7 +215,11 @@ public class JobApplicationManager implements JobApplicationService {
         jobApplicationDao.save(jobApplication);
         log.info("Saved job application with id: {}", jobApplication.getId());
 
-        activityNotificationService.applicationAnswered(jobApplication);
+        if (accepted) {
+            activityNotificationService.assignmentOffered(assignmentToReturn);
+        } else {
+            activityNotificationService.applicationAnswered(jobApplication);
+        }
 
         return jobApplicationMapper.toJobApplicationsApplicationIdPatchResponseDto(jobApplication);
 
@@ -263,6 +279,19 @@ public class JobApplicationManager implements JobApplicationService {
         }
     }
 
+    private void assertOpeningAvailable(Job job) {
+        Integer headcount = job.getHeadcount();
+        if (headcount == null) {
+            return;
+        }
+
+        long occupied = jobAssignmentService.countOccupiedSlots(job.getId());
+        if (occupied >= headcount) {
+            log.error("Job {} is full: {} of {} openings taken", job.getId(), occupied, headcount);
+            throw new ConflictException(JobApplicationMessages.JOB_HEADCOUNT_FULL);
+        }
+    }
+
     private void assertCurrentUserIsEmployerOf(Job job) {
         User authenticatedUser = securityService.getAuthenticatedUser();
 
@@ -270,7 +299,7 @@ public class JobApplicationManager implements JobApplicationService {
             if (!companyContactService.isUserAContactOfCompany(job.getCompany().getId(), authenticatedUser.getId())) {
                 log.warn("User with id: {} is not a contact of company with id: {}",
                         authenticatedUser.getId(), job.getCompany().getId());
-                throw new ForbiddenException(JobApplicationMessages.USER_NOT_CONTACT_OF_COMPANY_TO_VIEW_APPLICATIONS);
+                throw new ResourceNotFoundException(JobApplicationMessages.JOB_APPLICATION_NOT_FOUND);
             }
             return;
         }
@@ -278,7 +307,7 @@ public class JobApplicationManager implements JobApplicationService {
         if (!job.getCreator().getId().equals(authenticatedUser.getId())) {
             log.warn("User with id: {} is not the creator of job with id: {}",
                     authenticatedUser.getId(), job.getId());
-            throw new ResourceNotFoundException(JobApplicationMessages.USER_NOT_CREATOR_OF_INDIVIDUAL_JOB_TO_VIEW_APPLICATIONS);
+            throw new ResourceNotFoundException(JobApplicationMessages.JOB_APPLICATION_NOT_FOUND);
         }
     }
 
