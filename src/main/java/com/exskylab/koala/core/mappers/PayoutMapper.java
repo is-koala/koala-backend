@@ -11,6 +11,7 @@ import java.util.List;
 public interface PayoutMapper {
 
     @Mapping(target = "jobAssignmentId", source = "jobAssignment.id")
+    @Mapping(target = "amount", expression = "java(payout.getAmount() == null ? null : payout.getAmount().toPlainString())")
     PayoutDto toPayoutDto(Payout payout);
 
     List<PayoutDto> toPayoutDtoList(List<Payout> payouts);
