@@ -5,11 +5,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -48,10 +46,8 @@ class ErrorContractIT extends AbstractIntegrationTest {
 
     @Test
     void aUserReachingAnAdminEndpointIsForbiddenNotAServerError() throws Exception {
-        MockMultipartFile image = new MockMultipartFile(
-                "image", "a.png", MediaType.IMAGE_PNG_VALUE, new byte[]{1, 2, 3});
-
-        mockMvc.perform(multipart("/images").file(image)
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/admin/users/" + java.util.UUID.randomUUID() + "/roles")
                         .with(user("worker").roles("USER")))
                 .andExpect(status().isForbidden());
     }

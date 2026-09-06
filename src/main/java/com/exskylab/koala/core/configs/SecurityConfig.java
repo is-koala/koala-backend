@@ -80,7 +80,7 @@ public class SecurityConfig {
                         .requestMatchers("/admin/**").hasRole("ADMIN")
 
                         //image endpoints
-                        .requestMatchers(HttpMethod.POST,"/images").hasAnyRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST,"/images").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.DELETE,"/images/{imageId}").hasAnyRole("USER", "ADMIN")
 
                         //notification endpoints
