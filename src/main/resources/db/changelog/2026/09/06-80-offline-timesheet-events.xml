@@ -8,11 +8,11 @@
     <changeSet id="2026-09-06-80-offline-timesheet-events" author="koala">
         <addColumn tableName="work_sessions">
             <column name="check_in_client_event_id" type="UUID"/>
-            <column name="check_in_captured_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="check_in_captured_at" type="VARCHAR(40)"/>
             <column name="check_in_received_at" type="TIMESTAMP WITH TIME ZONE"/>
             <column name="check_in_plausibility_flags" type="VARCHAR(255)"/>
             <column name="check_out_client_event_id" type="UUID"/>
-            <column name="check_out_captured_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="check_out_captured_at" type="VARCHAR(40)"/>
             <column name="check_out_received_at" type="TIMESTAMP WITH TIME ZONE"/>
             <column name="check_out_plausibility_flags" type="VARCHAR(255)"/>
         </addColumn>

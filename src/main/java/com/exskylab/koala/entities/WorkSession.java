@@ -39,7 +39,8 @@ public class WorkSession extends BaseEntity {
     @Column(name = "check_in_client_event_id")
     private UUID checkInClientEventId;
 
-    @Column(name = "check_in_captured_at")
+    @Convert(converter = RawInstantConverter.class)
+    @Column(name = "check_in_captured_at", length = 40)
     private Instant checkInCapturedAt;
 
     @Column(name = "check_in_received_at")
@@ -56,7 +57,8 @@ public class WorkSession extends BaseEntity {
     @Column(name = "check_out_client_event_id")
     private UUID checkOutClientEventId;
 
-    @Column(name = "check_out_captured_at")
+    @Convert(converter = RawInstantConverter.class)
+    @Column(name = "check_out_captured_at", length = 40)
     private Instant checkOutCapturedAt;
 
     @Column(name = "check_out_received_at")

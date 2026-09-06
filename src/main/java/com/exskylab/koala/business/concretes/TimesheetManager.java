@@ -24,7 +24,6 @@ import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
@@ -59,8 +58,7 @@ public class TimesheetManager implements TimesheetService {
     @Override
     @Transactional
     public WorkSession checkIn(UUID jobAssignmentId, CheckPointDto point) {
-        Instant receivedAt = normalizeTimestamp(clock.instant());
-        Instant capturedAt = normalizeTimestamp(point.getCapturedAt());
+        Instant receivedAt = clock.instant();
         JobAssignment assignment = requireWorker(jobAssignmentId);
         workSessionDao.lockAssignment(jobAssignmentId);
 
@@ -72,7 +70,7 @@ public class TimesheetManager implements TimesheetService {
                     .orElse(null);
             if (existing != null) {
                 requireMatchingPayload(existing.getCheckInCapturedAt(), existing.getCheckInLatitude(),
-                        existing.getCheckInLongitude(), capturedAt,
+                        existing.getCheckInLongitude(), point.getCapturedAt(),
                         normalizedLatitude, normalizedLongitude);
                 return existing;
             }
@@ -99,10 +97,10 @@ public class TimesheetManager implements TimesheetService {
         if (point.getClientEventId() == null) {
             session.setCheckInAt(receivedAt);
         } else {
-            TimesheetEventPolicy.Outcome outcome = eventPolicy.reconcile(capturedAt, receivedAt,
+            TimesheetEventPolicy.Outcome outcome = eventPolicy.reconcile(point.getCapturedAt(), receivedAt,
                     assignment.getJob().getStartDateTime(), assignment.getJob().getEndDateTime(), null);
             session.setCheckInClientEventId(point.getClientEventId());
-            session.setCheckInCapturedAt(capturedAt);
+            session.setCheckInCapturedAt(point.getCapturedAt());
             session.setCheckInReceivedAt(receivedAt);
             session.setCheckInAt(outcome.effectiveAt());
             session.setCheckInPlausibilityFlags(outcome.flags());
@@ -121,8 +119,7 @@ public class TimesheetManager implements TimesheetService {
     @Override
     @Transactional
     public WorkSession checkOut(UUID jobAssignmentId, CheckPointDto point) {
-        Instant receivedAt = normalizeTimestamp(clock.instant());
-        Instant capturedAt = normalizeTimestamp(point.getCapturedAt());
+        Instant receivedAt = clock.instant();
         JobAssignment assignment = requireWorker(jobAssignmentId);
         workSessionDao.lockAssignment(jobAssignmentId);
 
@@ -134,7 +131,7 @@ public class TimesheetManager implements TimesheetService {
                     .orElse(null);
             if (existing != null) {
                 requireMatchingPayload(existing.getCheckOutCapturedAt(), existing.getCheckOutLatitude(),
-                        existing.getCheckOutLongitude(), capturedAt,
+                        existing.getCheckOutLongitude(), point.getCapturedAt(),
                         normalizedLatitude, normalizedLongitude);
                 return existing;
             }
@@ -147,12 +144,12 @@ public class TimesheetManager implements TimesheetService {
         session.setCheckOutLatitude(point.getClientEventId() == null ? point.getLatitude() : normalizedLatitude);
         session.setCheckOutLongitude(point.getClientEventId() == null ? point.getLongitude() : normalizedLongitude);
         if (point.getClientEventId() != null) {
-            TimesheetEventPolicy.Outcome outcome = eventPolicy.reconcile(capturedAt, receivedAt,
+            TimesheetEventPolicy.Outcome outcome = eventPolicy.reconcile(point.getCapturedAt(), receivedAt,
                     assignment.getJob().getStartDateTime(), assignment.getJob().getEndDateTime(),
                     session.getCheckInAt());
             effectiveAt = outcome.effectiveAt();
             session.setCheckOutClientEventId(point.getClientEventId());
-            session.setCheckOutCapturedAt(capturedAt);
+            session.setCheckOutCapturedAt(point.getCapturedAt());
             session.setCheckOutReceivedAt(receivedAt);
             session.setCheckOutPlausibilityFlags(outcome.flags());
         }
@@ -208,10 +205,6 @@ public class TimesheetManager implements TimesheetService {
 
     private BigDecimal normalizeCoordinate(BigDecimal coordinate) {
         return coordinate == null ? null : coordinate.setScale(6, RoundingMode.HALF_UP);
-    }
-
-    private Instant normalizeTimestamp(Instant timestamp) {
-        return timestamp == null ? null : timestamp.truncatedTo(ChronoUnit.MICROS);
     }
 
     private void recalculateWorkHours(UUID jobAssignmentId) {

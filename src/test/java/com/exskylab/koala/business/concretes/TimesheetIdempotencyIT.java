@@ -14,7 +14,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
+import java.time.temporal.ChronoField;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -91,19 +91,34 @@ class TimesheetIdempotencyIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void retryWithNanosecondCapturedAtMatchesPostgresStoredPayload() {
+    void retryPreservesAndMatchesTheExactNanosecondCapturedAt() {
         UUID eventId = UUID.randomUUID();
-        Instant capturedAt = Instant.now().minusSeconds(60).with(java.time.temporal.ChronoField.NANO_OF_SECOND,
+        Instant capturedAt = Instant.now().minusSeconds(60).with(ChronoField.NANO_OF_SECOND,
                 123_456_789);
 
         WorkSession first = timesheetService.checkIn(assignmentId,
                 new CheckPointDto(new BigDecimal("41.015137"), new BigDecimal("28.979530"), eventId, capturedAt));
-        Instant storedCapturedAt = jdbcTemplate.queryForObject(
-                "select check_in_captured_at from work_sessions where id = ?", Instant.class, first.getId());
-        assertEquals(capturedAt.truncatedTo(ChronoUnit.MICROS), storedCapturedAt);
+        assertEquals(capturedAt, first.getCheckInCapturedAt());
         WorkSession retry = timesheetService.checkIn(assignmentId,
                 new CheckPointDto(new BigDecimal("41.015137"), new BigDecimal("28.979530"), eventId, capturedAt));
 
+        assertEquals(first.getId(), retry.getId());
+    }
+
+    @Test
+    void checkOutRetryPreservesAndMatchesTheExactNanosecondCapturedAt() {
+        Instant checkInCapturedAt = Instant.now().minusSeconds(120)
+                .with(ChronoField.NANO_OF_SECOND, 123_456_789);
+        timesheetService.checkIn(assignmentId,
+                new CheckPointDto(null, null, UUID.randomUUID(), checkInCapturedAt));
+
+        UUID checkOutEventId = UUID.randomUUID();
+        Instant checkOutCapturedAt = checkInCapturedAt.plusSeconds(60).plusNanos(1);
+        CheckPointDto checkOutPoint = new CheckPointDto(null, null, checkOutEventId, checkOutCapturedAt);
+        WorkSession first = timesheetService.checkOut(assignmentId, checkOutPoint);
+        WorkSession retry = timesheetService.checkOut(assignmentId, checkOutPoint);
+
+        assertEquals(checkOutCapturedAt, first.getCheckOutCapturedAt());
         assertEquals(first.getId(), retry.getId());
     }
 

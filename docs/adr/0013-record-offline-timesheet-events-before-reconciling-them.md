@@ -12,8 +12,7 @@ garantisi alır.
 
 Sunucu her yeni istemci olayında şu gerçekleri birbirinden ayırır:
 
-- `capturedAt`: cihazın bildirdiği ham an; PostgreSQL'in mikrosaniye
-  hassasiyetine normalize edilerek denetim kaydı olarak saklanır.
+- `capturedAt`: cihazın bildirdiği ham an; denetim kaydıdır ve değiştirilmez.
 - `receivedAt`: isteğin sunucuya ilk ulaştığı an.
 - `effectiveAt`: çalışma oturumuna ve dakika hesabına uygulanan an.
 - plausibility bayrakları: cihaz zamanının neden güvenilmediğini açıklar.
@@ -24,10 +23,11 @@ benzersizdir. Aynı kimlik ve aynı normalize payload tekrarlandığında ilk
 tekrarlandığında `409` döner. Aynı UUID'yi başka kullanıcı ya da atamada görmek
 ilk olayın varlığını açığa çıkarmaz.
 
-Zaman damgası normalizasyonu hem ilk kayıtta hem yeniden deneme karşılaştırmasında
-uygulanır. Böylece JSON'un taşıyabildiği nanosaniye hassasiyeti ile PostgreSQL
-`timestamptz` alanının mikrosaniye hassasiyeti arasındaki fark, aynı olayın yanlış
-biçimde farklı payload sayılmasına yol açmaz.
+PostgreSQL `timestamptz` alanı JSON'un taşıyabildiği nanosaniye hassasiyetini
+korumadığı için ham `capturedAt` değerleri ISO-8601 metni olarak saklanır ve
+entity sınırında `Instant`'a çevrilir. `receivedAt` ve hesapta kullanılan
+`effectiveAt` veritabanı zaman damgası olarak kalır. Böylece denetim değeri
+kayıpsızdır ve aynı olayın yeniden denemesi birebir payload ile karşılaştırılır.
 
 Atama başına işlemler PostgreSQL transaction advisory lock'u ile sıralanır.
 Böylece iki eşzamanlı check-in, farklı anahtarlarla bile iki açık oturum

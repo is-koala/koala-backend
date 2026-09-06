@@ -123,7 +123,7 @@ class TimesheetManagerOfflineEventTest {
                 .thenReturn(Optional.of(original));
 
         WorkSession result = manager.checkIn(assignment.getId(), point(
-                "41.0151374", "28.9795304", eventId, capturedAt.plusNanos(789)));
+                "41.0151374", "28.9795304", eventId, capturedAt));
 
         assertEquals(original, result);
         verify(workSessionDao, never()).save(any());
@@ -143,6 +143,19 @@ class TimesheetManagerOfflineEventTest {
     }
 
     @Test
+    void reusingACheckInIdentityWithDifferentNanosecondsIsRejected() {
+        UUID eventId = UUID.randomUUID();
+        Instant capturedAt = Instant.parse("2026-09-06T10:00:00.123456789Z");
+        WorkSession original = checkInEvent(eventId, capturedAt, null, null);
+        when(workSessionDao.findByJobAssignmentIdAndCheckInClientEventId(assignment.getId(), eventId))
+                .thenReturn(Optional.of(original));
+
+        assertThrows(ConflictException.class, () -> manager.checkIn(assignment.getId(),
+                point(null, null, eventId, capturedAt.plusNanos(1))));
+        verify(workSessionDao, never()).save(any());
+    }
+
+    @Test
     void retryingACheckOutFindsTheAlreadyClosedSession() {
         UUID eventId = UUID.randomUUID();
         Instant capturedAt = Instant.parse("2026-09-06T11:00:00Z");
@@ -156,7 +169,7 @@ class TimesheetManagerOfflineEventTest {
                 .thenReturn(Optional.of(closed));
 
         WorkSession result = manager.checkOut(assignment.getId(), point(
-                "41.015137", "28.979530", eventId, capturedAt.plusNanos(789)));
+                "41.015137", "28.979530", eventId, capturedAt));
 
         assertEquals(closed, result);
         verify(workSessionDao, never()).findByJobAssignmentIdAndCheckOutAtIsNull(any());
