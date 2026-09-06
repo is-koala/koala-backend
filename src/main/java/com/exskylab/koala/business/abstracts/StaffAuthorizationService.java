@@ -17,6 +17,8 @@ public interface StaffAuthorizationService {
 
     StaffAuthorization resolve(Collection<String> roleCodes);
 
+    List<StaffPermission> getPermissions();
+
     List<StaffRoleView> getRoles();
 
     StaffRoleView getRole(UUID roleId);

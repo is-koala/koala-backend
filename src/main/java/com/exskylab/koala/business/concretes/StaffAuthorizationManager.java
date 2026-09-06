@@ -5,6 +5,7 @@ import com.exskylab.koala.core.constants.StaffMessages;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
+import com.exskylab.koala.core.security.StaffAuditContext;
 import com.exskylab.koala.core.security.StaffAuthorization;
 import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.core.security.StaffRoleView;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -33,10 +35,15 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
 public class StaffAuthorizationManager implements StaffAuthorizationService {
+
+    private static final List<StaffPermission> CATALOGUE = Arrays.stream(StaffPermission.values())
+            .sorted(Comparator.comparing(StaffPermission::getCode))
+            .toList();
 
     private final StaffMemberDao staffMemberDao;
     private final StaffRoleDao staffRoleDao;
@@ -80,6 +87,11 @@ public class StaffAuthorizationManager implements StaffAuthorizationService {
         staffRoleDao.findAllById(closure).forEach(role -> roles.add(role.getCode()));
 
         return new StaffAuthorization(Set.copyOf(roles), permissionsOf(closure));
+    }
+
+    @Override
+    public List<StaffPermission> getPermissions() {
+        return CATALOGUE;
     }
 
     @Override
@@ -140,7 +152,7 @@ public class StaffAuthorizationManager implements StaffAuthorizationService {
         if (roleIds.isEmpty()) {
             return directOf;
         }
-        for (StaffRolePermission granted : staffRolePermissionDao.findAllWithRoleByRoleIdIn(roleIds)) {
+        for (StaffRolePermission granted : staffRolePermissionDao.findAllByRoleIdIn(roleIds)) {
             StaffPermission permission = StaffPermission.fromCode(granted.getPermissionCode()).orElse(null);
             if (permission == null) {
                 log.warn("staff_role_permissions içinde tanınmayan izin kodu, atlandı: {}",
@@ -215,10 +227,15 @@ public class StaffAuthorizationManager implements StaffAuthorizationService {
             return;
         }
 
+        String before = trailOf(role.getId());
+
         StaffRolePermission granted = new StaffRolePermission();
         granted.setRole(role);
         granted.setPermissionCode(permission.getCode());
         staffRolePermissionDao.save(granted);
+        staffRolePermissionDao.flush();
+
+        StaffAuditContext.capture(before, trailOf(role.getId()));
     }
 
     @Override
@@ -228,12 +245,14 @@ public class StaffAuthorizationManager implements StaffAuthorizationService {
         requireGrantable(held, permission);
 
         StaffRole role = roleById(roleId);
-        boolean managedRolesBefore = managesRoles(role.getId());
+        boolean managedRolesBefore = reachesRoleManagement(role.getId());
+        String before = trailOf(role.getId());
 
         staffRolePermissionDao.deleteByRoleIdAndPermissionCode(role.getId(), permission.getCode());
         staffRolePermissionDao.flush();
 
-        requireRoleManagementSurvives(actor, role, managedRolesBefore);
+        requireTheActorKeepsRoleManagement(actor, role, managedRolesBefore);
+        StaffAuditContext.capture(before, trailOf(role.getId()));
     }
 
     @Override
@@ -254,10 +273,15 @@ public class StaffAuthorizationManager implements StaffAuthorizationService {
             return;
         }
 
+        String before = trailOf(parent.getId());
+
         StaffRoleInclude include = new StaffRoleInclude();
         include.setParentRole(parent);
         include.setChildRole(child);
         staffRoleIncludeDao.save(include);
+        staffRoleIncludeDao.flush();
+
+        StaffAuditContext.capture(before, trailOf(parent.getId()));
     }
 
     @Override
@@ -270,24 +294,38 @@ public class StaffAuthorizationManager implements StaffAuthorizationService {
 
         permissionsOf(closureOf(Set.of(child.getId()))).forEach(permission -> requireGrantable(held, permission));
 
-        boolean managedRolesBefore = managesRoles(parent.getId());
+        boolean managedRolesBefore = reachesRoleManagement(parent.getId());
+        String before = trailOf(parent.getId());
 
         staffRoleIncludeDao.deleteByParentRoleIdAndChildRoleId(parent.getId(), child.getId());
         staffRoleIncludeDao.flush();
 
-        requireRoleManagementSurvives(actor, parent, managedRolesBefore);
+        requireTheActorKeepsRoleManagement(actor, parent, managedRolesBefore);
+        StaffAuditContext.capture(before, trailOf(parent.getId()));
     }
 
-    private boolean managesRoles(UUID roleId) {
+    private String trailOf(UUID roleId) {
+        String permissions = staffRolePermissionDao.findAllByRoleIdIn(Set.of(roleId)).stream()
+                .map(StaffRolePermission::getPermissionCode)
+                .sorted()
+                .collect(Collectors.joining(", "));
+        String includes = staffRoleIncludeDao.findAllWithRolesByParentRoleIdIn(Set.of(roleId)).stream()
+                .map(include -> include.getChildRole().getCode())
+                .sorted()
+                .collect(Collectors.joining(", "));
+        return "permissions=[" + permissions + "]; includes=[" + includes + "]";
+    }
+
+    private boolean reachesRoleManagement(UUID roleId) {
         return permissionsOf(closureOf(Set.of(roleId))).contains(StaffPermission.ROLE_MANAGE);
     }
 
-    private void requireRoleManagementSurvives(StaffPrincipal actor, StaffRole role, boolean managedRolesBefore) {
+    private void requireTheActorKeepsRoleManagement(StaffPrincipal actor, StaffRole role, boolean managedRolesBefore) {
         if (!managedRolesBefore || !actor.roles().contains(role.getCode())) {
             return;
         }
-        if (!managesRoles(role.getId())) {
-            throw new ConflictException(StaffMessages.ROLE_MANAGE_LAST_HOLDER);
+        if (!reachesRoleManagement(role.getId())) {
+            throw new ConflictException(StaffMessages.ROLE_MANAGE_SELF_LOCKOUT);
         }
     }
 

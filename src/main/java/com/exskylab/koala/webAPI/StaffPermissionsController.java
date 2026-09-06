@@ -1,5 +1,6 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.business.abstracts.StaffAuthorizationService;
 import com.exskylab.koala.core.constants.StaffMessages;
 import com.exskylab.koala.core.dtos.staff.response.StaffPermissionDto;
 import com.exskylab.koala.core.mappers.StaffPermissionMapper;
@@ -16,8 +17,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Arrays;
-import java.util.Comparator;
 import java.util.List;
 
 @Tag(name = "Personel izinleri", description = "Rollere verilebilecek izin kataloğu.")
@@ -25,9 +24,12 @@ import java.util.List;
 @RequestMapping("/admin/permissions")
 public class StaffPermissionsController {
 
+    private final StaffAuthorizationService staffAuthorizationService;
     private final StaffPermissionMapper staffPermissionMapper;
 
-    public StaffPermissionsController(StaffPermissionMapper staffPermissionMapper) {
+    public StaffPermissionsController(StaffAuthorizationService staffAuthorizationService,
+                                      StaffPermissionMapper staffPermissionMapper) {
+        this.staffAuthorizationService = staffAuthorizationService;
         this.staffPermissionMapper = staffPermissionMapper;
     }
 
@@ -40,12 +42,8 @@ public class StaffPermissionsController {
     @RequiresPermission(StaffPermission.ROLE_MANAGE)
     @GetMapping
     public ResponseEntity<SuccessDataResult<List<StaffPermissionDto>>> permissions() {
-        List<StaffPermission> catalogue = Arrays.stream(StaffPermission.values())
-                .sorted(Comparator.comparing(StaffPermission::getCode))
-                .toList();
-
         return ResponseEntity.ok(new SuccessDataResult<>(
-                staffPermissionMapper.toPermissionDtoList(catalogue),
+                staffPermissionMapper.toPermissionDtoList(staffAuthorizationService.getPermissions()),
                 StaffMessages.PERMISSIONS_LISTED, HttpStatus.OK));
     }
 }

@@ -16,6 +16,6 @@ public class StaffMessages {
     public static final String INCLUDED_ROLE_REQUIRED = "{staff.role.include.required}";
     public static final String ROLE_INCLUDED = "{staff.role.include.added}";
     public static final String ROLE_EXCLUDED = "{staff.role.include.removed}";
-    public static final String ROLE_MANAGE_LAST_HOLDER = "{staff.role.manage.last.holder}";
+    public static final String ROLE_MANAGE_SELF_LOCKOUT = "{staff.role.manage.self.lockout}";
     public static final String PERMISSIONS_LISTED = "{staff.permissions.listed}";
 }
