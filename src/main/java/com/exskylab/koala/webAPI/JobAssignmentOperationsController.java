@@ -151,12 +151,12 @@ public class JobAssignmentOperationsController {
     }
 
     @Operation(summary = "İşe giriş yap",
-            description = "Yalnızca işçinin kendisi yapabilir; işveren yalnızca okuyabilir. İlk giriş atamayı IN_PROGRESS durumuna taşır. Atama başına aynı anda tek açık oturum olur.")
+            description = "Yalnızca işçinin kendisi yapabilir; işveren yalnızca okuyabilir. İlk giriş atamayı IN_PROGRESS durumuna taşır. Atama başına aynı anda tek açık oturum olur. clientEventId ve capturedAt birlikte gönderildiğinde aynı normalize payload güvenle tekrar edilebilir; eski gövde geriye uyumludur.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Giriş kaydedildi"),
             @ApiResponse(responseCode = "404", description = "Atama bulunamadı ya da işçisi değilsiniz",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
-            @ApiResponse(responseCode = "409", description = "Zaten açık bir oturum var",
+            @ApiResponse(responseCode = "409", description = "Zaten açık bir oturum var ya da olay kimliği farklı payload ile kullanıldı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping("/{assignmentId}/check-in")
@@ -166,17 +166,17 @@ public class JobAssignmentOperationsController {
         CheckPointDto point = request == null ? new CheckPointDto() : request;
         return ResponseEntity.status(HttpStatus.CREATED).body(new SuccessDataResult<>(
                 timesheetMapper.toWorkSessionDto(
-                        timesheetService.checkIn(assignmentId, point.getLatitude(), point.getLongitude())),
+                        timesheetService.checkIn(assignmentId, point)),
                 TimesheetMessages.CHECKED_IN, HttpStatus.CREATED));
     }
 
     @Operation(summary = "İşten çıkış yap",
-            description = "Oturum kapanınca çalışılan dakika yazılır ve atamanın workHours alanı tüm oturumların toplamından türetilir.")
+            description = "Oturum kapanınca çalışılan dakika etkili olay zamanlarından hesaplanır ve atamanın workHours alanı tüm oturumların toplamından türetilir. clientEventId ile kapanmış bir oturum güvenle tekrar okunabilir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Çıkış kaydedildi"),
             @ApiResponse(responseCode = "404", description = "Atama bulunamadı ya da işçisi değilsiniz",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
-            @ApiResponse(responseCode = "409", description = "Açık oturum yok",
+            @ApiResponse(responseCode = "409", description = "Açık oturum yok ya da olay kimliği farklı payload ile kullanıldı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping("/{assignmentId}/check-out")
@@ -186,12 +186,12 @@ public class JobAssignmentOperationsController {
         CheckPointDto point = request == null ? new CheckPointDto() : request;
         return ResponseEntity.ok(new SuccessDataResult<>(
                 timesheetMapper.toWorkSessionDto(
-                        timesheetService.checkOut(assignmentId, point.getLatitude(), point.getLongitude())),
+                        timesheetService.checkOut(assignmentId, point)),
                 TimesheetMessages.CHECKED_OUT, HttpStatus.OK));
     }
 
     @Operation(summary = "Çalışma oturumları",
-            description = "Giriş ve çıkış çiftleri, varsa konum bilgisiyle.")
+            description = "Giriş ve çıkış çiftleri; varsa konum, ham cihaz zamanı, ilk alım zamanı ve plausibility bayraklarıyla.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Oturumlar listelendi"),
             @ApiResponse(responseCode = "404", description = "Atama bulunamadı ya da taraf değilsiniz",

@@ -6,8 +6,10 @@ import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.TimesheetService;
 import com.exskylab.koala.core.constants.JobAssignmentMessages;
 import com.exskylab.koala.core.constants.TimesheetMessages;
+import com.exskylab.koala.core.dtos.timesheet.request.CheckPointDto;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.core.helpers.Concealment;
+import com.exskylab.koala.core.helpers.TimesheetEventPolicy;
 import com.exskylab.koala.dataAccess.WorkSessionDao;
 import com.exskylab.koala.entities.PaymentStatus;
 import com.exskylab.koala.entities.AssignmentStatus;
@@ -19,10 +21,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -37,19 +41,40 @@ public class TimesheetManager implements TimesheetService {
     private final JobAssignmentService jobAssignmentService;
     private final SecurityService securityService;
     private final AssignmentParticipants participants;
+    private final TimesheetEventPolicy eventPolicy;
+    private final Clock clock;
 
     public TimesheetManager(WorkSessionDao workSessionDao, JobAssignmentService jobAssignmentService,
-                            SecurityService securityService, AssignmentParticipants participants) {
+                            SecurityService securityService, AssignmentParticipants participants,
+                            TimesheetEventPolicy eventPolicy, Clock clock) {
         this.workSessionDao = workSessionDao;
         this.jobAssignmentService = jobAssignmentService;
         this.securityService = securityService;
         this.participants = participants;
+        this.eventPolicy = eventPolicy;
+        this.clock = clock;
     }
 
     @Override
     @Transactional
-    public WorkSession checkIn(UUID jobAssignmentId, BigDecimal latitude, BigDecimal longitude) {
+    public WorkSession checkIn(UUID jobAssignmentId, CheckPointDto point) {
+        Instant receivedAt = toDatabaseTimestamp(clock.instant());
         JobAssignment assignment = requireWorker(jobAssignmentId);
+        workSessionDao.lockAssignment(jobAssignmentId);
+
+        BigDecimal normalizedLatitude = normalizeCoordinate(point.getLatitude());
+        BigDecimal normalizedLongitude = normalizeCoordinate(point.getLongitude());
+        if (point.getClientEventId() != null) {
+            WorkSession existing = workSessionDao
+                    .findByJobAssignmentIdAndCheckInClientEventId(jobAssignmentId, point.getClientEventId())
+                    .orElse(null);
+            if (existing != null) {
+                requireMatchingPayload(existing.getCheckInCapturedAt(), existing.getCheckInLatitude(),
+                        existing.getCheckInLongitude(), point.getCapturedAt(),
+                        normalizedLatitude, normalizedLongitude);
+                return existing;
+            }
+        }
 
         if (!OPEN_FOR_WORK.contains(assignment.getStatus())) {
             throw new ConflictException(TimesheetMessages.ASSIGNMENT_NOT_ACTIVE);
@@ -67,9 +92,19 @@ public class TimesheetManager implements TimesheetService {
 
         WorkSession session = new WorkSession();
         session.setJobAssignment(assignment);
-        session.setCheckInAt(Instant.now());
-        session.setCheckInLatitude(latitude);
-        session.setCheckInLongitude(longitude);
+        session.setCheckInLatitude(point.getClientEventId() == null ? point.getLatitude() : normalizedLatitude);
+        session.setCheckInLongitude(point.getClientEventId() == null ? point.getLongitude() : normalizedLongitude);
+        if (point.getClientEventId() == null) {
+            session.setCheckInAt(receivedAt);
+        } else {
+            TimesheetEventPolicy.Outcome outcome = eventPolicy.reconcile(point.getCapturedAt(), receivedAt,
+                    assignment.getJob().getStartDateTime(), assignment.getJob().getEndDateTime(), null);
+            session.setCheckInClientEventId(point.getClientEventId());
+            session.setCheckInCapturedAt(point.getCapturedAt());
+            session.setCheckInReceivedAt(receivedAt);
+            session.setCheckInAt(toDatabaseTimestamp(outcome.effectiveAt()));
+            session.setCheckInPlausibilityFlags(outcome.flags());
+        }
 
         if (assignment.getStatus() != AssignmentStatus.IN_PROGRESS) {
             assignment.setStatus(AssignmentStatus.IN_PROGRESS);
@@ -83,17 +118,43 @@ public class TimesheetManager implements TimesheetService {
 
     @Override
     @Transactional
-    public WorkSession checkOut(UUID jobAssignmentId, BigDecimal latitude, BigDecimal longitude) {
-        requireWorker(jobAssignmentId);
+    public WorkSession checkOut(UUID jobAssignmentId, CheckPointDto point) {
+        Instant receivedAt = toDatabaseTimestamp(clock.instant());
+        JobAssignment assignment = requireWorker(jobAssignmentId);
+        workSessionDao.lockAssignment(jobAssignmentId);
+
+        BigDecimal normalizedLatitude = normalizeCoordinate(point.getLatitude());
+        BigDecimal normalizedLongitude = normalizeCoordinate(point.getLongitude());
+        if (point.getClientEventId() != null) {
+            WorkSession existing = workSessionDao
+                    .findByJobAssignmentIdAndCheckOutClientEventId(jobAssignmentId, point.getClientEventId())
+                    .orElse(null);
+            if (existing != null) {
+                requireMatchingPayload(existing.getCheckOutCapturedAt(), existing.getCheckOutLatitude(),
+                        existing.getCheckOutLongitude(), point.getCapturedAt(),
+                        normalizedLatitude, normalizedLongitude);
+                return existing;
+            }
+        }
 
         WorkSession session = workSessionDao.findByJobAssignmentIdAndCheckOutAtIsNull(jobAssignmentId)
                 .orElseThrow(() -> new ConflictException(TimesheetMessages.NOT_CHECKED_IN));
 
-        Instant now = Instant.now();
-        session.setCheckOutAt(now);
-        session.setCheckOutLatitude(latitude);
-        session.setCheckOutLongitude(longitude);
-        session.setMinutes((int) Duration.between(session.getCheckInAt(), now).toMinutes());
+        Instant effectiveAt = receivedAt;
+        session.setCheckOutLatitude(point.getClientEventId() == null ? point.getLatitude() : normalizedLatitude);
+        session.setCheckOutLongitude(point.getClientEventId() == null ? point.getLongitude() : normalizedLongitude);
+        if (point.getClientEventId() != null) {
+            TimesheetEventPolicy.Outcome outcome = eventPolicy.reconcile(point.getCapturedAt(), receivedAt,
+                    assignment.getJob().getStartDateTime(), assignment.getJob().getEndDateTime(),
+                    session.getCheckInAt());
+            effectiveAt = toDatabaseTimestamp(outcome.effectiveAt());
+            session.setCheckOutClientEventId(point.getClientEventId());
+            session.setCheckOutCapturedAt(point.getCapturedAt());
+            session.setCheckOutReceivedAt(receivedAt);
+            session.setCheckOutPlausibilityFlags(outcome.flags());
+        }
+        session.setCheckOutAt(effectiveAt);
+        session.setMinutes((int) Duration.between(session.getCheckInAt(), effectiveAt).toMinutes());
 
         WorkSession saved = workSessionDao.save(session);
         recalculateWorkHours(jobAssignmentId);
@@ -126,6 +187,29 @@ public class TimesheetManager implements TimesheetService {
                     "not the worker of the assignment");
         }
         return assignment;
+    }
+
+    private void requireMatchingPayload(Instant storedCapturedAt, BigDecimal storedLatitude,
+                                        BigDecimal storedLongitude, Instant capturedAt,
+                                        BigDecimal latitude, BigDecimal longitude) {
+        if (!Objects.equals(storedCapturedAt, capturedAt)
+                || !coordinatesEqual(storedLatitude, latitude)
+                || !coordinatesEqual(storedLongitude, longitude)) {
+            throw new ConflictException(TimesheetMessages.IDEMPOTENCY_CONFLICT);
+        }
+    }
+
+    private boolean coordinatesEqual(BigDecimal first, BigDecimal second) {
+        return first == null ? second == null : second != null && first.compareTo(second) == 0;
+    }
+
+    private BigDecimal normalizeCoordinate(BigDecimal coordinate) {
+        return coordinate == null ? null : coordinate.setScale(6, RoundingMode.HALF_UP);
+    }
+
+    private Instant toDatabaseTimestamp(Instant instant) {
+        long roundedMicroseconds = (instant.getNano() + 500L) / 1_000L;
+        return Instant.ofEpochSecond(instant.getEpochSecond(), roundedMicroseconds * 1_000L);
     }
 
     private void recalculateWorkHours(UUID jobAssignmentId) {
