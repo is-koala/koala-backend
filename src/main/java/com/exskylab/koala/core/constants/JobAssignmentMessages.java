@@ -14,6 +14,7 @@ public class JobAssignmentMessages {
     public static final String USER_IS_NOT_A_CONTACT_OF_COMPANY = "{job.assignment.user.is.not.a.contact.of.company}";
     public static final String ASSIGNMENT_NOT_READY_FOR_PAYMENT = "{job.assignment.not.ready.for.payment}";
     public static final String IBAN_NOT_PROVIDED_FOR_WORKER = "{job.assignment.iban.not.provided.for.worker}";
+    public static final String IBAN_NOT_VERIFIED_FOR_WORKER = "{job.assignment.iban.not.verified.for.worker}";
     public static final String WORKER_IDENTITY_NOT_VERIFIED = "{job.assignment.worker.identity.not.verified}";
     public static final String ADDRESS_NOT_PROVIDED_FOR_WORKER = "{job.assignment.address.not.provided.for.worker}";
     public static final String ADDRESS_NOT_PROVIDED_FOR_EMPLOYER = "{job.assignment.address.not.provided.for.employer}";

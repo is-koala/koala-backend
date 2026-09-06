@@ -22,6 +22,7 @@ import com.exskylab.koala.business.abstracts.PricingService;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
 import com.exskylab.koala.core.helpers.AddressFormatter;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
+import com.exskylab.koala.core.helpers.BankAccountVerificationPolicy;
 import com.exskylab.koala.core.properties.AppProperties;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
@@ -406,8 +407,14 @@ public class JobAssignmentManager implements JobAssignmentService {
         }else {
             throw new ValidationException(JobAssignmentMessages.ADDRESS_NOT_PROVIDED_FOR_WORKER);
         }
-        merchantDto.setIban(bankAccountService.findPrimaryIban(worker.getId())
-                .orElseThrow(() -> new ValidationException(JobAssignmentMessages.IBAN_NOT_PROVIDED_FOR_WORKER)));
+        BankAccount workerAccount = bankAccountService.findPrimaryAccount(worker.getId())
+                .orElseThrow(() -> new ValidationException(JobAssignmentMessages.IBAN_NOT_PROVIDED_FOR_WORKER));
+        if (!BankAccountVerificationPolicy.isVerified(workerAccount)) {
+            log.warn("Sub merchant refused for worker {}: the bank account ownership is not proven.",
+                    worker.getId());
+            throw new ValidationException(JobAssignmentMessages.IBAN_NOT_VERIFIED_FOR_WORKER);
+        }
+        merchantDto.setIban(workerAccount.getIban());
         merchantDto.setSubMerchantType(SubMerchantType.PERSONAL);
         if (worker.isIdentityVerified()){
             merchantDto.setIdentityNumber(worker.getTcIdentityNumber());

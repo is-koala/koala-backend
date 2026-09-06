@@ -78,13 +78,21 @@ public class PayoutManager implements PayoutService {
             throw new ConflictException(DisputeMessages.BLOCKS_RELEASE);
         }
 
+        BankAccount destination = bankAccountService
+                .findVerifiedPrimaryAccount(assignment.getWorker().getId())
+                .orElseThrow(() -> {
+                    log.warn("Release refused on assignment {}: worker {} has not proven IBAN ownership.",
+                            jobAssignmentId, assignment.getWorker().getId());
+                    return new ConflictException(PayoutMessages.WORKER_IBAN_NOT_VERIFIED);
+                });
+
         Payment payment = settledPayment(jobAssignmentId);
 
         Payout payout = new Payout();
         payout.setJobAssignment(assignment);
         payout.setPayment(payment);
         payout.setWorker(assignment.getWorker());
-        payout.setBankAccount(bankAccountService.findPrimaryAccount(assignment.getWorker().getId()).orElse(null));
+        payout.setBankAccount(destination);
         payout.setAmount(assignment.getWorkerPayout());
         payout.setCurrency(CURRENCY);
         payout.setStatus(PayoutStatus.PENDING);
