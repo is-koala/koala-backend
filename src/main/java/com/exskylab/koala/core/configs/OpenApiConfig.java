@@ -93,7 +93,7 @@ public class OpenApiConfig {
                 addIfAbsent(responses, "403", "Bu işlem için yetki yok");
             }
 
-            addIfAbsent(responses, "500", "Beklenmeyen sunucu hatası; yanıtta yalnızca correlationId taşınır");
+            addIfAbsent(responses, "500", "Beklenmeyen sunucu hatası; yanıtta yalnızca requestId taşınır");
             return operation;
         };
     }
