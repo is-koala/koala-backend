@@ -40,8 +40,10 @@ class AccountMediaDeletionOutboxIT extends AbstractIntegrationTest {
         UUID requestId = UUID.randomUUID();
         String key = "cv/retry-me.pdf";
         jdbcTemplate.update("""
-                insert into users (id, first_name, username, email, is_employer, created_at, is_deleted)
-                values (?, 'Silinecek', ?, ?, false, now(), false)
+                insert into users
+                    (id, first_name, username, email, email_verified, phone_verified,
+                     identity_verified, is_employer, created_at, is_deleted)
+                values (?, 'Silinecek', ?, ?, false, false, false, false, now(), false)
                 """, userId, "delete-" + userId, "delete-" + userId + "@example.test");
         jdbcTemplate.update("""
                 insert into media

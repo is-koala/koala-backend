@@ -44,8 +44,10 @@ class LiquibaseMigrationIT extends AbstractIntegrationTest {
         UUID userId = UUID.randomUUID();
         UUID requestId = UUID.randomUUID();
         jdbcTemplate.update("""
-                insert into users (id, first_name, username, email, is_employer, created_at, is_deleted)
-                values (?, 'Eski Binary', ?, ?, false, now(), false)
+                insert into users
+                    (id, first_name, username, email, email_verified, phone_verified,
+                     identity_verified, is_employer, created_at, is_deleted)
+                values (?, 'Eski Binary', ?, ?, false, false, false, false, now(), false)
                 """, userId, "old-binary-" + userId, "old-binary-" + userId + "@example.test");
 
         jdbcTemplate.update("""

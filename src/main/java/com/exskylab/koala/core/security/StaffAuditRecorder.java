@@ -24,9 +24,11 @@ public class StaffAuditRecorder {
     private static final String USER_AGENT_HEADER = "User-Agent";
 
     private final StaffAuditService staffAuditService;
+    private final ClientIpResolver clientIpResolver;
 
-    public StaffAuditRecorder(StaffAuditService staffAuditService) {
+    public StaffAuditRecorder(StaffAuditService staffAuditService, ClientIpResolver clientIpResolver) {
         this.staffAuditService = staffAuditService;
+        this.clientIpResolver = clientIpResolver;
     }
 
     private record Actor(UUID id, String displayName) {
@@ -61,7 +63,7 @@ public class StaffAuditRecorder {
                 allowed,
                 mutating,
                 sensitivity,
-                ClientIpResolver.resolve(request),
+                clientIpResolver.resolve(request),
                 request.getHeader(USER_AGENT_HEADER));
 
         if (StaffAuditContext.pend(record)) {

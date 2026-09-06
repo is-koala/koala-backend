@@ -82,8 +82,10 @@ class AccountDeletionLifecycleIT extends AbstractIntegrationTest {
                         'DOC123', ?, ?, true, true, true, false, now(), false)
                 """, userId, "worker-" + userId, "worker-" + userId + "@example.test", addressId, mediaId);
         jdbcTemplate.update("""
-                insert into users (id, first_name, username, email, is_employer, created_at, is_deleted)
-                values (?, 'İşveren', ?, ?, true, now(), false)
+                insert into users
+                    (id, first_name, username, email, email_verified, phone_verified,
+                     identity_verified, is_employer, created_at, is_deleted)
+                values (?, 'İşveren', ?, ?, false, false, false, true, now(), false)
                 """, employerId, "employer-" + employerId, "employer-" + employerId + "@example.test");
         jdbcTemplate.update("update media set created_by_id = ? where id = ?", userId, mediaId);
         jdbcTemplate.update("""
@@ -314,9 +316,11 @@ class AccountDeletionLifecycleIT extends AbstractIntegrationTest {
         UUID blockedRequestId = UUID.randomUUID();
         UUID readyRequestId = UUID.randomUUID();
         jdbcTemplate.update("""
-                insert into users (id, first_name, username, email, is_employer, created_at, is_deleted)
-                values (?, 'Blokeli', ?, ?, false, now(), false),
-                       (?, 'Hazır', ?, ?, false, now(), false)
+                insert into users
+                    (id, first_name, username, email, email_verified, phone_verified,
+                     identity_verified, is_employer, created_at, is_deleted)
+                values (?, 'Blokeli', ?, ?, false, false, false, false, now(), false),
+                       (?, 'Hazır', ?, ?, false, false, false, false, now(), false)
                 """, blockedUserId, "blocked-" + blockedUserId,
                 "blocked-" + blockedUserId + "@example.test",
                 readyUserId, "ready-" + readyUserId, "ready-" + readyUserId + "@example.test");

@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.hamcrest.Matchers.hasSize;
@@ -112,6 +113,7 @@ class AdminAuditTrailIT extends AbstractStaffIntegrationTest {
         mockMvc.perform(put("/admin/settings/" + LATE_FEE_KEY)
                         .header("Authorization", "Bearer " + token)
                         .header("User-Agent", "koala-admin/1.0")
+                        .header("X-Forwarded-For", "198.51.100.9")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"value\":\"0.40\"}"))
                 .andExpect(status().isOk());
@@ -120,6 +122,8 @@ class AdminAuditTrailIT extends AbstractStaffIntegrationTest {
 
         assertEquals("{\"value\":\"0.40\"}", row.get("request_body"));
         assertEquals("koala-admin/1.0", row.get("user_agent"));
+        assertNotEquals("198.51.100.9", row.get("ip"),
+                "Untrusted peers cannot spoof the audit address with forwarding headers.");
         assertNotNull(row.get("ip"));
         assertNotNull(row.get("purge_after"));
     }
