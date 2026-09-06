@@ -8,8 +8,9 @@ import com.exskylab.koala.business.abstracts.BadgeService;
 import com.exskylab.koala.business.abstracts.CompanyContactService;
 import com.exskylab.koala.business.abstracts.ReviewService;
 import com.exskylab.koala.business.abstracts.SecurityService;
+import com.exskylab.koala.core.constants.JobAssignmentMessages;
 import com.exskylab.koala.core.constants.ReviewMessages;
-import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
+import com.exskylab.koala.core.helpers.Concealment;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.dataAccess.RatingSummaryDao;
 import com.exskylab.koala.dataAccess.ReviewDao;
@@ -70,12 +71,12 @@ public class ReviewManager implements ReviewService {
 
         JobAssignment assignment = jobAssignmentService.getDetailedById(jobAssignmentId);
 
+        UUID authorId = securityService.getAuthenticatedUserId();
+        User subject = resolveSubject(assignment, authorId);
+
         if (assignment.getStatus() != AssignmentStatus.COMPLETED) {
             throw new ConflictException(ReviewMessages.WORK_NOT_COMPLETED);
         }
-
-        UUID authorId = securityService.getAuthenticatedUserId();
-        User subject = resolveSubject(assignment, authorId);
 
         if (reviewDao.existsByJobAssignmentIdAndAuthorId(jobAssignmentId, authorId)) {
             throw new ConflictException(ReviewMessages.ALREADY_REVIEWED);
@@ -129,7 +130,8 @@ public class ReviewManager implements ReviewService {
             return worker;
         }
 
-        throw new ResourceNotFoundException(ReviewMessages.NOT_A_PARTICIPANT);
+        throw Concealment.notFound(JobAssignmentMessages.NOT_FOUND, authorId, assignment.getId(),
+                "not a participant of the assignment");
     }
 
     private void applyToSummary(User subject, int rating) {

@@ -183,6 +183,109 @@ Servis ve controller katmanı düz anahtar kullanır: `"{user.not.found}"`. Çö
 
 **İstemciye iç detay sızmaz.** Beklenmeyen hatalarda gövdeye sabit bir metin yazılır, exception yalnızca correlation ID ile loglanır.
 
+## 2d2. Var olma gizlemesi — eşitlenen şey yanıt, durum kodu değil
+
+Depo beş ayrı yerde bir kaynağın **var olduğunu** sızdırmamak için 403 yerine 404 döndürmeyi seçmişti (§2o,
+§2ab, §2p, §2ar2). Karar doğruydu ama **eksik uygulanmıştı**: `errorCode` mesaj anahtarından türüyor (§2d) ve
+hata zarfıyla istemciye gidiyor, yani aynı 404'ü farklı anahtarla döndüren iki dal hâlâ ayırt edilebiliyordu.
+UUID deneyen saldırgan "sana ait değil" anlamına gelen bir kod aldığında kaynağın **var olduğunu** öğreniyordu.
+
+**Neden bugüne kadar görülmedi: sıralama.** Gizleme kararları önce alındı, hata zarfının `errorCode` alanı
+Faz 19/19B'de eklendi. O ekleme daha önce kapatılmış her sızıntıyı sessizce yeniden açtı — doğru bir kararın
+sonradan eklenen bir mekanizmayla geçersiz kılınması, ve bunu hiçbir şeyin haber vermemesi (is-koala/koala-backend#77,
+#67'nin tekrar eden dersi).
+
+**Kural: gizleme yanıt düzeyindedir, durum kodu düzeyinde değil.** Eşitlenmesi gereken şey istemcinin
+görebildiği **her şey** — durum, `errorCode`, `message`, `errorCategory`, `resource`, `resourceId`.
+
+**Biçim tek yerde: `core/helpers/Concealment`.** `Concealment.notFound(anahtar, aktör, kaynakId, gerekçe)`
+gizlenen yanıtı üreten tek nokta; **kaynağın kendi "bulunamadı" anahtarını** taşıyan bir
+`ResourceNotFoundException` döndürür ve gerçek gerekçeyi `log.warn` ile yazar. Anahtar başarısız kontrolün
+değil eksik kaynağın adını taşır — `TIMESHEET_NOT_THE_WORKER` değil `JOB_ASSIGNMENT_NOT_FOUND`.
+
+**Ayrım sunucu logunda korunuyor.** Yardımcının tek işlevsel katkısı bu: anahtar birleştiği için operasyonun
+iki hâli ayırt edebilmesinin başka yolu kalmıyor. Değiştirilen dalların çoğunda önceden **hiç log satırı
+yoktu**; şimdi hepsinde var.
+
+| Uç | Gizlenen dal | Ortak anahtar |
+|---|---|---|
+| `GET/POST /conversations/{id}/messages`, `/read` | taraf değil | `messaging.conversation.not.found` |
+| `PUT/DELETE /users/me/educations/{id}` | başkasının kaydı | `education.not.found` |
+| `PUT/DELETE /users/me/experiences/{id}` | başkasının kaydı | `experience.not.found` |
+| `GET/DELETE /users/me/job-templates/{id}` | başkasının şablonu | `job.template.not.found` |
+| `POST /job-assignments/{id}/cancel`, `GET .../cancellation[-preview]` | taraf değil | `job.assignment.not.found` |
+| `POST /job-assignments/{id}/check-in`, `check-out` | işçisi değil | `job.assignment.not.found` |
+| `GET /job-assignments/{id}/work-sessions` | taraf değil | `job.assignment.not.found` |
+| `POST /job-assignments/{id}/complete` | işvereni değil | `job.assignment.not.found` |
+| `POST /job-assignments/{id}/reviews` | taraf değil | `job.assignment.not.found` |
+
+Kullanılmayan hâle gelen sekiz anahtar üç katalogdan da düşürüldü (`education.not.owner`,
+`experience.not.owner`, `job.template.not.owner`, `cancellation.not.a.participant`, `timesheet.not.the.worker`,
+`timesheet.not.a.participant`, `review.not.a.participant`, `job.assignment.only.employer.can.complete`) —
+duran bir anahtar sonradan yeniden çağrılabilir.
+
+**İstemciye görünen iki davranış değişikliği.** `check-in`/`check-out` uçlarında **işveren** artık 404
+alıyor: eskiden de 404 alıyordu ama `TIMESHEET_NOT_THE_WORKER` koduyla, şimdi `JOB_ASSIGNMENT_NOT_FOUND`.
+Aynısı `complete` ucunda **işçi** için geçerli. Kod bazlı dallanan istemci bunu güncellemeli;
+`JobAssignmentOperationsController`'daki `@ApiResponse` blokları koddaki gerçek davranışa hizalandı (iki uçtaki
+403 satırı kaldırıldı, `check-out`'un "açık oturum yok" satırı 404'ten 409'a çekildi — kod baştan beri
+`ConflictException` atıyordu).
+
+**Sıra da yanıtın parçası: yetkilendirme durum kontrolünden önce gelir (§2ar3).** İki yerde tersti ve durum
+eşitlense bile sızıntı sürüyordu: `completeAssignment` yabancıya önce `PAYMENT_NOT_SECURED` (**409**)
+döndürüyordu — hem atamanın var olduğunu hem ödeme durumunu söylüyordu; `leaveReview` de aynı şekilde
+`WORK_NOT_COMPLETED` (**409**) döndürüyordu. İkisinde de yetki kontrolü öne alındı.
+
+**`resource` / `resourceId` zaten eşitti — varsayılmadı, ölçüldü.** `RequestResourceResolver` ikisini de
+istek yolundan türetiyor (§2d), yani aynı uca giden iki istek aynı `resource`'u üretiyor ve `resourceId`
+istemcinin kendi gönderdiği id oluyor; bilgi taşımıyor. `ExistenceConcealmentIT` bunu her uçta doğruluyor.
+
+**STOMP yüzeyi zaten temizdi (§2ai).** `authoriseConversation` `findById(...).map(...).orElse(false)` yazıyor,
+yani var olmayan konuşma ile taraf olmadığın konuşma **aynı** `ForbiddenException(SUBSCRIPTION_NOT_ALLOWED)`
+dalına düşüyor: hem 403 hem `MESSAGING_SUBSCRIPTION_NOT_ALLOWED` ortak. Taranıp doğrulandı, değiştirilmedi.
+
+**İki yapısal koruma var ve neyi yakalayamadıkları yazılı.**
+
+`ExistenceConcealmentIT` **yanıtı** sabitliyor: dokuz uçta yabancı bir kullanıcı aynı isteği iki kez atıyor —
+rastgele bir UUID'ye ve gerçekten var olan ama başkasına ait bir kaynağa. İki yanıt gövdesi, istemcinin kendi
+gönderdiği id yer tutucuya çevrildikten ve istek başına zorunlu olarak değişen iki alan (`timeStamp`,
+`correlationId`) düşüldükten sonra **birebir aynı** olmak zorunda. Sekiz alanı birden sabitliyor, kırmızıya
+dönme biçimi de öğretici (düzeltme öncesi dokuzunun dokuzu kırmızıydı). **Yakalayamadığı:** listesinde
+olmayan uçlar ve sonradan eklenen uçlar.
+
+`ExistenceConcealmentRulesTest` **kaynak kodu** tarıyor ve testin göremediği yerleri kapatıyor: `business/concretes`
+altındaki hiçbir metot iki farklı 404 anahtarı döndüremez, `Concealment.notFound`'a verilen her anahtar
+`NOT_FOUND` ile biter, ve gizlenen yanıt tek yerde üretilir (yardımcıdaki `log.warn` kaldırılırsa da kırmızı).
+**Yakalayamadığı üç şey var, ve en önemlisi ikincisi:**
+
+1. Farklı kaynakları adlandıran meşru çift — `PayoutManager#releaseToWorker` atama ile payout kaydını ayrı ayrı
+   arıyor. Muafiyet listesinde, ve `everyExemptionStillDescribesARealMethodThatNamesTwoResources` liste
+   bayatlarsa kırmızıya dönüyor (§2ae'deki desenin aynısı).
+2. **Sınıflar arasına yayılan çift.** Yükleyici başka bir serviste, gizleyen dal manager'da olduğunda tarama
+   ikisini aynı metotta görmüyor — atama yüzeyinin tamamı böyle (`jobAssignmentService.getDetailedById` yükler,
+   manager gizler). O aile bugün yalnız `ExistenceConcealmentIT` ile korunuyor.
+3. Yanıtın exception dışı kanalları: sıralama, zamanlama farkı, gövde boyutu.
+
+**`DisputeManager` bilerek dokunulmadan bırakıldı ve sızıntı orada duruyor.** `openDispute` ile
+`getForAssignment` atamayı `getDetailedById` ile yüklüyor (`job.assignment.not.found`) ama taraf olmayana
+`dispute.not.a.participant` atıyor — yukarıdaki 2 numaralı boşluğun canlı örneği. Dosya eşzamanlı olarak
+is-koala/koala-backend#64 kapsamında değiştiriliyordu; iki dalın aynı satırlara dokunması yerine düzeltme o
+issue'ya ya da bir devama bırakıldı. Düzeltmesi tek satırlık: iki dal da `Concealment.notFound` ile
+`JobAssignmentMessages.NOT_FOUND` atmalı.
+
+**`GET /jobs/{jobId}/applications` de dışarıda bırakıldı, gerekçesi §2ar3'te yazılı.** O uç şirket ilanında
+hâlâ `ValidationException` (**400**) atıyor, yani bugün hiçbir şey gizlemiyor; 400'ü 404'e çekmek `koala-web`'in
+sözleşmesini kırabileceği için kendi issue'sunu bekliyor. Anahtarı eşitlemek durum kodu ayrışıkken tek başına
+işe yaramazdı.
+
+**Gizleme gerekmeyen iki yer tarandı ve bilerek olduğu gibi bırakıldı.** `MessagingManager.assertMayConverse`
+ve `JobTemplateManager.assertCanCopy` yabancıya ilanın kendi anahtarından farklı bir anahtar döndürüyor; ama
+ilan **herkese açık** bir kaynak (`GET /jobs/{jobId}` `permitAll`), yani orada gizlenecek bir varlık yok.
+`CompanyManager.requireCompanyMember`/`requireCompanyAdmin` ise saf `exists…` sorgusu olduğu için var olmayan
+şirket ile üyesi olmadığın şirketi zaten ayırt ettirmiyor (§2s2'deki liste ucuyla aynı gerekçe);
+`CvManager.assertCanDownload`, `AvailabilityManager`, `JobAlertManager`, `SessionManager`, `PaymentManager`,
+`GalleryManager`, `CompanyContactInvitationManager` ve `JobApplicationManager` taramada **zaten doğru** çıktı.
+
 ## 2e. Para
 
 **Para her yerde `BigDecimal`, ölçek 2.** `Job.salary` ve `JobAssignment` üzerindeki tüm tutarlar `NUMERIC(19,2)`. `double`/`Float` ile para tutmak yasak — `Float` 50.000 TL üzerinde kuruş garantisi vermiyordu.
@@ -488,7 +591,7 @@ Testlerde `rate-limit.enabled=false`; açıkça test eden sınıflar `@TestPrope
 
 **Mesajlaşmanın bir penceresi var.** İş bittikten `messaging.grace-days-after-job` (7) gün sonra sohbet **salt okunur** olur: geçmiş okunur, yeni mesaj gönderilemez (409). Amaç ilişkinin süresiz açık kalıp platform dışına taşınmasını önlemek. `endDateTime` olmayan ilanlarda pencere hiç kapanmaz. `ConversationDto.closed` bunu istemciye söyler; karşılaştırma duvar saati olduğu için `messaging.zone-id` üzerinden yapılır.
 
-**Konuşma açmak için arada bir başvuru olmalı.** `jobApplicationDao.existsByJobIdAndUserId` kontrolü var; rastgele bir kullanıcı yabancı bir ilan üzerinden mesaj başlatamıyor. Yalnızca iki taraf okuyup yazabiliyor — taraf olmayan **404** alıyor (403 değil; konuşmanın varlığını da sızdırmamak için).
+**Konuşma açmak için arada bir başvuru olmalı.** `jobApplicationDao.existsByJobIdAndUserId` kontrolü var; rastgele bir kullanıcı yabancı bir ilan üzerinden mesaj başlatamıyor. Yalnızca iki taraf okuyup yazabiliyor — taraf olmayan, var olmayan bir konuşmanın **yanıtının aynısını** alıyor: 404 ve aynı `messaging.conversation.not.found` anahtarı (§2d2). Durumu eşitlemek yetmez, `errorCode` de aynı olmak zorunda; ayrım yalnız sunucu logunda.
 
 **Engelleme iki yönlü çalışır.** `UserBlock` tek yönlü kayıt ama `assertNotBlocked` her iki yönü de kontrol ediyor: A B'yi engellediyse B de A'ya yazamıyor. Engelleme idempotent, kendini engellemek reddediliyor.
 
@@ -969,7 +1072,7 @@ on iki kuralla sabitliyor. Operasyon tarafı `docs/runbooks/payments.md`'de.
 
 İmzalı adresin ömrü `storage.signed-url-minutes` (varsayılan 3 dk). Yönlendirme uçları `StorageDownloadController`'da; tanınmayan önek 400 döner, yani depo anahtarı uydurup rastgele nesne çekilemez.
 
-**Özel dosyada kimlik doğrulaması yetmez, sahiplik de kontrol edilir.** `/uploads/files/**` `SecurityConfig`'te `hasAnyRole("USER","ADMIN")` — yani **giriş yapmış herkes**. Tek koruma anahtarın tahmin edilemez olmasıydı; §2ab'nin "tahmin edilemez URL yeterli koruma değildir" ilkesiyle çelişiyordu. `CvService.assertCanDownload` eklendi: `media.createdBy` istek atanla eşleşmiyorsa ve kişi ADMIN değilse **404** döner (403 değil — dosyanın varlığı da sızmasın diye). Görsellerde bu kontrol yok, olmamalı da; onlar zaten CDN'den herkese açık.
+**Özel dosyada kimlik doğrulaması yetmez, sahiplik de kontrol edilir.** `/uploads/files/**` `SecurityConfig`'te `hasAnyRole("USER","ADMIN")` — yani **giriş yapmış herkes**. Tek koruma anahtarın tahmin edilemez olmasıydı; §2ab'nin "tahmin edilemez URL yeterli koruma değildir" ilkesiyle çelişiyordu. `CvService.assertCanDownload` eklendi: `media.createdBy` istek atanla eşleşmiyorsa ve kişi ADMIN değilse var olmayan dosyanın **yanıtının aynısı** döner — 404 ve aynı `storage.file.not.found` anahtarı (§2d2). Dosyanın varlığı ne durum kodundan ne `errorCode`'dan sızar. Görsellerde bu kontrol yok, olmamalı da; onlar zaten CDN'den herkese açık.
 
 Yan kazanç: `Media` soft delete edildiğinde `@SQLRestriction` yüzünden `findByFileUrl` onu bulamıyor, yani **silinen özgeçmiş artık indirilemiyor.** Öncesinde satır silinse bile anahtarı bilen indirebiliyordu. Depodaki nesne hâlâ duruyor — kalıcı silme Faz 9B'ye bağlı.
 
@@ -1407,7 +1510,7 @@ Düzeltme is-koala/koala-backend#74'ün ilk iş maddesi: DG15 de SOD'a karşı h
 
 **İptal önizlemesi kayıt açmaz.** `GET /job-assignments/{id}/cancellation-preview` iptal *etmeden* kesintiyi döndürür: `feeRate`, `feeAmount`, `refundAmount`, `noticeMinutes`, `cancellableNow`. `CancellationPolicy` zaten saf bir hesap (§2p), yani yeni kural ya da tablo gerekmedi.
 
-**Uygun olmayan durumda 409 değil `cancellableNow: false` döner.** Önizleme bir karar değil, bir gösterge; istemci butonu buna bakarak kapatıyor ve hata yakalamak zorunda kalmıyor. Taraf olmayan yine **404** alır — `cancel` ile aynı, atamanın varlığı sızmasın diye.
+**Uygun olmayan durumda 409 değil `cancellableNow: false` döner.** Önizleme bir karar değil, bir gösterge; istemci butonu buna bakarak kapatıyor ve hata yakalamak zorunda kalmıyor. Taraf olmayan yine var olmayan atamanın **yanıtının aynısını** alır — `cancel` ile aynı: 404 ve aynı `job.assignment.not.found` anahtarı (§2d2).
 
 **Önizleme bağlayıcı değil.** Kutu açıkken cezasız pencere kapanırsa gösterilen tutar ile kesilen tutar farklı olabilir. Bunu kilitlemek için önizlemeye bir geçerlilik süresi ve iptalde doğrulama gerekirdi; fark saniyeler mertebesinde olduğu için yapılmadı.
 
@@ -1417,7 +1520,7 @@ Düzeltme is-koala/koala-backend#74'ün ilk iş maddesi: DG15 de SOD'a karşı h
 
 **Geri çekme bir durum değişikliğidir, soft delete değil.** `JobApplication` `@SQLDelete` + `@SQLRestriction` taşıyor (§8); geri çekme bunlara hiç dokunmaz, yalnızca `status`'ü `WITHDRAWN` yapar. Kayıt tabloda kalır, `is_deleted` `false` kalır, işverenin başvuru listesinde `WITHDRAWN` olarak görünmeye devam eder. `ApplicationWithdrawalIT` bunu gerçek Postgres'te satır sayısı ve `is_deleted` üzerinden doğruluyor — ikisi karıştırılırsa başvuru geçmişi sessizce kaybolurdu.
 
-**Yalnızca sahibi, yalnızca `APPLIED` durumundan.** Başkasının başvurusu **404** alır (403 değil — kaynağın varlığı sızmaz, §0b). `ACCEPTED` geri çekilemez: orada artık bir `JobAssignment` var ve iptalin kendi akışı, kendi ceza politikası işliyor (§2p). `ACCEPTED` / `REJECTED` / `WITHDRAWN` için **409**.
+**Yalnızca sahibi, yalnızca `APPLIED` durumundan.** Başkasının başvurusu, var olmayan bir başvurunun **yanıtının aynısını** alır: 404 ve aynı `job.application.not.found` anahtarı (§2d2, §0b). `ACCEPTED` geri çekilemez: orada artık bir `JobAssignment` var ve iptalin kendi akışı, kendi ceza politikası işliyor (§2p). `ACCEPTED` / `REJECTED` / `WITHDRAWN` için **409**.
 
 **Geri çekilmiş başvuru artık kabul edilemez.** `respondToApplication` `WITHDRAWN` durumunda `ConflictException` ile **409** döner ve bunun kendi anahtarı var (`job.application.already.withdrawn`); "zaten yanıtlanmış" mesajı burada yalan olurdu. Bu kapı olmadan geri çekme yalnızca bir etiket olurdu — işveren yine kabul eder, atama ve ödeme oturumu yine doğardı.
 
@@ -1830,6 +1933,8 @@ Birim testlerde `CommissionCalculator` artık `FallbackSettings.commissionCalcul
 **Davet kanalı testleri (§2s3).** `CompanyInvitationDeliveryTest` beş kural: davet edilen kişinin akışına `COMPANY_CONTACT_INVITATION` hedefi ve davetin kimliğiyle bir kayıt düşer, akış kaydı yazılamazsa ne davet ne e-posta kaybolur, davet e-postasının konusu dolu, kabul ve ret makbuzlarının ikisi de kendi konusunu taşır. `CompanyInvitationDeliveryIT` iki kural — uçtan uca: davet edilen kişi `GET /users/me/notifications` yanıtındaki `targetId` ile `GET /contact-invitations/{id}` çağırıp davetine ulaşır, ve hem e-posta hem akış kaydı `notifications.subject` sütununu dolu bırakır.
 
 **Yetkili daveti testleri (§2s2).** `CompanyContactInvitationRulesTest` yedi kural: şirket yöneticisi listeyi okur, üye olmayan okuyamaz, davet edilen/daveti gönderen/şirket yöneticisi tekil daveti okur, UUID'yi elinde tutan yabancı okuyamaz, yabancı davetin durumuna hiç bakılmadan reddedilir. `CompanyInvitationSendingRulesTest` beş kural: ilk davet gider, zaten yetkili olan kişi 409, bekleyen davet varken ikinci davet 409, cevaplanmış davet yeni daveti engellemez, yönetici olmayan davet edilecek kişinin durumuna hiç bakılmadan reddedilir. `CompanyContactInvitationAccessIT` sekiz kural — gerçek filtre zinciri üzerinden: yalnız `ROLE_USER` taşıyan şirket yöneticisi listeye 200 ile ulaşır, `STAFF` yetkilisi ve üye olmayan listeyi var olmayan bir şirketten ayırt edemez, üç taraf da daveti okur, yabancı ve `STAFF` daveti rastgele bir UUID'den ayırt edemez, başkasının davetini cevaplamak var olmayan daveti cevaplamakla aynı yanıtı verir, şirket yöneticisi daveti okuyabilir ama cevaplayamaz. Ayırt edilemezlik durum koduyla değil `errorCode` ile sabitleniyor.
+**Var olma gizlemesi testleri (§2d2).** `ExistenceConcealmentIT` dokuz uçta tek bir kuralı sabitliyor: yabancının var olmayan bir kaynağa aldığı yanıt ile başkasına ait gerçek bir kaynağa aldığı yanıt, istemcinin gönderdiği id yer tutucuya çevrildikten ve `timeStamp`/`correlationId` düşüldükten sonra **birebir aynı** — konuşma mesajları, iptal, iptal kaydı, iptal önizlemesi, puantaj, check-in, tamamlama, değerlendirme ve iş şablonu. `ExistenceConcealmentRulesTest` aynı kuralı kaynak kodda tarıyor, dört kural: hiçbir manager metodu iki farklı 404 anahtarı döndürmez, `Concealment.notFound`'a verilen her anahtar `NOT_FOUND` ile biter, gizlenen yanıt tek yerde ve log satırıyla birlikte üretilir, muafiyet listesi bayatlamaz. İkisinin de yakalayamadıkları §2d2'de yazılı.
+
 **`ApiConventionTest` yüzeyi yapısal olarak koruyor.** Kaynak kodu tarayıp §0b'deki altı kuralı doğruluyor: admin kuralı `/admin` dışında bir yol gösteremez, aynı fiil+yol iki handler'da olamaz, yol sondaki eğik çizgi taşıyamaz, DTO adı HTTP fiili içeremez, 32 karakteri aşamaz, `request`/`response` dışında duramaz. Yeni bir uç eklerken bedava koruma.
 
 **Faz 11A/11B testleri.** `AutoCompletionRulesTest` (vadesi geleni tamamlar ve emaneti çıkarır, açık uyuşmazlıkta durur, emanette para yoksa dokunmaz, ikinci koşu zararsız, bir atamadaki hata partiyi düşürmez) ve `SettlementRetryTest` (kuyruğa alma idempotan, geri çekilme üstel ve tavanlı, deneme limitinde durur, başarıda `Payout` `PROCESSING`'e geçer).

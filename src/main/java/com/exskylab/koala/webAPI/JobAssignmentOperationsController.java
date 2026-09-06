@@ -154,9 +154,7 @@ public class JobAssignmentOperationsController {
             description = "Yalnızca işçinin kendisi yapabilir; işveren yalnızca okuyabilir. İlk giriş atamayı IN_PROGRESS durumuna taşır. Atama başına aynı anda tek açık oturum olur.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Giriş kaydedildi"),
-            @ApiResponse(responseCode = "403", description = "Yalnızca işçi giriş yapabilir",
-                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
-            @ApiResponse(responseCode = "404", description = "Atama bulunamadı",
+            @ApiResponse(responseCode = "404", description = "Atama bulunamadı ya da işçisi değilsiniz",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "409", description = "Zaten açık bir oturum var",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
@@ -176,9 +174,9 @@ public class JobAssignmentOperationsController {
             description = "Oturum kapanınca çalışılan dakika yazılır ve atamanın workHours alanı tüm oturumların toplamından türetilir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Çıkış kaydedildi"),
-            @ApiResponse(responseCode = "403", description = "Yalnızca işçi çıkış yapabilir",
+            @ApiResponse(responseCode = "404", description = "Atama bulunamadı ya da işçisi değilsiniz",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
-            @ApiResponse(responseCode = "404", description = "Açık oturum yok",
+            @ApiResponse(responseCode = "409", description = "Açık oturum yok",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping("/{assignmentId}/check-out")

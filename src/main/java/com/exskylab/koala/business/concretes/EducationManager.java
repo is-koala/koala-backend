@@ -8,6 +8,7 @@ import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.EducationMessages;
 import com.exskylab.koala.core.dtos.education.request.SaveEducationDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
+import com.exskylab.koala.core.helpers.Concealment;
 import com.exskylab.koala.dataAccess.EducationDao;
 import com.exskylab.koala.entities.*;
 import org.springframework.stereotype.Service;
@@ -90,8 +91,10 @@ public class EducationManager implements EducationService {
         Education education = educationDao.findWithDetailsById(educationId)
                 .orElseThrow(() -> new ResourceNotFoundException(EducationMessages.NOT_FOUND));
 
-        if (!education.getUser().getId().equals(securityService.getAuthenticatedUserId())) {
-            throw new ResourceNotFoundException(EducationMessages.NOT_OWNER);
+        UUID actorId = securityService.getAuthenticatedUserId();
+        if (!education.getUser().getId().equals(actorId)) {
+            throw Concealment.notFound(EducationMessages.NOT_FOUND, actorId, educationId,
+                    "education belongs to another user");
         }
         return education;
     }

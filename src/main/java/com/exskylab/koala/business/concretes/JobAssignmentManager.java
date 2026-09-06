@@ -7,6 +7,7 @@ import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.constants.JobAssignmentMessages;
+import com.exskylab.koala.core.helpers.Concealment;
 import com.exskylab.koala.core.dtos.jobAssignment.request.AnswerAssignmentDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.PaymentSessionDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentDto;
@@ -414,15 +415,17 @@ public class JobAssignmentManager implements JobAssignmentService {
         JobAssignment assignment = jobAssignmentDao.findWithDetailsForPaymentById(assignmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(JobAssignmentMessages.NOT_FOUND));
 
+        UUID actorId = securityService.getAuthenticatedUserId();
+        if (participants.partyOf(assignment, actorId)
+                .filter(party -> party == CancellationParty.EMPLOYER).isEmpty()) {
+            throw Concealment.notFound(JobAssignmentMessages.NOT_FOUND, actorId, assignmentId,
+                    "not the employer of the assignment");
+        }
+
         if (assignment.getPaymentStatus() != PaymentStatus.HELD_IN_ESCROW) {
             log.warn("Completion refused on assignment {}: money is not in escrow, payment status is {}",
                     assignmentId, assignment.getPaymentStatus());
             throw new ConflictException(JobAssignmentMessages.PAYMENT_NOT_SECURED);
-        }
-
-        if (participants.partyOf(assignment, securityService.getAuthenticatedUserId())
-                .filter(party -> party == CancellationParty.EMPLOYER).isEmpty()) {
-            throw new ResourceNotFoundException(JobAssignmentMessages.ONLY_EMPLOYER_CAN_COMPLETE);
         }
 
         if (assignment.getStatus() != AssignmentStatus.CONFIRMED

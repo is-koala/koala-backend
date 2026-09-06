@@ -18,7 +18,6 @@ public class JobAssignmentMessages {
     public static final String ADDRESS_NOT_PROVIDED_FOR_WORKER = "{job.assignment.address.not.provided.for.worker}";
     public static final String ADDRESS_NOT_PROVIDED_FOR_EMPLOYER = "{job.assignment.address.not.provided.for.employer}";
     public static final String ADDRESS_NOT_PROVIDED_FOR_JOB = "{job.assignment.address.not.provided.for.job}";
-    public static final String ONLY_EMPLOYER_CAN_COMPLETE = "{job.assignment.only.employer.can.complete}";
     public static final String NOT_COMPLETABLE = "{job.assignment.not.completable}";
     public static final String COMPLETED = "{job.assignment.completed}";
 }

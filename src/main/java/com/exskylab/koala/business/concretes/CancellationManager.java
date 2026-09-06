@@ -7,9 +7,10 @@ import com.exskylab.koala.business.abstracts.CancellationService;
 import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.CancellationMessages;
+import com.exskylab.koala.core.constants.JobAssignmentMessages;
 import com.exskylab.koala.core.dtos.cancellation.response.CancellationPreviewDto;
-import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
+import com.exskylab.koala.core.helpers.Concealment;
 import com.exskylab.koala.core.helpers.CancellationPolicy;
 import com.exskylab.koala.dataAccess.CancellationDao;
 import com.exskylab.koala.entities.*;
@@ -65,7 +66,8 @@ public class CancellationManager implements CancellationService {
 
         UUID actorId = securityService.getAuthenticatedUserId();
         CancellationParty party = participants.partyOf(assignment, actorId)
-                .orElseThrow(() -> new ResourceNotFoundException(CancellationMessages.NOT_A_PARTICIPANT));
+                .orElseThrow(() -> Concealment.notFound(JobAssignmentMessages.NOT_FOUND, actorId, jobAssignmentId,
+                        "not a participant of the assignment"));
 
         if (!CANCELLABLE.contains(assignment.getStatus())) {
             throw new ConflictException(CancellationMessages.NOT_CANCELLABLE);
@@ -115,7 +117,8 @@ public class CancellationManager implements CancellationService {
 
         UUID actorId = securityService.getAuthenticatedUserId();
         CancellationParty party = participants.partyOf(assignment, actorId)
-                .orElseThrow(() -> new ResourceNotFoundException(CancellationMessages.NOT_A_PARTICIPANT));
+                .orElseThrow(() -> Concealment.notFound(JobAssignmentMessages.NOT_FOUND, actorId, jobAssignmentId,
+                        "not a participant of the assignment"));
 
         Duration notice = policy.noticeBefore(assignment.getJob().getStartDateTime(), Instant.now());
         boolean escrowHeld = assignment.getPaymentStatus() == PaymentStatus.HELD_IN_ESCROW;
@@ -174,8 +177,10 @@ public class CancellationManager implements CancellationService {
     public Optional<Cancellation> getForAssignment(UUID jobAssignmentId) {
         JobAssignment assignment = jobAssignmentService.getDetailedById(jobAssignmentId);
 
-        if (!participants.isParticipant(assignment, securityService.getAuthenticatedUserId())) {
-            throw new ResourceNotFoundException(CancellationMessages.NOT_A_PARTICIPANT);
+        UUID actorId = securityService.getAuthenticatedUserId();
+        if (!participants.isParticipant(assignment, actorId)) {
+            throw Concealment.notFound(JobAssignmentMessages.NOT_FOUND, actorId, jobAssignmentId,
+                    "not a participant of the assignment");
         }
 
         return cancellationDao.findByJobAssignmentId(jobAssignmentId);

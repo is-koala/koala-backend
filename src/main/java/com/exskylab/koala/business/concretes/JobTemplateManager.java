@@ -7,6 +7,7 @@ import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.JobTemplateMessages;
 import com.exskylab.koala.core.dtos.jobTemplate.request.CreateJobTemplateDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
+import com.exskylab.koala.core.helpers.Concealment;
 import com.exskylab.koala.dataAccess.JobTemplateDao;
 import com.exskylab.koala.entities.Job;
 import com.exskylab.koala.entities.JobTemplate;
@@ -79,8 +80,10 @@ public class JobTemplateManager implements JobTemplateService {
         JobTemplate template = jobTemplateDao.findWithDetailsById(templateId)
                 .orElseThrow(() -> new ResourceNotFoundException(JobTemplateMessages.NOT_FOUND));
 
-        if (!template.getOwner().getId().equals(securityService.getAuthenticatedUserId())) {
-            throw new ResourceNotFoundException(JobTemplateMessages.NOT_OWNER);
+        UUID actorId = securityService.getAuthenticatedUserId();
+        if (!template.getOwner().getId().equals(actorId)) {
+            throw Concealment.notFound(JobTemplateMessages.NOT_FOUND, actorId, templateId,
+                    "job template belongs to another user");
         }
         return template;
     }
