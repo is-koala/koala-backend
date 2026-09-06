@@ -1518,6 +1518,40 @@ dilimine ait (`docs/research/iys-commercial-message-integration.md`).
 
 **Para taşıyan metotlara anotasyon konmaz.** `PayoutService`/`PayoutManager` metotlarını otomatik tamamlama zamanlayıcısı boş bir `SecurityContext` ile çağırıyor; anotasyon konsaydı zamanlayıcı sessizce dururdu. Personel tarafı `StaffPayoutManager` facade'ından geçer: aktörü parametre olarak alır, izni denetler, sonra korumasız iç metodu çağırır. Aktör `null` ise istek köprü aşamasındaki marketplace `ROLE_ADMIN`'dendir.
 
+### `/admin/roles` — DAG'ın HTTP yüzeyi
+
+Kurallar (`grantPermission`, `revokePermission`, `includeRole`) #14 ile indi ama **çağıracak uç yoktu**: bir rolün ne yapabildiğini değiştirmek canlı veritabanına elle yazılan bir SQL cümlesiydi. Yedi uç bunu kapatıyor, hepsi `role.manage` ile korunuyor:
+
+| Uç | İzin | Denetim eylemi |
+|---|---|---|
+| `GET /admin/roles` | `role.manage` | — |
+| `GET /admin/roles/{roleId}` | `role.manage` | — |
+| `POST /admin/roles/{roleId}/permissions` | `role.manage` | `staff.role.permission.grant` |
+| `DELETE /admin/roles/{roleId}/permissions/{permission}` | `role.manage` | `staff.role.permission.revoke` |
+| `POST /admin/roles/{roleId}/includes` | `role.manage` | `staff.role.include.add` |
+| `DELETE /admin/roles/{roleId}/includes/{includedRoleId}` | `role.manage` | `staff.role.include.remove` |
+| `GET /admin/permissions` | `role.manage` | — |
+
+**Servis rol koduyla değil `UUID` ile anahtarlandı.** #14'ün metotları `String roleCode` alıyordu ve yalnız testlerden çağrılıyordu. Uç yolları §1 gereği `@PathVariable UUID` alıyor; koda göre ikinci bir yazma yüzeyi bırakmak aynı işi yapan iki imza demekti, o yüzden imzalar `UUID`'ye çevrildi ve `StaffRoleDao.findByCode` düştü. `resolve(...)` hâlâ kodla çalışıyor — token `realm_access.roles` içinde kod taşıyor, orada id yok.
+
+**Liste ucu DAG'ın tamamını tek istekte veriyor.** Her satır rolün kendi izinlerini **ve doğrudan kapsadığı rolleri** taşıyor; panel grafiği çizmek için rol başına ikinci bir istek atmıyor. Detay ucu buna ek olarak geçişli kapsananları (`effectiveRoles`) ve DAG aşağı çözülmüş etkili izinleri (`effectivePermissions`) veriyor.
+
+**Grafik tek seferde belleğe alınıp orada geziliyor.** `StaffAuthorizationManager.graph()` üç sorgu atıyor (roller, kenarlar, izinler) ve kapanışları bellekte hesaplıyor; rol başına `closureOf` çağırmak on rol için on ayrı tur demekti (§2af). Kenar sorgusu `@EntityGraph({"parentRole", "childRole"})` taşıyor — `childRole` lazy olduğu için kod ve ad okunurken kenar başına bir sorgu daha atılırdı. `resolve(...)`'ın kullandığı `findAllByParentRoleIdIn` graph'sız kaldı: orada yalnız id okunuyor, eager çekmek boşuna iş olurdu.
+
+**İzin kodu yol değişkeninde metin.** `/admin/settings/{key}` ile aynı biçim; §1'in "id'ler UUID" kuralı doğal anahtarı metin olan kaynakları kapsamıyor. Tanınmayan kod iki yerde reddediliyor: gövdede `GrantStaffPermissionDto`'nun `@AssertTrue`'su ile **400 + alan adı** (§2ah), yolda controller'ın `permissionOf` yardımcısıyla **404** — yol segmenti var olmayan bir alt kaynağı adlandırıyor. `StaffPermission`'a `@JsonValue`/`@JsonCreator` eklenmedi ve global bir `Converter` yazılmadı; ikisi de enum'un her yerdeki serileştirmesini değiştirirdi.
+
+**`GET /admin/permissions` issue'nun listesinde yoktu, bilinçli eklendi.** Panel "izin ekle" kutusunu doldurmak için kodların listesine ihtiyaç duyuyor; olmasaydı `StaffPermission` sabitlerini istemciye kopyalamak ve her yeni izinde panel sürümü çıkarmak gerekirdi. Katalog `mutating` ve `sensitivity` de veriyor — denetim kaydının okuduğu metadata (§2av) panelde de anlamlı: hangi iznin yazma yaptığı ve hangisinin kişisel veri/finans sınıfında olduğu görünüyor.
+
+**Kapsama kaldırma, kapsama eklemenin aynası.** `excludeRole` de aktörden kapsanan rolün **etkili izinlerinin tamamını** istiyor. Kaldırma yetkiyi daraltıyor, yani "sahip olmadığını veremezsin" gerekçesi doğrudan geçerli değil; ama görev ayrılığı (§2au) tersten de delinebilirdi — yalnız güven dalını taşıyan biri `OWNER`'dan finans dalını koparabilirdi. `role.manage` zaten yalnız `OWNER`'da olduğu için pratikte kısıtlayıcı değil, sınır ileriye dönük duruyor.
+
+**Son yetkilinin kendini kilitlemesi engelleniyor.** Kural tek cümle: **bir yazımdan sonra düzenlenen rol `role.manage`'i kaybettiyse ve aktör o role kendisi ulaşıyorsa, işlem 409 (`STAFF_ROLE_MANAGE_LAST_HOLDER`) ile reddedilir ve transaction geri alınır.** Hem izin geri almada hem kapsama kaldırmada uygulanıyor; ikisinde de karar **yazımdan sonra** veriliyor — kenar silindikten sonra rolün etkili izinleri canlı grafikten yeniden hesaplanıyor, yani kural kapsama kaldırmada da tam.
+
+Kural bir üst garantiyi de veriyor: **grafik son `role.manage` satırını hiçbir zaman kaybedemez.** `requireGrantable` aktörden `role.manage` istiyor, yani aktör her zaman o izne ulaşan bir role sahip; izni son taşıyan rolü düzenliyorsa kural ateşleniyor, düzenlemiyorsa grafikte hâlâ başka bir kaynak var. Ayrı bir "grafikte en az bir satır kalsın" kontrolü bu yüzden yazılmadı.
+
+**Rol *üyeliği* Koala'da bilinmiyor**, ADR-0010 gereği Keycloak'ta. Bu yüzden "sistemde kaç kişi `role.manage` taşıyor" sorusu buradan cevaplanamıyor ve kural aktörün kendi erişimi üzerinden ifade edildi — kilitlenmeyi engelleyen budur. Aktörün ulaşmadığı bir rolden `role.manage` alınabilir (`roleManagementMayStillBeRevokedFromARoleTheActorDoesNotHold`); kural fazladan kapatmıyor.
+
+**Rol yaratma/silme ucu açılmadı.** Roller `06-20-staff-authorization.xml` ile seed'leniyor ve `koala-admin/docs/keycloak-setup.md` §3'teki composite rollerle birebir eşleşmek zorunda; panelden yeni rol açmak Keycloak tarafında karşılığı olmayan bir rol üretirdi. Issue de rol listesini okuma olarak istiyor.
+
 ---
 
 ## 2av. Admin denetim kaydı — ikiye bölünmüş iz
@@ -1654,6 +1688,8 @@ Birim testlerde `CommissionCalculator` artık `FallbackSettings.commissionCalcul
 `AdminAuditTrailIT` on dokuz kural — gerçek HTTP üzerinden: izin verilen değişiklik aktör/izin/eylem/kayıt ile yazılır, detay gövde-IP-istemciyi taşır, `cancellation.late-fee-rate` artık iz bırakmadan değişmez, reddedilen istek `allowed = false` yazar, filtreli kullanıcı araması yazılır, filtresiz yükleme yazılmaz, sayfa çevirmek arama değildir, tek kayıt okuması yazılır, finansal satır 10 yıl normal satır 2 yıl saklanır, anonim istek tabloyu doldurmaz, köprü admini de denetlenir, denetim kaydını okumak yazılır ama kendi satırını döndürmez, ikinci okuma tek satır ekler, uç `audit.read` istiyor ve reddi de yazılıyor, çekirdek alanların hepsi dönüyor, detay silinince çekirdek dönmeye devam ediyor, beş süzgecin hepsi sunucuda daraltıyor, aktör süzgeci bir kişinin yaptıklarını buluyor, tanınmayan sıralama alanı 400 dönüyor.
 
 `AdminAuditStorageIT` bölünmeyi gerçek Postgres'te doğruluyor (çekirdek detay silinince kalır, cascade ters yönde çalışır, iki yarı kendi tarihini taşır); `AdminAuditRetentionIT` saklama ve KVKK silmesini (10 yıl / 24 ay / 6 ay damgaları, süresi dolan detay çekirdeği bırakır, süresi dolan çekirdek detayı götürür, penceredeki satıra dokunulmaz, silme talebi yalnız o kişinin detayını siler, ikinci silme zararsız). KVKK tetiği `LegalConsentTest` içinde: kabul edilen talep silme çağırır, engellenen talep hiçbir şey silmez.
+
+**Rol→izin yüzeyi testleri (§2au).** `StaffRoleAdministrationIT` on bir kural sabitliyor — gerçek HTTP ve gerçek Postgres üzerinden: liste her rolü kendi izinleri ve doğrudan kapsamalarıyla döndürür, detay `TRUST_LEAD → MODERATOR + DISPUTE_HANDLER → SUPPORT_AGENT` zincirini geçişli çözer, panelden verilen izin bir sonraki okumada görünür, geri alınan izin kaybolur, döngü yaratan kapsama **409** ile reddedilir, kaldırılan kapsama artık izin taşımaz, **son `role.manage` sahibi kendi rolünden o izni alamaz** ama ulaşmadığı bir rolden alabilir, `role.manage` taşımayan personel altı ucun hepsinden **403** alır, sahip olmadığı izni role ekleyemez ve satır hiç açılmaz, izin kataloğu her kodu `mutating`/`sensitivity` ile verir. `StaffAuthorizationIT` servis katmanındaki aynı kuralları `UUID` anahtarıyla korumaya devam ediyor.
 
 **`ApiConventionTest` yüzeyi yapısal olarak koruyor.** Kaynak kodu tarayıp §0b'deki altı kuralı doğruluyor: admin kuralı `/admin` dışında bir yol gösteremez, aynı fiil+yol iki handler'da olamaz, yol sondaki eğik çizgi taşıyamaz, DTO adı HTTP fiili içeremez, 32 karakteri aşamaz, `request`/`response` dışında duramaz. Yeni bir uç eklerken bedava koruma.
 
