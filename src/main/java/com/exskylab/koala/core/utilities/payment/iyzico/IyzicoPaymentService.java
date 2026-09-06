@@ -282,12 +282,13 @@ public class IyzicoPaymentService {
             status = e.getStatusCode();
             responseBody = e.getResponseBodyAsString();
         } catch (Exception e) {
-            log.error("iyzico: {} could not reach {}: {}", operation, url, e.getMessage());
+            log.error("iyzico: {} could not reach the provider ({})",
+                    operation, e.getClass().getSimpleName());
             throw new ExternalServiceException(PaymentMessages.PROVIDER_UNAVAILABLE);
         }
 
         if (responseBody == null || responseBody.isBlank()) {
-            log.error("iyzico: {} returned HTTP {} with an empty body from {}", operation, status, url);
+            log.error("iyzico: {} returned HTTP {} with an empty body", operation, status);
             throw new ExternalServiceException(PaymentMessages.PROVIDER_UNAVAILABLE);
         }
 
@@ -295,14 +296,16 @@ public class IyzicoPaymentService {
         try {
             root = objectMapper.readTree(responseBody);
         } catch (Exception e) {
-            log.error("iyzico: {} returned HTTP {} from {} with a body that is not JSON: {}",
-                    operation, status, url, abbreviate(responseBody));
+            log.error("iyzico: {} returned HTTP {} with a non-JSON body", operation, status);
             throw new ExternalServiceException(PaymentMessages.PROVIDER_UNAVAILABLE);
         }
 
         if (!"success".equals(root.path("status").asString())) {
-            log.error("iyzico: {} rejected with HTTP {}, errorCode={} errorMessage={}", operation, status,
-                    text(root, "errorCode"), text(root, "errorMessage"));
+            log.error("iyzico: {} failed with HTTP {}, errorCode={}", operation, status,
+                    text(root, "errorCode"));
+            if (status.is5xxServerError() || status.value() == 408 || status.value() == 429) {
+                throw new ExternalServiceException(PaymentMessages.PROVIDER_UNAVAILABLE);
+            }
             throw new ExternalServiceException(PaymentMessages.PROVIDER_REJECTED);
         }
 
@@ -320,11 +323,6 @@ public class IyzicoPaymentService {
             trimmed = trimmed.substring(0, trimmed.length() - 1);
         }
         return trimmed;
-    }
-
-    private static String abbreviate(String body) {
-        String flattened = body.replaceAll("\\s+", " ").trim();
-        return flattened.length() <= 500 ? flattened : flattened.substring(0, 500) + "…";
     }
 
     private HttpHeaders createIyzicoHeaders(String uriPath, String jsonBody, String randomKey) throws Exception {

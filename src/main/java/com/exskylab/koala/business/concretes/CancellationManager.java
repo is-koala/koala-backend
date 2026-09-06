@@ -148,7 +148,7 @@ public class CancellationManager implements CancellationService {
     @Override
     @Transactional
     public boolean expireUnpaidAssignment(UUID jobAssignmentId) {
-        JobAssignment assignment = jobAssignmentService.getDetailedById(jobAssignmentId);
+        JobAssignment assignment = jobAssignmentService.getDetailedByIdForUpdate(jobAssignmentId);
 
         if (assignment.getStatus() != AssignmentStatus.CONFIRMED
                 || assignment.getPaymentStatus() == PaymentStatus.HELD_IN_ESCROW

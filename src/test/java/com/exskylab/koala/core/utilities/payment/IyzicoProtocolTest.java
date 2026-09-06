@@ -1,5 +1,8 @@
 package com.exskylab.koala.core.utilities.payment;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.exskylab.koala.core.exceptions.ExternalServiceException;
 import com.exskylab.koala.core.properties.IyzicoProperties;
 import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoEndpoints;
@@ -26,6 +29,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Locale;
+import java.util.stream.Collectors;
+
+import org.slf4j.LoggerFactory;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.*;
@@ -318,6 +324,49 @@ class IyzicoProtocolTest {
                                 """));
 
         assertThrows(ExternalServiceException.class, () -> service.retrieveCheckoutFormResult(retrieveRequest()));
+    }
+
+    @Test
+    void aFiveHundredResponseRemainsAmbiguousInsteadOfBecomingAProviderRejection() {
+        server.expect(requestTo(BASE_URL + IyzicoEndpoints.CHECKOUT_FORM_INITIALIZE))
+                .andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("""
+                                {"status":"failure","errorCode":"50000","errorMessage":"Temporary error"}
+                                """));
+
+        ExternalServiceException thrown = assertThrows(ExternalServiceException.class,
+                () -> service.initiateCheckoutFormPayment(initializeRequest()));
+
+        assertEquals("PAYMENT_PROVIDER_UNAVAILABLE", thrown.getErrorCode());
+    }
+
+    @Test
+    void providerResponseDetailsNeverReachApplicationLogs() {
+        String sensitiveProviderDetail = "TCKN-10000000146-IBAN-TR000000000000000000000001";
+        Logger logger = (Logger) LoggerFactory.getLogger(IyzicoPaymentService.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            server.expect(requestTo(BASE_URL + IyzicoEndpoints.CHECKOUT_FORM_RETRIEVE))
+                    .andRespond(withStatus(HttpStatus.BAD_REQUEST)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .body("""
+                                    {"status":"failure","errorCode":"1000","errorMessage":"%s"}
+                                    """.formatted(sensitiveProviderDetail)));
+
+            assertThrows(ExternalServiceException.class,
+                    () -> service.retrieveCheckoutFormResult(retrieveRequest()));
+
+            String logs = appender.list.stream()
+                    .map(ILoggingEvent::getFormattedMessage)
+                    .collect(Collectors.joining("\n"));
+            assertFalse(logs.contains(sensitiveProviderDetail));
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
     }
 
     @Test

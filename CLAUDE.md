@@ -1184,11 +1184,11 @@ Bedeli açıkça yazılı olsun: **Checkout Form bir gün 3DS'siz bir ödeme ge�
 
 **Bir çelişki not edilmeli.** CF sorgulama yanıtının OpenAPI şeması (`/odeme-metotlari/odeme-formu/cf-entegrasyonu/cf-sorgulama`) `mdStatus`'u **saymıyor**; ama aynı doküman setindeki CF örnek yanıtı (`.../cf-ornek-entegrasyon`) `"mdStatus": 1` içeriyor ve resmî `iyzipay-java` SDK'sında `CheckoutForm`, `PaymentResource`'tan `getMdStatus()`'u miras alıyor. İkisi de iyzico. Alanın geleceğini varsayıyoruz ama şema garanti etmediği için okuma null'a dayanıklı ve karar fail-closed.
 
-**Kapı dolandırıcılık dalından önce.** `mdStatus != 1` ve `fraudStatus == 0` birlikte gelirse ödeme `IN_REVIEW`'da beklemez, `FAILED` olur: `IN_REVIEW`'dan çıkış zaten otomatik değil ve doğrulanmamış bir işlemi "belki sonra onaylanır" diye tutmanın anlamı yok.
+**Kapı dolandırıcılık dalından önce.** `mdStatus != 1` ve `fraudStatus == 0` birlikte gelirse ödeme `IN_REVIEW`'a geçmez, `VERIFY_PENDING` kalır. Tahsilat ihtimali dışlanamadığı için bu durum terminal yapılmaz; aktif deneme yeni checkout'u engeller ve bounded reconciliation aynı imzalı sonucu yeniden kontrol eder.
 
 **Ret sebebi mesaj anahtarı, ham değer değil.** `payments.failure_reason` istemciye `GET /job-assignments/{id}/payments` ile aynen dönüyor (`PaymentAttemptDto`), yani sağlayıcı detayı için uygun bir yer değil. Kayda `{payment.3ds.verification.failed}` yazılıyor; sayısal `mdStatus` yalnız log satırında (`Payment {} rejected: 3-D Secure verification did not succeed, mdStatus={}`). Operatör için korelasyon yine `conversation_id`.
 
-**Reddedilen deneme sıradan bir başarısız denemedir.** `payments.status = FAILED`, `completed_at` damgalı, atama `PENDING_COLLECTION`/`FAILED` → `FAILED`; emanet açılmaz, atamaya kırılım yazılmaz, `JobAssignmentDao`'ya hiç dokunulmaz. İşveren yeniden deneyebilir. Zaten `SUCCEEDED` olan ödemede idempotanlık kısa devresi önce çalıştığı için ikinci callback sağlayıcıya hiç gitmez (§2k); reddedilen denemede ise kısa devre yok, tekrar sorulur ve sonuç yine `FAILED` olur.
+**3DS doğrulaması olmayan deneme terminal değildir.** `payments.status = VERIFY_PENDING`, `completed_at = null`; emanet açılmaz ve atamaya kırılım yazılmaz. Tahsilat ihtimali dışlanamadığı için işveren yeni checkout açamaz. Bounded reconciliation aynı imzalı sonucu yeniden kontrol eder, tavan dolunca satır manuel inceleme için aktif ve zamanlanmamış kalır. `SUCCEEDED` ve `FAILED` denemeler terminaldir; tekrar callback geldiğinde sağlayıcıya gidilmeden aynı sonuç döner (§2k).
 
 **Sandbox'ta doğrulanmadı.** `4131111111111117` ile gerçek bir sandbox işlemi yapılmadı; kural iyzico dokümantasyonuna ve sahte sağlayıcı yanıtlarına karşı sabitlendi (`PaymentCallbackTest`, `IyzicoProtocolTest`).
 
@@ -1202,9 +1202,9 @@ Artık `PayoutManager` sağlayıcıyı hiç çağırmıyor; `SettlementService.e
 
 **Üstel geri çekilme, tavanlı.** `initial-backoff` (1 dk) her denemede ikiye katlanır, `max-backoff` (6 saat) ile sınırlanır. `max-attempts` (8) aşılınca görev `FAILED`'a düşer ve **sessizce durur** — sonsuza kadar sağlayıcıyı dövmez. `FAILED` görevler elle incelenmek üzere tabloda kalır.
 
-**`Payout` ve `Refund` durumunu sağlayıcı yanıtı belirler.** Release anında `Payout` `PENDING` yazılır, görev başarılı olduğunda `PROCESSING`'e geçer. İade tarafında `DISAPPROVE` görevi başarılı olduğunda `Refund` `COMPLETED` olur ve `completedAt` damgalanır. **Görev deneme limitini aştığında ilgili kayıt `FAILED` işaretlenir.**
+**`Payout` ve `Refund` durumunu sağlayıcı akışı belirler.** Release anında `Payout` `PENDING` yazılır, görev başarılı olduğunda `PROCESSING`'e geçer. İade `PENDING` (talep edildi) başlar; scheduler provider çağrısından hemen önce `RefundProgressManager` ile ayrı bir transaction'da `PROCESSING` (işleniyor) yapar. `REFUND` görevi başarılı olduğunda `Refund` `COMPLETED` olur ve `completedAt` damgalanır. **Görev deneme limitini aştığında ilgili kayıt `FAILED` işaretlenir.**
 
-Bir süre bu yarım kaldı: `markPayoutProcessing` yalnızca `APPROVE` için çalışıyordu, `Refund` sonsuza kadar `PENDING`'de duruyordu ve görev `FAILED`'a düştüğünde `Payout` `PROCESSING`'de kalıyordu. Yani operatör "yolda", "ulaştı" ve "kalıcı olarak başarısız" hâllerini ayırt edemiyordu.
+İade tarafındaki ayrı `PROCESSING` commit'i kullanıcı sözleşmesindeki “talep edildi → işleniyor → iade edildi” ayrımını gerçekten gözlenebilir kılar. Uygulama provider çağrısı sırasında kapanırsa refund `PROCESSING`, settlement görevi `PENDING` kalabilir; kalıcı görev aynı çağrıyı retry eder, tavan dolarsa `FAILED` ile kapanır.
 
 **`PayoutStatus.COMPLETED` bilerek kullanılmıyor.** Sağlayıcı `approve` çağrısı yalnızca talimatın kabul edildiğini söyler; paranın işçinin banka hesabına geçtiğini söyleyen bir geri bildirim yok. O geçiş Iyzico ödeme raporuyla mutabakat gerektiriyor, Faz 11B'nin kalan parçası.
 

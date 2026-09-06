@@ -73,6 +73,7 @@ class UnpaidExpiryRulesTest {
         a.setPaymentStatus(paymentStatus);
 
         when(jobAssignmentService.getDetailedById(a.getId())).thenReturn(a);
+        when(jobAssignmentService.getDetailedByIdForUpdate(a.getId())).thenReturn(a);
         return a;
     }
 
@@ -83,6 +84,8 @@ class UnpaidExpiryRulesTest {
         assertTrue(manager.expireUnpaidAssignment(a.getId()));
         assertEquals(AssignmentStatus.CANCELLED, a.getStatus());
         verify(cancellationDao).save(any(Cancellation.class));
+        verify(jobAssignmentService).getDetailedByIdForUpdate(a.getId());
+        verify(jobAssignmentService, never()).getDetailedById(a.getId());
     }
 
     @Test

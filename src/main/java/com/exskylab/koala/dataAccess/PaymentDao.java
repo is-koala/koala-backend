@@ -20,6 +20,12 @@ import java.util.UUID;
 @Repository
 public interface PaymentDao extends JpaRepository<Payment, UUID> {
 
+    @Query("select p.jobAssignment.id from Payment p where p.providerToken = :providerToken")
+    Optional<UUID> findJobAssignmentIdByProviderToken(@Param("providerToken") String providerToken);
+
+    @Query("select p.jobAssignment.id from Payment p where p.id = :id")
+    Optional<UUID> findJobAssignmentIdById(@Param("id") UUID id);
+
     @EntityGraph(attributePaths = {"jobAssignment", "jobAssignment.worker", "jobAssignment.job"})
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<Payment> findByProviderToken(String providerToken);

@@ -79,6 +79,9 @@ class PaymentCallbackTest {
         payment.setCommissionAmount(new BigDecimal("75.00"));
         payment.setCommissionRate(new BigDecimal("0.075"));
         payment.setTotalCharged(new BigDecimal("1075.00"));
+        when(paymentDao.findJobAssignmentIdByProviderToken(TOKEN)).thenReturn(Optional.of(ASSIGNMENT_ID));
+        when(paymentDao.findJobAssignmentIdById(payment.getId())).thenReturn(Optional.of(ASSIGNMENT_ID));
+        when(jobAssignmentDao.findByIdForUpdate(ASSIGNMENT_ID)).thenReturn(Optional.of(assignment));
         return payment;
     }
 
@@ -123,6 +126,7 @@ class PaymentCallbackTest {
         assertEquals(new BigDecimal("1000.00"), assignment.getFinalPayout());
         assertEquals(new BigDecimal("0.075"), assignment.getCommissionRate());
         assertEquals(new BigDecimal("1075.00"), assignment.getTotalCharged());
+        verify(jobAssignmentDao).findByIdForUpdate(ASSIGNMENT_ID);
     }
 
     @Test
@@ -232,6 +236,9 @@ class PaymentCallbackTest {
         assignment.setId(UUID.randomUUID());
         assignment.setPricingVersion("2026-09-v1");
         assignment.setCurrency("TRY");
+        assignment.setStatus(AssignmentStatus.CONFIRMED);
+        assignment.setPaymentStatus(PaymentStatus.PENDING_COLLECTION);
+        when(jobAssignmentDao.findByIdForUpdate(assignment.getId())).thenReturn(Optional.of(assignment));
         CommissionCalculator calculator = FallbackSettings.commissionCalculator();
         var breakdown = calculator.calculate(new BigDecimal("1000.00"));
 
@@ -258,6 +265,34 @@ class PaymentCallbackTest {
 
         assertEquals(PaymentAttemptStatus.FAILED, result.getStatus());
         assertEquals(PaymentStatus.FAILED, result.getJobAssignment().getPaymentStatus());
+    }
+
+    @Test
+    void aTerminallyFailedAttemptCannotLaterOpenEscrow() {
+        Payment payment = pendingPayment();
+        payment.setStatus(PaymentAttemptStatus.FAILED);
+        payment.getJobAssignment().setPaymentStatus(PaymentStatus.FAILED);
+        when(paymentDao.findByProviderToken(TOKEN)).thenReturn(Optional.of(payment));
+
+        Payment result = paymentManager.completeFromCallback(TOKEN);
+
+        assertEquals(PaymentAttemptStatus.FAILED, result.getStatus());
+        assertEquals(PaymentStatus.FAILED, result.getJobAssignment().getPaymentStatus());
+        verifyNoInteractions(iyzicoPaymentService);
+    }
+
+    @Test
+    void aSuccessfulProviderResultForACancelledAssignmentRequiresManualReview() {
+        Payment payment = pendingPayment();
+        payment.getJobAssignment().setStatus(AssignmentStatus.CANCELLED);
+        when(paymentDao.findByProviderToken(TOKEN)).thenReturn(Optional.of(payment));
+        when(iyzicoPaymentService.retrieveCheckoutFormResult(any())).thenReturn(providerSuccess());
+
+        Payment result = paymentManager.completeFromCallback(TOKEN);
+
+        assertEquals(PaymentAttemptStatus.VERIFY_PENDING, result.getStatus());
+        assertEquals(PaymentStatus.PENDING_COLLECTION, result.getJobAssignment().getPaymentStatus());
+        assertNull(result.getNextVerificationAt());
     }
 
     @Test
@@ -302,6 +337,26 @@ class PaymentCallbackTest {
         assertEquals(PaymentAttemptStatus.IN_REVIEW, result.getStatus());
         assertEquals(PaymentStatus.PENDING_COLLECTION, result.getJobAssignment().getPaymentStatus());
         assertEquals("txn-1", result.getProviderTransactionId());
+    }
+
+    @Test
+    void providerCorrelationIdsCannotChangeAfterFraudReview() {
+        Payment payment = pendingPayment();
+        payment.setStatus(PaymentAttemptStatus.IN_REVIEW);
+        payment.setProviderPaymentId("pay-original");
+        payment.setProviderTransactionId("txn-original");
+        IyzicoPaymentResultResponseDto changed = providerSuccess();
+        changed.setPaymentId("pay-different");
+        changed.setPaymentTransactionId("txn-different");
+        when(paymentDao.findByProviderToken(TOKEN)).thenReturn(Optional.of(payment));
+        when(iyzicoPaymentService.retrieveCheckoutFormResult(any())).thenReturn(changed);
+
+        Payment result = paymentManager.completeFromCallback(TOKEN);
+
+        assertEquals(PaymentAttemptStatus.VERIFY_PENDING, result.getStatus());
+        assertEquals("pay-original", result.getProviderPaymentId());
+        assertEquals("txn-original", result.getProviderTransactionId());
+        assertEquals(PaymentStatus.PENDING_COLLECTION, result.getJobAssignment().getPaymentStatus());
     }
 
     @Test
@@ -392,7 +447,7 @@ class PaymentCallbackTest {
         assertNull(assignment.getFinalPayout());
         assertNull(assignment.getTotalCharged());
         assertNull(assignment.getWorkerPayout());
-        verifyNoInteractions(jobAssignmentDao);
+        verify(jobAssignmentDao, never()).save(any());
     }
 
     @Test
@@ -471,7 +526,7 @@ class PaymentCallbackTest {
         assertEquals(PaymentStatus.PENDING_COLLECTION, third.getJobAssignment().getPaymentStatus());
         assertEquals(PaymentMessages.THREE_D_SECURE_FAILED, second.getFailureReason());
         verify(iyzicoPaymentService, times(3)).retrieveCheckoutFormResult(any());
-        verifyNoInteractions(jobAssignmentDao);
+        verify(jobAssignmentDao, never()).save(any());
     }
 
     @Test

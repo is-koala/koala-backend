@@ -49,7 +49,8 @@ Her olayda önce şu üçü:
 ```sql
 select id, status, failure_reason, total_charged, currency,
        provider_payment_id, provider_transaction_id, conversation_id,
-       verification_attempts, next_verification_at, created_at, completed_at
+       provider_submerchant_key, verification_attempts,
+       next_verification_at, created_at, completed_at
 from payments
 where job_assignment_id = :assignmentId
 order by created_at desc;
@@ -119,13 +120,15 @@ Payment <id> rejected: 3-D Secure verification did not succeed, mdStatus=<değer
 
 `mdStatus=null` ise yanıtta alan hiç yoktu. iyzico "yalnız 3DS işlemlerinde
 görünür" diyor, yani ya işlem 3DS'siz geçti ya da yanıt beklediğimiz gibi değil;
-ikisi ayırt edilemediği için ödeme reddedilir. **Bu satırı canlıda görürsen
+ikisi ayırt edilemediği için ödeme doğrulama kuyruğunda tutulur. **Bu satırı canlıda görürsen
 olaydır** — Checkout Form 3DS'siz ödeme geçiriyor demektir ve karar
 (`forceThreeDS` mı, kapının gevşetilmesi mi) issue'ya yazılmalıdır. Kapıyı
 kendiliğinden gevşetme.
 
-3DS reddi terminal `FAILED` olduğu için işveren yeniden deneyebilir. Sağlayıcı
-tarafında tahsilat görünüyorsa panelden `conversation_id` ile elle iade et.
+3DS sonucu terminal sayılmaz: satır `VERIFY_PENDING` kalır ve tek aktif deneme
+indeksi yeni checkout'u engeller. Sağlayıcı tarafında tahsilat görünüyorsa
+panelden `conversation_id` ile elle iade et; sonuç kanıtlanmadan satırı `FAILED`
+yapma.
 
 **Sonucu bilinmeyen deneme.** `VERIFY_PENDING` aktif bir durumdur; benzersiz
 indeks aynı atamada ikinci checkout'u engeller. Token varsa
@@ -138,6 +141,32 @@ panelde `conversation_id` ile ödeme sonucunu bul ve bölüm 4'e göre uzlaştı
 Initialize yanıtı alınamadıysa token yoktur ve retrieve çalışamaz; bu durumda
 `VERIFY_PENDING` doğrudan manuel panel araması bekler. Panelde işlem yokluğu
 kanıtlanmadan yeni checkout açılmaz.
+
+**Migration öncesi submerchant snapshot'ı olmayan deneme.** Migration 84 eski
+token'lı denemeleri scheduler'a açtı, fakat o satırların checkout anındaki
+`provider_submerchant_key` değeri bilinmiyordu. Migration 85 bu kayıtları
+`VERIFY_PENDING` yapar ve `next_verification_at` değerini boşaltır. Böylece
+bilinmeyen snapshot başarıya yükseltilmez ve aynı sonuç için sekiz kez boşuna
+retrieve yapılmaz. Etkilenen kayıtları bul:
+
+```sql
+select id, job_assignment_id, conversation_id, provider_token, status
+from payments
+where is_deleted = false
+  and status in ('INITIATED', 'VERIFY_PENDING', 'IN_REVIEW')
+  and provider_token is not null
+  and provider_submerchant_key is null;
+```
+
+Her satırı Iyzico panelinde `conversation_id` ile doğrula. Checkout anındaki
+submerchant key panel/rapor kanıtıyla kesinleşirse bu değeri
+`provider_submerchant_key` alanına yaz ve `next_verification_at = now()` yap;
+uygulama imzalı retrieve ve bütün snapshot kontrollerini yeniden çalıştırsın.
+İşlem hiç oluşmadıysa veya kesin olarak reddedildiyse kanıtı olay kaydına ekle,
+sonra satırı `FAILED`/`completed_at = now()` yap. Tahsilat var ama snapshot
+kanıtlanamıyorsa panelden elle iade et ve olay kaydıyla kapat. Bu kayıtları
+doğrudan `SUCCEEDED` yapma ve bugünkü işçi profilindeki submerchant key'i eski
+checkout snapshot'ıymış gibi kopyalama.
 
 **`IN_REVIEW` durumu.** `fraudStatus = 0`. Ödeme sağlayıcıda incelemede,
 emanet açılmadı, işçi işe başlayamaz. Webhook tüketicisi yoktur ama aynı
@@ -201,8 +230,13 @@ Ne kuyruğa girer (§2x'teki tablo):
 - Kısmi iade → `REFUND` **ve** `DISAPPROVE`. İkincisi kalan tutarın işçiye
   aktarılmasını engeller.
 
-Sonra `refunds` satırı `PENDING` durumunda bekler. `SettlementRetryScheduler`
-görevi başarıyla çalıştırınca `COMPLETED` olur; deneme limiti aşılırsa `FAILED`.
+Sonra `refunds` satırı `PENDING` (talep edildi) durumunda bekler.
+`SettlementRetryScheduler` görevi çalıştırmaya başladığında ayrı bir transaction
+satırı `PROCESSING` (işleniyor) yapar; böylece provider çağrısı sürerken durum
+okunabilir. Provider iadeyi kabul edince `COMPLETED` (iade edildi), deneme limiti
+aşılırsa `FAILED` olur. Uygulama provider çağrısından sonra çökerse satır
+`PROCESSING`, görev `PENDING` kalabilir; scheduler aynı kalıcı görevi yeniden
+dener ve sonucu tamamlar.
 
 ```sql
 select st.id, st.operation, st.status, st.attempts, st.next_attempt_at,
@@ -411,7 +445,7 @@ Canlıya geçmeden bilinmesi gereken üç boşluk:
 
 1. **`mdStatus` artık okunuyor — kapatıldı.** `retrieveCheckoutFormResult`
    alanı ayrıştırıyor ve `completeFromCallback` yalnız `mdStatus = 1` iken
-   emanet açıyor; başka her değer ve alanın yokluğu denemeyi `FAILED` yapıyor
+   emanet açıyor; başka her değer ve alanın yokluğu denemeyi `VERIFY_PENDING` yapıyor
    (§2x2). Yukarıdaki `4131111111111117` kartı artık emanet açmaz.
    **Kalan boşluk kuralın kendisi değil, doğrulaması:** sandbox'ta gerçek bir
    işlemle denenmedi ve Checkout Form'un 3DS'siz ödeme geçirip geçirmediği
@@ -423,10 +457,10 @@ Canlıya geçmeden bilinmesi gereken üç boşluk:
    öğrenmeyeceğimiz anlamına da gelir. Canlıda bu, bölüm 4'teki "ekstrede var,
    bizde yok" farkı olarak ortaya çıkar. Ayrıca iyzico webhook imzası
    `X-IYZ-SIGNATURE-V3` hesap bazında açılıyor (`/en/advanced/webhook`).
-3. **Hız sınırı için özel işleme yok.** `errorCode 50000` bugün sıradan bir
-   sağlayıcı hatası gibi ele alınır ve deneme `FAILED` olur. Canlıda eşzamanlı
-   ödeme sayısı arttığında bunu `failure_reason` içindeki serbest metinden
-   tanırsınız.
+3. **Hız sınırı için ayrı geri çekilme süresi yok.** `errorCode 50000` sağlayıcı
+   erişilemezliği gibi ele alınır; deneme `VERIFY_PENDING` kalır ve normal
+   üstel geri çekilmeyi kullanır. Canlıda eşzamanlı ödeme sayısı arttığında
+   provider hata metriği ve Iyzico paneli birlikte incelenir.
 
 ### 6.3 Uyarılar — belgelenmemiş, canlıda doğrulanmalı
 
@@ -490,7 +524,7 @@ başlatılamaz ve mühendislik tarafı bunları bekler.
 8. **Canlıda küçük tutarlı gerçek bir ödeme ve iadesi.** Issue'nun kabul
    kriteri. Gerçek bir kart gerektirir, otomatikleştirilemez. ADR-0005 bunu
    insan onaylı runbook'a bağlıyor. Koşu sırasında kaydedilecekler:
-   `conversationId`, tutar, `mdStatus` (panelden — biz okumuyoruz),
+   `conversationId`, tutar, `mdStatus` (retrieve yanıtı ve panelden),
    `fraudStatus`, callback sonucu, `settlement_tasks` satırının durumu ve
    iadenin ekstrede göründüğü tarih.
 9. **Rotasyon sahibinin atanması.** Bölüm 5'teki tablodaki "Ödeme sahibi"

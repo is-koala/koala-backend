@@ -51,6 +51,7 @@ class PaymentMonitoringTest {
     private static final String TOKEN = "iyzico-token-123";
 
     private PaymentDao paymentDao;
+    private JobAssignmentDao jobAssignmentDao;
     private IyzicoPaymentService iyzicoPaymentService;
     private SimpleMeterRegistry registry;
     private PaymentManager paymentManager;
@@ -59,11 +60,12 @@ class PaymentMonitoringTest {
     @BeforeEach
     void setUp() {
         paymentDao = mock(PaymentDao.class);
+        jobAssignmentDao = mock(JobAssignmentDao.class);
         iyzicoPaymentService = mock(IyzicoPaymentService.class);
         registry = new SimpleMeterRegistry();
         verificationProperties = new PaymentVerificationProperties();
         paymentManager = new PaymentManager(paymentDao, iyzicoPaymentService, new PaymentStateMachine(),
-                mock(SecurityService.class), mock(JobAssignmentDao.class),
+                mock(SecurityService.class), jobAssignmentDao,
                 new AssignmentParticipants(mock(CompanyContactService.class)), new PaymentMetrics(registry),
                 verificationProperties);
         when(paymentDao.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -75,6 +77,9 @@ class PaymentMonitoringTest {
         JobAssignment assignment = new JobAssignment();
         assignment.setId(UUID.randomUUID());
         assignment.setPricingVersion("2026-09-v1");
+        assignment.setStatus(AssignmentStatus.CONFIRMED);
+        assignment.setPaymentStatus(PaymentStatus.PENDING_COLLECTION);
+        when(jobAssignmentDao.findByIdForUpdate(assignment.getId())).thenReturn(Optional.of(assignment));
         CommissionCalculator calculator = FallbackSettings.commissionCalculator();
         when(paymentDao.saveAndFlush(any())).thenThrow(new IllegalStateException("database unavailable"));
 
@@ -89,6 +94,9 @@ class PaymentMonitoringTest {
         JobAssignment assignment = new JobAssignment();
         assignment.setId(UUID.randomUUID());
         assignment.setPricingVersion("2026-09-v1");
+        assignment.setStatus(AssignmentStatus.CONFIRMED);
+        assignment.setPaymentStatus(PaymentStatus.PENDING_COLLECTION);
+        when(jobAssignmentDao.findByIdForUpdate(assignment.getId())).thenReturn(Optional.of(assignment));
         when(paymentDao.existsByJobAssignmentIdAndStatusIn(any(), any())).thenReturn(true);
 
         var breakdown = FallbackSettings.commissionCalculator()
@@ -106,6 +114,9 @@ class PaymentMonitoringTest {
         JobAssignment assignment = new JobAssignment();
         assignment.setId(UUID.randomUUID());
         assignment.setPricingVersion("2026-09-v1");
+        assignment.setStatus(AssignmentStatus.CONFIRMED);
+        assignment.setPaymentStatus(PaymentStatus.PENDING_COLLECTION);
+        when(jobAssignmentDao.findByIdForUpdate(assignment.getId())).thenReturn(Optional.of(assignment));
         when(paymentDao.existsByJobAssignmentIdAndStatusIn(any(), any())).thenReturn(false);
         when(paymentDao.saveAndFlush(any())).thenThrow(
                 new DataIntegrityViolationException("duplicate payment attempt",
@@ -120,6 +131,28 @@ class PaymentMonitoringTest {
 
         assertEquals("PAYMENT_ATTEMPT_IN_PROGRESS", thrown.getErrorCode());
         assertEquals(0.0, counter("initiation", "persistence_error"));
+    }
+
+    @Test
+    void reservationRechecksPaymentEligibilityUnderTheAssignmentLock() {
+        JobAssignment staleAssignment = new JobAssignment();
+        staleAssignment.setId(UUID.randomUUID());
+        staleAssignment.setStatus(AssignmentStatus.CONFIRMED);
+        staleAssignment.setPaymentStatus(PaymentStatus.PENDING_COLLECTION);
+
+        JobAssignment lockedAssignment = new JobAssignment();
+        lockedAssignment.setId(staleAssignment.getId());
+        lockedAssignment.setStatus(AssignmentStatus.CONFIRMED);
+        lockedAssignment.setPaymentStatus(PaymentStatus.HELD_IN_ESCROW);
+        when(jobAssignmentDao.findByIdForUpdate(staleAssignment.getId()))
+                .thenReturn(Optional.of(lockedAssignment));
+
+        var breakdown = FallbackSettings.commissionCalculator()
+                .calculate(new BigDecimal("1000.00"));
+
+        assertThrows(com.exskylab.koala.core.exceptions.ConflictException.class,
+                () -> paymentManager.startAttempt(staleAssignment, breakdown));
+        verify(paymentDao, never()).saveAndFlush(any());
     }
 
     @Test
@@ -240,6 +273,11 @@ class PaymentMonitoringTest {
         payment.setCommissionAmount(new BigDecimal("75.00"));
         payment.setCommissionRate(new BigDecimal("0.075"));
         payment.setTotalCharged(new BigDecimal("1075.00"));
+        when(paymentDao.findJobAssignmentIdByProviderToken(TOKEN))
+                .thenReturn(Optional.of(assignment.getId()));
+        when(paymentDao.findJobAssignmentIdById(payment.getId()))
+                .thenReturn(Optional.of(assignment.getId()));
+        when(jobAssignmentDao.findByIdForUpdate(assignment.getId())).thenReturn(Optional.of(assignment));
         return payment;
     }
 }
