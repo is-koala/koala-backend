@@ -242,6 +242,7 @@ public class CompanyManager implements CompanyService {
         log.info("Company created email queued for {}", LogMasks.email(sendEmailDto.getDestinationEmail()));
 
         var sendEmailDtoToContact = new SendEmailDto();
+        sendEmailDtoToContact.setRecipient(contact.getUser());
         sendEmailDtoToContact.setDestinationEmail(contact.getUser().getEmail());
         sendEmailDtoToContact.setSubject("KOALA ŞİRKET OLUŞTURMA TALEBİNİZ ALINMIŞTIR");
         sendEmailDtoToContact.setTemplateName("company-created-to-contact");
