@@ -14,4 +14,7 @@ public class PaymentMessages {
     public static final String THREE_D_SECURE_FAILED = "{payment.3ds.verification.failed}";
     public static final String QUOTE_CALCULATED = "{payment.quote.calculated}";
     public static final String ATTEMPT_IN_PROGRESS = "{payment.attempt.in.progress}";
+    public static final String VERIFICATION_PENDING = "{payment.verification.pending}";
+    public static final String INITIATION_FAILED = "{payment.initiation.failed}";
+    public static final String PROVIDER_RESPONSE_INVALID = "{payment.provider.response.invalid}";
 }

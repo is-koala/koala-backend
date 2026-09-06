@@ -70,4 +70,10 @@ public class Payment extends BaseEntity {
 
     @Column(name = "completed_at")
     private Instant completedAt;
+
+    @Column(name = "verification_attempts", nullable = false)
+    private int verificationAttempts;
+
+    @Column(name = "next_verification_at")
+    private Instant nextVerificationAt;
 }

@@ -46,6 +46,8 @@ class PaymentSessionAuthorizationTest {
     private CompanyContactService companyContactService;
     private IyzicoPaymentService iyzicoPaymentService;
     private PaymentService paymentService;
+    private UserService userService;
+    private BankAccountService bankAccountService;
     private SimpleMeterRegistry meterRegistry;
     private JobAssignmentManager manager;
 
@@ -60,7 +62,14 @@ class PaymentSessionAuthorizationTest {
         companyContactService = mock(CompanyContactService.class);
         iyzicoPaymentService = mock(IyzicoPaymentService.class);
         paymentService = mock(PaymentService.class);
+        userService = mock(UserService.class);
+        bankAccountService = mock(BankAccountService.class);
         meterRegistry = new SimpleMeterRegistry();
+
+        com.exskylab.koala.entities.Payment reserved = new com.exskylab.koala.entities.Payment();
+        reserved.setId(UUID.randomUUID());
+        reserved.setConversationId("reserved-conversation");
+        when(paymentService.startAttempt(any(), any())).thenReturn(reserved);
 
         manager = new JobAssignmentManager(
                 jobAssignmentDao,
@@ -68,12 +77,12 @@ class PaymentSessionAuthorizationTest {
                 mock(JobAssignmentMapper.class),
                 iyzicoPaymentService,
                 companyContactService,
-                mock(UserService.class),
+                userService,
                 new PricingManager(FallbackSettings.commissionCalculator()),
                 paymentService,
                 new PaymentStateMachine(),
                 new AppProperties("http://localhost:8080", "http://localhost:3000"),
-                mock(BankAccountService.class),
+                bankAccountService,
                 new PageableSanitizer(),
                 new AssignmentParticipants(companyContactService),
                 mock(BadgeService.class),
@@ -173,6 +182,12 @@ class PaymentSessionAuthorizationTest {
         assignment.setWorker(worker);
         assignment.setStatus(AssignmentStatus.CONFIRMED);
         assignment.setPaymentStatus(PaymentStatus.PENDING_COLLECTION);
+        assignment.setPricingVersion("2026-09-v1");
+        assignment.setCurrency("TRY");
+        assignment.setWorkerPayout(new java.math.BigDecimal("1000.00"));
+        assignment.setCommissionAmount(new java.math.BigDecimal("75.00"));
+        assignment.setCommissionRate(new java.math.BigDecimal("0.075"));
+        assignment.setTotalCharged(new java.math.BigDecimal("1075.00"));
         return assignment;
     }
 
@@ -257,6 +272,7 @@ class PaymentSessionAuthorizationTest {
         assignment.setCommissionRate(new java.math.BigDecimal("0.075"));
         assignment.setTotalCharged(new java.math.BigDecimal("1075.00"));
         com.exskylab.koala.entities.Payment payment = new com.exskylab.koala.entities.Payment();
+        payment.setId(UUID.randomUUID());
         payment.setConversationId("conversation-1");
         when(jobAssignmentDao.findById(assignment.getId())).thenReturn(Optional.of(assignment));
         when(securityService.getAuthenticatedUser()).thenReturn(employer);
@@ -272,6 +288,43 @@ class PaymentSessionAuthorizationTest {
                 .tag("outcome", "provider_error")
                 .counter()
                 .count());
+        verify(paymentService).markInitiationUncertain(payment.getId());
+    }
+
+    @Test
+    void theAttemptIsReservedBeforeAnyExternalSubmerchantOrCheckoutCall() {
+        Job job = individualJob();
+        job.setAddress(address());
+        employer.setAddress(address());
+        employer.setFirstName("Koala");
+        employer.setLastName("Employer");
+        employer.setEmail("employer@example.test");
+        employer.setPhoneNumber("+905551112233");
+        worker.setIyzicoSubmerchantKey(null);
+        worker.setIdentityVerified(true);
+        worker.setTcIdentityNumber("10000000146");
+        worker.setFirstName("Koala");
+        worker.setLastName("Worker");
+        worker.setEmail("worker@example.test");
+        worker.setPhoneNumber("+905554445566");
+        worker.setAddress(address());
+        JobAssignment assignment = confirmedAssignment(job);
+        when(jobAssignmentDao.findById(assignment.getId())).thenReturn(Optional.of(assignment));
+        when(securityService.getAuthenticatedUser()).thenReturn(employer);
+        when(bankAccountService.findPrimaryIban(worker.getId())).thenReturn(Optional.of("TR000000000000000000000001"));
+        var merchant = new com.exskylab.koala.core.utilities.payment.iyzico.dtos.SubMerchantCreateResponseDto();
+        merchant.setSubMerchantKey("submerchant-key");
+        when(iyzicoPaymentService.createSubMerchant(any())).thenReturn(merchant);
+        when(iyzicoPaymentService.initiateCheckoutFormPayment(any()))
+                .thenThrow(new IllegalStateException("provider unavailable"));
+
+        assertThrows(IllegalStateException.class,
+                () -> manager.initiatePaymentSession(assignment.getId(), "127.0.0.1"));
+
+        var order = org.mockito.Mockito.inOrder(paymentService, iyzicoPaymentService);
+        order.verify(paymentService).startAttempt(any(), any());
+        order.verify(iyzicoPaymentService).createSubMerchant(any());
+        order.verify(iyzicoPaymentService).initiateCheckoutFormPayment(any());
     }
 
     private static com.exskylab.koala.entities.Address address() {

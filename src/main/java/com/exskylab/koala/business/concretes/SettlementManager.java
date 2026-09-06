@@ -2,6 +2,7 @@ package com.exskylab.koala.business.concretes;
 
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.SettlementService;
+import com.exskylab.koala.core.constants.PayoutMessages;
 import com.exskylab.koala.core.properties.IyzicoProperties;
 import com.exskylab.koala.core.properties.SettlementRetryProperties;
 import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
@@ -214,6 +215,7 @@ public class SettlementManager implements SettlementService {
 
             payoutDao.findByJobAssignmentId(task.getJobAssignment().getId()).ifPresent(payout -> {
                 payout.setStatus(PayoutStatus.FAILED);
+                payout.setFailureReason(PayoutMessages.SETTLEMENT_FAILED);
                 payoutDao.save(payout);
                 log.error("Payout {} marked FAILED, settlement gave up", payout.getId());
             });

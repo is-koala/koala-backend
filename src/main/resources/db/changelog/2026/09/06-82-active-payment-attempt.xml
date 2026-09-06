@@ -6,33 +6,56 @@
         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
 
     <changeSet id="2026-09-06-82-active-payment-attempt" author="codex">
-        <comment>Keep only the newest unresolved payment attempt, then enforce one active attempt per assignment.</comment>
+        <preConditions onFail="HALT" onError="HALT"
+                       onFailMessage="Payment migration blocked: reconcile duplicate active attempts or provider tokens before deployment.">
+            <and>
+                <sqlCheck expectedResult="0"><![CDATA[
+                    SELECT COUNT(*) FROM (
+                        SELECT job_assignment_id
+                          FROM payments
+                         WHERE is_deleted = false
+                           AND status IN ('INITIATED', 'VERIFY_PENDING', 'IN_REVIEW')
+                         GROUP BY job_assignment_id
+                        HAVING COUNT(*) > 1
+                    ) duplicate_active_attempts
+                ]]></sqlCheck>
+                <sqlCheck expectedResult="0"><![CDATA[
+                    SELECT COUNT(*) FROM (
+                        SELECT provider_token
+                          FROM payments
+                         WHERE is_deleted = false
+                           AND provider_token IS NOT NULL
+                         GROUP BY provider_token
+                        HAVING COUNT(*) > 1
+                    ) duplicate_provider_tokens
+                ]]></sqlCheck>
+            </and>
+        </preConditions>
+        <comment>Refuse an unsafe rollout, then enforce active-attempt and provider-token invariants.</comment>
+        <addColumn tableName="payments">
+            <column name="verification_attempts" type="INTEGER" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="next_verification_at" type="TIMESTAMP WITH TIME ZONE"/>
+        </addColumn>
         <sql><![CDATA[
-            WITH ranked_active AS (
-                SELECT id,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY job_assignment_id
-                           ORDER BY created_at DESC, id DESC
-                       ) AS position
-                FROM payments
-                WHERE is_deleted = false
-                  AND status IN ('INITIATED', 'IN_REVIEW')
-            )
-            UPDATE payments AS payment
-               SET status = 'FAILED',
-                   completed_at = COALESCE(payment.completed_at, CURRENT_TIMESTAMP),
-                   failure_reason = 'Superseded while enforcing one active payment attempt.'
-              FROM ranked_active
-             WHERE payment.id = ranked_active.id
-               AND ranked_active.position > 1;
-
             CREATE UNIQUE INDEX uk_payments_one_active_attempt
                 ON payments (job_assignment_id)
                 WHERE is_deleted = false
-                  AND status IN ('INITIATED', 'IN_REVIEW');
+                  AND status IN ('INITIATED', 'VERIFY_PENDING', 'IN_REVIEW');
+
+            CREATE UNIQUE INDEX uk_payments_provider_token
+                ON payments (provider_token)
+                WHERE is_deleted = false
+                  AND provider_token IS NOT NULL;
         ]]></sql>
         <rollback>
-            <sql>DROP INDEX IF EXISTS uk_payments_one_active_attempt;</sql>
+            <sql><![CDATA[
+                DROP INDEX IF EXISTS uk_payments_provider_token;
+                DROP INDEX IF EXISTS uk_payments_one_active_attempt;
+            ]]></sql>
+            <dropColumn tableName="payments" columnName="next_verification_at"/>
+            <dropColumn tableName="payments" columnName="verification_attempts"/>
         </rollback>
     </changeSet>
 </databaseChangeLog>

@@ -119,6 +119,8 @@ class SettlementRetryTest {
 
         assertEquals(SettlementTaskStatus.FAILED, task.getStatus());
         assertEquals(PayoutStatus.FAILED, payout.getStatus());
+        assertEquals(com.exskylab.koala.core.constants.PayoutMessages.SETTLEMENT_FAILED,
+                payout.getFailureReason());
     }
 
     @Test
