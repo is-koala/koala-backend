@@ -1197,10 +1197,10 @@ Liste üç ayda bir güncelleniyor; `scripts/fetch-csca-anchors.sh` çalıştır
 **Gerçek kart dökümü tek komutla denenir:**
 
 ```bash
-KOALA_CHIP_DIR=/tmp/chip KOALA_CSCA_DIR=/opt/koala/csca ./mvnw test -Dtest=RealChipVerificationTest
+KOALA_CHIP_DIR=/tmp/chip KOALA_CSCA_DIR=src/main/resources/csca ./mvnw test -Dtest=RealChipVerificationTest
 ```
 
-`KOALA_CHIP_DIR` içinde `sod.b64`, `dg1.b64` ve (varsa) `dg11.b64` beklenir — base64, tek satır. İki değişken de verilmezse test sessizce atlanır, yani CI'ı etkilemez. Çıktısında iki teşhis satırı var: **`ds issuer`** kimlik kartının hangi CSCA'ya zincirlendiğini söyler (doğrulama başarısız olsa bile), **`kartta`** ise SOD'un listelediği veri gruplarını yazar — yani DG11'in (ulusal karakterli ad) ve DG15'in (Active Authentication) o kartta bulunup bulunmadığı tek koşuda görünür.
+`KOALA_CHIP_DIR` içinde `sod.b64` ve `dg1.b64` beklenir (`RealChipVerificationTest:28-29` yalnız bu ikisini okur; DG11'in varlığı `kartta` teşhis satırından görünür) — base64, tek satır. İki değişken de verilmezse test sessizce atlanır, yani CI'ı etkilemez. Çıktısında iki teşhis satırı var: **`ds issuer`** kimlik kartının hangi CSCA'ya zincirlendiğini söyler (doğrulama başarısız olsa bile), **`kartta`** ise SOD'un listelediği veri gruplarını yazar — yani DG11'in (ulusal karakterli ad) ve DG15'in (Active Authentication) o kartta bulunup bulunmadığı tek koşuda görünür.
 
 **Passive Authentication tek başına kopyalamayı engellemez.** Bir kez okunan SOD ve DG1 sabittir; kaydeden biri sonsuza kadar yeniden gönderebilir. Bu yüzden **Active Authentication** eklendi.
 
@@ -1210,7 +1210,13 @@ KOALA_CHIP_DIR=/tmp/chip KOALA_CSCA_DIR=/opt/koala/csca ./mvnw test -Dtest=RealC
 
 **İki imza şeması destekleniyor:** RSA için ISO 9796-2 (mesaj kurtarmalı, ICAO'nun tarif ettiği biçim) ve ECDSA için düz imza. Hangisinin kullanıldığı karta göre değişiyor, ikisi de deneniyor.
 
-**Doğrulama anahtarına neden güveniyoruz:** `DG15`'in hash'i SOD'da, yani Passive Authentication zaten onu imzalı kabul ediyor. Uydurma bir DG15 gönderen kişi SOD hash kontrolüne takılır.
+⚠️ **Doğrulama anahtarına GÜVENİLMİYOR — bu paragraf yanlıştı ve düzeltildi.** Önceki metin *"DG15'in hash'i SOD'da, yani Passive Authentication zaten onu imzalı kabul ediyor; uydurma bir DG15 gönderen kişi SOD hash kontrolüne takılır"* diyordu. **Kod bunu yapmıyor.** `PassiveAuthenticationVerifier`'ın iki `verify` aşırı yüklemesi de (`:45`, `:49`) DG15 almıyor; `hashForDataGroup` yalnız DG1 (`:62`) ve DG11 (`:84`) için çağrılıyor. `UserManager:463` istemciden gelen `dg15`'i çözüp doğrudan `verifyChipPresence` → `IdentityChallengeManager` → `ActiveAuthentication.verify` zincirine veriyor.
+
+**Sonucu:** Active Authentication, imzayı **saldırganın seçtiği bir anahtara** karşı doğruluyor. Bir kez alınmış `sod`+`dg1` dökümü olan biri kendi anahtar çiftini üretir, açık anahtarı `dg15` diye gönderir, sunucunun sayısını kendi özel anahtarıyla imzalar ve geçer. **Yani AA bugünkü hâliyle kapatmak için var olduğu tekrar oynatma açığını kapatmıyor.**
+
+`ActiveAuthenticationTest`'in *"başka çipin anahtarı doğrulamaz"* kuralı bu boşluğu görmüyor: sentetik testte anahtar sabit veriliyor, oysa üretimde anahtarı istemci seçiyor.
+
+Düzeltme is-koala/koala-backend#74'ün ilk iş maddesi: DG15 de SOD'a karşı hash'lenmeli. **O düzeltme inmeden `active-authentication-required` açılmamalı** — açmak, kapanmamış bir açık için kapandı güvencesi üretir.
 
 **Varsayılan zorunlu değil** (`identity.passive-authentication.active-authentication-required=false`): TCKK'da DG15'in bulunduğu henüz gerçek kartla doğrulanmadı. İmza gelirse doğrulanır, gelmezse geçilir. Kart DG15 taşıdığı teyit edilince bayrak açılmalı — o noktaya kadar tekrar oynatma açığı duruyor.
 
