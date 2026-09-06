@@ -3,6 +3,7 @@ package com.exskylab.koala.business.concretes;
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.PaymentService;
 import com.exskylab.koala.business.abstracts.SecurityService;
+import com.exskylab.koala.core.constants.JobAssignmentMessages;
 import com.exskylab.koala.core.constants.PaymentMessages;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.exceptions.ExternalServiceException;
@@ -71,16 +72,21 @@ public class PaymentManager implements PaymentService {
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Payment startAttempt(JobAssignment jobAssignment, CommissionCalculator.Breakdown breakdown) {
-        if (hasPendingAttemptForAssignment(jobAssignment.getId())) {
+        JobAssignment lockedAssignment = jobAssignmentDao.findByIdForUpdate(jobAssignment.getId())
+                .orElseThrow(() -> new ResourceNotFoundException(JobAssignmentMessages.NOT_FOUND));
+        if (!stateMachine.canInitiate(lockedAssignment)) {
+            throw new ConflictException(JobAssignmentMessages.ASSIGNMENT_NOT_READY_FOR_PAYMENT);
+        }
+        if (hasPendingAttemptForAssignment(lockedAssignment.getId())) {
             throw new ConflictException(PaymentMessages.ATTEMPT_IN_PROGRESS);
         }
 
         Payment payment = new Payment();
-        payment.setJobAssignment(jobAssignment);
+        payment.setJobAssignment(lockedAssignment);
         payment.setConversationId(UUID.randomUUID().toString());
         payment.setStatus(PaymentAttemptStatus.INITIATED);
-        payment.setPricingVersion(jobAssignment.getPricingVersion());
-        payment.setCurrency(jobAssignment.getCurrency() == null ? CURRENCY : jobAssignment.getCurrency());
+        payment.setPricingVersion(lockedAssignment.getPricingVersion());
+        payment.setCurrency(lockedAssignment.getCurrency() == null ? CURRENCY : lockedAssignment.getCurrency());
         payment.setWorkerPayout(breakdown.workerPayout());
         payment.setCommissionAmount(breakdown.commission());
         payment.setCommissionRate(breakdown.rate());
@@ -99,7 +105,7 @@ public class PaymentManager implements PaymentService {
             paymentMetrics.initiationPersistenceError();
             throw exception;
         }
-        log.info("Payment attempt {} started for assignment {}", saved.getId(), jobAssignment.getId());
+        log.info("Payment attempt {} started for assignment {}", saved.getId(), lockedAssignment.getId());
         return saved;
     }
 
@@ -169,15 +175,24 @@ public class PaymentManager implements PaymentService {
     @Override
     @Transactional
     public Payment completeFromCallback(String providerToken) {
+        UUID assignmentId = paymentDao.findJobAssignmentIdByProviderToken(providerToken).orElse(null);
+        if (assignmentId == null) {
+            paymentMetrics.callbackUnknownToken();
+            throw new ResourceNotFoundException(PaymentMessages.NOT_FOUND);
+        }
+        lockAssignment(assignmentId);
         Payment payment = paymentDao.findByProviderToken(providerToken).orElse(null);
         if (payment == null) {
             paymentMetrics.callbackUnknownToken();
             throw new ResourceNotFoundException(PaymentMessages.NOT_FOUND);
         }
 
-        if (payment.getStatus() == PaymentAttemptStatus.SUCCEEDED) {
-            paymentMetrics.callbackAlreadySucceeded();
-            log.info("Payment {} already settled, callback ignored.", payment.getId());
+        if (!PENDING_STATUSES.contains(payment.getStatus())) {
+            if (payment.getStatus() == PaymentAttemptStatus.SUCCEEDED) {
+                paymentMetrics.callbackAlreadySucceeded();
+            }
+            log.info("Payment {} is terminal with status {}, callback ignored.",
+                    payment.getId(), payment.getStatus());
             return payment;
         }
 
@@ -195,6 +210,11 @@ public class PaymentManager implements PaymentService {
     @Override
     @Transactional
     public boolean reconcileAttempt(UUID paymentId) {
+        UUID assignmentId = paymentDao.findJobAssignmentIdById(paymentId).orElse(null);
+        if (assignmentId == null) {
+            return false;
+        }
+        lockAssignment(assignmentId);
         Payment payment = paymentDao.findWithDetailsById(paymentId).orElse(null);
         if (payment == null || !PENDING_STATUSES.contains(payment.getStatus())
                 || payment.getProviderToken() == null || payment.getProviderToken().isBlank()) {
@@ -215,7 +235,8 @@ public class PaymentManager implements PaymentService {
             result = iyzicoPaymentService.retrieveCheckoutFormResult(request);
         } catch (RuntimeException e) {
             paymentMetrics.callbackProviderError();
-            log.warn("Payment {} could not be verified with the provider: {}", payment.getId(), e.getMessage());
+            log.warn("Payment {} could not be verified with the provider ({})",
+                    payment.getId(), e.getClass().getSimpleName());
             return deferVerification(payment);
         }
 
@@ -274,6 +295,12 @@ public class PaymentManager implements PaymentService {
             return deferVerification(payment);
         }
 
+        if (!stateMachine.canInitiate(payment.getJobAssignment())) {
+            log.error("Payment {} requires manual review because assignment {} is no longer collectible.",
+                    payment.getId(), payment.getJobAssignment().getId());
+            return requireManualReview(payment);
+        }
+
         Payment settled = settle(payment, result);
         paymentMetrics.callbackSucceeded();
         return settled;
@@ -299,6 +326,8 @@ public class PaymentManager implements PaymentService {
         if (!Objects.equals(assignment.getId().toString(), result.getBasketId())) return "basketId";
         if (!Objects.equals(payment.getCurrency(), result.getCurrency())) return "currency";
         if (result.getPaymentId() == null || result.getPaymentId().isBlank()) return "paymentId";
+        if (payment.getProviderPaymentId() != null
+                && !Objects.equals(payment.getProviderPaymentId(), result.getPaymentId())) return "paymentId";
         return null;
     }
 
@@ -316,6 +345,10 @@ public class PaymentManager implements PaymentService {
             return "subMerchantKey";
         }
         if (result.getPaymentTransactionId() == null || result.getPaymentTransactionId().isBlank()) {
+            return "paymentTransactionId";
+        }
+        if (payment.getProviderTransactionId() != null
+                && !Objects.equals(payment.getProviderTransactionId(), result.getPaymentTransactionId())) {
             return "paymentTransactionId";
         }
         return null;
@@ -345,6 +378,19 @@ public class PaymentManager implements PaymentService {
         payment.setNextVerificationAt(attempts >= verificationProperties.getMaxAttempts()
                 ? null : Instant.now().plus(verificationBackoffFor(attempts)));
         return paymentDao.save(payment);
+    }
+
+    private Payment requireManualReview(Payment payment) {
+        payment.setStatus(PaymentAttemptStatus.VERIFY_PENDING);
+        payment.setFailureReason(PaymentMessages.VERIFICATION_PENDING);
+        payment.setCompletedAt(null);
+        payment.setNextVerificationAt(null);
+        return paymentDao.save(payment);
+    }
+
+    private JobAssignment lockAssignment(UUID assignmentId) {
+        return jobAssignmentDao.findByIdForUpdate(assignmentId)
+                .orElseThrow(() -> new ResourceNotFoundException(JobAssignmentMessages.NOT_FOUND));
     }
 
     private java.time.Duration verificationBackoffFor(int attempts) {

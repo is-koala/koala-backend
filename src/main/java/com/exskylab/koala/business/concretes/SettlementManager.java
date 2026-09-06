@@ -1,6 +1,5 @@
 package com.exskylab.koala.business.concretes;
 
-import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.SettlementService;
 import com.exskylab.koala.core.constants.PayoutMessages;
 import com.exskylab.koala.core.properties.IyzicoProperties;
@@ -11,17 +10,15 @@ import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoRefundRequest
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoRefundResponseDto;
 import com.exskylab.koala.dataAccess.PayoutDao;
 import com.exskylab.koala.dataAccess.RefundDao;
-import com.exskylab.koala.entities.Refund;
-import com.exskylab.koala.entities.RefundStatus;
-import java.util.Optional;
 import com.exskylab.koala.dataAccess.SettlementTaskDao;
 import com.exskylab.koala.entities.*;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -37,16 +34,19 @@ public class SettlementManager implements SettlementService {
     private final IyzicoPaymentService iyzicoPaymentService;
     private final IyzicoProperties iyzicoProperties;
     private final SettlementRetryProperties retryProperties;
+    private final RefundManager refundManager;
 
     public SettlementManager(SettlementTaskDao settlementTaskDao, PayoutDao payoutDao, RefundDao refundDao,
                              IyzicoPaymentService iyzicoPaymentService, IyzicoProperties iyzicoProperties,
-                             SettlementRetryProperties retryProperties) {
+                             SettlementRetryProperties retryProperties,
+                             RefundManager refundManager) {
         this.settlementTaskDao = settlementTaskDao;
         this.payoutDao = payoutDao;
         this.refundDao = refundDao;
         this.iyzicoPaymentService = iyzicoPaymentService;
         this.iyzicoProperties = iyzicoProperties;
         this.retryProperties = retryProperties;
+        this.refundManager = refundManager;
     }
 
     @Override
@@ -116,6 +116,9 @@ public class SettlementManager implements SettlementService {
         task.setAttempts(task.getAttempts() + 1);
 
         try {
+            if (task.getOperation() == SettlementOperation.REFUND && task.getPayment() != null) {
+                refundManager.markProcessing(task.getPayment().getId());
+            }
             String reference = dispatch(task);
 
             task.setStatus(SettlementTaskStatus.SUCCEEDED);
@@ -139,12 +142,12 @@ public class SettlementManager implements SettlementService {
             if (task.getAttempts() >= retryProperties.getMaxAttempts()) {
                 task.setStatus(SettlementTaskStatus.FAILED);
                 markSettlementGivenUp(task);
-                log.error("Settlement task {} gave up after {} attempts: {}",
-                        taskId, task.getAttempts(), e.getMessage());
+                log.error("Settlement task {} gave up after {} attempts ({})",
+                        taskId, task.getAttempts(), e.getClass().getSimpleName());
             } else {
                 task.setNextAttemptAt(Instant.now().plus(backoffFor(task.getAttempts())));
-                log.warn("Settlement task {} failed on attempt {}, next try at {}: {}",
-                        taskId, task.getAttempts(), task.getNextAttemptAt(), e.getMessage());
+                log.warn("Settlement task {} failed on attempt {}, next try at {} ({})",
+                        taskId, task.getAttempts(), task.getNextAttemptAt(), e.getClass().getSimpleName());
             }
 
             settlementTaskDao.save(task);

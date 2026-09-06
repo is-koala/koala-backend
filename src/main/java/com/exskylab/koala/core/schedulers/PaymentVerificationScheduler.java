@@ -33,7 +33,8 @@ public class PaymentVerificationScheduler {
             try {
                 paymentService.reconcileAttempt(paymentId);
             } catch (Exception exception) {
-                log.error("Payment {} reconciliation could not be run: {}", paymentId, exception.getMessage());
+                log.error("Payment {} reconciliation could not be run ({})",
+                        paymentId, exception.getClass().getSimpleName());
             }
         }
     }

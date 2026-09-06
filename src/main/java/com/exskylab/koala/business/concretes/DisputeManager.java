@@ -95,11 +95,11 @@ public class DisputeManager implements DisputeService {
     @Override
     @Transactional
     public Dispute resolveDispute(StaffPrincipal actor, UUID disputeId, DisputeResolution resolution, String note) {
-        Dispute dispute = disputeDao.findById(disputeId)
+        UUID assignmentId = disputeDao.findJobAssignmentIdById(disputeId)
                 .orElseThrow(() -> new ResourceNotFoundException(DisputeMessages.NOT_FOUND));
-
-        UUID assignmentId = dispute.getJobAssignment().getId();
         jobAssignmentService.getDetailedByIdForUpdate(assignmentId);
+        Dispute dispute = disputeDao.findByIdForUpdate(disputeId)
+                .orElseThrow(() -> new ResourceNotFoundException(DisputeMessages.NOT_FOUND));
 
         if (resolution.movesMoney()) {
             staffPayoutService.requirePermission(actor, resolution.getMoneyPermission(), assignmentId);

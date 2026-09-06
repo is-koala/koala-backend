@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-06-85-legacy-payment-reconciliation" author="codex">
+        <comment>Move active legacy attempts without an immutable submerchant snapshot to manual review.</comment>
+        <sql><![CDATA[
+            UPDATE payments
+               SET status = 'VERIFY_PENDING',
+                   failure_reason = '{payment.verification.pending}',
+                   next_verification_at = NULL
+             WHERE is_deleted = false
+               AND status IN ('INITIATED', 'VERIFY_PENDING', 'IN_REVIEW')
+               AND provider_token IS NOT NULL
+               AND provider_submerchant_key IS NULL;
+        ]]></sql>
+    </changeSet>
+</databaseChangeLog>

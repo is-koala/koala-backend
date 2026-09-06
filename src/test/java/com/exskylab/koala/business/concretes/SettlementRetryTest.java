@@ -33,6 +33,7 @@ class SettlementRetryTest {
     private IyzicoPaymentService iyzicoPaymentService;
     private IyzicoProperties iyzicoProperties;
     private SettlementRetryProperties retryProperties;
+    private RefundManager refundManager;
     private SettlementManager manager;
 
     private Payment payment;
@@ -47,9 +48,10 @@ class SettlementRetryTest {
         iyzicoPaymentService = mock(IyzicoPaymentService.class);
         iyzicoProperties = new IyzicoProperties();
         retryProperties = new SettlementRetryProperties();
+        refundManager = mock(RefundManager.class);
 
         manager = new SettlementManager(settlementTaskDao, payoutDao, refundDao, iyzicoPaymentService,
-                iyzicoProperties, retryProperties);
+                iyzicoProperties, retryProperties, refundManager);
 
         payment = new Payment();
         payment.setId(UUID.randomUUID());
@@ -105,6 +107,19 @@ class SettlementRetryTest {
 
         assertEquals(RefundStatus.COMPLETED, refund.getStatus());
         assertNotNull(refund.getCompletedAt());
+    }
+
+    @Test
+    void aRefundBecomesProcessingBeforeTheProviderCall() {
+        pendingRefund();
+        SettlementTask task = pendingTask(SettlementOperation.REFUND);
+        when(iyzicoPaymentService.refund(any())).thenReturn(refundResponse());
+
+        manager.runTask(task.getId());
+
+        var order = inOrder(refundManager, iyzicoPaymentService);
+        order.verify(refundManager).markProcessing(payment.getId());
+        order.verify(iyzicoPaymentService).refund(any());
     }
 
     @Test

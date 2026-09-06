@@ -1,6 +1,8 @@
 package com.exskylab.koala.core.properties;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.ConfigDataApplicationContextInitializer;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -52,6 +54,27 @@ class IyzicoEnvironmentSplitTest {
     @Test
     void anUnknownProviderHostIsRejectedEvenLocally() {
         contextRunner.withPropertyValues("iyzico.deployment=local", "iyzico.base-url=https://api.iyzipay.com.evil.test")
+                .run(context -> assertNotNull(context.getStartupFailure()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "https://sandbox-api.iyzipay.com:444",
+            "https://sandbox-api.iyzipay.com/proxy",
+            "https://user@sandbox-api.iyzipay.com",
+            "https://sandbox-api.iyzipay.com?route=other",
+            "https://sandbox-api.iyzipay.com#fragment"
+    })
+    void stagingAcceptsOnlyTheExactOfficialProviderOrigin(String baseUrl) {
+        contextRunner.withPropertyValues("iyzico.deployment=staging", "iyzico.base-url=" + baseUrl)
+                .run(context -> assertNotNull(context.getStartupFailure()));
+    }
+
+    @Test
+    void localLoopbackStillRequiresAnHttpOriginWithoutExtraUrlComponents() {
+        contextRunner.withPropertyValues("iyzico.deployment=local", "iyzico.base-url=ftp://localhost:9998")
+                .run(context -> assertNotNull(context.getStartupFailure()));
+        contextRunner.withPropertyValues("iyzico.deployment=local", "iyzico.base-url=http://localhost:9998/proxy")
                 .run(context -> assertNotNull(context.getStartupFailure()));
     }
 

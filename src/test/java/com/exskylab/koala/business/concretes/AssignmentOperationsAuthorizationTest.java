@@ -292,6 +292,8 @@ class AssignmentOperationsAuthorizationTest {
         dispute.setJobAssignment(a);
         dispute.setStatus(DisputeStatus.OPEN);
         when(disputeDaoStub.findById(dispute.getId())).thenReturn(Optional.of(dispute));
+        when(disputeDaoStub.findJobAssignmentIdById(dispute.getId())).thenReturn(Optional.of(a.getId()));
+        when(disputeDaoStub.findByIdForUpdate(dispute.getId())).thenReturn(Optional.of(dispute));
         return dispute;
     }
 

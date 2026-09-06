@@ -71,4 +71,5 @@
     <include file="db/changelog/2026/09/06-82-active-payment-attempt.xml"/>
     <include file="db/changelog/2026/09/06-83-cancellation-refund.xml"/>
     <include file="db/changelog/2026/09/06-84-payment-attempt-reconciliation.xml"/>
+    <include file="db/changelog/2026/09/06-85-legacy-payment-reconciliation.xml"/>
 </databaseChangeLog>
