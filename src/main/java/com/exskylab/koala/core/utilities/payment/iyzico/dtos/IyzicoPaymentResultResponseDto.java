@@ -13,6 +13,7 @@ public class IyzicoPaymentResultResponseDto {
     private String conversationId;
     private String paymentStatus;
     private Integer fraudStatus;
+    private Integer mdStatus;
     private BigDecimal price;
     private BigDecimal paidPrice;
     private BigDecimal itemPaidPrice;
