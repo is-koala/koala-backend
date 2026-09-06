@@ -43,6 +43,12 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
                 String.class);
         assertTrue(tokenDefinition.contains("UNIQUE INDEX"));
         assertTrue(tokenDefinition.contains("provider_token"));
+
+        assertEquals("YES", jdbcTemplate.queryForObject("""
+                select is_nullable from information_schema.columns
+                where table_schema = 'public' and table_name = 'payments'
+                  and column_name = 'provider_submerchant_key'
+                """, String.class));
     }
 
     @Test

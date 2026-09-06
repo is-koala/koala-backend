@@ -177,6 +177,7 @@ public class IyzicoPaymentService {
             result.setItemPrice(decimal(first, "price"));
             result.setItemPaidPrice(decimal(first, "paidPrice"));
             result.setItemSubMerchantPrice(decimal(first, "subMerchantPrice"));
+            result.setItemSubMerchantKey(text(first, "subMerchantKey"));
         }
 
         log.info("iyzico: payment result for conversationId {} is paymentStatus={} fraudStatus={} mdStatus={}",
@@ -371,14 +372,8 @@ public class IyzicoPaymentService {
         }
     }
 
-    private String generateIyzicoV2Signature(String randomKey, String payload)
-            throws NoSuchAlgorithmException, InvalidKeyException {
-        Mac sha256Hmac = Mac.getInstance("HmacSHA256");
-        sha256Hmac.init(new SecretKeySpec(
-                iyzicoProperties.getSecretKey().getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-
-        byte[] hash = sha256Hmac.doFinal((randomKey + payload).getBytes(StandardCharsets.UTF_8));
-        return bytesToHex(hash);
+    private String generateIyzicoV2Signature(String randomKey, String payload) {
+        return hmacSha256(randomKey + payload);
     }
 
     private void verifyResponseSignature(JsonNode root, List<String> fields, java.util.Set<String> decimalFields) {
@@ -409,6 +404,10 @@ public class IyzicoPaymentService {
     }
 
     private String responseHmac(String payload) {
+        return hmacSha256(payload);
+    }
+
+    private String hmacSha256(String payload) {
         try {
             Mac sha256Hmac = Mac.getInstance("HmacSHA256");
             sha256Hmac.init(new SecretKeySpec(
@@ -425,22 +424,29 @@ public class IyzicoPaymentService {
         }
         try {
             URI uri = URI.create(value);
-            if (uri.getUserInfo() != null || uri.getHost() == null) {
+            if (uri.getUserInfo() != null || uri.getHost() == null || uri.getFragment() != null) {
                 return false;
             }
             String host = uri.getHost().toLowerCase(Locale.ROOT);
             return switch (iyzicoProperties.providerEnvironment()) {
-                case SANDBOX -> "https".equalsIgnoreCase(uri.getScheme()) && Set.of(
-                        "sandbox-api.iyzipay.com", "sandbox-cpp.iyzipay.com",
-                        "sandbox-payment.iyzipay.com").contains(host);
-                case LIVE -> "https".equalsIgnoreCase(uri.getScheme()) && Set.of(
-                        "api.iyzipay.com", "payment.iyzipay.com").contains(host);
-                case LOOPBACK -> java.util.Objects.equals(host, URI.create(baseUrl()).getHost());
+                case SANDBOX -> "https".equalsIgnoreCase(uri.getScheme())
+                        && uri.getPort() == -1 && "sandbox-cpp.iyzipay.com".equals(host);
+                case LIVE -> "https".equalsIgnoreCase(uri.getScheme())
+                        && uri.getPort() == -1 && "cpp.iyzipay.com".equals(host);
+                case LOOPBACK -> sameOrigin(uri, URI.create(baseUrl()));
                 default -> false;
             };
         } catch (IllegalArgumentException exception) {
             return false;
         }
+    }
+
+    private static boolean sameOrigin(URI candidate, URI configured) {
+        return candidate.getScheme() != null
+                && candidate.getScheme().equalsIgnoreCase(configured.getScheme())
+                && candidate.getHost() != null
+                && candidate.getHost().equalsIgnoreCase(configured.getHost())
+                && candidate.getPort() == configured.getPort();
     }
 
     private static String bytesToHex(byte[] hash) {

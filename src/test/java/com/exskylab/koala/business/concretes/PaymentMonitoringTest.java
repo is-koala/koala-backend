@@ -15,6 +15,7 @@ import com.exskylab.koala.dataAccess.JobAssignmentDao;
 import com.exskylab.koala.dataAccess.PaymentDao;
 import com.exskylab.koala.entities.AssignmentStatus;
 import com.exskylab.koala.entities.JobAssignment;
+import com.exskylab.koala.entities.Job;
 import com.exskylab.koala.entities.Payment;
 import com.exskylab.koala.entities.PaymentAttemptStatus;
 import com.exskylab.koala.entities.PaymentStatus;
@@ -27,16 +28,23 @@ import org.hibernate.exception.ConstraintViolationException;
 import java.sql.SQLException;
 
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.ArgumentCaptor;
 
 class PaymentMonitoringTest {
 
@@ -46,16 +54,18 @@ class PaymentMonitoringTest {
     private IyzicoPaymentService iyzicoPaymentService;
     private SimpleMeterRegistry registry;
     private PaymentManager paymentManager;
+    private PaymentVerificationProperties verificationProperties;
 
     @BeforeEach
     void setUp() {
         paymentDao = mock(PaymentDao.class);
         iyzicoPaymentService = mock(IyzicoPaymentService.class);
         registry = new SimpleMeterRegistry();
+        verificationProperties = new PaymentVerificationProperties();
         paymentManager = new PaymentManager(paymentDao, iyzicoPaymentService, new PaymentStateMachine(),
                 mock(SecurityService.class), mock(JobAssignmentDao.class),
                 new AssignmentParticipants(mock(CompanyContactService.class)), new PaymentMetrics(registry),
-                new PaymentVerificationProperties());
+                verificationProperties);
         when(paymentDao.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(paymentDao.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
@@ -127,6 +137,32 @@ class PaymentMonitoringTest {
     }
 
     @Test
+    void attachingAProviderTokenSchedulesTheInitiatedAttemptAfterTheCheckoutWindow() {
+        Payment payment = pendingPayment();
+        payment.setProviderToken(null);
+        Instant before = Instant.now().plus(Duration.ofMinutes(35));
+
+        paymentManager.attachProviderToken(payment, "new-provider-token");
+
+        assertEquals("new-provider-token", payment.getProviderToken());
+        assertNotNull(payment.getNextVerificationAt());
+        assertFalse(payment.getNextVerificationAt().isBefore(before));
+        assertTrue(payment.getNextVerificationAt().isBefore(Instant.now().plus(Duration.ofMinutes(36))));
+    }
+
+    @Test
+    void scheduledInitiatedAttemptsAreIncludedInTheDurableReconciliationScan() {
+        when(paymentDao.findDueVerificationIds(any(), any(), any())).thenReturn(List.of());
+
+        paymentManager.findDueVerificationAttemptIds();
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<PaymentAttemptStatus>> statuses = ArgumentCaptor.forClass(List.class);
+        verify(paymentDao).findDueVerificationIds(statuses.capture(), any(), any());
+        assertTrue(statuses.getValue().contains(PaymentAttemptStatus.INITIATED));
+    }
+
+    @Test
     void technicalFailureSeriesExistAtZeroBeforeTheSyntheticProbeRuns() {
         assertEquals(0.0, counter("initiation", "provider_error"));
         assertEquals(0.0, counter("initiation", "persistence_error"));
@@ -153,6 +189,20 @@ class PaymentMonitoringTest {
         result.setPaymentStatus("SUCCESS");
         result.setMdStatus(0);
         result.setFraudStatus(1);
+        result.setPaymentId("pay-1");
+        result.setPaymentTransactionId("txn-1");
+        result.setConversationId(payment.getConversationId());
+        result.setToken(TOKEN);
+        result.setBasketId(payment.getJobAssignment().getId().toString());
+        result.setCurrency("TRY");
+        result.setPrice(new BigDecimal("1075.00"));
+        result.setPaidPrice(new BigDecimal("1075.00"));
+        result.setItemCount(1);
+        result.setItemId(payment.getJobAssignment().getJob().getId().toString());
+        result.setItemPrice(new BigDecimal("1075.00"));
+        result.setItemPaidPrice(new BigDecimal("1075.00"));
+        result.setItemSubMerchantPrice(new BigDecimal("1000.00"));
+        result.setItemSubMerchantKey("submerchant-key");
         when(paymentDao.findByProviderToken(TOKEN)).thenReturn(Optional.of(payment));
         when(iyzicoPaymentService.retrieveCheckoutFormResult(any())).thenReturn(result);
 
@@ -174,12 +224,16 @@ class PaymentMonitoringTest {
         assignment.setId(UUID.randomUUID());
         assignment.setStatus(AssignmentStatus.CONFIRMED);
         assignment.setPaymentStatus(PaymentStatus.PENDING_COLLECTION);
+        Job job = new Job();
+        job.setId(UUID.randomUUID());
+        assignment.setJob(job);
 
         Payment payment = new Payment();
         payment.setId(UUID.randomUUID());
         payment.setJobAssignment(assignment);
         payment.setConversationId(UUID.randomUUID().toString());
         payment.setProviderToken(TOKEN);
+        payment.setProviderSubmerchantKey("submerchant-key");
         payment.setStatus(PaymentAttemptStatus.INITIATED);
         payment.setCurrency("TRY");
         payment.setWorkerPayout(new BigDecimal("1000.00"));

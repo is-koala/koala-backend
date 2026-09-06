@@ -11,6 +11,8 @@ import com.exskylab.koala.core.utilities.payment.iyzico.dtos.PaymentSessionReque
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.PaymentSessionResponseDto;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -71,7 +73,8 @@ class IyzicoProtocolTest {
                  "paidPrice":"1075.00","currency":"TRY","basketId":"basket-1",
                  "token":"tok-1","signature":"183f3da44502ffc7c4e80b737e68844f2153f83a62234df275e5fbc2e6b64a39",
                  "itemTransactions":[{"itemId":"job-1","paymentTransactionId":"txn-1",
-                 "price":"1075.00","paidPrice":"1075.00","subMerchantPrice":"1000.00"}]}
+                 "price":"1075.00","paidPrice":"1075.00","subMerchantPrice":"1000.00",
+                 "subMerchantKey":"submerchant-key"}]}
                 """;
     }
 
@@ -166,6 +169,7 @@ class IyzicoProtocolTest {
         assertEquals("job-1", result.getItemId());
         assertEquals(0, new BigDecimal("1075.00").compareTo(result.getItemPrice()));
         assertEquals(0, new BigDecimal("1000.00").compareTo(result.getItemSubMerchantPrice()));
+        assertEquals("submerchant-key", result.getItemSubMerchantKey());
         assertEquals(1, result.getItemCount());
     }
 
@@ -215,14 +219,53 @@ class IyzicoProtocolTest {
         server.expect(requestTo(BASE_URL + IyzicoEndpoints.CHECKOUT_FORM_INITIALIZE))
                 .andRespond(withSuccess("""
                         {"status":"success","conversationId":"conv-1","token":"tok-1",
-                         "paymentPageUrl":"https://sandbox-api.iyzipay.com/checkoutform/example",
+                         "paymentPageUrl":"https://sandbox-cpp.iyzipay.com/checkoutform/example",
                          "signature":"da244a6a48b4793ef8d0d6e0b5e46683c5a9bf0f6b4f73b60168667f4ae66a25"}
                         """, MediaType.APPLICATION_JSON));
 
         PaymentSessionResponseDto result = service.initiateCheckoutFormPayment(initializeRequest());
 
         assertEquals("tok-1", result.getToken());
-        assertEquals("https://sandbox-api.iyzipay.com/checkoutform/example", result.getPaymentPageUrl());
+        assertEquals("https://sandbox-cpp.iyzipay.com/checkoutform/example", result.getPaymentPageUrl());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "https://sandbox-api.iyzipay.com/checkoutform/example",
+            "https://sandbox-payment.iyzipay.com/checkoutform/example",
+            "https://sandbox-cpp.iyzipay.com:444/checkoutform/example",
+            "https://user@sandbox-cpp.iyzipay.com/checkoutform/example",
+            "https://sandbox-cpp.iyzipay.com/checkoutform/example#token"
+    })
+    void onlyTheExactOfficialSandboxHostedOriginIsAccepted(String hostedUrl) {
+        server.expect(requestTo(BASE_URL + IyzicoEndpoints.CHECKOUT_FORM_INITIALIZE))
+                .andRespond(withSuccess("""
+                        {"status":"success","conversationId":"conv-1","token":"tok-1",
+                         "paymentPageUrl":"%s",
+                         "signature":"da244a6a48b4793ef8d0d6e0b5e46683c5a9bf0f6b4f73b60168667f4ae66a25"}
+                        """.formatted(hostedUrl), MediaType.APPLICATION_JSON));
+
+        assertThrows(ExternalServiceException.class,
+                () -> service.initiateCheckoutFormPayment(initializeRequest()));
+    }
+
+    @Test
+    void theExactOfficialLiveHostedOriginIsAccepted() {
+        IyzicoProperties live = new IyzicoProperties();
+        live.setApiKey("live-api-key");
+        live.setSecretKey(SECRET);
+        live.setBaseUrl("https://api.iyzipay.com");
+        IyzicoPaymentService liveService = new IyzicoPaymentService(restTemplate, live, new ObjectMapper());
+        server.expect(requestTo("https://api.iyzipay.com" + IyzicoEndpoints.CHECKOUT_FORM_INITIALIZE))
+                .andRespond(withSuccess("""
+                        {"status":"success","conversationId":"conv-1","token":"tok-1",
+                         "paymentPageUrl":"https://cpp.iyzipay.com/checkoutform/example",
+                         "signature":"da244a6a48b4793ef8d0d6e0b5e46683c5a9bf0f6b4f73b60168667f4ae66a25"}
+                        """, MediaType.APPLICATION_JSON));
+
+        PaymentSessionResponseDto result = liveService.initiateCheckoutFormPayment(initializeRequest());
+
+        assertEquals("https://cpp.iyzipay.com/checkoutform/example", result.getPaymentPageUrl());
     }
 
     @Test

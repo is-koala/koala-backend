@@ -20,6 +20,7 @@ public class IyzicoPaymentResultResponseDto {
     private BigDecimal itemPaidPrice;
     private BigDecimal itemPrice;
     private BigDecimal itemSubMerchantPrice;
+    private String itemSubMerchantKey;
     private String itemId;
     private int itemCount;
     private String currency;

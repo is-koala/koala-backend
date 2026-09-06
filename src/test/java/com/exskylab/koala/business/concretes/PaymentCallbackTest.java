@@ -72,6 +72,7 @@ class PaymentCallbackTest {
         payment.setJobAssignment(assignment);
         payment.setConversationId(CONVERSATION_ID);
         payment.setProviderToken(TOKEN);
+        payment.setProviderSubmerchantKey("submerchant-key");
         payment.setStatus(PaymentAttemptStatus.INITIATED);
         payment.setCurrency("TRY");
         payment.setWorkerPayout(new BigDecimal("1000.00"));
@@ -99,6 +100,7 @@ class PaymentCallbackTest {
         result.setItemPrice(new BigDecimal("1075.00"));
         result.setItemPaidPrice(new BigDecimal("1075.00"));
         result.setItemSubMerchantPrice(new BigDecimal("1000.00"));
+        result.setItemSubMerchantKey("submerchant-key");
         result.setCurrency("TRY");
         return result;
     }
@@ -259,6 +261,21 @@ class PaymentCallbackTest {
     }
 
     @Test
+    void aDeclineForAnotherConversationCannotTerminallyFailThisAttempt() {
+        Payment payment = pendingPayment();
+        IyzicoPaymentResultResponseDto declined = providerSuccess();
+        declined.setPaymentStatus("FAILURE");
+        declined.setConversationId("another-conversation");
+        when(paymentDao.findByProviderToken(TOKEN)).thenReturn(Optional.of(payment));
+        when(iyzicoPaymentService.retrieveCheckoutFormResult(any())).thenReturn(declined);
+
+        Payment result = paymentManager.completeFromCallback(TOKEN);
+
+        assertEquals(PaymentAttemptStatus.VERIFY_PENDING, result.getStatus());
+        assertEquals(PaymentStatus.PENDING_COLLECTION, result.getJobAssignment().getPaymentStatus());
+    }
+
+    @Test
     void aPaymentRejectedByFraudFiltersFails() {
         Payment payment = pendingPayment();
         IyzicoPaymentResultResponseDto rejected = providerSuccess();
@@ -285,6 +302,34 @@ class PaymentCallbackTest {
         assertEquals(PaymentAttemptStatus.IN_REVIEW, result.getStatus());
         assertEquals(PaymentStatus.PENDING_COLLECTION, result.getJobAssignment().getPaymentStatus());
         assertEquals("txn-1", result.getProviderTransactionId());
+    }
+
+    @Test
+    void anAbsentFraudDecisionRemainsPendingInsteadOfOpeningEscrow() {
+        Payment payment = pendingPayment();
+        IyzicoPaymentResultResponseDto indeterminate = providerSuccess();
+        indeterminate.setFraudStatus(null);
+        when(paymentDao.findByProviderToken(TOKEN)).thenReturn(Optional.of(payment));
+        when(iyzicoPaymentService.retrieveCheckoutFormResult(any())).thenReturn(indeterminate);
+
+        Payment result = paymentManager.completeFromCallback(TOKEN);
+
+        assertEquals(PaymentAttemptStatus.VERIFY_PENDING, result.getStatus());
+        assertEquals(PaymentStatus.PENDING_COLLECTION, result.getJobAssignment().getPaymentStatus());
+    }
+
+    @Test
+    void anUnknownFraudDecisionRemainsPendingInsteadOfOpeningEscrow() {
+        Payment payment = pendingPayment();
+        IyzicoPaymentResultResponseDto indeterminate = providerSuccess();
+        indeterminate.setFraudStatus(2);
+        when(paymentDao.findByProviderToken(TOKEN)).thenReturn(Optional.of(payment));
+        when(iyzicoPaymentService.retrieveCheckoutFormResult(any())).thenReturn(indeterminate);
+
+        Payment result = paymentManager.completeFromCallback(TOKEN);
+
+        assertEquals(PaymentAttemptStatus.VERIFY_PENDING, result.getStatus());
+        assertEquals(PaymentStatus.PENDING_COLLECTION, result.getJobAssignment().getPaymentStatus());
     }
 
     @Test
@@ -315,6 +360,20 @@ class PaymentCallbackTest {
     }
 
     @Test
+    void aSuccessfulPaymentForAnotherSubmerchantNeverOpensEscrow() {
+        Payment payment = pendingPayment();
+        IyzicoPaymentResultResponseDto tampered = providerSuccess();
+        tampered.setItemSubMerchantKey("another-submerchant");
+        when(paymentDao.findByProviderToken(TOKEN)).thenReturn(Optional.of(payment));
+        when(iyzicoPaymentService.retrieveCheckoutFormResult(any())).thenReturn(tampered);
+
+        Payment result = paymentManager.completeFromCallback(TOKEN);
+
+        assertEquals(PaymentAttemptStatus.VERIFY_PENDING, result.getStatus());
+        assertEquals(PaymentStatus.PENDING_COLLECTION, result.getJobAssignment().getPaymentStatus());
+    }
+
+    @Test
     void aPaymentWhoseThreeDSecureVerificationFailedNeverOpensEscrow() {
         Payment payment = pendingPayment();
         IyzicoPaymentResultResponseDto unverified = providerSuccess();
@@ -325,10 +384,11 @@ class PaymentCallbackTest {
         Payment result = paymentManager.completeFromCallback(TOKEN);
         JobAssignment assignment = result.getJobAssignment();
 
-        assertEquals(PaymentAttemptStatus.FAILED, result.getStatus());
-        assertEquals(PaymentStatus.FAILED, assignment.getPaymentStatus());
+        assertEquals(PaymentAttemptStatus.VERIFY_PENDING, result.getStatus());
+        assertEquals(PaymentStatus.PENDING_COLLECTION, assignment.getPaymentStatus());
         assertNotEquals(PaymentStatus.HELD_IN_ESCROW, assignment.getPaymentStatus());
-        assertNotNull(result.getCompletedAt());
+        assertNull(result.getCompletedAt());
+        assertNotNull(result.getNextVerificationAt());
         assertNull(assignment.getFinalPayout());
         assertNull(assignment.getTotalCharged());
         assertNull(assignment.getWorkerPayout());
@@ -352,7 +412,7 @@ class PaymentCallbackTest {
 
     @ParameterizedTest
     @ValueSource(ints = {-1, 0, 2, 3, 4, 5, 6, 7, 8})
-    void everyMdStatusOtherThanOneIsRejected(int mdStatus) {
+    void everyMdStatusOtherThanOneRemainsPendingVerification(int mdStatus) {
         Payment payment = pendingPayment();
         IyzicoPaymentResultResponseDto unverified = providerSuccess();
         unverified.setMdStatus(mdStatus);
@@ -361,12 +421,12 @@ class PaymentCallbackTest {
 
         Payment result = paymentManager.completeFromCallback(TOKEN);
 
-        assertEquals(PaymentAttemptStatus.FAILED, result.getStatus());
+        assertEquals(PaymentAttemptStatus.VERIFY_PENDING, result.getStatus());
         assertNotEquals(PaymentStatus.HELD_IN_ESCROW, result.getJobAssignment().getPaymentStatus());
     }
 
     @Test
-    void anAbsentMdStatusIsRejectedRatherThanAssumedVerified() {
+    void anAbsentMdStatusRemainsPendingRatherThanBeingAssumedVerified() {
         Payment payment = pendingPayment();
         IyzicoPaymentResultResponseDto silent = providerSuccess();
         silent.setMdStatus(null);
@@ -375,7 +435,7 @@ class PaymentCallbackTest {
 
         Payment result = paymentManager.completeFromCallback(TOKEN);
 
-        assertEquals(PaymentAttemptStatus.FAILED, result.getStatus());
+        assertEquals(PaymentAttemptStatus.VERIFY_PENDING, result.getStatus());
         assertEquals(PaymentMessages.THREE_D_SECURE_FAILED, result.getFailureReason());
         assertNotEquals(PaymentStatus.HELD_IN_ESCROW, result.getJobAssignment().getPaymentStatus());
     }
@@ -391,7 +451,7 @@ class PaymentCallbackTest {
 
         Payment result = paymentManager.completeFromCallback(TOKEN);
 
-        assertEquals(PaymentAttemptStatus.FAILED, result.getStatus());
+        assertEquals(PaymentAttemptStatus.VERIFY_PENDING, result.getStatus());
         assertNotEquals(PaymentAttemptStatus.IN_REVIEW, result.getStatus());
     }
 
@@ -407,8 +467,8 @@ class PaymentCallbackTest {
         Payment second = paymentManager.completeFromCallback(TOKEN);
         Payment third = paymentManager.completeFromCallback(TOKEN);
 
-        assertEquals(PaymentAttemptStatus.FAILED, third.getStatus());
-        assertEquals(PaymentStatus.FAILED, third.getJobAssignment().getPaymentStatus());
+        assertEquals(PaymentAttemptStatus.VERIFY_PENDING, third.getStatus());
+        assertEquals(PaymentStatus.PENDING_COLLECTION, third.getJobAssignment().getPaymentStatus());
         assertEquals(PaymentMessages.THREE_D_SECURE_FAILED, second.getFailureReason());
         verify(iyzicoPaymentService, times(3)).retrieveCheckoutFormResult(any());
         verifyNoInteractions(jobAssignmentDao);
@@ -435,24 +495,20 @@ class PaymentCallbackTest {
     }
 
     @Test
-    void aRejectedVerificationCanBeRetriedAndThenSucceed() {
-        Payment first = pendingPayment();
+    void aPendingThreeDsResultCanLaterBeReconciledToSuccess() {
+        Payment payment = pendingPayment();
         IyzicoPaymentResultResponseDto unverified = providerSuccess();
         unverified.setMdStatus(0);
-        when(paymentDao.findByProviderToken(TOKEN)).thenReturn(Optional.of(first));
-        when(iyzicoPaymentService.retrieveCheckoutFormResult(any())).thenReturn(unverified);
+        when(paymentDao.findByProviderToken(TOKEN)).thenReturn(Optional.of(payment));
+        when(iyzicoPaymentService.retrieveCheckoutFormResult(any()))
+                .thenReturn(unverified, providerSuccess());
 
         paymentManager.completeFromCallback(TOKEN);
-        assertEquals(PaymentStatus.FAILED, first.getJobAssignment().getPaymentStatus());
-
-        Payment second = pendingPayment();
-        second.getJobAssignment().setPaymentStatus(PaymentStatus.FAILED);
-        reset(iyzicoPaymentService);
-        when(paymentDao.findByProviderToken(TOKEN)).thenReturn(Optional.of(second));
-        when(iyzicoPaymentService.retrieveCheckoutFormResult(any())).thenReturn(providerSuccess());
+        assertEquals(PaymentAttemptStatus.VERIFY_PENDING, payment.getStatus());
+        assertEquals(PaymentStatus.PENDING_COLLECTION, payment.getJobAssignment().getPaymentStatus());
 
         paymentManager.completeFromCallback(TOKEN);
 
-        assertEquals(PaymentStatus.HELD_IN_ESCROW, second.getJobAssignment().getPaymentStatus());
+        assertEquals(PaymentStatus.HELD_IN_ESCROW, payment.getJobAssignment().getPaymentStatus());
     }
 }
