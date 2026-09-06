@@ -534,18 +534,9 @@ Uyuşmazlık yalnızca **emanette para varken** açılabilir, atama başına ayn
 
 **Değerlendirme bildirimi `ReviewManager` içinde, rozet değerlendirmesinden sonra.** Kaydedilmemiş ya da reddedilmiş bir değerlendirme kimseye bildirilmez — çağrı akışın sonunda, `ConflictException` atılan yolların ötesinde. Yazan kişiye bildirim gitmez, yalnızca hakkında yazılana. `ReviewRulesTest` ikisini de sabitliyor. Her gönderim `try/catch` içinde — bildirim teslim edilemese de iş akışı düşmez, iş alarmındaki desenin aynısı.
 
-**Kategoriler yeniden dağıtıldı.** Önceden on üç gönderim noktasının onu `ACCOUNT_SECURITY` idi; şirket daveti ve şirket oluşturma da öyle işaretliydi. Faz 9B'deki **kanal bazlı bildirim tercihi** buna dayanacağı için yanlış kategori sonradan veri göçü demekti: kullanıcı pazarlama iletisini kapatmak istediğinde şifre sıfırlamayı da kapatmak zorunda kalırdı.
+**Kategoriler yeniden dağıtıldı.** Önceden on üç gönderim noktasının onu `ACCOUNT_SECURITY` idi; şirket daveti ve şirket oluşturma da öyle işaretliydi. Kanal bazlı bildirim tercihi buna dayanacağı için yanlış kategori sonradan veri göçü demekti: kullanıcı pazarlama iletisini kapatmak istediğinde şifre sıfırlamayı da kapatmak zorunda kalırdı. `COMPANY_UPDATES` bu ayrım için eklendi.
 
-| Kategori | Ne taşır | Kapatılabilir mi |
-|---|---|---|
-| `ACCOUNT_SECURITY` | kayıt, giriş, şifre sıfırlama, e-posta/telefon doğrulama | **hayır**, işlemsel |
-| `APPLICATION_UPDATES` | başvuru, atama, tamamlama, ödeme, uyuşmazlık, iptal | hayır, işlemsel |
-| `IDENTITY_VERIFICATION` | kimlik doğrulandı | hayır |
-| `COMPANY_UPDATES` | şirket oluşturma, yetkili daveti ve cevabı | evet |
-| `JOB_ALERTS` | iş alarmı, takip edilen şirketin yeni ilanı | evet |
-| `MARKETINGS` / `NEWSLETTER` | ticari ileti | evet, **açık rıza şart** |
-
-`COMPANY_UPDATES` bu ayrım için eklendi.
+**Kategori → kapatılabilirlik tablosu buradan kaldırıldı; tek kaynak `NotificationCategoryKind`.** Tercih katmanı (§2at) geldiğinde bu bilgi enum'a taşındı ve burada ikinci bir kopya bırakmak iki gerçeklik üretiyordu. Hangi kategorinin kapatılabildiği, varsayılanının ne olduğu ve ticari sayılıp sayılmadığı için **§2at'ye** ya da doğrudan enum'a bak.
 
 **`AgreementType.COMMERCIAL_MESSAGE` rızası hâlâ ayrı bir şey.** Kayıtta toplanan bu onay `ConsentRecord`'a yazılıyor ve **kanal tercihine dönüşmüyor**: `MARKETINGS`/`NEWSLETTER` kayıt sırasında sözleşme onaylansa bile **kapalı** kalıyor ve kullanıcı bildirim tercihlerinden açana kadar gönderim yapılamıyor. Bu bilinçli — sözleşme onayı şemsiye izin, kanal bazlı açma ayrı ve açık bir eylem olmalı (§2at). Gönderim kapısı ve rıza kaydı §2at'de. İYS entegrasyonu yapılmadı — kapsamı `docs/research/iys-commercial-message-integration.md` içinde.
 
@@ -1257,7 +1248,7 @@ gerekip gerekmediği oradan türüyor. §2s'deki tablo bu enum'a taşındı, art
 kombinasyonu tutar; satırı olmayan kombinasyon `kind`'ın varsayılanına düşer. Yeni bir kategori eklendiğinde
 mevcut kullanıcılar için veri göçü gerekmiyor — kayıt anında 21 satır açan tasarımın tersi.
 
-**İşlemsel bildirimin kapatılamaması iki yerde, ikisi de bilinçli.** `UpdateNotificationPrefsDto` üzerindeki
+**İşlemsel bildirimin kapatılamaması iki yerde, ikisi de bilinçli.** `UpdateNotificationPreferencesDto` üzerindeki
 `@AssertTrue` istemciye 400 + alan mesajı döndürür (§2ah'nin çapraz alan kuralı); `isAllowed` ise
 `kind.isOptional()` değilse **satıra hiç bakmadan** `true` döner. Birincisi API sözleşmesi, ikincisi garanti:
 veritabanına elle yazılmış ya da göçten kalmış bir satır bile ödeme bildirimini susturamaz.
@@ -1463,7 +1454,7 @@ Denetim bulguları `K-01`…`K-42` kodlarıyla numaralandırılmış; commit mes
 |---|---|---|
 | **20** | **Referans veri olgunlaştırma.** Ayrıntı aşağıda | ürün + veri |
 | **7C** | **Iyzico kalanları.** Dolandırıcılık incelemesi (`fraudStatus=0`) webhook tüketicisi — `IN_REVIEW`'daki ödeme bugün kendiliğinden çözülmüyor (§2x). Ayrıca kısmi iade + disapprove sıralamasının sandbox'ta teyidi | sandbox erişimi |
-| **9B** | Yasal kalanlar: anonimleştirme adımı, `Invoice`, `AuditLog`, İYS entegrasyonu, kanal bazlı bildirim tercihi, ETBİS, depolama saklama politikası (§8) | **hukuk** |
+| **9B** | Yasal kalanlar: anonimleştirme adımı, `Invoice`, `AuditLog`, İYS entegrasyonu, ETBİS, depolama saklama politikası (§8) | **hukuk** |
 | **11D** | **Çok örneklilik.** Beş yerde tek örnek varsayımı: hız sınırı sayacı (§2j), otomatik tamamlama zamanlayıcısı (§2u), mutabakat zamanlayıcısı (§2y), presence haritası ve STOMP basit broker'ı (§2z). **Şu an tek örnek çalışacak, ertelendi** — Redis + `ShedLock` + RabbitMQ STOMP relay | ertelendi |
 
 ### İstemcide değişmesi gerekenler (Faz 15'ten sonra biriken)
