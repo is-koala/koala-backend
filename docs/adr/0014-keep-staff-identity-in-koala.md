@@ -69,7 +69,7 @@ Grafik `db/changelog/2026/09/06-20-staff-authorization.xml` ile seed'lenir ve `S
 - **Panelde personel yönetimi ekranı gerekir**: personel oluşturma, rol atama/geri alma, devre dışı bırakma. Keycloak konsolunun yerini alır.
 - **Rol iptali anında geçerli olur.** ADR-0010 bunu "token yenilenene kadar gecikir, ~5 dakikalık token ömrüyle yönetilir" diye kaydetmişti. Üyelik veritabanından okununca gecikme sıfırlanır — beklenmedik bir kazanç.
 - **Rol atama denetim kaydına girer.** ADR-0010'un açıkça kayıp yazdığı şey geri gelir.
-- **MFA yok.** Bu, ADR-0010'a göre gerçek bir gerileme ve öyle kaydedilmelidir. İkinci personelden önce yeniden değerlendirilmeli; kilitleme tarafı için mevcut hız sınırlayıcı (§2j `AUTH` kovası) bir taban sağlıyor ama MFA'nın yerini tutmuyor.
+- **MFA yok.** Bu, ADR-0010'a göre gerçek bir gerileme ve öyle kaydedilmelidir. Karşılığı hız sınırlayıcı (§2j `AUTH` kovası) ve hesap kilidi; ikisi de MFA'nın yerini tutmuyor. **Yeniden açılma koşulu yazılıdır: panele sahibin dışında ikinci bir kişi girdiği gün.** Bugün tek kullanıcı var ve panel yalnız `admin.iskoala.com` üzerinden erişilebilir; koşul bu ikisinden herhangi biri değiştiğinde sağlanır. Koşulsuz bir "sonra bakarız" kaydı, gerilemeyi kalıcı hâle getirme yoludur.
 - **Kurtarma planı basitleşir.** Panel artık dış bir servise bağlı değil; Koala ayaktaysa panel de ayakta.
 - ADR-0010'un "Geçiş" bölümündeki marketplace `ROLE_ADMIN` köprüsü, personel girişi indiğinde kapanır. Köprünün ömrü `koala.staff.bridge.open` anahtarına bağlı (is-koala/koala-backend#64) ve o anahtar bu iş bitince kapatılır.
 
