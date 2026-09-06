@@ -6,6 +6,7 @@ import com.exskylab.koala.core.helpers.LogMasks;
 
 import com.exskylab.koala.business.abstracts.*;
 import com.exskylab.koala.core.constants.AdminMessages;
+import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.core.constants.SystemUser;
 import com.exskylab.koala.core.constants.UserMessages;
 import com.exskylab.koala.core.dtos.address.request.AddressWriteDto;
@@ -562,7 +563,7 @@ public class UserManager implements UserService {
 
     @Override
     @Transactional
-    public List<UserDao.RoleGrantView> grantRole(UUID userId, Role role) {
+    public List<UserDao.RoleGrantView> grantRole(StaffPrincipal actor, UUID userId, Role role) {
         User target = getById(userId);
         rejectSystemUser(target);
 
@@ -571,17 +572,26 @@ public class UserManager implements UserService {
             return userDao.findRoleGrants(target.getId());
         }
 
-        UUID grantedById = securityService.getAuthenticatedUserId();
         addRole(target, role);
-        userDao.stampRoleGrant(target.getId(), role.name(), Instant.now(), grantedById);
-        log.info("Role {} granted to user {} by {}", role, target.getId(), grantedById);
+        if (actor == null) {
+            // Köprü yolu: aktör bir marketplace kullanıcısı, kimliği granted_by_id'ye yazılabiliyor.
+            UUID grantedById = securityService.getAuthenticatedUserId();
+            userDao.stampRoleGrant(target.getId(), role.name(), Instant.now(), grantedById);
+            log.info("Role {} granted to user {} by bridge admin {}", role, target.getId(), grantedById);
+        } else {
+            // Personel yolu: granted_by_id users'a yabancı anahtar taşıyor ve personelin orada satırı yok
+            // (ADR-0014: personel marketplace kullanıcılarından ayrı). Sütun boş kalıyor, "kim verdi"
+            // sorusunu admin denetim kaydı cevaplıyor.
+            userDao.stampRoleGrantTime(target.getId(), role.name(), Instant.now());
+            log.info("Role {} granted to user {} by staff {}", role, target.getId(), actor.subject());
+        }
 
         return userDao.findRoleGrants(target.getId());
     }
 
     @Override
     @Transactional
-    public void revokeRole(UUID userId, Role role) {
+    public void revokeRole(StaffPrincipal actor, UUID userId, Role role) {
         User target = getById(userId);
         rejectSystemUser(target);
 
@@ -594,7 +604,11 @@ public class UserManager implements UserService {
         }
 
         if (role == Role.ROLE_ADMIN) {
-            if (target.getId().equals(securityService.getAuthenticatedUserId())) {
+            // Kendi rolünü alma koruması yalnız köprü yolunda anlamlı: orada aktör bir marketplace
+            // kullanıcısı, yani hedefle aynı kişi olabilir. Personel yolunda aktör hiçbir zaman bir
+            // users satırı değildir, dolayısıyla hedefle çakışamaz — kontrol vakumda kalırdı ve
+            // securityService'e uzanmak IllegalStateException demek olurdu.
+            if (actor == null && target.getId().equals(securityService.getAuthenticatedUserId())) {
                 throw new ConflictException(AdminMessages.OWN_ADMIN_ROLE_PROTECTED);
             }
             if (userDao.countUsersWithRole(Role.ROLE_ADMIN.name()) <= 1) {

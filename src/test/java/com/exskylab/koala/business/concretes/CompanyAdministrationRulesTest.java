@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.*;
 import com.exskylab.koala.core.dtos.company.request.UpdateCompanyRequestDto;
@@ -131,7 +132,7 @@ class CompanyAdministrationRulesTest {
         when(securityService.getAuthenticatedUserId()).thenReturn(adminId);
 
         assertFalse(company.getApprovalStatus().isApproved());
-        assertTrue(manager.approveCompany(company.getId(), null).getApprovalStatus().isApproved());
+        assertTrue(manager.approveCompany(null, company.getId(), null).getApprovalStatus().isApproved());
     }
 
     @Test
@@ -161,7 +162,7 @@ class CompanyAdministrationRulesTest {
     void anApprovalTellsTheCompany() {
         when(securityService.getAuthenticatedUserId()).thenReturn(adminId);
 
-        manager.approveCompany(company.getId(), null);
+        manager.approveCompany(null, company.getId(), null);
 
         verify(activityNotificationService).companyApprovalDecided(company);
     }
@@ -170,7 +171,7 @@ class CompanyAdministrationRulesTest {
     void aRejectionTellsTheCompany() {
         when(securityService.getAuthenticatedUserId()).thenReturn(adminId);
 
-        manager.rejectCompany(company.getId(), "Vergi levhası okunmuyor");
+        manager.rejectCompany(null, company.getId(), "Vergi levhası okunmuyor");
 
         verify(activityNotificationService).companyApprovalDecided(company);
     }
@@ -180,8 +181,8 @@ class CompanyAdministrationRulesTest {
         when(securityService.getAuthenticatedUserId()).thenReturn(adminId);
         company.setApprovalStatus(CompanyApprovalStatus.APPROVED);
 
-        assertThrows(ConflictException.class, () -> manager.approveCompany(company.getId(), null));
-        assertThrows(ConflictException.class, () -> manager.rejectCompany(company.getId(), "Şüpheli"));
+        assertThrows(ConflictException.class, () -> manager.approveCompany(null, company.getId(), null));
+        assertThrows(ConflictException.class, () -> manager.rejectCompany(null, company.getId(), "Şüpheli"));
 
         verifyNoInteractions(activityNotificationService);
     }
@@ -190,7 +191,7 @@ class CompanyAdministrationRulesTest {
     void anApprovalRecordsTheNoteItWasGiven() {
         when(securityService.getAuthenticatedUserId()).thenReturn(adminId);
 
-        Company approved = manager.approveCompany(company.getId(), "  Vergi levhası doğrulandı  ");
+        Company approved = manager.approveCompany(null, company.getId(), "  Vergi levhası doğrulandı  ");
 
         assertEquals(CompanyApprovalStatus.APPROVED, approved.getApprovalStatus());
         assertEquals("Vergi levhası doğrulandı", approved.getApprovalNote());
@@ -202,25 +203,25 @@ class CompanyAdministrationRulesTest {
         when(securityService.getAuthenticatedUserId()).thenReturn(adminId);
         company.setApprovalStatus(CompanyApprovalStatus.APPROVED);
 
-        assertThrows(ConflictException.class, () -> manager.rejectCompany(company.getId(), "Şüpheli"));
+        assertThrows(ConflictException.class, () -> manager.rejectCompany(null, company.getId(), "Şüpheli"));
         assertEquals(CompanyApprovalStatus.APPROVED, company.getApprovalStatus());
     }
 
     @Test
     void aRejectedCompanyCannotBeRejectedTwice() {
         when(securityService.getAuthenticatedUserId()).thenReturn(adminId);
-        manager.rejectCompany(company.getId(), "Vergi levhası okunmuyor");
+        manager.rejectCompany(null, company.getId(), "Vergi levhası okunmuyor");
 
-        assertThrows(ConflictException.class, () -> manager.rejectCompany(company.getId(), "Yine olmadı"));
+        assertThrows(ConflictException.class, () -> manager.rejectCompany(null, company.getId(), "Yine olmadı"));
         assertEquals("Vergi levhası okunmuyor", company.getApprovalNote());
     }
 
     @Test
     void aRejectedCompanyCanStillBeApprovedAndTheNoteIsReplaced() {
         when(securityService.getAuthenticatedUserId()).thenReturn(adminId);
-        manager.rejectCompany(company.getId(), "Vergi levhası okunmuyor");
+        manager.rejectCompany(null, company.getId(), "Vergi levhası okunmuyor");
 
-        Company approved = manager.approveCompany(company.getId(), "Belgeler yenilendi");
+        Company approved = manager.approveCompany(null, company.getId(), "Belgeler yenilendi");
 
         assertEquals(CompanyApprovalStatus.APPROVED, approved.getApprovalStatus());
         assertEquals("Belgeler yenilendi", approved.getApprovalNote());
@@ -230,7 +231,7 @@ class CompanyAdministrationRulesTest {
     void aPendingCompanyIsRejectedWithAReasonAndLeavesThePendingQueue() {
         when(securityService.getAuthenticatedUserId()).thenReturn(adminId);
 
-        Company rejected = manager.rejectCompany(company.getId(), "Vergi levhası okunmuyor");
+        Company rejected = manager.rejectCompany(null, company.getId(), "Vergi levhası okunmuyor");
 
         assertEquals(CompanyApprovalStatus.REJECTED, rejected.getApprovalStatus());
         assertEquals("Vergi levhası okunmuyor", rejected.getApprovalNote());
@@ -242,6 +243,31 @@ class CompanyAdministrationRulesTest {
         when(securityService.getAuthenticatedUserId()).thenReturn(adminId);
         company.setApprovalStatus(CompanyApprovalStatus.APPROVED);
 
-        assertThrows(ConflictException.class, () -> manager.approveCompany(company.getId(), null));
+        assertThrows(ConflictException.class, () -> manager.approveCompany(null, company.getId(), null));
+    }
+
+    // --- personel yolu (#95) ---
+
+    @Test
+    void approvalAndRejectionWorkForAStaffActorWithoutTouchingTheMarketplacePrincipal() {
+        StaffPrincipal actor = StaffPrincipal.unregistered("kc-subject-1", java.util.Set.of("COMPANY_APPROVER"));
+
+        assertTrue(manager.approveCompany(actor, company.getId(), null).getApprovalStatus().isApproved());
+
+        // securityService'e uzanmak IllegalStateException demekti: aktör bir UserPrincipal değil.
+        // Log satırında bile çağrılmamalı — #95'in tuzağı tam buydu.
+        verify(securityService, never()).getAuthenticatedUserId();
+        verify(securityService, never()).getAuthenticatedUser();
+    }
+
+    @Test
+    void aStaffRejectionAlsoAvoidsTheMarketplacePrincipal() {
+        StaffPrincipal actor = StaffPrincipal.unregistered("kc-subject-1", java.util.Set.of("COMPANY_APPROVER"));
+
+        manager.rejectCompany(actor, company.getId(), "Vergi levhası okunmuyor");
+
+        verify(activityNotificationService).companyApprovalDecided(company);
+        verify(securityService, never()).getAuthenticatedUserId();
+        verify(securityService, never()).getAuthenticatedUser();
     }
 }
