@@ -97,6 +97,14 @@ class NotificationPreferenceRulesTest {
     }
 
     @Test
+    void aCompanyContactInvitationSurvivesAStoredRowThatSwitchesCompanyUpdatesOff() {
+        storedRow(NotificationCategory.COMPANY_UPDATES, NotificationChannel.EMAIL, false);
+
+        assertTrue(manager.isAllowed(userId, NotificationCategory.COMPANY_UPDATES, NotificationChannel.EMAIL),
+                "yetkili daveti e-postadan başka hiçbir kanaldan gitmiyor, tercih onu susturamamalı");
+    }
+
+    @Test
     void aCommercialCategoryIsOffUntilTheUserOptsIn() {
         assertFalse(manager.isAllowed(userId, NotificationCategory.MARKETINGS, NotificationChannel.EMAIL));
 
@@ -145,6 +153,15 @@ class NotificationPreferenceRulesTest {
                 NotificationCategory.JOB_ALERTS, NotificationChannel.EMAIL);
 
         assertTrue(optional.editable());
+    }
+
+    @Test
+    void theResolvedViewOffersNoSwitchForCompanyUpdates() {
+        NotificationPreferenceDto companyUpdates = entryOf(manager.getMyPreferences(),
+                NotificationCategory.COMPANY_UPDATES, NotificationChannel.EMAIL);
+
+        assertTrue(companyUpdates.enabled());
+        assertFalse(companyUpdates.editable());
     }
 
     @Test

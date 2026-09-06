@@ -6,7 +6,7 @@ public enum NotificationCategory {
     APPLICATION_UPDATES(NotificationCategoryKind.TRANSACTIONAL),
     IDENTITY_VERIFICATION(NotificationCategoryKind.TRANSACTIONAL),
     MARKETINGS(NotificationCategoryKind.COMMERCIAL),
-    COMPANY_UPDATES(NotificationCategoryKind.ALERT),
+    COMPANY_UPDATES(NotificationCategoryKind.TRANSACTIONAL),
     JOB_ALERTS(NotificationCategoryKind.ALERT),
     NEWSLETTER(NotificationCategoryKind.COMMERCIAL);
 
