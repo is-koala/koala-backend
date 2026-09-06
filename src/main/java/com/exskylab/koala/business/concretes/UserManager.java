@@ -172,7 +172,7 @@ public class UserManager implements UserService {
             if (currentUser.isIdentityVerified()){
                 throw new ValidationException(UserMessages.IDENTITY_VERIFIED_CANNOT_CHANGE_FIRST_NAME);
             }
-            log.info("Updating first name to: {}, from {}", userMePatchRequestDto.getFirstName(), currentUser.getFirstName());
+            log.info("First name change requested for user id: {}", currentUser.getId());
             currentUser.setFirstName(userMePatchRequestDto.getFirstName());
 
         }
@@ -181,7 +181,7 @@ public class UserManager implements UserService {
             if (currentUser.isIdentityVerified()){
                 throw new ValidationException(UserMessages.IDENTITY_VERIFIED_CANNOT_CHANGE_LAST_NAME);
             }
-            log.info("Updating last name to: {}, from {}", userMePatchRequestDto.getLastName(), currentUser.getLastName());
+            log.info("Last name change requested for user id: {}", currentUser.getId());
             currentUser.setLastName(userMePatchRequestDto.getLastName());
         }
 
@@ -189,7 +189,7 @@ public class UserManager implements UserService {
             if (currentUser.isIdentityVerified()){
                 throw new ValidationException(UserMessages.IDENTITY_VERIFIED_CANNOT_CHANGE_BIRTHDATE);
             }
-            log.info("Updating birthdate to: {} from: {}", userMePatchRequestDto.getBirthdate(), currentUser.getBirthDate());
+            log.info("Birthdate change requested for user id: {}", currentUser.getId());
             currentUser.setBirthDate(userMePatchRequestDto.getBirthdate());
         }
 
@@ -205,7 +205,7 @@ public class UserManager implements UserService {
             }catch (IllegalArgumentException e){
                 throw new ValidationException(UserMessages.GENDER_NOT_FOUND);
             }
-            log.info("Updating gender to: {}, from {}", userMePatchRequestDto.getGender(), currentUser.getGender());
+            log.info("Gender change requested for user id: {}", currentUser.getId());
             currentUser.setGender(gender);
             }
 
@@ -247,12 +247,12 @@ public class UserManager implements UserService {
             }
 
             if (userMePatchRequestDto.getAbout() != null){
-                log.info("Updating about to: {}, from {}", userMePatchRequestDto.getAbout(), currentUser.getAbout());
+                log.info("About change requested for user id: {}", currentUser.getId());
                 currentUser.setAbout(userMePatchRequestDto.getAbout());
             }
 
             if (userMePatchRequestDto.getQualifications() != null){
-                log.info("Updating qualifications to: {}, from {}", userMePatchRequestDto.getQualifications(), currentUser.getQualifications());
+                log.info("Qualifications change requested for user id: {}", currentUser.getId());
                 currentUser.setQualifications(userMePatchRequestDto.getQualifications());
             }
 
@@ -261,7 +261,7 @@ public class UserManager implements UserService {
             }
 
             if (userMePatchRequestDto.getInterests() != null){
-                log.info("Updating interests to: {}, from {}", userMePatchRequestDto.getInterests(), currentUser.getInterests());
+                log.info("Interests change requested for user id: {}", currentUser.getId());
                 currentUser.setInterests(userMePatchRequestDto.getInterests());
             }
 

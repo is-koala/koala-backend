@@ -2,9 +2,11 @@ package com.exskylab.koala.business.abstracts;
 
 import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.entities.Dispute;
+import com.exskylab.koala.entities.DisputeEvidence;
 import com.exskylab.koala.entities.DisputeResolution;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -22,4 +24,14 @@ public interface DisputeService {
     boolean hasActiveDispute(UUID jobAssignmentId);
 
     boolean hasActiveDisputeForUser(UUID userId);
+
+    DisputeEvidence attachEvidence(UUID disputeId, MultipartFile file);
+
+    List<DisputeEvidence> getEvidence(UUID disputeId);
+
+    DisputeEvidence getEvidenceForDownload(UUID disputeId, UUID evidenceId);
+
+    List<DisputeEvidence> getEvidenceForStaff(UUID disputeId);
+
+    DisputeEvidence getEvidenceForStaffDownload(UUID disputeId, UUID evidenceId);
 }

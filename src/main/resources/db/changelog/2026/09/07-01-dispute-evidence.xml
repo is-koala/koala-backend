@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-07-01-dispute-evidence" author="koala">
+        <createTable tableName="dispute_evidence">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="dispute_id" type="UUID">
+                <constraints nullable="false"
+                             foreignKeyName="fk_dispute_evidence_dispute" references="disputes(id)"/>
+            </column>
+            <column name="uploaded_by_id" type="UUID">
+                <constraints nullable="false"
+                             foreignKeyName="fk_dispute_evidence_uploader" references="users(id)"/>
+            </column>
+            <column name="storage_key" type="VARCHAR(512)"/>
+            <column name="original_file_name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="content_type" type="VARCHAR(128)"/>
+            <column name="file_size" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="checksum_sha256" type="VARCHAR(64)"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="deleted_by_id" type="UUID"/>
+        </createTable>
+
+        <sql>
+            CREATE UNIQUE INDEX uk_dispute_evidence_storage_key ON dispute_evidence (storage_key);
+        </sql>
+        <sql>
+            CREATE INDEX idx_dispute_evidence_dispute ON dispute_evidence (dispute_id)
+                WHERE is_deleted = false;
+        </sql>
+
+        <rollback>
+            <sql>DROP INDEX IF EXISTS idx_dispute_evidence_dispute;</sql>
+            <sql>DROP INDEX IF EXISTS uk_dispute_evidence_storage_key;</sql>
+            <dropTable tableName="dispute_evidence"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>
