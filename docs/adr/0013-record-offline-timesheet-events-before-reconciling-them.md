@@ -26,7 +26,10 @@ ilk olayın varlığını açığa çıkarmaz.
 PostgreSQL `timestamptz` alanı JSON'un taşıyabildiği nanosaniye hassasiyetini
 korumadığı için ham `capturedAt` değerleri ISO-8601 metni olarak saklanır ve
 entity sınırında `Instant`'a çevrilir. `receivedAt` ve hesapta kullanılan
-`effectiveAt` veritabanı zaman damgası olarak kalır. Böylece denetim değeri
+`effectiveAt` veritabanı zaman damgası olarak kalır. İlk yanıt ile idempotent
+tekrarın aynı sonucu üretmesi için bu iki alan PostgreSQL'in mikrosaniye
+hassasiyetine, veritabanının yaptığı gibi yuvarlanarak yazılmadan önce
+kanonikleştirilir. Böylece denetim değeri
 kayıpsızdır ve aynı olayın yeniden denemesi birebir payload ile karşılaştırılır.
 
 Atama başına işlemler PostgreSQL transaction advisory lock'u ile sıralanır.

@@ -58,7 +58,7 @@ public class TimesheetManager implements TimesheetService {
     @Override
     @Transactional
     public WorkSession checkIn(UUID jobAssignmentId, CheckPointDto point) {
-        Instant receivedAt = clock.instant();
+        Instant receivedAt = toDatabaseTimestamp(clock.instant());
         JobAssignment assignment = requireWorker(jobAssignmentId);
         workSessionDao.lockAssignment(jobAssignmentId);
 
@@ -102,7 +102,7 @@ public class TimesheetManager implements TimesheetService {
             session.setCheckInClientEventId(point.getClientEventId());
             session.setCheckInCapturedAt(point.getCapturedAt());
             session.setCheckInReceivedAt(receivedAt);
-            session.setCheckInAt(outcome.effectiveAt());
+            session.setCheckInAt(toDatabaseTimestamp(outcome.effectiveAt()));
             session.setCheckInPlausibilityFlags(outcome.flags());
         }
 
@@ -119,7 +119,7 @@ public class TimesheetManager implements TimesheetService {
     @Override
     @Transactional
     public WorkSession checkOut(UUID jobAssignmentId, CheckPointDto point) {
-        Instant receivedAt = clock.instant();
+        Instant receivedAt = toDatabaseTimestamp(clock.instant());
         JobAssignment assignment = requireWorker(jobAssignmentId);
         workSessionDao.lockAssignment(jobAssignmentId);
 
@@ -147,7 +147,7 @@ public class TimesheetManager implements TimesheetService {
             TimesheetEventPolicy.Outcome outcome = eventPolicy.reconcile(point.getCapturedAt(), receivedAt,
                     assignment.getJob().getStartDateTime(), assignment.getJob().getEndDateTime(),
                     session.getCheckInAt());
-            effectiveAt = outcome.effectiveAt();
+            effectiveAt = toDatabaseTimestamp(outcome.effectiveAt());
             session.setCheckOutClientEventId(point.getClientEventId());
             session.setCheckOutCapturedAt(point.getCapturedAt());
             session.setCheckOutReceivedAt(receivedAt);
@@ -205,6 +205,11 @@ public class TimesheetManager implements TimesheetService {
 
     private BigDecimal normalizeCoordinate(BigDecimal coordinate) {
         return coordinate == null ? null : coordinate.setScale(6, RoundingMode.HALF_UP);
+    }
+
+    private Instant toDatabaseTimestamp(Instant instant) {
+        long roundedMicroseconds = (instant.getNano() + 500L) / 1_000L;
+        return Instant.ofEpochSecond(instant.getEpochSecond(), roundedMicroseconds * 1_000L);
     }
 
     private void recalculateWorkHours(UUID jobAssignmentId) {

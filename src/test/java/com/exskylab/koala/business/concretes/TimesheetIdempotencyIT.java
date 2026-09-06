@@ -82,7 +82,9 @@ class TimesheetIdempotencyIT extends AbstractIntegrationTest {
             ready.await(10, TimeUnit.SECONDS);
             start.countDown();
 
-            assertEquals(first.get(10, TimeUnit.SECONDS).getId(), second.get(10, TimeUnit.SECONDS).getId());
+            WorkSession firstResult = first.get(10, TimeUnit.SECONDS);
+            WorkSession secondResult = second.get(10, TimeUnit.SECONDS);
+            assertSameResponse(firstResult, secondResult);
         }
 
         Integer count = jdbcTemplate.queryForObject(
@@ -102,7 +104,7 @@ class TimesheetIdempotencyIT extends AbstractIntegrationTest {
         WorkSession retry = timesheetService.checkIn(assignmentId,
                 new CheckPointDto(new BigDecimal("41.015137"), new BigDecimal("28.979530"), eventId, capturedAt));
 
-        assertEquals(first.getId(), retry.getId());
+        assertSameResponse(first, retry);
     }
 
     @Test
@@ -119,7 +121,7 @@ class TimesheetIdempotencyIT extends AbstractIntegrationTest {
         WorkSession retry = timesheetService.checkOut(assignmentId, checkOutPoint);
 
         assertEquals(checkOutCapturedAt, first.getCheckOutCapturedAt());
-        assertEquals(first.getId(), retry.getId());
+        assertSameResponse(first, retry);
     }
 
     @Test
@@ -143,6 +145,25 @@ class TimesheetIdempotencyIT extends AbstractIntegrationTest {
         start.await(10, TimeUnit.SECONDS);
         return timesheetService.checkIn(assignmentId, new CheckPointDto(new BigDecimal("41.015137"),
                 new BigDecimal("28.979530"), eventId, capturedAt));
+    }
+
+    private void assertSameResponse(WorkSession expected, WorkSession actual) {
+        assertEquals(expected.getId(), actual.getId());
+        assertEquals(expected.getCheckInAt(), actual.getCheckInAt());
+        assertEquals(expected.getCheckOutAt(), actual.getCheckOutAt());
+        assertEquals(expected.getCheckInClientEventId(), actual.getCheckInClientEventId());
+        assertEquals(expected.getCheckInCapturedAt(), actual.getCheckInCapturedAt());
+        assertEquals(expected.getCheckInReceivedAt(), actual.getCheckInReceivedAt());
+        assertEquals(expected.getCheckInPlausibilityFlags(), actual.getCheckInPlausibilityFlags());
+        assertEquals(expected.getCheckOutClientEventId(), actual.getCheckOutClientEventId());
+        assertEquals(expected.getCheckOutCapturedAt(), actual.getCheckOutCapturedAt());
+        assertEquals(expected.getCheckOutReceivedAt(), actual.getCheckOutReceivedAt());
+        assertEquals(expected.getCheckOutPlausibilityFlags(), actual.getCheckOutPlausibilityFlags());
+        assertEquals(expected.getCheckInLatitude(), actual.getCheckInLatitude());
+        assertEquals(expected.getCheckInLongitude(), actual.getCheckInLongitude());
+        assertEquals(expected.getCheckOutLatitude(), actual.getCheckOutLatitude());
+        assertEquals(expected.getCheckOutLongitude(), actual.getCheckOutLongitude());
+        assertEquals(expected.getMinutes(), actual.getMinutes());
     }
 
     private void insertAssignment(UUID id, UUID assignedWorkerId) {
