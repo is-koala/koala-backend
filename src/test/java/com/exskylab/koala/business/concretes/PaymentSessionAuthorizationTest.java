@@ -314,7 +314,10 @@ class PaymentSessionAuthorizationTest {
         JobAssignment assignment = confirmedAssignment(job);
         when(jobAssignmentDao.findById(assignment.getId())).thenReturn(Optional.of(assignment));
         when(securityService.getAuthenticatedUser()).thenReturn(employer);
-        when(bankAccountService.findPrimaryIban(worker.getId())).thenReturn(Optional.of("TR000000000000000000000001"));
+        com.exskylab.koala.entities.BankAccount workerAccount = new com.exskylab.koala.entities.BankAccount();
+        workerAccount.setIban("TR000000000000000000000001");
+        workerAccount.setVerificationStatus(com.exskylab.koala.entities.BankAccountVerificationStatus.VERIFIED);
+        when(bankAccountService.findPrimaryAccount(worker.getId())).thenReturn(Optional.of(workerAccount));
         var merchant = new com.exskylab.koala.core.utilities.payment.iyzico.dtos.SubMerchantCreateResponseDto();
         merchant.setSubMerchantKey("submerchant-key");
         when(iyzicoPaymentService.createSubMerchant(any())).thenReturn(merchant);
