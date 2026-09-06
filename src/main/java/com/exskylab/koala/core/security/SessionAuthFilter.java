@@ -6,6 +6,7 @@ import com.exskylab.koala.business.abstracts.SessionService;
 import com.exskylab.koala.core.configs.RequestLoggingFilter;
 import com.exskylab.koala.core.constants.AuthMessages;
 import com.exskylab.koala.core.helpers.DeviceIdentity;
+import com.exskylab.koala.core.logging.LogContext;
 import com.exskylab.koala.core.helpers.ClientPlatform;
 import com.exskylab.koala.core.exceptions.UnauthorizedException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
@@ -120,6 +121,9 @@ public class SessionAuthFilter extends OncePerRequestFilter {
 
             SecurityContextHolder.getContext().setAuthentication(authToken);
             request.setAttribute(RequestLoggingFilter.USER_ID_ATTRIBUTE, principal.id());
+            LogContext.put(LogContext.USER_ID, principal.id());
+            LogContext.put(LogContext.SESSION_ID, sessionId);
+            LogContext.put(LogContext.DEVICE_ID, currentDevice.getId());
             log.debug("Authenticated user ID: {} with session ID: {}", userId, sessionId);
 
         }catch (JwtException | ResourceNotFoundException | UnauthorizedException e){

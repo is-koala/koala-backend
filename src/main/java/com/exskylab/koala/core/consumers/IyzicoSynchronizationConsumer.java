@@ -45,7 +45,7 @@ public class IyzicoSynchronizationConsumer {
         try {
             iyzicoPaymentService.updateSubMerchant(subMerchantUpdateRequestDto);
         }catch (Exception e){
-            log.error("Failed to update Iyzico sub-merchant for user id: {}. Error: {}", userDto.getId(), e.getMessage());
+            log.error("Failed to update Iyzico sub-merchant for user id: {}", userDto.getId(), e);
             throw e;
         }
 

@@ -2,6 +2,7 @@ package com.exskylab.koala.core.exceptions;
 
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.helpers.MessageResolver;
+import com.exskylab.koala.core.logging.LogContext;
 import com.exskylab.koala.core.monitoring.BackendErrorMonitor;
 import com.exskylab.koala.core.utilities.results.ErrorCategory;
 import com.exskylab.koala.core.utilities.results.ErrorResult;
@@ -71,7 +72,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Result> handleHttpMessageNotReadable(HttpMessageNotReadableException ex) {
         log.warn("Govdesi okunamayan istek [type=HttpMessageNotReadableException, "
-                + "errorCode=REQUEST_MALFORMED, correlationId={}]", MDC.get("correlationId"));
+                + "errorCode=REQUEST_MALFORMED, requestId={}]", MDC.get(LogContext.REQUEST_ID));
         return build(HttpStatus.BAD_REQUEST, "{request.body.unreadable}", null, ErrorCategory.REQUEST_MALFORMED, null);
     }
 
@@ -132,7 +133,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Result> handleUnexpected(Exception ex) {
-        log.error("Beklenmeyen hata [correlationId={}]", MDC.get("correlationId"), ex);
+        log.error("Beklenmeyen hata [requestId={}]", MDC.get(LogContext.REQUEST_ID), ex);
         backendErrorMonitor.capture(ex, "UNEXPECTED");
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "{unexpected.error}", null, ErrorCategory.UNEXPECTED, null);
     }

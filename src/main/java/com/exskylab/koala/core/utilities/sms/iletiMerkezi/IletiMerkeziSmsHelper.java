@@ -62,7 +62,7 @@ public class IletiMerkeziSmsHelper implements SmsService {
                throw new ExternalServiceException(SmsMessages.SMS_SEND_FAILED);
            }
         }catch (Exception e){
-            log.error("Error occurred while sending sms to: {}. Error: {}", LogMasks.phones(phoneNumbers), e.getMessage());
+            log.error("Error occurred while sending sms to: {}", LogMasks.phones(phoneNumbers), e);
             throw new ExternalServiceException(SmsMessages.SMS_SEND_FAILED);
         }
     }

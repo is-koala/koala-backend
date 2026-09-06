@@ -282,8 +282,7 @@ public class IyzicoPaymentService {
             status = e.getStatusCode();
             responseBody = e.getResponseBodyAsString();
         } catch (Exception e) {
-            log.error("iyzico: {} could not reach the provider ({})",
-                    operation, e.getClass().getSimpleName());
+            log.error("iyzico: {} could not reach the provider", operation, e);
             throw new ExternalServiceException(PaymentMessages.PROVIDER_UNAVAILABLE);
         }
 
@@ -296,7 +295,7 @@ public class IyzicoPaymentService {
         try {
             root = objectMapper.readTree(responseBody);
         } catch (Exception e) {
-            log.error("iyzico: {} returned HTTP {} with a non-JSON body", operation, status);
+            log.error("iyzico: {} returned HTTP {} with a non-JSON body", operation, status, e);
             throw new ExternalServiceException(PaymentMessages.PROVIDER_UNAVAILABLE);
         }
 

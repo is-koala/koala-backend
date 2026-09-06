@@ -1,6 +1,8 @@
 package com.exskylab.koala.core.configs;
 
 
+import com.exskylab.koala.core.logging.LogContextListenerAdvice;
+import com.exskylab.koala.core.logging.LogContextPublishPostProcessor;
 import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.annotation.EnableRabbit;
 import org.springframework.amqp.rabbit.config.RetryInterceptorBuilder;
@@ -130,20 +132,24 @@ public class RabbitMQConfig {
     }
 
     @Bean
-    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
+    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory,
+                                         LogContextPublishPostProcessor logContextPublishPostProcessor) {
         RabbitTemplate template = new RabbitTemplate(connectionFactory);
         template.setMessageConverter(messageConverter());
         template.setChannelTransacted(true);
+        template.setBeforePublishPostProcessors(logContextPublishPostProcessor);
         return template;
     }
 
     @Bean
     public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
             SimpleRabbitListenerContainerFactoryConfigurer configurer,
-            ConnectionFactory connectionFactory) {
+            ConnectionFactory connectionFactory,
+            LogContextListenerAdvice logContextListenerAdvice) {
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(factory, connectionFactory);
         factory.setMessageConverter(messageConverter());
+        factory.setAdviceChain(logContextListenerAdvice);
         return factory;
     }
 
@@ -161,11 +167,12 @@ public class RabbitMQConfig {
     public SimpleRabbitListenerContainerFactory emailListenerContainerFactory(
             SimpleRabbitListenerContainerFactoryConfigurer configurer,
             ConnectionFactory connectionFactory,
-            @Qualifier("emailRetryInterceptor") StatelessRetryOperationsInterceptor emailRetryInterceptor) {
+            @Qualifier("emailRetryInterceptor") StatelessRetryOperationsInterceptor emailRetryInterceptor,
+            LogContextListenerAdvice logContextListenerAdvice) {
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(factory, connectionFactory);
         factory.setMessageConverter(messageConverter());
-        factory.setAdviceChain(emailRetryInterceptor);
+        factory.setAdviceChain(logContextListenerAdvice, emailRetryInterceptor);
         return factory;
     }
 
@@ -183,13 +190,14 @@ public class RabbitMQConfig {
     public SimpleRabbitListenerContainerFactory iyzicoListenerContainerFactory(
             SimpleRabbitListenerContainerFactoryConfigurer configurer,
             ConnectionFactory connectionFactory,
-            @Qualifier("iyzicoRetryInterceptor") StatefulRetryOperationsInterceptor iyzicoRetryInterceptor) {
+            @Qualifier("iyzicoRetryInterceptor") StatefulRetryOperationsInterceptor iyzicoRetryInterceptor,
+            LogContextListenerAdvice logContextListenerAdvice) {
 
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(factory, connectionFactory);
         factory.setMessageConverter(messageConverter());
 
-        factory.setAdviceChain(iyzicoRetryInterceptor);
+        factory.setAdviceChain(logContextListenerAdvice, iyzicoRetryInterceptor);
 
         return factory;
     }

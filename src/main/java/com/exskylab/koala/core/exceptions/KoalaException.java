@@ -14,6 +14,12 @@ public abstract class KoalaException extends RuntimeException {
         this.errorCode = deriveErrorCode(message, getClass());
     }
 
+    protected KoalaException(String message, HttpStatus httpStatus, boolean writableStackTrace) {
+        super(message, null, false, writableStackTrace);
+        this.httpStatus = httpStatus;
+        this.errorCode = deriveErrorCode(message, getClass());
+    }
+
     public HttpStatus getHttpStatus() {
         return httpStatus;
     }

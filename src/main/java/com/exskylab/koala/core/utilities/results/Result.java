@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.utilities.results;
 
+import com.exskylab.koala.core.logging.LogContext;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
@@ -14,6 +15,7 @@ public class Result {
     private HttpStatus httpStatus;
     private String path;
     private Instant timeStamp = Instant.now();
+    private String requestId;
     private String correlationId;
 
     public boolean isSuccess() {
@@ -40,6 +42,10 @@ public class Result {
         return timeStamp;
     }
 
+    public String getRequestId() {
+        return requestId;
+    }
+
     public String getCorrelationId() {
         return correlationId;
     }
@@ -50,7 +56,8 @@ public class Result {
         this.httpStatus = httpStatus;
         HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
         this.path = request.getRequestURI();
-        this.correlationId = MDC.get("correlationId");
+        this.requestId = MDC.get(LogContext.REQUEST_ID);
+        this.correlationId = this.requestId;
     }
 
     public Result(boolean success, HttpStatus httpStatus) {
@@ -58,6 +65,7 @@ public class Result {
         this.httpStatus = httpStatus;
         HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
         this.path = request.getRequestURI();
-        this.correlationId = MDC.get("correlationId");
+        this.requestId = MDC.get(LogContext.REQUEST_ID);
+        this.correlationId = this.requestId;
     }
 }

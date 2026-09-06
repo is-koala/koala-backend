@@ -86,7 +86,7 @@ public class CvManager implements CvService {
             key = storageService.uploadFile(document.getBytes(), document.getOriginalFilename(),
                     document.getContentType(), FolderType.FILE);
         } catch (IOException e) {
-            log.error("CV upload failed for user {}: {}", currentUser.getId(), e.getMessage());
+            log.error("CV upload failed for user {}", currentUser.getId(), e);
             throw new ValidationException(CvMessages.UPLOAD_FAILED);
         }
 

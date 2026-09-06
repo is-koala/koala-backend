@@ -40,8 +40,7 @@ public class SettlementRetryScheduler {
                     succeeded++;
                 }
             } catch (Exception e) {
-                log.error("Settlement task {} could not be run ({})",
-                        taskId, e.getClass().getSimpleName());
+                log.error("Settlement task {} could not be run", taskId, e);
             }
         }
 

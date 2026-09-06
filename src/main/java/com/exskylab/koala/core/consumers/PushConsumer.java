@@ -34,7 +34,7 @@ public class PushConsumer {
         try {
             notification = notificationService.getById(pushTaskDto.id());
         } catch (Exception e) {
-            log.error("Notification not found to send push ID: {}. Aborting request.", pushTaskDto.id());
+            log.error("Notification not found to send push ID: {}. Aborting request.", pushTaskDto.id(), e);
             return;
         }
 
@@ -51,7 +51,7 @@ public class PushConsumer {
             notification.setSentAt(Instant.now());
             log.info("Push task sent for id: {}", pushTaskDto.id());
         } catch (Exception e) {
-            log.error("Push task could not be sent for id: {}, Error: {}", pushTaskDto.id(), e.getMessage());
+            log.error("Push task could not be sent for id: {}", pushTaskDto.id(), e);
             notification.setStatus(NotificationStatus.FAILED);
             notification.setFailureReason(truncate(e.getMessage()));
         } finally {

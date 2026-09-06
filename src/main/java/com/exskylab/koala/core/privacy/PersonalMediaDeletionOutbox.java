@@ -56,8 +56,7 @@ public class PersonalMediaDeletionOutbox {
                                next_attempt_at = now() + interval '1 hour'
                          where storage_key = ?
                         """, key);
-                log.error("Personal media deletion failed and will be retried: {}",
-                        exception.getClass().getSimpleName());
+                log.error("Personal media deletion failed and will be retried", exception);
             }
         }
         return deleted;

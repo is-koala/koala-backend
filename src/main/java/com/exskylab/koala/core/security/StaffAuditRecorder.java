@@ -73,7 +73,7 @@ public class StaffAuditRecorder {
         try {
             staffAuditService.record(record, null, null, null);
         } catch (Exception exception) {
-            log.error("Denetim kaydı yazılamadı: {} {}", record.action(), exception.getMessage());
+            log.error("Denetim kaydı yazılamadı: {}", record.action(), exception);
         }
     }
 
