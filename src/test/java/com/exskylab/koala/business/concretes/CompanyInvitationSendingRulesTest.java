@@ -12,6 +12,7 @@ import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.dtos.companyContact.request.InviteContactToCompanyDto;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
+import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.mappers.CompanyMapper;
 import com.exskylab.koala.dataAccess.CompanyDao;
@@ -27,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -100,7 +102,6 @@ class CompanyInvitationSendingRulesTest {
     private InviteContactToCompanyDto invite() {
         InviteContactToCompanyDto dto = new InviteContactToCompanyDto();
         dto.setEmail(invitee.getEmail());
-        dto.setTcIdentityNumber(INVITEE_TC);
         dto.setRole(CompanyContactRole.STAFF.name());
         return dto;
     }
@@ -137,6 +138,17 @@ class CompanyInvitationSendingRulesTest {
         manager.inviteContactToCompany(company.getId(), invite());
 
         verify(invitationService).inviteUserToCompany(companyAdmin, invitee, company, CompanyContactRole.STAFF);
+    }
+
+    @Test
+    void someoneWhoseIdentityIsNotVerifiedStillCannotBeMadeAContact() {
+        invitee.setTcIdentityNumber(null);
+
+        ValidationException thrown = assertThrows(ValidationException.class,
+                () -> manager.inviteContactToCompany(company.getId(), invite()));
+
+        assertEquals("USER_MUST_VERIFY_IDENTITY", thrown.getErrorCode());
+        verify(invitationService, never()).inviteUserToCompany(any(), any(), any(), any());
     }
 
     @Test

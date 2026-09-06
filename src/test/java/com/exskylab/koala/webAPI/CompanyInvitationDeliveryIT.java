@@ -117,8 +117,7 @@ class CompanyInvitationDeliveryIT extends AbstractIntegrationTest {
         return mockMvc.perform(post("/companies/{companyId}/contact-invitations", companyId)
                 .with(user(principal(companyAdminId)))
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"" + email(inviteeId) + "\",\"tcIdentityNumber\":\"" + INVITEE_TC
-                        + "\",\"role\":\"STAFF\"}"));
+                .content("{\"email\":\"" + email(inviteeId) + "\",\"role\":\"STAFF\"}"));
     }
 
     private UUID storedInvitationId() {

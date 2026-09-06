@@ -15,9 +15,6 @@ import lombok.Setter;
 @NoArgsConstructor
 public class InviteContactToCompanyDto {
 
-    @NotBlank(message = CompanyContactMessages.TC_IDENTITY_NUMBER_NOT_BLANK)
-    private String tcIdentityNumber;
-
     @NotBlank(message = CompanyContactMessages.EMAIL_NOT_BLANK)
     @Email(message = CompanyContactMessages.EMAIL_INVALID)
     private String email;

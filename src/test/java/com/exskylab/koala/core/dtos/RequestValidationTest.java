@@ -21,11 +21,13 @@ import jakarta.validation.Validator;
 import jakarta.validation.ValidatorFactory;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -56,7 +58,6 @@ class RequestValidationTest {
     @Test
     void aContactInvitationNamesTheEmailFieldAndRejectsAMalformedAddress() {
         InviteContactToCompanyDto invite = new InviteContactToCompanyDto();
-        invite.setTcIdentityNumber("10000000146");
         invite.setRole(CompanyContactRole.STAFF.name());
 
         assertTrue(messagesFor(invite).contains("{companyContact.email.notBlank}"));
@@ -66,7 +67,17 @@ class RequestValidationTest {
         assertTrue(messagesFor(invite).contains("{companyContact.email.invalid}"));
 
         invite.setEmail("davetli@ornek.test");
-        assertTrue(isValid(invite));
+        assertTrue(isValid(invite), "Davet yalniz e-posta ve rol ile gonderilebilmeli: " + messagesFor(invite));
+    }
+
+    @Test
+    void aContactInvitationNeverAsksForAThirdPartyNationalId() {
+        List<String> fields = Arrays.stream(InviteContactToCompanyDto.class.getDeclaredFields())
+                .map(Field::getName)
+                .toList();
+
+        assertFalse(fields.contains("tcIdentityNumber"),
+                "Davet govdesi ucuncu kisinin kimlik numarasini tasiyamaz, alanlar: " + fields);
     }
 
     @Test
