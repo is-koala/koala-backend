@@ -1,6 +1,7 @@
 package com.exskylab.koala.dataAccess;
 
 import com.exskylab.koala.entities.StaffRoleInclude;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -13,5 +14,10 @@ public interface StaffRoleIncludeDao extends JpaRepository<StaffRoleInclude, UUI
 
     List<StaffRoleInclude> findAllByParentRoleIdIn(Collection<UUID> parentRoleIds);
 
+    @EntityGraph(attributePaths = {"parentRole", "childRole"})
+    List<StaffRoleInclude> findAllWithRolesByParentRoleIdIn(Collection<UUID> parentRoleIds);
+
     boolean existsByParentRoleIdAndChildRoleId(UUID parentRoleId, UUID childRoleId);
+
+    void deleteByParentRoleIdAndChildRoleId(UUID parentRoleId, UUID childRoleId);
 }
