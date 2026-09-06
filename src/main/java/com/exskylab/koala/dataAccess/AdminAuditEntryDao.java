@@ -23,9 +23,9 @@ public interface AdminAuditEntryDao extends JpaRepository<AdminAuditEntry, UUID>
               and (cast(:permission as string) is null or e.permission = cast(:permission as string))
               and (cast(:resourceType as string) is null or e.resourceType = cast(:resourceType as string))
               and (cast(:resourceId as string) is null or e.resourceId = cast(:resourceId as string))
-              and (:from is null or e.occurredAt >= :from)
-              and (:to is null or e.occurredAt <= :to)
-              and (:allowed is null or e.allowed = :allowed)
+              and e.occurredAt >= :from
+              and e.occurredAt <= :to
+              and (:filterByOutcome = false or e.allowed = :allowed)
             """,
             countQuery = """
                     select count(e) from AdminAuditEntry e
@@ -34,9 +34,9 @@ public interface AdminAuditEntryDao extends JpaRepository<AdminAuditEntry, UUID>
                       and (cast(:permission as string) is null or e.permission = cast(:permission as string))
                       and (cast(:resourceType as string) is null or e.resourceType = cast(:resourceType as string))
                       and (cast(:resourceId as string) is null or e.resourceId = cast(:resourceId as string))
-                      and (:from is null or e.occurredAt >= :from)
-                      and (:to is null or e.occurredAt <= :to)
-                      and (:allowed is null or e.allowed = :allowed)
+                      and e.occurredAt >= :from
+                      and e.occurredAt <= :to
+                      and (:filterByOutcome = false or e.allowed = :allowed)
                     """)
     Page<AdminAuditEntry> search(@Param("actor") UUID actor,
                                  @Param("action") String action,
@@ -45,7 +45,8 @@ public interface AdminAuditEntryDao extends JpaRepository<AdminAuditEntry, UUID>
                                  @Param("resourceId") String resourceId,
                                  @Param("from") Instant from,
                                  @Param("to") Instant to,
-                                 @Param("allowed") Boolean allowed,
+                                 @Param("filterByOutcome") boolean filterByOutcome,
+                                 @Param("allowed") boolean allowed,
                                  Pageable pageable);
 
     @Modifying

@@ -18,6 +18,8 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.hamcrest.Matchers.hasSize;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -256,5 +258,165 @@ class AdminAuditTrailIT extends AbstractStaffIntegrationTest {
 
         assertEquals(Boolean.TRUE, row.get("allowed"));
         assertEquals("admin", row.get("actor_display_name"));
+    }
+
+    @Test
+    void readingTheAuditLogIsRecordedButNeverReturnsItsOwnRow() throws Exception {
+        String token = tokenFor("AUDITOR");
+
+        mockMvc.perform(get("/admin/audit-log").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content", hasSize(0)));
+
+        Map<String, Object> row = onlyRow();
+
+        assertEquals("audit.read", row.get("permission"), "Denetim kaydını okumak hassas bir okumadır.");
+        assertEquals("audit-log", row.get("resource_type"));
+        assertEquals(Boolean.FALSE, row.get("mutating"));
+        assertEquals("PERSONAL_DATA", row.get("sensitivity"));
+    }
+
+    @Test
+    void readingTheLogAgainAddsOneRowNotAnAvalanche() throws Exception {
+        String token = tokenFor("AUDITOR");
+
+        mockMvc.perform(get("/admin/audit-log").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content", hasSize(0)));
+
+        mockMvc.perform(get("/admin/audit-log").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content", hasSize(1)));
+
+        assertEquals(2, rows().size(),
+                "İstek başına bir satır; okuma kendi satırını doğurup çoğaltmamalı.");
+    }
+
+    @Test
+    void theAuditLogIsGuardedByItsOwnPermissionAndTheRefusalIsRecorded() throws Exception {
+        String token = tokenFor("SUPPORT_AGENT");
+
+        mockMvc.perform(get("/admin/audit-log").header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
+
+        Map<String, Object> row = onlyRow();
+
+        assertEquals("audit.read", row.get("permission"));
+        assertEquals(Boolean.FALSE, row.get("allowed"));
+    }
+
+    @Test
+    void everyCoreFieldComesBackAndTheDetailRidesAlong() throws Exception {
+        String owner = tokenFor("OWNER");
+        String auditor = tokenFor("AUDITOR");
+
+        mockMvc.perform(put("/admin/settings/" + LATE_FEE_KEY)
+                        .header("Authorization", "Bearer " + owner)
+                        .header("User-Agent", "koala-admin/1.0")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"value\":\"0.40\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/admin/audit-log").param("permission", "settings.manage")
+                        .header("Authorization", "Bearer " + auditor))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content", hasSize(1)))
+                .andExpect(jsonPath("$.data.content[0].id").exists())
+                .andExpect(jsonPath("$.data.content[0].occurredAt").exists())
+                .andExpect(jsonPath("$.data.content[0].actorStaffId").exists())
+                .andExpect(jsonPath("$.data.content[0].actorDisplayName").value("Denetim Denemesi"))
+                .andExpect(jsonPath("$.data.content[0].permission").value("settings.manage"))
+                .andExpect(jsonPath("$.data.content[0].action").value("setting.update"))
+                .andExpect(jsonPath("$.data.content[0].resourceType").value("settings"))
+                .andExpect(jsonPath("$.data.content[0].resourceId").value(LATE_FEE_KEY))
+                .andExpect(jsonPath("$.data.content[0].allowed").value(true))
+                .andExpect(jsonPath("$.data.content[0].mutating").value(true))
+                .andExpect(jsonPath("$.data.content[0].sensitivity").value("NORMAL"))
+                .andExpect(jsonPath("$.data.content[0].requestBody").value("{\"value\":\"0.40\"}"))
+                .andExpect(jsonPath("$.data.content[0].ip").exists())
+                .andExpect(jsonPath("$.data.content[0].userAgent").value("koala-admin/1.0"))
+                .andExpect(jsonPath("$.data.content[0].after").value("0.40"));
+    }
+
+    @Test
+    void theCoreSurvivesWhenTheDetailIsErasedAndTheEndpointSaysSo() throws Exception {
+        String owner = tokenFor("OWNER");
+        String auditor = tokenFor("AUDITOR");
+
+        mockMvc.perform(put("/admin/settings/" + LATE_FEE_KEY)
+                        .header("Authorization", "Bearer " + owner)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"value\":\"0.40\"}"))
+                .andExpect(status().isOk());
+
+        jdbcTemplate.update("delete from admin_audit_entry_details");
+
+        mockMvc.perform(get("/admin/audit-log").param("permission", "settings.manage")
+                        .header("Authorization", "Bearer " + auditor))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content", hasSize(1)))
+                .andExpect(jsonPath("$.data.content[0].action").value("setting.update"))
+                .andExpect(jsonPath("$.data.content[0].requestBody").doesNotExist())
+                .andExpect(jsonPath("$.data.content[0].ip").doesNotExist())
+                .andExpect(jsonPath("$.data.content[0].userAgent").doesNotExist())
+                .andExpect(jsonPath("$.data.content[0].before").doesNotExist())
+                .andExpect(jsonPath("$.data.content[0].after").doesNotExist());
+    }
+
+    @Test
+    void everyFilterNarrowsOnTheServer() throws Exception {
+        String support = tokenFor("SUPPORT_AGENT");
+        String auditor = tokenFor("AUDITOR");
+
+        mockMvc.perform(get("/admin/users").param("query", "biri@iskoala.com")
+                        .header("Authorization", "Bearer " + support))
+                .andExpect(status().isOk());
+        mockMvc.perform(put("/admin/settings/" + LATE_FEE_KEY)
+                        .header("Authorization", "Bearer " + support)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"value\":\"0.90\"}"))
+                .andExpect(status().isForbidden());
+
+        String header = "Bearer " + auditor;
+
+        mockMvc.perform(get("/admin/audit-log").param("allowed", "false").header("Authorization", header))
+                .andExpect(jsonPath("$.data.content", hasSize(1)))
+                .andExpect(jsonPath("$.data.content[0].permission").value("settings.manage"));
+        mockMvc.perform(get("/admin/audit-log").param("action", "user.read").header("Authorization", header))
+                .andExpect(jsonPath("$.data.content", hasSize(1)));
+        mockMvc.perform(get("/admin/audit-log").param("resourceType", "users").header("Authorization", header))
+                .andExpect(jsonPath("$.data.content", hasSize(1)));
+        mockMvc.perform(get("/admin/audit-log").param("resourceId", LATE_FEE_KEY).header("Authorization", header))
+                .andExpect(jsonPath("$.data.content", hasSize(1)));
+        mockMvc.perform(get("/admin/audit-log").param("from", "2000-01-01T00:00:00Z")
+                        .param("to", "2000-01-02T00:00:00Z").header("Authorization", header))
+                .andExpect(jsonPath("$.data.content", hasSize(0)));
+    }
+
+    @Test
+    void theActorFilterFindsWhatOnePersonDid() throws Exception {
+        String subject = UUID.randomUUID().toString();
+        UUID staffId = staffMember(subject);
+        String support = StaffTokenIssuer.tokenFor(subject, List.of("SUPPORT_AGENT"));
+        String auditor = tokenFor("AUDITOR");
+
+        mockMvc.perform(get("/admin/users").param("query", "biri@iskoala.com")
+                        .header("Authorization", "Bearer " + support))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/admin/audit-log").param("actor", staffId.toString())
+                        .header("Authorization", "Bearer " + auditor))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content", hasSize(1)))
+                .andExpect(jsonPath("$.data.content[0].actorStaffId").value(staffId.toString()));
+    }
+
+    @Test
+    void anUnknownSortFieldIsARequestErrorNotAServerError() throws Exception {
+        String token = tokenFor("AUDITOR");
+
+        mockMvc.perform(get("/admin/audit-log").param("sort", "requestBody,desc")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest());
     }
 }

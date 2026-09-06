@@ -2,10 +2,19 @@ package com.exskylab.koala.business.abstracts;
 
 import com.exskylab.koala.core.security.StaffAuditRecord;
 import com.exskylab.koala.entities.AdminAuditEntry;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
+import java.time.Instant;
+import java.util.UUID;
 
 public interface StaffAuditService {
 
     AdminAuditEntry record(StaffAuditRecord source, String requestBody, String before, String after);
+
+    Page<AdminAuditEntry> search(UUID actor, String action, String permission, String resourceType,
+                                 String resourceId, Instant from, Instant to, Boolean allowed,
+                                 Pageable pageable);
 
     int purgeExpiredDetails();
 

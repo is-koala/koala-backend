@@ -1,6 +1,7 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.StaffAuditService;
+import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.properties.AuditRetentionProperties;
 import com.exskylab.koala.core.security.StaffAuditRecord;
 import com.exskylab.koala.dataAccess.AdminAuditEntryDao;
@@ -9,11 +10,16 @@ import com.exskylab.koala.entities.AdminAuditEntry;
 import com.exskylab.koala.entities.AdminAuditEntryDetail;
 import com.exskylab.koala.entities.PermissionSensitivity;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Set;
+import java.util.UUID;
 
 @Service
 @Slf4j
@@ -28,16 +34,24 @@ public class StaffAuditManager implements StaffAuditService {
     private static final int USER_AGENT_LIMIT = 512;
     private static final String UNKNOWN_ACTOR = "unknown";
 
+    private static final Set<String> SORTABLE = Set.of("occurredAt");
+    private static final Sort NEWEST_FIRST = Sort.by(Sort.Direction.DESC, "occurredAt");
+    private static final Instant BEGINNING_OF_TIME = Instant.EPOCH;
+    private static final Instant END_OF_TIME = Instant.parse("9999-12-31T23:59:59Z");
+
     private final AdminAuditEntryDao adminAuditEntryDao;
     private final AdminAuditEntryDetailDao adminAuditEntryDetailDao;
     private final AuditRetentionProperties retentionProperties;
+    private final PageableSanitizer pageableSanitizer;
 
     public StaffAuditManager(AdminAuditEntryDao adminAuditEntryDao,
                              AdminAuditEntryDetailDao adminAuditEntryDetailDao,
-                             AuditRetentionProperties retentionProperties) {
+                             AuditRetentionProperties retentionProperties,
+                             PageableSanitizer pageableSanitizer) {
         this.adminAuditEntryDao = adminAuditEntryDao;
         this.adminAuditEntryDetailDao = adminAuditEntryDetailDao;
         this.retentionProperties = retentionProperties;
+        this.pageableSanitizer = pageableSanitizer;
     }
 
     @Override
@@ -69,6 +83,20 @@ public class StaffAuditManager implements StaffAuditService {
         entry.setDetail(detail);
 
         return adminAuditEntryDao.save(entry);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<AdminAuditEntry> search(UUID actor, String action, String permission, String resourceType,
+                                        String resourceId, Instant from, Instant to, Boolean allowed,
+                                        Pageable pageable) {
+        pageableSanitizer.rejectUnknownSort(pageable, SORTABLE);
+        Pageable page = pageableSanitizer.sanitize(pageable, SORTABLE, NEWEST_FIRST);
+
+        return adminAuditEntryDao.search(actor, blankToNull(action), blankToNull(permission),
+                blankToNull(resourceType), blankToNull(resourceId),
+                from == null ? BEGINNING_OF_TIME : from, to == null ? END_OF_TIME : to,
+                allowed != null, Boolean.TRUE.equals(allowed), page);
     }
 
     @Override
@@ -112,6 +140,10 @@ public class StaffAuditManager implements StaffAuditService {
 
     private static Instant plusMonths(Instant from, int months) {
         return from.atZone(ZoneOffset.UTC).plusMonths(months).toInstant();
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private static String orUnknown(String value) {
