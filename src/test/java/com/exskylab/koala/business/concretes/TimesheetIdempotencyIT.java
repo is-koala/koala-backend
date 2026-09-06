@@ -2,6 +2,7 @@ package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.TimesheetService;
+import com.exskylab.koala.core.dtos.timesheet.request.CheckPointDto;
 import com.exskylab.koala.entities.WorkSession;
 import com.exskylab.koala.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.AfterEach;
@@ -92,10 +93,12 @@ class TimesheetIdempotencyIT extends AbstractIntegrationTest {
     void theSameEventIdentityOnAnotherWorkersAssignmentDoesNotRevealTheFirstResult() {
         UUID eventId = UUID.randomUUID();
         Instant capturedAt = Instant.now().minusSeconds(60);
-        WorkSession first = timesheetService.checkIn(assignmentId, null, null, eventId, capturedAt);
+        WorkSession first = timesheetService.checkIn(assignmentId,
+                new CheckPointDto(null, null, eventId, capturedAt));
 
         when(securityService.getAuthenticatedUserId()).thenReturn(otherWorkerId);
-        WorkSession second = timesheetService.checkIn(otherAssignmentId, null, null, eventId, capturedAt);
+        WorkSession second = timesheetService.checkIn(otherAssignmentId,
+                new CheckPointDto(null, null, eventId, capturedAt));
 
         assertNotEquals(first.getId(), second.getId());
         assertEquals(otherAssignmentId, second.getJobAssignment().getId());
@@ -105,8 +108,8 @@ class TimesheetIdempotencyIT extends AbstractIntegrationTest {
                                      UUID eventId, Instant capturedAt) throws Exception {
         ready.countDown();
         start.await(10, TimeUnit.SECONDS);
-        return timesheetService.checkIn(assignmentId, new BigDecimal("41.015137"),
-                new BigDecimal("28.979530"), eventId, capturedAt);
+        return timesheetService.checkIn(assignmentId, new CheckPointDto(new BigDecimal("41.015137"),
+                new BigDecimal("28.979530"), eventId, capturedAt));
     }
 
     private void insertAssignment(UUID id, UUID assignedWorkerId) {

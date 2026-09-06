@@ -1,6 +1,7 @@
 package com.exskylab.koala.core.dtos.timesheet.request;
 
-import com.exskylab.koala.core.customValidations.ValidTimesheetEvent;
+import com.exskylab.koala.core.constants.TimesheetMessages;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import lombok.AllArgsConstructor;
@@ -17,7 +18,6 @@ import java.util.UUID;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-@ValidTimesheetEvent
 public class CheckPointDto {
 
     @DecimalMin("-90.0")
@@ -35,4 +35,9 @@ public class CheckPointDto {
     @Schema(description = "Olayın cihazda yakalandığı UTC anı; clientEventId ile birlikte gönderilir",
             example = "2026-09-06T10:00:00Z")
     private Instant capturedAt;
+
+    @AssertTrue(message = TimesheetMessages.CLIENT_EVENT_PAIR)
+    public boolean isEventIdentityComplete() {
+        return (clientEventId == null) == (capturedAt == null);
+    }
 }

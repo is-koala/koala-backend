@@ -278,6 +278,9 @@ class RequestValidationTest {
         request.setClientEventId(UUID.randomUUID());
 
         assertTrue(messagesFor(request).contains("{timesheet.client.event.pair}"));
+        assertEquals(Set.of("eventIdentityComplete"), validator.validate(request).stream()
+                .map(violation -> violation.getPropertyPath().toString())
+                .collect(Collectors.toSet()));
 
         request.setClientEventId(null);
         request.setCapturedAt(Instant.parse("2026-09-06T10:00:00Z"));

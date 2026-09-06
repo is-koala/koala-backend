@@ -4,6 +4,7 @@ import com.exskylab.koala.business.abstracts.CompanyContactService;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.exceptions.ConflictException;
+import com.exskylab.koala.core.dtos.timesheet.request.CheckPointDto;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.core.helpers.TimesheetEventPolicy;
 import com.exskylab.koala.core.properties.TimesheetProperties;
@@ -26,6 +27,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -79,8 +81,8 @@ class TimesheetManagerOfflineEventTest {
         UUID eventId = UUID.randomUUID();
         Instant capturedAt = Instant.parse("2026-09-06T10:00:00Z");
 
-        WorkSession session = manager.checkIn(assignment.getId(), new BigDecimal("41.0151374"),
-                new BigDecimal("28.9795304"), eventId, capturedAt);
+        WorkSession session = manager.checkIn(assignment.getId(), point(
+                "41.0151374", "28.9795304", eventId, capturedAt));
 
         assertEquals(eventId, session.getCheckInClientEventId());
         assertEquals(capturedAt, session.getCheckInCapturedAt());
@@ -93,6 +95,26 @@ class TimesheetManagerOfflineEventTest {
     }
 
     @Test
+    void aCheckInKeepsItsArrivalTimeWhileWaitingForTheAssignmentLock() {
+        Instant afterLockWait = RECEIVED_AT.plusSeconds(30);
+        AtomicReference<Instant> now = new AtomicReference<>(RECEIVED_AT);
+        Clock waitingClock = mock(Clock.class);
+        when(waitingClock.instant()).thenAnswer(invocation -> now.get());
+        when(workSessionDao.lockAssignment(assignment.getId())).thenAnswer(invocation -> {
+            now.set(afterLockWait);
+            return true;
+        });
+        manager = new TimesheetManager(workSessionDao, jobAssignmentService, securityService,
+                new AssignmentParticipants(mock(CompanyContactService.class)),
+                new TimesheetEventPolicy(new TimesheetProperties()), waitingClock);
+
+        WorkSession session = manager.checkIn(assignment.getId(), point(
+                null, null, UUID.randomUUID(), Instant.parse("2026-09-06T10:00:00Z")));
+
+        assertEquals(RECEIVED_AT, session.getCheckInReceivedAt());
+    }
+
+    @Test
     void retryingTheSameNormalizedCheckInReturnsTheOriginalResult() {
         UUID eventId = UUID.randomUUID();
         Instant capturedAt = Instant.parse("2026-09-06T10:00:00Z");
@@ -100,8 +122,8 @@ class TimesheetManagerOfflineEventTest {
         when(workSessionDao.findByJobAssignmentIdAndCheckInClientEventId(assignment.getId(), eventId))
                 .thenReturn(Optional.of(original));
 
-        WorkSession result = manager.checkIn(assignment.getId(), new BigDecimal("41.0151374"),
-                new BigDecimal("28.9795304"), eventId, capturedAt);
+        WorkSession result = manager.checkIn(assignment.getId(), point(
+                "41.0151374", "28.9795304", eventId, capturedAt));
 
         assertEquals(original, result);
         verify(workSessionDao, never()).save(any());
@@ -116,7 +138,7 @@ class TimesheetManagerOfflineEventTest {
                 .thenReturn(Optional.of(original));
 
         assertThrows(ConflictException.class, () -> manager.checkIn(assignment.getId(),
-                new BigDecimal("41.015138"), new BigDecimal("28.979530"), eventId, capturedAt));
+                point("41.015138", "28.979530", eventId, capturedAt)));
         verify(workSessionDao, never()).save(any());
     }
 
@@ -133,12 +155,35 @@ class TimesheetManagerOfflineEventTest {
         when(workSessionDao.findByJobAssignmentIdAndCheckOutClientEventId(assignment.getId(), eventId))
                 .thenReturn(Optional.of(closed));
 
-        WorkSession result = manager.checkOut(assignment.getId(), new BigDecimal("41.015137"),
-                new BigDecimal("28.979530"), eventId, capturedAt);
+        WorkSession result = manager.checkOut(assignment.getId(), point(
+                "41.015137", "28.979530", eventId, capturedAt));
 
         assertEquals(closed, result);
         verify(workSessionDao, never()).findByJobAssignmentIdAndCheckOutAtIsNull(any());
         verify(workSessionDao, never()).save(any());
+    }
+
+    @Test
+    void aCheckOutKeepsItsArrivalTimeWhileWaitingForTheAssignmentLock() {
+        WorkSession open = checkInEvent(UUID.randomUUID(), Instant.parse("2026-09-06T10:00:00Z"), null, null);
+        when(workSessionDao.findByJobAssignmentIdAndCheckOutAtIsNull(assignment.getId()))
+                .thenReturn(Optional.of(open));
+        Instant afterLockWait = RECEIVED_AT.plusSeconds(30);
+        AtomicReference<Instant> now = new AtomicReference<>(RECEIVED_AT);
+        Clock waitingClock = mock(Clock.class);
+        when(waitingClock.instant()).thenAnswer(invocation -> now.get());
+        when(workSessionDao.lockAssignment(assignment.getId())).thenAnswer(invocation -> {
+            now.set(afterLockWait);
+            return true;
+        });
+        manager = new TimesheetManager(workSessionDao, jobAssignmentService, securityService,
+                new AssignmentParticipants(mock(CompanyContactService.class)),
+                new TimesheetEventPolicy(new TimesheetProperties()), waitingClock);
+
+        WorkSession session = manager.checkOut(assignment.getId(), point(
+                null, null, UUID.randomUUID(), Instant.parse("2026-09-06T11:00:00Z")));
+
+        assertEquals(RECEIVED_AT, session.getCheckOutReceivedAt());
     }
 
     @Test
@@ -148,8 +193,8 @@ class TimesheetManagerOfflineEventTest {
         when(workSessionDao.findByJobAssignmentIdAndCheckOutAtIsNull(assignment.getId())).thenReturn(Optional.of(open));
         when(workSessionDao.findAllByJobAssignmentIdOrderByCheckInAtAsc(assignment.getId())).thenReturn(List.of(open));
 
-        WorkSession closed = manager.checkOut(assignment.getId(), null, null, UUID.randomUUID(),
-                Instant.parse("2026-09-06T10:00:00Z"));
+        WorkSession closed = manager.checkOut(assignment.getId(), point(
+                null, null, UUID.randomUUID(), Instant.parse("2026-09-06T10:00:00Z")));
 
         assertEquals(open.getCheckInAt(), closed.getCheckOutAt());
         assertEquals(0, closed.getMinutes());
@@ -167,5 +212,10 @@ class TimesheetManagerOfflineEventTest {
         session.setCheckInLongitude(longitude == null ? null : new BigDecimal(longitude));
         session.setCheckInAt(capturedAt);
         return session;
+    }
+
+    private CheckPointDto point(String latitude, String longitude, UUID eventId, Instant capturedAt) {
+        return new CheckPointDto(latitude == null ? null : new BigDecimal(latitude),
+                longitude == null ? null : new BigDecimal(longitude), eventId, capturedAt);
     }
 }

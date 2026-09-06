@@ -8,6 +8,7 @@ import com.exskylab.koala.business.abstracts.CompanyContactService;
 import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
+import com.exskylab.koala.core.dtos.timesheet.request.CheckPointDto;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.core.helpers.CancellationPolicy;
 import com.exskylab.koala.core.properties.CancellationProperties;
@@ -276,7 +277,8 @@ class AssignmentOperationsAuthorizationTest {
         JobAssignment a = assignment(AssignmentStatus.CONFIRMED, PaymentStatus.HELD_IN_ESCROW, inHours(1));
         when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
 
-        assertThrows(ResourceNotFoundException.class, () -> timesheetManager.checkIn(a.getId(), null, null));
+        assertThrows(ResourceNotFoundException.class,
+                () -> timesheetManager.checkIn(a.getId(), new CheckPointDto()));
         verify(workSessionDao, never()).save(any());
     }
 
@@ -286,7 +288,8 @@ class AssignmentOperationsAuthorizationTest {
         when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());
         when(workSessionDao.findByJobAssignmentIdAndCheckOutAtIsNull(a.getId())).thenReturn(Optional.empty());
 
-        WorkSession session = timesheetManager.checkIn(a.getId(), new BigDecimal("41.015137"), new BigDecimal("28.979530"));
+        WorkSession session = timesheetManager.checkIn(a.getId(), new CheckPointDto(
+                new BigDecimal("41.015137"), new BigDecimal("28.979530"), null, null));
 
         assertNotNull(session.getCheckInAt());
         assertNull(session.getCheckOutAt());
@@ -299,7 +302,7 @@ class AssignmentOperationsAuthorizationTest {
         when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());
         when(workSessionDao.findByJobAssignmentIdAndCheckOutAtIsNull(a.getId())).thenReturn(Optional.empty());
 
-        assertThrows(ConflictException.class, () -> timesheetManager.checkIn(a.getId(), null, null));
+        assertThrows(ConflictException.class, () -> timesheetManager.checkIn(a.getId(), new CheckPointDto()));
         assertEquals(AssignmentStatus.CONFIRMED, a.getStatus());
     }
 
@@ -319,7 +322,7 @@ class AssignmentOperationsAuthorizationTest {
         when(workSessionDao.findByJobAssignmentIdAndCheckOutAtIsNull(a.getId()))
                 .thenReturn(Optional.of(new WorkSession()));
 
-        assertThrows(ConflictException.class, () -> timesheetManager.checkIn(a.getId(), null, null));
+        assertThrows(ConflictException.class, () -> timesheetManager.checkIn(a.getId(), new CheckPointDto()));
     }
 
     @Test
@@ -328,7 +331,7 @@ class AssignmentOperationsAuthorizationTest {
         when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());
         when(workSessionDao.findByJobAssignmentIdAndCheckOutAtIsNull(a.getId())).thenReturn(Optional.empty());
 
-        assertThrows(ConflictException.class, () -> timesheetManager.checkOut(a.getId(), null, null));
+        assertThrows(ConflictException.class, () -> timesheetManager.checkOut(a.getId(), new CheckPointDto()));
     }
 
     @Test
@@ -343,7 +346,7 @@ class AssignmentOperationsAuthorizationTest {
         when(workSessionDao.findByJobAssignmentIdAndCheckOutAtIsNull(a.getId())).thenReturn(Optional.of(open));
         when(workSessionDao.findAllByJobAssignmentIdOrderByCheckInAtAsc(a.getId())).thenReturn(List.of(open));
 
-        WorkSession closed = timesheetManager.checkOut(a.getId(), null, null);
+        WorkSession closed = timesheetManager.checkOut(a.getId(), new CheckPointDto());
 
         assertEquals(200, closed.getMinutes());
         assertEquals(3, a.getWorkHours());

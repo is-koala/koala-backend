@@ -1,23 +1,16 @@
 package com.exskylab.koala.business.abstracts;
 
+import com.exskylab.koala.core.dtos.timesheet.request.CheckPointDto;
 import com.exskylab.koala.entities.WorkSession;
 
-import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
 public interface TimesheetService {
 
-    WorkSession checkIn(UUID jobAssignmentId, BigDecimal latitude, BigDecimal longitude);
+    WorkSession checkIn(UUID jobAssignmentId, CheckPointDto point);
 
-    WorkSession checkIn(UUID jobAssignmentId, BigDecimal latitude, BigDecimal longitude,
-                        UUID clientEventId, Instant capturedAt);
-
-    WorkSession checkOut(UUID jobAssignmentId, BigDecimal latitude, BigDecimal longitude);
-
-    WorkSession checkOut(UUID jobAssignmentId, BigDecimal latitude, BigDecimal longitude,
-                         UUID clientEventId, Instant capturedAt);
+    WorkSession checkOut(UUID jobAssignmentId, CheckPointDto point);
 
     List<WorkSession> getSessions(UUID jobAssignmentId);
 }

@@ -166,8 +166,7 @@ public class JobAssignmentOperationsController {
         CheckPointDto point = request == null ? new CheckPointDto() : request;
         return ResponseEntity.status(HttpStatus.CREATED).body(new SuccessDataResult<>(
                 timesheetMapper.toWorkSessionDto(
-                        timesheetService.checkIn(assignmentId, point.getLatitude(), point.getLongitude(),
-                                point.getClientEventId(), point.getCapturedAt())),
+                        timesheetService.checkIn(assignmentId, point)),
                 TimesheetMessages.CHECKED_IN, HttpStatus.CREATED));
     }
 
@@ -187,8 +186,7 @@ public class JobAssignmentOperationsController {
         CheckPointDto point = request == null ? new CheckPointDto() : request;
         return ResponseEntity.ok(new SuccessDataResult<>(
                 timesheetMapper.toWorkSessionDto(
-                        timesheetService.checkOut(assignmentId, point.getLatitude(), point.getLongitude(),
-                                point.getClientEventId(), point.getCapturedAt())),
+                        timesheetService.checkOut(assignmentId, point)),
                 TimesheetMessages.CHECKED_OUT, HttpStatus.OK));
     }
 
