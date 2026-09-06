@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import com.exskylab.koala.business.abstracts.CancellationService;
 import com.exskylab.koala.business.abstracts.DisputeService;
+import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.business.abstracts.TimesheetService;
 import com.exskylab.koala.core.constants.CancellationMessages;
 import com.exskylab.koala.core.constants.DisputeMessages;
@@ -44,6 +45,7 @@ public class JobAssignmentOperationsController {
 
     private final CancellationService cancellationService;
     private final DisputeService disputeService;
+    private final PayoutService payoutService;
     private final TimesheetService timesheetService;
     private final JobAssignmentService jobAssignmentService;
     private final JobAssignmentMapper jobAssignmentMapper;
@@ -53,6 +55,7 @@ public class JobAssignmentOperationsController {
 
     public JobAssignmentOperationsController(CancellationService cancellationService,
                                              DisputeService disputeService,
+                                             PayoutService payoutService,
                                              TimesheetService timesheetService,
                                              JobAssignmentService jobAssignmentService,
                                              JobAssignmentMapper jobAssignmentMapper,
@@ -61,6 +64,7 @@ public class JobAssignmentOperationsController {
                                              TimesheetMapper timesheetMapper) {
         this.cancellationService = cancellationService;
         this.disputeService = disputeService;
+        this.payoutService = payoutService;
         this.timesheetService = timesheetService;
         this.jobAssignmentService = jobAssignmentService;
         this.jobAssignmentMapper = jobAssignmentMapper;
@@ -82,9 +86,10 @@ public class JobAssignmentOperationsController {
     public ResponseEntity<SuccessDataResult<CancellationDto>> cancel(
             @PathVariable UUID assignmentId, @RequestBody @Valid CancelAssignmentDto request) {
 
+        var cancellation = cancellationService.cancelAssignment(assignmentId, request.getReason());
+        var refund = payoutService.getLatestRefundForAssignment(assignmentId).orElse(null);
         return ResponseEntity.status(HttpStatus.CREATED).body(new SuccessDataResult<>(
-                cancellationMapper.toCancellationDto(
-                        cancellationService.cancelAssignment(assignmentId, request.getReason())),
+                cancellationMapper.toCancellationDto(cancellation, refund),
                 CancellationMessages.CREATED, HttpStatus.CREATED));
     }
 
@@ -113,9 +118,12 @@ public class JobAssignmentOperationsController {
     })
     @GetMapping("/{assignmentId}/cancellation")
     public ResponseEntity<SuccessDataResult<CancellationDto>> cancellation(@PathVariable UUID assignmentId) {
+        var cancellation = cancellationService.getForAssignment(assignmentId).orElse(null);
+        var refund = cancellation == null
+                ? null
+                : payoutService.getLatestRefundForAssignment(assignmentId).orElse(null);
         return ResponseEntity.ok(new SuccessDataResult<>(
-                cancellationService.getForAssignment(assignmentId)
-                        .map(cancellationMapper::toCancellationDto).orElse(null),
+                cancellationMapper.toCancellationDto(cancellation, refund),
                 CancellationMessages.FETCHED, HttpStatus.OK));
     }
 

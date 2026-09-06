@@ -241,4 +241,14 @@ class PayoutReleaseTest {
         verify(settlementService).enqueueRefund(eq(payment), eq(assignment), eq(new BigDecimal("537.50")));
         verify(settlementService).enqueue(eq(payment), eq(assignment), eq(SettlementOperation.DISAPPROVE));
     }
+
+    @Test
+    void theLatestRefundCanBeReadForAUserFacingCancellationState() {
+        Refund refund = new Refund();
+        refund.setStatus(RefundStatus.PENDING);
+        when(refundDao.findFirstByPaymentJobAssignmentIdOrderByCreatedAtDesc(assignmentId))
+                .thenReturn(Optional.of(refund));
+
+        assertSame(refund, payoutManager.getLatestRefundForAssignment(assignmentId).orElseThrow());
+    }
 }
