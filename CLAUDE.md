@@ -433,7 +433,7 @@ Gerekçe: (b) elle SQL yazmayı ortadan kaldırmıyor, yalnızca kopyalanacak bi
 
 **AMQP `correlation-id` özelliği yerinde ve adı orada doğru.** `LogContextPublishPostProcessor` mesajın AMQP `correlation-id` özelliğine `requestId`'yi koymaya devam ediyor: bu koala'nın değil AMQP protokolünün alan adı ve değer orada gerçekten birden fazla mesajda görünüyor (araştırma §7.2). `git grep -i correlation -- src/` bugün yalnızca Spring AMQP'nin `getCorrelationId`/`setCorrelationId` çağrılarını ve kaldırmayı sabitleyen `RequestIdIT` iddiasını gösterir; koala'nın kendi sözlüğünde `correlation` diye bir kavram kalmadı.
 
-**İstemci tarafı henüz güncellenmedi ve bunu bilerek bırakıyoruz.** `koala-web` (`src/server/api/client.ts`, `src/server/api/errors.ts`, `src/server/auth/login.ts`) ve `koala-admin` (`test/fixtures/envelopes.ts`, `src/app/(panel)/disputes/page.tsx`, `src/app/(panel)/verification/job-categories/page.tsx`) zarftan hâlâ `correlationId` okuyor. İkisi de dağıtılmadığı için canlı kırılma yok, ama `requestId`'ye geçirilmeden önce hata ekranlarında **boş** bir kimlik gösterirler — tip hatası vermeden, sessizce.
+**İstemci tarafı aynı turda geçirildi.** `koala-web` (is-koala/koala-web#77), `koala-admin` (is-koala/koala-admin#16) ve `koala-mobile` (is-koala/koala#78) `requestId` okuyor; üç depoda da `git grep -i correlation` boş dönüyor. Geçiş sırasız yapılabildi çünkü #116 önce `requestId`'yi **ekledi**, bu değişiklik ise `correlationId`'yi sonra kaldırdı — arada her iki ad da zarftaydı, yani hangi depo önce inerse insin kırılma olmadı. `koala-admin` alanı hata ekranlarında kullanıcıya gösterdiği için (destek ekibi backend log satırını bununla buluyor) etiketi de düzeltildi: `Correlation ID:` → `İstek numarası:`.
 
 ### MDC
 
