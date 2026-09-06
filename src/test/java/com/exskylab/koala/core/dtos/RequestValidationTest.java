@@ -14,6 +14,7 @@ import com.exskylab.koala.core.dtos.notificationPreference.request.NotificationP
 import com.exskylab.koala.core.dtos.notificationPreference.request.UpdateNotificationPreferencesDto;
 import com.exskylab.koala.core.dtos.report.request.CreateReportDto;
 import com.exskylab.koala.core.dtos.report.request.ReviewReportDto;
+import com.exskylab.koala.core.dtos.timesheet.request.CheckPointDto;
 import com.exskylab.koala.entities.*;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
@@ -25,6 +26,7 @@ import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -285,6 +287,24 @@ class RequestValidationTest {
                 entry(NotificationCategory.APPLICATION_UPDATES, NotificationChannel.EMAIL, false)));
 
         assertTrue(messagesFor(request).contains("{notification.preference.not.optional}"));
+    }
+
+    @Test
+    void aTimesheetEventIdentityAndCapturedTimeTravelTogether() {
+        CheckPointDto request = new CheckPointDto();
+        request.setClientEventId(UUID.randomUUID());
+
+        assertTrue(messagesFor(request).contains("{timesheet.client.event.pair}"));
+        assertEquals(Set.of("eventIdentityComplete"), validator.validate(request).stream()
+                .map(violation -> violation.getPropertyPath().toString())
+                .collect(Collectors.toSet()));
+
+        request.setClientEventId(null);
+        request.setCapturedAt(Instant.parse("2026-09-06T10:00:00Z"));
+        assertTrue(messagesFor(request).contains("{timesheet.client.event.pair}"));
+
+        request.setClientEventId(UUID.randomUUID());
+        assertTrue(isValid(request));
     }
 
     @Test

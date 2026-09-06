@@ -706,6 +706,8 @@ uygulayacak bir uç bulamıyor (görsel için `DELETE /admin/images/{imageId}` v
 
 **`workHours` artık tahmin değil.** `WorkSession` check-in/check-out çiftini ve isteğe bağlı konumu tutar; kapanışta dakika yazılır ve atamanın `workHours` alanı tüm oturumların toplamından `HALF_UP` ile türetilir. Atama başına aynı anda tek açık oturum var (`uk_work_sessions_open_per_assignment`). Check-in/out yalnızca **işçinin kendisi** yapabilir — işveren yalnızca okuyabilir. İlk check-in atamayı `IN_PROGRESS`'e taşır.
 
+**Çevrimdışı puantaj olayı kalıcı ve idempotent.** Yeni istemci `clientEventId` ile `capturedAt` alanlarını birlikte gönderir; eski konum-only gövde sunucu zamanlı davranışını korur. Yeni sözleşmede ham cihaz zamanı, ilk alım zamanı, ücret hesabındaki etkili zaman ve plausibility bayrakları ayrı saklanır. Aynı atama/işlem kimliği aynı normalize payload ile tekrarlandığında ilk `WorkSession` döner; değiştirilmiş payload 409'dur. Atama başına transaction advisory lock eşzamanlı istekleri sıralar; check-out retry kapanmış oturumu da bulur. Varsayılan 72 saat geçmiş/5 dakika gelecek penceresi `timesheet.*` ayarlarıyla değişir; ilan penceresi dışı ve monotonik olmayan zamanlar reddedilmeden işaretlenip güvenli sınıra çekilir. Tehdit modeli ve ayrıntılı zaman kararı [ADR-0013](docs/adr/0013-record-offline-timesheet-events-before-reconciling-them.md)'tedir.
+
 ## 2r. Profil uçları
 
 `GET/POST/DELETE /users/me/saved-jobs[/{jobId}]` — kaydedilen ilanlar. Kaydetme idempotent, olmayan ilan 404, kaydedilmemiş ilanı silmek sessizce geçer.

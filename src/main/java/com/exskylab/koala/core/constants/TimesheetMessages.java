@@ -9,4 +9,6 @@ public class TimesheetMessages {
     public static final String CHECKED_IN = "{timesheet.checked.in}";
     public static final String CHECKED_OUT = "{timesheet.checked.out}";
     public static final String LISTED = "{timesheet.listed}";
+    public static final String CLIENT_EVENT_PAIR = "{timesheet.client.event.pair}";
+    public static final String IDEMPOTENCY_CONFLICT = "{timesheet.idempotency.conflict}";
 }
