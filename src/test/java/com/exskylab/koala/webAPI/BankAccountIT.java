@@ -213,7 +213,7 @@ class BankAccountIT extends AbstractIntegrationTest {
                     .reduce("", (left, right) -> left + "\n" + right);
             assertFalse(handlerLogs.contains(rawIban));
             assertTrue(handlerLogs.contains("REQUEST_MALFORMED"));
-            assertTrue(handlerLogs.contains("correlationId="));
+            assertTrue(handlerLogs.contains("requestId="));
         } finally {
             logger.detachAppender(appender);
             appender.stop();
