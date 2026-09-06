@@ -468,7 +468,7 @@ public class UserManager implements UserService {
 
         PassiveAuthenticationResult result;
         try {
-            result = cscaTrustStore.verifier().verify(securityObject, dataGroup1, dataGroup11);
+            result = cscaTrustStore.verifier().verify(securityObject, dataGroup1, dataGroup11, dataGroup15);
         } catch (PassiveAuthenticationException e) {
             log.warn("Passive authentication failed: {}", e.getMessage());
             throw new ValidationException(e.getMessageKey());

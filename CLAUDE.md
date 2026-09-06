@@ -1696,13 +1696,17 @@ KOALA_CHIP_DIR=/tmp/chip KOALA_CSCA_DIR=src/main/resources/csca ./mvnw test -Dte
 
 **İki imza şeması destekleniyor:** RSA için ISO 9796-2 (mesaj kurtarmalı, ICAO'nun tarif ettiği biçim) ve ECDSA için düz imza. Hangisinin kullanıldığı karta göre değişiyor, ikisi de deneniyor.
 
-⚠️ **Doğrulama anahtarına GÜVENİLMİYOR — bu paragraf yanlıştı ve düzeltildi.** Önceki metin *"DG15'in hash'i SOD'da, yani Passive Authentication zaten onu imzalı kabul ediyor; uydurma bir DG15 gönderen kişi SOD hash kontrolüne takılır"* diyordu. **Kod bunu yapmıyor.** `PassiveAuthenticationVerifier`'ın iki `verify` aşırı yüklemesi de (`:45`, `:49`) DG15 almıyor; `hashForDataGroup` yalnız DG1 (`:62`) ve DG11 (`:84`) için çağrılıyor. `UserManager:463` istemciden gelen `dg15`'i çözüp doğrudan `verifyChipPresence` → `IdentityChallengeManager` → `ActiveAuthentication.verify` zincirine veriyor.
+**Doğrulama anahtarı artık gerçekten SOD'a bağlanıyor — ama bu paragraf iki kez yanlıştı, o yüzden nasıl yapıldığı yazılı.** İlk metin *"DG15'in hash'i SOD'da, yani Passive Authentication zaten onu imzalı kabul ediyor"* diyordu ve kod bunu **yapmıyordu**; ikinci metin kusuru doğru anlatıyordu ama düzeltme is-koala/koala-backend#74 ile indi.
 
-**Sonucu:** Active Authentication, imzayı **saldırganın seçtiği bir anahtara** karşı doğruluyor. Bir kez alınmış `sod`+`dg1` dökümü olan biri kendi anahtar çiftini üretir, açık anahtarı `dg15` diye gönderir, sunucunun sayısını kendi özel anahtarıyla imzalar ve geçer. **Yani AA bugünkü hâliyle kapatmak için var olduğu tekrar oynatma açığını kapatmıyor.**
+**Ne yapılıyor.** `PassiveAuthenticationVerifier.verify` dört parametreli bir aşırı yükleme kazandı (`sod`, `dg1`, `dg11`, `dg15`) ve `UserManager.verifyChipEvidence` istekten çözdüğü `dg15`'i artık **oraya** veriyor. Doğrulayıcı, DG1 ve DG11 için yazılmış desenin aynısını uyguluyor: DG15'in hash'i `LDSSecurityObject`'teki 15 numaralı girdiyle karşılaştırılıyor, tutmazsa `IdentityMessages.DATA_GROUP_TAMPERED`. Kontrol PA zincirinin **içinde**, yani `UserManager`'ın `verifyChipPresence`'ı çağırdığı satırdan önce; doğrulanmamış bir anahtar `ActiveAuthentication.verify`'a hiç ulaşmıyor.
 
-`ActiveAuthenticationTest`'in *"başka çipin anahtarı doğrulamaz"* kuralı bu boşluğu görmüyor: sentetik testte anahtar sabit veriliyor, oysa üretimde anahtarı istemci seçiyor.
+**Anahtar gönderilmediğinde doğrulayıcı hiçbir şey yapmıyor, ve bu bilinçli.** "Kart DG15 taşımıyor" ile "istemci DG15 göndermedi" burada ayırt edilemez ve ikisi de saldırı değil; kararı veren tek yer `active-authentication-required` bayrağı (`verifyChipPresence`). **Bayrak kapalıyken DG15'siz bir kart yüzünden kimse reddedilmemeli** — bu, gerçek kart teyidi gelmeden (is-koala/koala-backend#70) akışı bozmamanın şartı.
 
-Düzeltme is-koala/koala-backend#74'ün ilk iş maddesi: DG15 de SOD'a karşı hash'lenmeli. **O düzeltme inmeden `active-authentication-required` açılmamalı** — açmak, kapanmamış bir açık için kapandı güvencesi üretir.
+**Ama DG15 gönderilmiş ve SOD onu imzalamamışsa reddediliyor: `identity.chip.key.unsigned`.** Fail-closed yön bu: aksi hâlde saldırgan SOD'da hiç bulunmayan bir veri grubu göndererek kontrolü atlar — hash karşılaştırması yapılacak bir "beklenen" değer olmadığı için sessizce geçerdi. `DATA_GROUP_TAMPERED`'dan **ayrı bir anahtar** kullanılıyor çünkü iki hâl farklı: biri "gönderdiğin anahtar kartın imzasındakinden başka" (kurcalama), diğeri "kartın imzası hiç anahtar taşımıyor, gönderdiğin şey uydurma". Operatör ve istemci ikisini ayırt edebilmeli.
+
+`ActiveAuthenticationTest`'in *"başka çipin anahtarı doğrulamaz"* kuralı bu boşluğu görmüyordu: sentetik testte anahtar sabit veriliyor, oysa üretimde anahtarı istemci seçiyor. Boşluğu kapatan testler `PassiveAuthenticationTest` içinde ve **düzeltmeden önce yazılıp kırmızıya döndüğü görüldü**: geçerli `sod`+`dg1` ile saldırganın kendi anahtar çiftinden gelen DG15 reddedilir, SOD'un hiç imzalamadığı DG15 reddedilir, kartın kendi DG15'i doğrulanır, DG15 gönderilmeyen okuma (kart taşısın ya da taşımasın) bozulmadan geçer. `IdentityVerificationRulesTest` `UserManager` tarafını sabitliyor: çözülen `dg15` doğrulayıcıya **geçiriliyor**, ve doğrulayıcı reddederse `IdentityChallengeService`'e hiç dokunulmuyor.
+
+**Bayrağın açılması hâlâ bekliyor.** Bu düzeltme #74'ün "Tuzak 2" yarısı; `IDENTITY_ACTIVE_AUTH_REQUIRED=true` için gerçek bir kartla DG15'in varlığının teyidi (is-koala/koala-backend#70) ve PA'nın açılması (is-koala/koala-backend#73) gerekiyor. **Bayrak açılana kadar tekrar oynatma açığı pratikte duruyor** — ama artık açıldığında gerçekten kapanacak.
 
 **Varsayılan zorunlu değil** (`identity.passive-authentication.active-authentication-required=false`): TCKK'da DG15'in bulunduğu henüz gerçek kartla doğrulanmadı. İmza gelirse doğrulanır, gelmezse geçilir. Kart DG15 taşıdığı teyit edilince bayrak açılmalı — o noktaya kadar tekrar oynatma açığı duruyor.
 
@@ -2285,6 +2289,7 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 | Kimlik doğrulamada `sod` + `dg1` (base64) gönderilmeli — bayrak açıldığında zorunlu olacak | §2aq2 |
 | `dg11` gönderilirse ad ulusal karakterlerle çipten alınır, gönderilmezse istekteki ad korunur | §2aq2 |
 | Çip doğrulaması: `POST /users/me/identity-verification/challenge` → çipe imzalat → `dg15` + `challenge` + `activeAuthenticationSignature` | §2aq2 |
+| Gönderilen `dg15` artık SOD'a karşı doğrulanıyor: çipten okunan ham DG15 dosyası aynen gönderilmeli — SOD'un imzalamadığı bir anahtar `IDENTITY_CHIP_KEY_UNSIGNED`, tutmayan hash `IDENTITY_DATA_GROUP_TAMPERED` alır | §2aq2 |
 | `UserMeResponseDto.tcIdentityNumber` → `maskedTcIdentityNumber`, değer artık `***********` | §2aq |
 | İlan listesinde `applicationCount` var, ilan başına istek atma | §2ap |
 | İlan silme değil `POST /jobs/{id}/cancel` | kayıt korunur, başvuranlara bildirim gider (§2ap) |
