@@ -27,6 +27,7 @@ class CancellationPreviewTest {
     private CancellationDao cancellationDao;
     private SecurityService securityService;
     private JobAssignmentService jobAssignmentService;
+    private DisputeService disputeService;
     private CancellationManager manager;
 
     private static final ZoneId POLICY_ZONE = new CancellationProperties().getZoneId();
@@ -39,11 +40,12 @@ class CancellationPreviewTest {
         cancellationDao = mock(CancellationDao.class);
         securityService = mock(SecurityService.class);
         jobAssignmentService = mock(JobAssignmentService.class);
+        disputeService = mock(DisputeService.class);
 
         manager = new CancellationManager(cancellationDao, jobAssignmentService, mock(UserService.class),
                 securityService, new AssignmentParticipants(mock(CompanyContactService.class)),
                 new CancellationPolicy(new CancellationProperties(), passthroughSettings()),
-                mock(PayoutService.class), mock(ActivityNotificationService.class));
+                mock(PayoutService.class), disputeService, mock(ActivityNotificationService.class));
     }
 
     private static LocalDateTime startsInHours(long hours) {
@@ -81,8 +83,8 @@ class CancellationPreviewTest {
 
         CancellationPreviewDto preview = manager.previewCancellation(a.getId());
 
-        assertEquals(0, preview.feeRate().signum());
-        assertEquals(0, new BigDecimal("1500.00").compareTo(preview.refundAmount()));
+        assertEquals("0.0000", preview.feeRate());
+        assertEquals("1500.00", preview.refundAmount());
         assertTrue(preview.cancellableNow());
     }
 
@@ -91,7 +93,7 @@ class CancellationPreviewTest {
         JobAssignment a = assignment(AssignmentStatus.CONFIRMED, startsInHours(72));
         when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
 
-        assertEquals(0, manager.previewCancellation(a.getId()).feeRate().signum());
+        assertEquals("0.0000", manager.previewCancellation(a.getId()).feeRate());
     }
 
     @Test
@@ -101,9 +103,9 @@ class CancellationPreviewTest {
 
         CancellationPreviewDto preview = manager.previewCancellation(a.getId());
 
-        assertEquals(0, new BigDecimal("0.50").compareTo(preview.feeRate()));
-        assertEquals(0, new BigDecimal("750.00").compareTo(preview.feeAmount()));
-        assertEquals(0, new BigDecimal("750.00").compareTo(preview.refundAmount()));
+        assertEquals("0.5000", preview.feeRate());
+        assertEquals("750.00", preview.feeAmount());
+        assertEquals("750.00", preview.refundAmount());
     }
 
     @Test
@@ -113,7 +115,7 @@ class CancellationPreviewTest {
 
         CancellationPreviewDto preview = manager.previewCancellation(a.getId());
 
-        assertEquals(0, preview.refundAmount().signum());
+        assertEquals("0.00", preview.refundAmount());
         assertTrue(preview.noticeMinutes() <= 0);
     }
 
@@ -130,6 +132,15 @@ class CancellationPreviewTest {
     void aCompletedAssignmentPreviewsAsNotCancellableInsteadOfThrowing() {
         JobAssignment a = assignment(AssignmentStatus.COMPLETED, startsInHours(-24));
         when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
+
+        assertFalse(manager.previewCancellation(a.getId()).cancellableNow());
+    }
+
+    @Test
+    void anActiveDisputePreviewsAsNotCancellable() {
+        JobAssignment a = assignment(AssignmentStatus.CONFIRMED, startsInHours(48));
+        when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
+        when(disputeService.hasActiveDispute(a.getId())).thenReturn(true);
 
         assertFalse(manager.previewCancellation(a.getId()).cancellableNow());
     }

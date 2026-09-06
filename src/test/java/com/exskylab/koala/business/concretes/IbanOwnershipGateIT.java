@@ -52,6 +52,12 @@ class IbanOwnershipGateIT extends AbstractIntegrationTest {
 
     @BeforeEach
     void escrowIsFundedAndWorkIsDone() {
+        org.mockito.Mockito.when(settlementService.enqueue(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenReturn(java.util.Optional.of(new com.exskylab.koala.entities.SettlementTask()));
+
         jdbcTemplate.update("""
                 insert into users (id, created_at, is_deleted, email, password, is_employer,
                                    email_verified, phone_verified, identity_verified)

@@ -1,0 +1,41 @@
+package com.exskylab.koala.core.schedulers;
+
+import com.exskylab.koala.business.abstracts.PaymentService;
+import com.exskylab.koala.core.properties.PaymentVerificationProperties;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.UUID;
+
+@Component
+@Slf4j
+public class PaymentVerificationScheduler {
+
+    private final PaymentService paymentService;
+    private final PaymentVerificationProperties properties;
+
+    public PaymentVerificationScheduler(PaymentService paymentService,
+                                        PaymentVerificationProperties properties) {
+        this.paymentService = paymentService;
+        this.properties = properties;
+    }
+
+    @Scheduled(cron = "${iyzico.payment-verification.cron:30 */5 * * * *}")
+    public void runDueVerifications() {
+        if (!properties.isEnabled()) {
+            return;
+        }
+
+        List<UUID> due = paymentService.findDueVerificationAttemptIds();
+        for (UUID paymentId : due) {
+            try {
+                paymentService.reconcileAttempt(paymentId);
+            } catch (Exception exception) {
+                log.error("Payment {} reconciliation could not be run ({})",
+                        paymentId, exception.getClass().getSimpleName());
+            }
+        }
+    }
+}

@@ -70,7 +70,7 @@ public class JobAssignmentOperationsController {
     }
 
     @Operation(summary = "Atamayı iptal et",
-            description = "İşçi iptal ederse işveren her koşulda tam iade alır. İşveren cezasız pencere içinde iptal ederse kesinti yoktur; pencere dışında geç iptal ücreti kesilir. İş başladıktan sonra iade yapılmaz. Atama başına tek iptal kaydı açılabilir.")
+            description = "İşçi iptal ederse işveren her koşulda tam iade alır. İşveren cezasız pencere içinde iptal ederse kesinti yoktur; pencere dışında geç iptal ücreti kesilir. İş başladıktan sonra iade yapılmaz. Atama başına tek iptal kaydı açılabilir. Para alanları exact decimal string, iade durumu yalnız bu iptalin doğrudan oluşturduğu iadedir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "İptal edildi"),
             @ApiResponse(responseCode = "404", description = "Atama bulunamadı ya da taraf değilsiniz",
@@ -82,14 +82,14 @@ public class JobAssignmentOperationsController {
     public ResponseEntity<SuccessDataResult<CancellationDto>> cancel(
             @PathVariable UUID assignmentId, @RequestBody @Valid CancelAssignmentDto request) {
 
+        var cancellation = cancellationService.cancelAssignment(assignmentId, request.getReason());
         return ResponseEntity.status(HttpStatus.CREATED).body(new SuccessDataResult<>(
-                cancellationMapper.toCancellationDto(
-                        cancellationService.cancelAssignment(assignmentId, request.getReason())),
+                cancellationMapper.toCancellationDto(cancellation),
                 CancellationMessages.CREATED, HttpStatus.CREATED));
     }
 
     @Operation(summary = "İptal kesintisini önizle",
-            description = "İptal etmeden, şu an iptal edilse ne kesileceğini döndürür. Hiçbir kayıt oluşturmaz. Kesinti iptal edenin tarafına göre değiştiği için hesap çağıranın kendi tarafına göre yapılır. Atama iptal edilebilir durumda değilse hata yerine cancellableNow=false döner.")
+            description = "İptal etmeden, şu an iptal edilse ne kesileceğini döndürür. Hiçbir kayıt oluşturmaz. Kesinti iptal edenin tarafına göre değiştiği için hesap çağıranın kendi tarafına göre yapılır. Atama iptal edilebilir durumda değilse hata yerine cancellableNow=false döner. Para alanları bilimsel gösterim kullanmayan exact decimal string'dir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Önizleme döndürüldü"),
             @ApiResponse(responseCode = "404", description = "Atama bulunamadı ya da taraf değilsiniz",
@@ -105,7 +105,7 @@ public class JobAssignmentOperationsController {
     }
 
     @Operation(summary = "İptal kaydını getir",
-            description = "Uygulanan oran, kesilen ücret ve iade tutarını taşır.")
+            description = "Uygulanan oran, kesilen ücret ve iade tutarını exact decimal string olarak taşır. İade yaşam döngüsü yalnız iptale doğrudan bağlı iadedir; eski kayıtlarda bağlantı yoksa null olabilir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "İptal kaydı döndürüldü"),
             @ApiResponse(responseCode = "404", description = "İptal kaydı yok",
@@ -113,9 +113,9 @@ public class JobAssignmentOperationsController {
     })
     @GetMapping("/{assignmentId}/cancellation")
     public ResponseEntity<SuccessDataResult<CancellationDto>> cancellation(@PathVariable UUID assignmentId) {
+        var cancellation = cancellationService.getForAssignment(assignmentId).orElse(null);
         return ResponseEntity.ok(new SuccessDataResult<>(
-                cancellationService.getForAssignment(assignmentId)
-                        .map(cancellationMapper::toCancellationDto).orElse(null),
+                cancellationMapper.toCancellationDto(cancellation),
                 CancellationMessages.FETCHED, HttpStatus.OK));
     }
 

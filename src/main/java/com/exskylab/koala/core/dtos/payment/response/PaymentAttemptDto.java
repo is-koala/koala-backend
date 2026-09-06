@@ -6,7 +6,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -19,10 +18,10 @@ public class PaymentAttemptDto {
     private UUID id;
     private PaymentAttemptStatus status;
     private String currency;
-    private BigDecimal workerPayout;
-    private BigDecimal commissionAmount;
-    private BigDecimal commissionRate;
-    private BigDecimal totalCharged;
+    private String workerPayout;
+    private String commissionAmount;
+    private String commissionRate;
+    private String totalCharged;
     private PricingBreakdownDto pricing;
     private String failureReason;
     private Instant completedAt;
