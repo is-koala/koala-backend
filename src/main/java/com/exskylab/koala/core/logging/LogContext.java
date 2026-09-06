@@ -10,7 +10,6 @@ import java.util.UUID;
 public final class LogContext {
 
     public static final String REQUEST_ID = "requestId";
-    public static final String CLIENT_CORRELATION_ID = "clientCorrelationId";
     public static final String USER_ID = "userId";
     public static final String SESSION_ID = "sessionId";
     public static final String DEVICE_ID = "deviceId";
@@ -22,11 +21,11 @@ public final class LogContext {
 
     public static final String HEADER_PREFIX = "x-koala-log-";
 
-    public static final List<String> KEYS = List.of(REQUEST_ID, CLIENT_CORRELATION_ID, USER_ID, SESSION_ID,
+    public static final List<String> KEYS = List.of(REQUEST_ID, USER_ID, SESSION_ID,
             DEVICE_ID, METHOD, PATH, STATUS, DURATION_MS, CLIENT_IP);
 
     public static final List<String> CARRIED_KEYS =
-            List.of(REQUEST_ID, CLIENT_CORRELATION_ID, USER_ID, SESSION_ID, DEVICE_ID);
+            List.of(REQUEST_ID, USER_ID, SESSION_ID, DEVICE_ID);
 
     private LogContext() {
     }

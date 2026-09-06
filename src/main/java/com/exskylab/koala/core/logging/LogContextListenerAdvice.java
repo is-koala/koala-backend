@@ -44,9 +44,9 @@ public class LogContextListenerAdvice implements MethodInterceptor {
                     values.put(key, header.toString());
                 }
             }
-            String correlationId = message.getMessageProperties().getCorrelationId();
-            if (correlationId != null) {
-                values.putIfAbsent(LogContext.REQUEST_ID, correlationId);
+            String carriedRequestId = message.getMessageProperties().getCorrelationId();
+            if (carriedRequestId != null) {
+                values.putIfAbsent(LogContext.REQUEST_ID, carriedRequestId);
             }
         }
         values.putIfAbsent(LogContext.REQUEST_ID, LogContext.newRequestId());
