@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.abstracts;
 
+import com.exskylab.koala.core.dtos.bankAccount.request.ConfirmIbanTransferDto;
 import com.exskylab.koala.core.dtos.bankAccount.request.SaveBankAccountDto;
 import com.exskylab.koala.entities.BankAccount;
 import com.exskylab.koala.entities.User;
@@ -23,4 +24,10 @@ public interface BankAccountService {
     Optional<BankAccount> findPrimaryAccount(UUID userId);
 
     Optional<String> findPrimaryIban(UUID userId);
+
+    Optional<BankAccount> findVerifiedPrimaryAccount(UUID userId);
+
+    BankAccount startMyVerification(UUID accountId);
+
+    BankAccount confirmVerification(String reference, ConfirmIbanTransferDto observation);
 }
