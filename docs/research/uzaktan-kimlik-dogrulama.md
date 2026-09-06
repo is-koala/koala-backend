@@ -417,7 +417,202 @@ tek başına ortadan kaldırır.
 
 ## 4. Sunucuda doğrulanabilir yüz eşleştirme
 
-*(bu bölüm sağlayıcı ve standart araştırması tamamlanınca dolduruluyor)*
+### 4.1 En önemli bulgu: cihazda yapılan eşleştirme sunucuya **kanıtlanamaz**
+
+Platform ilkelleri (Android Play Integrity + Key Attestation, iOS App Attest / DeviceCheck,
+`BiometricPrompt` + `CryptoObject`) **kimin çalıştığını** ve **cihazda kayıtlı bir biyometriğin bir
+anahtarı açtığını** kanıtlar. Hiçbiri **belirli bir karşılaştırmanın yapıldığını**, hangi görüntüler
+üzerinde yapıldığını ya da sonucunun ne olduğunu kanıtlamaz.
+
+`setUserAuthenticationRequired(true)` + `AUTH_BIOMETRIC_STRONG` ile üretilmiş bir anahtarın imzası
+şunu kanıtlar: *bu cihazda, bu imzadan hemen önce, cihaza kayıtlı bir Class 3 biyometrik doğrulama
+yaptı ve bunu güvenli donanım zorladı.* Kanıtlamadığı şeyler:
+
+- **Kimin yüzü.** Kayıtlı biyometrik telefonu kuran kişiye ait; **kimlik belgesinin sahibiyle
+  hiçbir bağı yok.** Kendi yüzünü kaydeden bir saldırgan birebir aynı geçerli imzayı üretir.
+- **Hangi modalite.** `getAuthenticationType()` yalnız `BIOMETRIC` / `DEVICE_CREDENTIAL` / `UNKNOWN`
+  döndürüyor; uygulama parmak izi mi yüz mü kullanıldığını **kendisi bile öğrenemiyor**.
+- **Çip fotoğrafıyla bir karşılaştırma yapıldığını.** Çip fotoğrafı biyometrik alt sisteme hiç
+  girmiyor. Apple sınırı açıkça yazıyor: Secure Enclave *"geri yalnızca bir geçti/kaldı sonucu
+  döndürür"* ve altındaki doğrulama verisine hiçbir yazılım erişemez. İki platformda da donanım
+  eşleştiricisine rastgele bir görüntü verip imzalı bir skor almanın yolu yok.
+- **Herhangi bir canlılık özelliği.** Class 3'ün SAR ≤ %7 eşiği telefon kilidi için bir uyumluluk
+  tabanı; ISO/IEC 30107-3 anlamında KYC seviyesi bir PAD sonucu değil.
+
+Apple'ın kendi belgesi durumu tek cümlede söylüyor: *"uygulamanızın mantığına kendi üzerinde
+güvenlik denetimi yaptırmaya güvenemezsiniz, çünkü ele geçirilmiş bir uygulama sonuçları
+uydurabilir."*
+
+En yakın istisna **Android Protected Confirmation** — TEE'nin çizdiği, metni imzalanan bir onay
+kutusu. Ama *bir insanın bir cümleyi okuyup onayladığını* kanıtlıyor, bir biyometrik sonucu değil;
+üstelik yalnız desteklenen cihazlarda ve hiç yaygınlaşmadı.
+
+**Sonuç: sunucuya doğrulanabilir tek mimari, karşılaştırmanın ve PAD kararının sunucuda yapılmasıdır.**
+Cihaz bütünlüğü kanıtı (Play Integrity / App Attest) gerekli bir tamamlayıcıdır, ikame değil.
+
+### 4.2 ISO/IEC 30107-3 — ve satıcı sunumlarındaki üç yanlış
+
+**Standart ürünü değil ölçümü standartlaştırıyor.** "ISO 30107-3 sertifikalı ürün" diye bir şey
+yok; yalnız standardın raporlama şartlarına uyan bir laboratuvar raporu var. Standardın kendisi
+uyarıyor: *"PAD mekanizmalarının hata oranları benzer testler arasında zorunlu olarak
+karşılaştırılabilir değildir ve farklı laboratuvarlarca zorunlu olarak yeniden üretilebilir
+değildir."*
+
+Tanımlı metrikler (Madde 3.2): **APCER** (saldırı sunumunun gerçek sanılma oranı — **PAI türü
+başına**, tek bir küresel sayı değil), **BPCER** (gerçek sunumun saldırı sanılma oranı), **IAPAR**
+(2017'deki adı IAPMR), ve yanıtsızlık oranları.
+
+Üç yaygın yanlış:
+
+1. **ACER bir ISO/IEC 30107-3 metriği değil.** (APCER+BPCER)/2 formülü Madde 3.2'de geçmiyor,
+   NIST'in kendi standart anlatımında geçmiyor, iBeta'nın zorunlu metrik listesinde geçmiyor.
+   Üstelik ortalamak standardın mantığına aykırı: standart PAI türlerinin **ayrı ayrı** analiz
+   edilmesini tam da tek bir ortalamanın içeri sızan türü gizlemesi yüzünden istiyor.
+   **Satıcı sunumunda "ISO 30107-3'e göre ACER" görüyorsan bu bir kırmızı bayraktır.**
+2. **"Seviye 1 / 2 / 3" ISO'nun değil, iBeta'nın kurgusu.** Standardın 7. maddesindeki "seviyeler"
+   sistemin **hangi parçasının** test edildiğini anlatıyor (alt sistem / yakalama / tam sistem),
+   saldırı zorluğunu değil. iBeta bunu kendisi söylüyor. Seviyeler: **1** = ≤30 $ malzeme, %0
+   geçiş; **2** = ≤300 $ malzeme, %1 geçiş; **3** = hiper-gerçekçi maske, %5 geçiş. BPCER tavanı
+   Seviye 1–2 için %15.
+3. **Seviye 2 ayırt edici değil.** iBeta'nın yayımladığı 277 mektubun 166'sı Seviye 1, 99'u
+   Seviye 2, **yalnız 3'ü Seviye 3**. Seviye 2 masaya oturma bedeli.
+
+Ve kapsam sınırı: FIDO'nun kendi belgesi *"enjeksiyon saldırıları PAD testinin kapsamı dışındadır"*
+diyor. Bir iBeta Seviye 2, sanal kameraya sentetik video besleyen saldırgan hakkında **hiçbir şey**
+söylemiyor — ki uzaktan işe alımda bugün baskın saldırı budur.
+
+### 4.3 MASAK'ın "on milyonda bir" şartı metrolojik olarak sorunlu
+
+MASAK Genel Tebliği 19, Md. 4(9)(b) yapay zekâ algoritmasının *"yanlış onay vakasının on milyonda
+birin altında"* olduğunu gösteren TSE raporu istiyor (yurtdışı menşeli kuruluş uluslararası geçerli
+bir sertifika taşıyorsa TSE raporu aranmıyor).
+
+İki sorun var:
+
+- **NIST bu sayıyı hiç raporlamıyor.** FRTE 1:1 raporunun tamamında FMR = 1e-7 sonucu **yok**; en
+  düşük eşik **1e-6**. Sebebi istatistiksel: sahtekâr karşılaştırma sayısı ~10⁸ mertebesinde ve
+  "üçler kuralı" tabanı ≈3×10⁻⁸ — yani 1e-7 böyle bir korpusun çözebileceğinin tam sınırında.
+- **Şart canlılık testine de uygulanıyor ama FMR bir *eşleştirme* metriği.** Canlılık algoritmasının
+  FMR'si yoktur; güvenlik metriği APCER/IAPAR'dır ve iBeta bunları %0/%1/%5 ile sınırlıyor — yani
+  altı yedi kat büyüklük daha gevşek.
+
+**Hiçbir satıcının — ne Türk ne yabancı — 1e-7'nin altını belgeleyen bir TSE ya da akredite
+laboratuvar raporu yayımladığı bulunamadı.** Bu şart metrolojik değil idari olarak karşılanıyor
+görünüyor. Koala MASAK yükümlüsü olmadığı için (§1) bugün bağlayıcı değil, ama eşiği aşıldığı gün
+bu sorunun cevabı doğrudan TSE'ye sorulmalı.
+
+Not: Md. 4(8) dış hizmet alınan kuruluş için **TS EN ISO/IEC 27001**'i zorunlu tutuyor — bu bir
+ayırt edici değil, taban.
+
+### 4.4 Türkiye pazarı — üç sert bulgu
+
+**① iBeta'nın ISO 30107-3 mektup listesinde tek bir Türk şirketi yok.** 277 satırın tamamı
+Türkiye / Türkiye / İstanbul / Ankara ve bu araştırmada bulunan her Türk satıcı adı için tarandı.
+**Sıfır sonuç.**
+
+**② İHS Teknoloji'nin "iBeta Seviye 2" belgesi bir İngiliz şirketine ait.** Bağlantı verilen
+mektuplar **Fraud.com International LTD** (Londra, şirket no. 11269440) adına düzenlenmiş; İHS
+Türkiye ortağı/hizmet sağlayıcısı. Mektup gerçek (12 Nisan 2022, Udentify 1.0, 6 denek, 6 PAI türü,
+%0 geçiş) — ama İHS'nin değil.
+
+**③ NIST kayıtlarında üç Türk geliştirici var, ve biri satıcı izleniminin tersini söylüyor.**
+FRTE 1:1 katılımcı tablosunda, ülke kodu TR: **Papilon Savunma** (`papsav1923-003`, FNMR 0,0034 @
+FMR 1e-6), **Turkcell Technology** (`turkcell-001`, 0,0043), **Techsign** (`techsign-001`, 0,0087).
+Sınıfın en iyisi ≈0,0015–0,0019 olduğuna göre Papilon ve Turkcell saygın orta-üst alan.
+
+Ama **Techsign NIST FATE PAD'deki tek Türk katılımcı ve canlılık sonuçları kötü**: en kolay
+kategoride (baskı fotoğraf / replay) `techsign-001` **APCER 0,53**, `techsign-000` **0,72** —
+liderler 0,000'da. Bu, bağımsız kanıtın pazarlama izlenimiyle doğrudan çeliştiği nadir bir durum.
+
+**Ve brief'te sayılan on Türk şirketin altısı kimlik işinde bile değil:** Vispera (raf görüntü
+tanıma), Sestek/Knovvu (**yalnız ses** biyometrisi), ARDIC (IoT), Netaş, Kuika, Hipotenüs. Üçü
+(Fintechhub, Toohoo, Vidyodijital) Türk şirketi olarak doğrulanamadı. Yalnız **Identify**
+(identify.com.tr) gerçek bir IDV satıcısı — NFC var, canlılık sertifikası **yok**.
+
+### 4.5 Veri yerleşimi — asıl süzgeç bu
+
+MASAK Md. 4/A(3) NFC okumayı zaten masaya oturma bedeli yapıyor; ciddi satıcıların hepsinde var.
+Gerçek süzgeçler ikisi:
+
+- **Veri Türkiye'de kalabiliyor mu?** Yalnız **Regula'nın on-premise dağıtımı** ve **İHS'nin yurt
+  içi barındırması** bunu karşılıyor; Sumsub sözleşmeye bağlı bir "belki". Veriff, Onfido/Entrust,
+  Jumio, iDenfy, Signicat'in hiçbiri Türkiye bölgesi sunmuyor.
+- **Canlılık sertifikası satıcının kendisinin mi?** Bu ölçüt iDenfy'ı (canlılığı FaceTec'ten alıyor)
+  ve Signicat'i (iProov'dan alıyor) doğrudan sertifikalı taraf olmaktan çıkarıyor,
+  Onfido/Entrust'ın Seviye 2 iddiasına soru işareti koyuyor (en yeni mektup **Seviye 1**), ve her
+  Türk satıcının ya sertifikasız olduğunu ya da yabancı ortağının mektubunu ödünç aldığını gösteriyor.
+
+En güçlü PAD kâğıt izi **Yoti**'de: yayımlanmış üç Seviye 3 mektubundan biri onun — ama
+eşleştirmede 444 geliştirici içinde **251.** sırada ve FATE PAD'de sondan ortak birinci. Sertifika
+ile doğruluk aynı şey değil. **IDEMIA** FATE PAD'de baskı/replay kategorisinde ortak birinci
+(APCER 0,000).
+
+### 4.5b Doğruluk sıralaması — canlı liderlik tablosundan
+
+NIST'in "Accuracy By Developer" tablosu (444 geliştirici, 2026-08-31) satıcı sayfalarının verdiği
+izlenimle çelişiyor. VISABORDER, FMR = 1e-6, FNMR (düşük daha iyi):
+
+| Geliştirici | FNMR | Sıra |
+|---|---|---|
+| Paravision | 0,0015 | 6. |
+| Innovatrics | 0,0017 | 10. |
+| IDEMIA | 0,0020 | 17. |
+| HyperVerge | 0,0027 | 68. |
+| **Papilon Savunma (TR)** | 0,0034 | — |
+| **Turkcell (TR)** | 0,0043 | — |
+| Trust Stamp | 0,0073 | 210. |
+| **Techsign (TR)** | 0,0087 | — |
+| Yoti | 0,0106 | 251. |
+| IDVerse / OCR Labs | listede yok | — |
+
+**Papilon ve Turkcell, NIST 1:1 eşleştirmede Yoti ve Trust Stamp'i geçiyor.** Türk satıcıları
+peşinen elemek için bir sebep yok; elenmeleri gerekiyorsa sebep canlılık sertifikasının olmaması.
+
+### 4.5c İncelenen satıcıların altısı konumunu abartıyor
+
+Bu, araştırmanın en aktarılabilir bulgusu — bir satıcı sunumuna bakarken doğrudan işe yarıyor:
+
+| Satıcı | İddia | Gerçek |
+|---|---|---|
+| **HyperVerge** | "NIST FRVT 1:1'de dünyada 7." | **68./444**. Ayrıca iBeta'da yalnız **Seviye 1** var, Seviye 2 iddiasının mektubu listede yok |
+| **Yoti** | "NIST'te ilk on" | **251./444**. İddia muhtemelen FATE *yaş tahmini* sıralamasından geliyor, farklı bir yarış |
+| **IDEMIA** | "test edilen çoğu senaryoda 1 numara" | FRTE **1:N** tanımlama için; 1:1 doğrulama ayrı bir yarış |
+| **Onfido / Entrust** | Pazarlama "Seviye 2" | En yeni mektup (27 Tem 2026) açıkça **Seviye 1** diyor |
+| **İHS Teknoloji** | "iBeta Seviye 2 sertifikalıdır" | Mektup **Fraud.com International LTD**'ye (Londra) ait |
+| **IDEMIA + Paravision** | "DHS RIVR kazananı" | DHS sonuçları **tümüyle anonim** yayımlanıyor; iddia yapısal olarak doğrulanamaz |
+
+### 4.6 Mevzuat metni — birincil kaynak, ve iki gün önceki değişiklik
+
+**BDDK Yönetmeliği** (Resmî Gazete 1 Nisan 2021, No. 31441):
+- **Md. 7(2)** — belgenin temassız yongasının NFC ile okunması **birincil** doğrulama; ihraç makamı
+  imzası ve yonga klonlaması da denetleniyor.
+- **Md. 7(3)** — NFC başarısızsa **en az dört** görsel güvenlik unsuru doğrulanacak.
+- **Md. 8(1)** — görüntülü görüşme sırasında **canlılık tespiti zorunlu**, derin sahtecilik karşıtı
+  tedbirler açıkça isteniyor.
+- **Md. 8(3)–(4)** — süreçte bir **müşteri temsilcisi** bulunmak zorunda.
+
+**Sonuç:** Türkiye'de tamamen otomatik, sunucu tarafı selfie–belge eşleştirmesi tek başına
+**uyumlu bir banka açılış akışı değil.** NFC + insanlı görüntülü görüşme mevzuat şartı. Satıcı
+listesini sertifikadan daha sert süzen şey bu.
+
+⚠️ **TCMB Tebliğ değişikliği, Resmî Gazete 4 Eylül 2026, No. 33360** — bu araştırma yapılırken iki
+günlük. Uzaktan kimlik tespitini **ödeme ve elektronik para kuruluşlarına** genişletiyor: yine NFC
+birincil, OCR/kart okuyucu yedeği MASAK görüşüne bağlı, ve yabancı uyruklular ICAO 9303 NFC
+pasaportuyla uzaktan tanımlanabiliyor.
+
+**Bu Koala'yı dolaylı ama gerçek biçimde ilgilendiriyor.** §1'in sonucu — alt üye işyeri kimlik
+tespiti yükümlülüğünün Iyzico'da olduğu — bu değişiklikle güçleniyor; ama aynı değişiklik Iyzico'nun
+kendi yükümlülüğünü sıkılaştırdığı için **Iyzico'nun Koala'dan alt üye işyeri açılışında daha fazla
+kanıt istemeye başlaması beklenmelidir.** Bu, Koala'nın çip kanıtı toplamasını hukuki bir zorunluluk
+değil ama ticari bir gereklilik hâline getirebilir. İzlenmeli.
+
+### 4.7 Fiyat
+
+Yalnız üç satıcı doğrulama başına fiyat yayımlıyor. Yayımlanan bant **1,35–1,89 $/doğrulama**,
+aylık taban **135–299 $**. Veriff'in tam otomatik "Essential" katmanı **0,80 $** ile en ucuz
+başlık — ama yalnız yapay zekâ ve 3 ay saklama. Sumsub 1,35/1,85 $, iDenfy 1,35 $ + katman
+ücretleri (3D canlılık +0,20 $). Regula, Jumio, Onfido/Entrust, Signicat, IDEMIA ve **bütün Türk
+satıcılar** fiyat yayımlamıyor.
 
 ---
 
