@@ -188,8 +188,8 @@ class NotificationSuppressionTest {
     }
 
     @Test
-    void aCompanyInvitationOffersNoUnsubscribeLinkEvenThoughItsCategoryCanBeSwitchedOff() {
-        manager.sendEmail(email(NotificationCategory.COMPANY_UPDATES), DispatchPriority.NORMAL, true);
+    void aCompanyInvitationIsQueuedAndCarriesNoUnsubscribeLink() {
+        manager.sendEmail(email(NotificationCategory.COMPANY_UPDATES), DispatchPriority.CRITICAL, true);
 
         assertFalse(queuedEmail().templateParameters().containsKey("unsubscribeUrl"),
                 "yetkili daveti eyleme çağıran bir posta, çıkış bağlantısı taşımamalı");

@@ -1280,8 +1280,8 @@ değer taşıyor ve üç soruyu birden cevaplıyor: kapatılabilir mi, varsayıl
 
 | Kind | Kategoriler | Kapatılabilir | Varsayılan | Ticari |
 |---|---|---|---|---|
-| `TRANSACTIONAL` | `ACCOUNT_SECURITY`, `APPLICATION_UPDATES`, `IDENTITY_VERIFICATION` | **hayır** | açık | hayır |
-| `ALERT` | `JOB_ALERTS`, `COMPANY_UPDATES` | evet | **açık** | hayır |
+| `TRANSACTIONAL` | `ACCOUNT_SECURITY`, `APPLICATION_UPDATES`, `IDENTITY_VERIFICATION`, `COMPANY_UPDATES` | **hayır** | açık | hayır |
+| `ALERT` | `JOB_ALERTS` | evet | **açık** | hayır |
 | `COMMERCIAL` | `MARKETINGS`, `NEWSLETTER` | evet | **kapalı** | evet |
 
 Yeni bir kategori eklendiğinde tek karar `kind` seçmek; varsayılanı, kapatılabilirliği ve rıza kaydı
@@ -1334,13 +1334,35 @@ onu çizer. Gönderen tarafın bağlantıyı eklemeyi hatırlaması gerekmiyor.
 `COMPANY_UPDATES`'i de kapsıyordu — o kategorinin taşıdığı tek şey şirket kurulumu ve **yetkili daveti**
 (`CompanyContactInvitationManager`, `DispatchPriority.CRITICAL`). Eyleme çağıran bir davetin altına "tek tıkla
 çıkabilirsin" yazmak yanlış: davet pazarlama değil. Issue #31 de bağlantıyı "pazarlama e-postalarında" diye
-istiyor. `JOB_ALERTS` bugün yalnızca push gönderiyor, yani pratikte kaybedilen bir şey yok; iş alarmı
-e-postası yazıldığında bu sınır yeniden değerlendirilmeli.
+istiyor. Geriye kalan tek kapatılabilir kategori `JOB_ALERTS` ve o bugün yalnızca push gönderiyor, yani
+pratikte kaybedilen bir şey yok; iş alarmı e-postası yazıldığında bu sınır yeniden değerlendirilmeli.
 
-**Açık kalan gerilim:** `COMPANY_UPDATES` kapatılabilir (§2s'deki tablo öyle diyor) ama içinde yetkili daveti
-var; kullanıcı bu kategoriyi kapatırsa davetten e-postayla haberdar olmaz. Kategorinin "şirket haberi"
-(kapatılabilir) ve "üyelik eylemi" (işlemsel) diye ikiye ayrılması gerekiyor — bu issue'nun kapsamı dışında,
-takip issue'su açıldı.
+**`COMPANY_UPDATES` kapatılabilirdi ve bu daveti erişilemez kılıyordu (issue #52).** PR #48'de kategori
+`ALERT` işaretlenmişti; kullanıcı `COMPANY_UPDATES`/`EMAIL` kapattığında yetkili davetinden **hiçbir şekilde**
+haberdar olamıyordu. `CompanyContactInvitationManager` yalnızca e-posta gönderiyor — `sendInApp` yok, push
+yok — ve daveti listeleyen bir uç da yok: `GET /companies/{companyId}/contact-invitations` zaten o şirketin
+yetkilisi olmayı, `GET /contact-invitations/{invitationId}` davetin UUID'sini bilmeyi gerektiriyor. Yani
+bastırılan e-posta daveti bozmuyor, **erişilemez hâle getiriyordu.**
+
+**Kategori bölünmedi, yeniden sınıflandırıldı.** İlk düşünülen yön ikiye bölmekti — `COMPANY_UPDATES` haber
+olarak `ALERT` kalır, üyelik eylemleri yeni bir işlemsel kategoriye taşınır. Bölünmedi: geriye `COMPANY_UPDATES`
+yalnızca `CompanyManager`'daki iki oluşturma postasını yönetir hâlde kalıyordu ve **o ikisi `setRecipient`
+çağırmıyor**, yani `recipient == null` kuralı yüzünden zaten hiç bastırılmıyorlar. Sonuç tercih merkezinde
+hiçbir şey yapmayan canlı bir anahtar olurdu.
+
+Kategorinin beş gönderim noktasının hepsi işlemsel: bir oluşturma makbuzu, eyleme çağıran bir davet, iki cevap
+makbuzu. `ALERT` işaretinin dayandığı "şirket haberi" ayrımı üründe yok — takip edilen şirketin yeni ilanı
+zaten `JOB_ALERTS`'ten geçiyor (`CompanyFollowManager`). Sektör standardı da bu yönde: bir organizasyona
+katılım daveti hesap/üyelik iletisi sayılır, İYS/KVKK ayrımında ticari ileti değil işlemsel iletidir.
+
+**Sabit yeniden adlandırılmadı, yalnızca `kind` değişti** — veri göçü bu yüzden gerekmedi.
+`@Enumerated(EnumType.STRING)` ile yazılmış `notifications.category` ve `notification_preferences.category`
+satırları aynı metni taşımaya devam ediyor. Kullanıcının daha önce yazdığı `COMPANY_UPDATES` satırları
+kendiliğinden etkisizleşiyor: `isAllowed`, `kind.isOptional()` false ise satıra hiç bakmadan `true` dönüyor —
+yukarıdaki "veritabanına elle yazılmış satır bile susturamaz" garantisinin tam olarak işe yaradığı yer.
+
+Bedeli: `PUT /users/me/notification-preferences` artık `COMPANY_UPDATES=false` gönderen isteğe **400** döner.
+Tercih ekranı hiçbir istemcide yazılmadığı için bugün bunu gören yok.
 
 **Token mekanizması parola sıfırlamanın aynısı** (§ `PasswordResetTokenManager`): 32 bayt rastgele,
 URL-safe; veritabanında yalnız SHA-256 özeti. `PasswordResetTokenGenerator` **yeniden kullanıldı** — sınıf
@@ -1561,7 +1583,7 @@ Birim testlerde `CommissionCalculator` artık `FallbackSettings.commissionCalcul
 
 **`EntityGraphPathsIT` neden var.** `@EntityGraph` içindeki `attributePaths` derleyicinin denetlemediği düz metin; yanlış bir yol ancak o sorgu çalıştırıldığında patlıyor. `JobAssignmentDao` içinde `job.creator.addresses` yazıyordu, oysa `User.address` tekil — `PATCH /job-assignments/{id}/status` her çağrıda çöküyordu ve kimse fark etmemişti. Test tüm DAO'ları tarayıp her yolu JPA metamodel'ine karşı doğruluyor. Yeni bir entity graph eklerken bu test bedava koruma sağlıyor.
 
-**Bildirim tercihi testleri (§2at).** `NotificationPreferenceRulesTest` on dört kural: işlemsel kategori satır ne derse desin açık kalır, alarm kullanıcı kapatana kadar açık, ticari kullanıcı açana kadar kapalı, bir kanalı kapatmak diğerlerine dokunmaz, alıcısı bilinmeyen gönderim susturulmaz, karar yazılır ve çözümlenmiş görünüme yansır, işlemsel satırlar `editable=false` gelir, tercih taşımayan kanal görünümde hiç yok, aynı kanala ikinci karar yeni satır açmaz, ticari izin an/kanal/IP ile kaydedilir, izin çekilişi de kaydedilir, ticari olmayan kategori rıza kaydı bırakmaz, çıkış bağlantısı yalnız kendi kanalını kapatır, çıkış bağlantısı oturum istemez. `NotificationUnsubscribeRulesTest` altı kural: bağlantı token'ı taşır ve veritabanı yalnız özeti, satır hangi kanalı kapatacağını bilir, tanınmayan token reddedilir, süresi dolmuş bağlantı çalışmaz, canlı bağlantı hedefine çözümlenir, aynı bağlantıya ikinci tık zararsız. `NotificationSuppressionTest` on bir kural gönderim kapısını sabitliyor: kapatılan kanal ne kuyruğa girer ne kayıt açar, e-postayı kapatmak push'u susturmaz, ödeme bildirimi tercihe rağmen gider, hesabı olmayan adrese giden e-posta susturulmaz, ticari e-posta çıkış bağlantısı taşır, işlemsel e-posta taşımaz, yetkili daveti taşımaz, iş alarmı taşımaz, bağlantı bindiği e-postanın kategori ve kanalını adlandırır, bastırılan e-posta token bile istemez.
+**Bildirim tercihi testleri (§2at).** `NotificationPreferenceRulesTest` on altı kural: işlemsel kategori satır ne derse desin açık kalır, **yetkili daveti kapatılmış `COMPANY_UPDATES` satırına rağmen gider** (issue #52), alarm kullanıcı kapatana kadar açık, ticari kullanıcı açana kadar kapalı, bir kanalı kapatmak diğerlerine dokunmaz, alıcısı bilinmeyen gönderim susturulmaz, karar yazılır ve çözümlenmiş görünüme yansır, işlemsel satırlar `editable=false` gelir, **`COMPANY_UPDATES` görünümde anahtar sunmaz**, tercih taşımayan kanal görünümde hiç yok, aynı kanala ikinci karar yeni satır açmaz, ticari izin an/kanal/IP ile kaydedilir, izin çekilişi de kaydedilir, ticari olmayan kategori rıza kaydı bırakmaz, çıkış bağlantısı yalnız kendi kanalını kapatır, çıkış bağlantısı oturum istemez. Son iki kural PR #48'in getirdiği regresyonu koruyor: ikisi de yazıldığında kırmızıydı. `NotificationUnsubscribeRulesTest` altı kural: bağlantı token'ı taşır ve veritabanı yalnız özeti, satır hangi kanalı kapatacağını bilir, tanınmayan token reddedilir, süresi dolmuş bağlantı çalışmaz, canlı bağlantı hedefine çözümlenir, aynı bağlantıya ikinci tık zararsız. `NotificationSuppressionTest` on bir kural gönderim kapısını sabitliyor: kapatılan kanal ne kuyruğa girer ne kayıt açar, e-postayı kapatmak push'u susturmaz, ödeme bildirimi tercihe rağmen gider, hesabı olmayan adrese giden e-posta susturulmaz, ticari e-posta çıkış bağlantısı taşır, işlemsel e-posta taşımaz, yetkili daveti kuyruğa girer ve çıkış bağlantısı taşımaz, iş alarmı taşımaz, bağlantı bindiği e-postanın kategori ve kanalını adlandırır, bastırılan e-posta token bile istemez.
 
 `WorkerToolsRulesTest` bir kural kazandı: eşleşen iş alarmı `NotificationService`'e `JOB_ALERTS` kategorisiyle push olarak veriliyor — yani üretimdeki alarm yolu da kapıdan geçiyor.
 
