@@ -173,6 +173,9 @@ rate-limit:
   realtime-message:
     max-attempts: ${RATE_LIMIT_REALTIME_MESSAGE_MAX_ATTEMPTS:60}
     window: ${RATE_LIMIT_REALTIME_MESSAGE_WINDOW:1m}
+  realtime-credential:
+    max-attempts: ${RATE_LIMIT_REALTIME_CREDENTIAL_MAX_ATTEMPTS:10}
+    window: ${RATE_LIMIT_REALTIME_CREDENTIAL_WINDOW:1m}
   address-search:
     max-attempts: ${RATE_LIMIT_ADDRESS_SEARCH_MAX_ATTEMPTS:60}
     window: ${RATE_LIMIT_ADDRESS_SEARCH_WINDOW:1m}

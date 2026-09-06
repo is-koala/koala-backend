@@ -75,8 +75,9 @@ public class SessionAuthFilter extends OncePerRequestFilter {
         }
 
         try{
-            final UUID sessionId = jwtService.extractSessionId(sessionToken);
-            final UUID userId = jwtService.extractUserId(sessionToken);
+            JwtIdentity identity = jwtService.extractHttpIdentity(sessionToken);
+            final UUID sessionId = identity.sessionId();
+            final UUID userId = identity.userId();
 
             var session = sessionService.findActiveSessionById(sessionId);
             var user = session.getDevice().getUser();

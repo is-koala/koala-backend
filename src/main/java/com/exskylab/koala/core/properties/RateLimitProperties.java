@@ -20,6 +20,7 @@ public class RateLimitProperties {
     private Bucket publicBucket = new Bucket(120, Duration.ofMinutes(1));
     private Bucket realtimeSubscribe = new Bucket(30, Duration.ofMinutes(1));
     private Bucket realtimeMessage = new Bucket(60, Duration.ofMinutes(1));
+    private Bucket realtimeCredential = new Bucket(10, Duration.ofMinutes(1));
 
     public static class Bucket {
 
@@ -105,6 +106,14 @@ public class RateLimitProperties {
 
     public void setRealtimeMessage(Bucket realtimeMessage) {
         this.realtimeMessage = realtimeMessage;
+    }
+
+    public Bucket getRealtimeCredential() {
+        return realtimeCredential;
+    }
+
+    public void setRealtimeCredential(Bucket realtimeCredential) {
+        this.realtimeCredential = realtimeCredential;
     }
 
     public Bucket getAuth() {

@@ -190,6 +190,7 @@ public class SecurityConfig {
 
                         //realtime endpoints
                         .requestMatchers("/ws/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/users/me/realtime-credential").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/users/{userId}/presence").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/presence/lookup").hasAnyRole("USER", "ADMIN")
 
