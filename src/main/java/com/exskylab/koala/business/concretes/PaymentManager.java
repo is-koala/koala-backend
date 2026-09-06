@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.PaymentService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.PaymentMessages;
+import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
@@ -19,6 +20,7 @@ import com.exskylab.koala.entities.Payment;
 import com.exskylab.koala.entities.PaymentAttemptStatus;
 import com.exskylab.koala.entities.PaymentStatus;
 import com.exskylab.koala.core.constants.PayoutMessages;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -60,6 +62,10 @@ public class PaymentManager implements PaymentService {
     @Override
     @Transactional
     public Payment startAttempt(JobAssignment jobAssignment, CommissionCalculator.Breakdown breakdown) {
+        if (hasPendingAttemptForAssignment(jobAssignment.getId())) {
+            throw new ConflictException(PaymentMessages.ATTEMPT_IN_PROGRESS);
+        }
+
         Payment payment = new Payment();
         payment.setJobAssignment(jobAssignment);
         payment.setConversationId(UUID.randomUUID().toString());
@@ -73,13 +79,37 @@ public class PaymentManager implements PaymentService {
 
         Payment saved;
         try {
-            saved = paymentDao.save(payment);
+            saved = paymentDao.saveAndFlush(payment);
+        } catch (DataIntegrityViolationException exception) {
+            if (isActiveAttemptConstraint(exception)) {
+                throw new ConflictException(PaymentMessages.ATTEMPT_IN_PROGRESS);
+            }
+            paymentMetrics.initiationPersistenceError();
+            throw exception;
         } catch (RuntimeException exception) {
             paymentMetrics.initiationPersistenceError();
             throw exception;
         }
         log.info("Payment attempt {} started for assignment {}", saved.getId(), jobAssignment.getId());
         return saved;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasPendingAttemptForAssignment(UUID jobAssignmentId) {
+        return paymentDao.existsByJobAssignmentIdAndStatusIn(jobAssignmentId, PENDING_STATUSES);
+    }
+
+    private boolean isActiveAttemptConstraint(Throwable exception) {
+        Throwable current = exception;
+        while (current != null) {
+            if (current.getMessage() != null
+                    && current.getMessage().contains("uk_payments_one_active_attempt")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     @Override

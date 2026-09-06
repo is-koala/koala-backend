@@ -9,6 +9,7 @@ import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.constants.JobAssignmentMessages;
+import com.exskylab.koala.core.constants.PaymentMessages;
 import com.exskylab.koala.core.helpers.Concealment;
 import com.exskylab.koala.core.dtos.jobAssignment.request.AnswerAssignmentDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.PaymentSessionDto;
@@ -234,6 +235,10 @@ public class JobAssignmentManager implements JobAssignmentService {
                 log.error("Unknown employer type for job with id {}", job.getId());
                 throw new IllegalArgumentException("Unknown employer type");
             }
+        }
+
+        if (paymentService.hasPendingAttemptForAssignment(assignmentId)) {
+            throw new ConflictException(PaymentMessages.ATTEMPT_IN_PROGRESS);
         }
 
         if (worker.getIyzicoSubmerchantKey() == null || worker.getIyzicoSubmerchantKey().isBlank()){

@@ -68,4 +68,5 @@
     <include file="db/changelog/2026/09/06-79-bank-account-collection.xml"/>
     <include file="db/changelog/2026/09/06-62-company-approval-decision.xml"/>
     <include file="db/changelog/2026/09/06-80-offline-timesheet-events.xml"/>
+    <include file="db/changelog/2026/09/06-82-active-payment-attempt.xml"/>
 </databaseChangeLog>

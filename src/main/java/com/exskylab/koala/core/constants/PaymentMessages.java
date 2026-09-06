@@ -13,4 +13,5 @@ public class PaymentMessages {
     public static final String FRAUD_REVIEW = "{payment.fraud.review}";
     public static final String THREE_D_SECURE_FAILED = "{payment.3ds.verification.failed}";
     public static final String QUOTE_CALCULATED = "{payment.quote.calculated}";
+    public static final String ATTEMPT_IN_PROGRESS = "{payment.attempt.in.progress}";
 }

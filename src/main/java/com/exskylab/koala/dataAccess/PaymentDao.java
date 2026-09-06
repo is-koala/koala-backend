@@ -25,6 +25,8 @@ public interface PaymentDao extends JpaRepository<Payment, UUID> {
 
     boolean existsByJobAssignmentIdAndStatus(UUID jobAssignmentId, PaymentAttemptStatus status);
 
+    boolean existsByJobAssignmentIdAndStatusIn(UUID jobAssignmentId, List<PaymentAttemptStatus> statuses);
+
     @Query("""
             select (count(p) > 0) from Payment p
             where p.status in :statuses

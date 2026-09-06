@@ -225,6 +225,21 @@ class PaymentSessionAuthorizationTest {
     }
 
     @Test
+    void aPendingAttemptStopsBeforeAnotherProviderSessionOrSubmerchantIsCreated() {
+        JobAssignment assignment = confirmedAssignment(individualJob());
+        when(jobAssignmentDao.findById(assignment.getId())).thenReturn(Optional.of(assignment));
+        when(securityService.getAuthenticatedUser()).thenReturn(employer);
+        when(paymentService.hasPendingAttemptForAssignment(assignment.getId())).thenReturn(true);
+
+        var thrown = assertThrows(com.exskylab.koala.core.exceptions.ConflictException.class,
+                () -> manager.initiatePaymentSession(assignment.getId(), "127.0.0.1"));
+
+        assertEquals("PAYMENT_ATTEMPT_IN_PROGRESS", thrown.getErrorCode());
+        verify(iyzicoPaymentService, never()).createSubMerchant(any());
+        verify(iyzicoPaymentService, never()).initiateCheckoutFormPayment(any());
+    }
+
+    @Test
     void aProviderInitiationFailureIncrementsTheBoundedFailureMetric() {
         Job job = individualJob();
         job.setAddress(address());

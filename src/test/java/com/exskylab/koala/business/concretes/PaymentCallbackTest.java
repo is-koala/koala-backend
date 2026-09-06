@@ -49,6 +49,7 @@ class PaymentCallbackTest {
                 new PaymentMetrics(new SimpleMeterRegistry()));
 
         when(paymentDao.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(paymentDao.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
     }
 
     private Payment pendingPayment() {

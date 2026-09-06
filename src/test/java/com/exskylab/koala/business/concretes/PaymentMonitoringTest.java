@@ -19,14 +19,18 @@ import com.exskylab.koala.entities.PaymentStatus;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class PaymentMonitoringTest {
@@ -46,6 +50,7 @@ class PaymentMonitoringTest {
         paymentManager = new PaymentManager(paymentDao, iyzicoPaymentService, new PaymentStateMachine(),
                 mock(SecurityService.class), mock(JobAssignmentDao.class),
                 new AssignmentParticipants(mock(CompanyContactService.class)), new PaymentMetrics(registry));
+        when(paymentDao.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(paymentDao.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
@@ -55,12 +60,48 @@ class PaymentMonitoringTest {
         assignment.setId(UUID.randomUUID());
         assignment.setPricingVersion("2026-09-v1");
         CommissionCalculator calculator = FallbackSettings.commissionCalculator();
-        when(paymentDao.save(any())).thenThrow(new IllegalStateException("database unavailable"));
+        when(paymentDao.saveAndFlush(any())).thenThrow(new IllegalStateException("database unavailable"));
 
         org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
                 () -> paymentManager.startAttempt(assignment, calculator.calculate(new BigDecimal("1000.00"))));
 
         assertEquals(1.0, counter("initiation", "persistence_error"));
+    }
+
+    @Test
+    void anActiveAttemptBlocksAnotherReservationBeforeTheProviderIsCalled() {
+        JobAssignment assignment = new JobAssignment();
+        assignment.setId(UUID.randomUUID());
+        assignment.setPricingVersion("2026-09-v1");
+        when(paymentDao.existsByJobAssignmentIdAndStatusIn(any(), any())).thenReturn(true);
+
+        var breakdown = FallbackSettings.commissionCalculator()
+                .calculate(new BigDecimal("1000.00"));
+
+        var thrown = assertThrows(com.exskylab.koala.core.exceptions.ConflictException.class,
+                () -> paymentManager.startAttempt(assignment, breakdown));
+
+        assertEquals("PAYMENT_ATTEMPT_IN_PROGRESS", thrown.getErrorCode());
+        verify(paymentDao, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void aConcurrentReservationLosingTheDatabaseRaceBecomesAConflict() {
+        JobAssignment assignment = new JobAssignment();
+        assignment.setId(UUID.randomUUID());
+        assignment.setPricingVersion("2026-09-v1");
+        when(paymentDao.existsByJobAssignmentIdAndStatusIn(any(), any())).thenReturn(false);
+        when(paymentDao.saveAndFlush(any())).thenThrow(
+                new DataIntegrityViolationException("uk_payments_one_active_attempt"));
+
+        var breakdown = FallbackSettings.commissionCalculator()
+                .calculate(new BigDecimal("1000.00"));
+
+        var thrown = assertThrows(com.exskylab.koala.core.exceptions.ConflictException.class,
+                () -> paymentManager.startAttempt(assignment, breakdown));
+
+        assertEquals("PAYMENT_ATTEMPT_IN_PROGRESS", thrown.getErrorCode());
+        assertEquals(0.0, counter("initiation", "persistence_error"));
     }
 
     @Test
