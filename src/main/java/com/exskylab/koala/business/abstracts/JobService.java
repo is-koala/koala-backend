@@ -32,11 +32,19 @@ public interface JobService {
 
     Job getById(UUID jobId);
 
-    JobDetailDto getJobDetail(UUID jobId);
+    JobDetailDto getJobDetail(UUID jobId, UUID viewerId);
+
+    default JobDetailDto getJobDetail(UUID jobId) {
+        return getJobDetail(jobId, null);
+    }
 
     Job getDetailedById(UUID jobId);
 
-    PageDto<JobSummaryDto> search(JobSearchCriteriaDto criteria, Pageable pageable);
+    PageDto<JobSummaryDto> search(JobSearchCriteriaDto criteria, Pageable pageable, UUID viewerId);
+
+    default PageDto<JobSummaryDto> search(JobSearchCriteriaDto criteria, Pageable pageable) {
+        return search(criteria, pageable, null);
+    }
 
     PageDto<JobSummaryDto> getJobsOfCurrentUser(Pageable pageable);
 

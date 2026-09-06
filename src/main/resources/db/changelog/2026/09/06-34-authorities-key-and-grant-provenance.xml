@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-06-34-1-deduplicate-authorities" author="koala">
+        <sql>
+            DELETE FROM public.authorities a
+            WHERE a.ctid &lt;> (
+                SELECT min(b.ctid) FROM public.authorities b
+                WHERE b.user_id = a.user_id AND b.role = a.role
+            );
+        </sql>
+        <rollback/>
+    </changeSet>
+
+    <changeSet id="2026-09-06-34-2-add-grant-provenance-columns" author="koala">
+        <addColumn tableName="authorities">
+            <column name="granted_at" type="TIMESTAMPTZ"/>
+            <column name="granted_by_id" type="UUID"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="authorities" columnName="granted_by_id"/>
+            <dropColumn tableName="authorities" columnName="granted_at"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-06-34-3-backfill-granted-at" author="koala">
+        <sql>
+            UPDATE public.authorities SET granted_at = now() WHERE granted_at IS NULL;
+        </sql>
+        <rollback/>
+    </changeSet>
+
+    <changeSet id="2026-09-06-34-4-granted-by-foreign-key" author="koala">
+        <addForeignKeyConstraint baseTableName="authorities" baseColumnNames="granted_by_id"
+                                 constraintName="fk_authorities_on_granted_by"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <rollback>
+            <dropForeignKeyConstraint baseTableName="authorities" constraintName="fk_authorities_on_granted_by"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-06-34-5-unique-user-role" author="koala">
+        <addUniqueConstraint tableName="authorities" columnNames="user_id, role"
+                             constraintName="uk_authorities_user_role"/>
+        <rollback>
+            <dropUniqueConstraint tableName="authorities" constraintName="uk_authorities_user_role"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-06-34-6-composite-primary-key" author="koala">
+        <addPrimaryKey tableName="authorities" columnNames="user_id, role"
+                       constraintName="pk_authorities"/>
+        <rollback>
+            <dropPrimaryKey tableName="authorities" constraintName="pk_authorities"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

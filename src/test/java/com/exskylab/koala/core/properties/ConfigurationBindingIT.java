@@ -52,8 +52,8 @@ class ConfigurationBindingIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void corsOriginsAreAListNotAWildcard() {
-        assertFalse(corsProperties.getAllowedOrigins().isEmpty());
+    void configuredCorsOriginsNeverUseAWildcard() {
+        assertNotNull(corsProperties.getAllowedOrigins());
         assertFalse(corsProperties.getAllowedOrigins().contains("*"),
                 "Kimlik bilgisi paylasilan bir CORS yapilandirmasinda joker origin kabul edilemez.");
     }

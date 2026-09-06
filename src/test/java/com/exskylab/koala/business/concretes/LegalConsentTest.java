@@ -1,9 +1,14 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.business.abstracts.StaffAuditService;
 import com.exskylab.koala.core.exceptions.ConflictException;
+import com.exskylab.koala.core.constants.LegalMessages;
 import com.exskylab.koala.core.dtos.legal.request.ConsentDecisionDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.ClientContext;
+import com.exskylab.koala.business.abstracts.DisputeService;
+import com.exskylab.koala.business.abstracts.PaymentService;
+import com.exskylab.koala.core.privacy.AccountAnonymizer;
 import com.exskylab.koala.dataAccess.AccountDeletionRequestDao;
 import com.exskylab.koala.dataAccess.AgreementVersionDao;
 import com.exskylab.koala.dataAccess.ConsentRecordDao;
@@ -28,6 +33,10 @@ class LegalConsentTest {
     private ConsentRecordDao consentRecordDao;
     private AccountDeletionRequestDao deletionDao;
     private com.exskylab.koala.business.abstracts.JobAssignmentService jobAssignmentService;
+    private StaffAuditService staffAuditService;
+    private DisputeService disputeService;
+    private PaymentService paymentService;
+    private AccountAnonymizer accountAnonymizer;
     private LegalManager legalManager;
 
     private AgreementVersion terms;
@@ -41,8 +50,13 @@ class LegalConsentTest {
         consentRecordDao = mock(ConsentRecordDao.class);
         deletionDao = mock(AccountDeletionRequestDao.class);
         jobAssignmentService = mock(com.exskylab.koala.business.abstracts.JobAssignmentService.class);
+        staffAuditService = mock(StaffAuditService.class);
+        disputeService = mock(DisputeService.class);
+        paymentService = mock(PaymentService.class);
+        accountAnonymizer = mock(AccountAnonymizer.class);
 
-        legalManager = new LegalManager(agreementVersionDao, consentRecordDao, deletionDao, jobAssignmentService);
+        legalManager = new LegalManager(agreementVersionDao, consentRecordDao, deletionDao,
+                jobAssignmentService, disputeService, paymentService, accountAnonymizer, staffAuditService);
 
         terms = agreement(AgreementType.TERMS_OF_SERVICE, true);
         privacy = agreement(AgreementType.PRIVACY_POLICY, true);
@@ -126,18 +140,42 @@ class LegalConsentTest {
     }
 
     @Test
-    void deletionIsBlockedWhileMoneyIsStillInEscrow() {
+    void deletionRequestRemainsVisibleWhileMoneyIsStillInEscrow() {
         when(jobAssignmentService.hasMoneyInEscrowFor(any())).thenReturn(true);
 
-        assertThrows(ConflictException.class, () -> legalManager.requestAccountDeletion(user, "istemiyorum"));
-        verify(deletionDao, never()).save(any());
+        AccountDeletionRequest request = legalManager.requestAccountDeletion(user, "istemiyorum");
+
+        assertEquals(AccountDeletionStatus.REQUESTED, request.getStatus());
+        assertEquals(LegalMessages.DELETION_BLOCKED_BY_ESCROW, request.getBlockedReason());
+        verify(deletionDao).save(request);
     }
 
     @Test
-    void deletionIsBlockedWhileWorkIsStillOngoing() {
+    void deletionRequestRemainsVisibleWhileWorkIsStillOngoing() {
         when(jobAssignmentService.hasActiveWorkFor(any())).thenReturn(true);
 
-        assertThrows(ConflictException.class, () -> legalManager.requestAccountDeletion(user, null));
+        AccountDeletionRequest request = legalManager.requestAccountDeletion(user, null);
+
+        assertEquals(AccountDeletionStatus.REQUESTED, request.getStatus());
+        assertEquals(LegalMessages.DELETION_BLOCKED_BY_ACTIVE_WORK, request.getBlockedReason());
+    }
+
+    @Test
+    void deletionRequestRemainsVisibleWhileADisputeIsActive() {
+        when(disputeService.hasActiveDisputeForUser(user.getId())).thenReturn(true);
+
+        AccountDeletionRequest request = legalManager.requestAccountDeletion(user, null);
+
+        assertEquals(LegalMessages.DELETION_BLOCKED_BY_DISPUTE, request.getBlockedReason());
+    }
+
+    @Test
+    void deletionRequestRemainsVisibleWhileAPaymentIsPending() {
+        when(paymentService.hasPendingPaymentForUser(user.getId())).thenReturn(true);
+
+        AccountDeletionRequest request = legalManager.requestAccountDeletion(user, null);
+
+        assertEquals(LegalMessages.DELETION_BLOCKED_BY_PENDING_PAYMENT, request.getBlockedReason());
     }
 
     @Test
@@ -156,5 +194,73 @@ class LegalConsentTest {
         assertEquals(AccountDeletionStatus.REQUESTED, request.getStatus());
         assertEquals("artik kullanmiyorum", request.getReason());
         assertNotNull(request.getRequestedAt());
+    }
+
+    @Test
+    void anErasureRequestDropsTheAuditDetailAboutThatPerson() {
+        legalManager.requestAccountDeletion(user, "kvkk");
+
+        verify(staffAuditService).eraseDetailsForResource(user.getId().toString());
+    }
+
+    @Test
+    void aQueuedButBlockedErasureRequestStillDropsTheAuditDetail() {
+        when(jobAssignmentService.hasMoneyInEscrowFor(user.getId())).thenReturn(true);
+
+        AccountDeletionRequest request = legalManager.requestAccountDeletion(user, "kvkk");
+
+        assertEquals(LegalMessages.DELETION_BLOCKED_BY_ESCROW, request.getBlockedReason());
+        verify(staffAuditService).eraseDetailsForResource(user.getId().toString());
+    }
+
+    @Test
+    void aDueCleanRequestIsAnonymizedOnce() {
+        AccountDeletionRequest request = deletionRequest();
+        when(deletionDao.findByIdForUpdate(request.getId())).thenReturn(Optional.of(request));
+
+        assertTrue(legalManager.processDeletionRequest(request.getId()));
+        assertEquals(AccountDeletionStatus.ANONYMIZED, request.getStatus());
+        assertNotNull(request.getProcessedAt());
+        assertNull(request.getReason());
+        verify(accountAnonymizer).anonymize(user.getId(), request.getId());
+
+        assertFalse(legalManager.processDeletionRequest(request.getId()));
+        verifyNoMoreInteractions(accountAnonymizer);
+    }
+
+    @Test
+    void aStillBlockedRequestStaysQueuedWithAVisibleReason() {
+        AccountDeletionRequest request = deletionRequest();
+        when(deletionDao.findByIdForUpdate(request.getId())).thenReturn(Optional.of(request));
+        when(disputeService.hasActiveDisputeForUser(user.getId())).thenReturn(true);
+
+        assertFalse(legalManager.processDeletionRequest(request.getId()));
+        assertEquals(AccountDeletionStatus.REQUESTED, request.getStatus());
+        assertEquals(LegalMessages.DELETION_BLOCKED_BY_DISPUTE, request.getBlockedReason());
+        assertTrue(request.getNextAttemptAt().isAfter(Instant.now()));
+        verifyNoInteractions(accountAnonymizer);
+    }
+
+    @Test
+    void anAdministratorCanRejectAQueuedRequestWithAReason() {
+        AccountDeletionRequest request = deletionRequest();
+        when(deletionDao.findByIdForUpdate(request.getId())).thenReturn(Optional.of(request));
+
+        legalManager.rejectDeletionRequest(request.getId(), "Yasal saklama incelemesi sürüyor.");
+
+        assertEquals(AccountDeletionStatus.REJECTED, request.getStatus());
+        assertEquals("Yasal saklama incelemesi sürüyor.", request.getBlockedReason());
+        assertNotNull(request.getProcessedAt());
+    }
+
+    private AccountDeletionRequest deletionRequest() {
+        AccountDeletionRequest request = new AccountDeletionRequest();
+        request.setId(UUID.randomUUID());
+        request.setUser(user);
+        request.setSubjectId(user.getId());
+        request.setStatus(AccountDeletionStatus.REQUESTED);
+        request.setReason("kullanıcı gerekçesi");
+        request.setRequestedAt(Instant.now().minusSeconds(86400));
+        return request;
     }
 }

@@ -95,3 +95,17 @@ _Avoid_: Yaklaşık konum
 **Açık İşyeri Adresi**:
 Bir şirket işvereninin belirli bir ilanda herkese göstermeyi açıkça seçtiği doğrulanmış tam iş adresi.
 _Avoid_: Varsayılan şirket adresi
+
+**Adres Hassasiyeti**:
+Bir ilan cevabındaki konumun yaklaşık mı yoksa tam mı olduğunu açıkça bildiren sözleşme değeri. Yetki değiştikçe aynı ilan `APPROXIMATE` veya `EXACT` dönebilir.
+_Avoid_: Adres doğruluğu, konum kaynağı
+
+## Oturum ve gizlilik
+
+**Tarayıcı Cihazı**:
+Web BFF'nin tarayıcı profili için ürettiği kalıcı cihaz kimliğiyle temsil edilen oturum sahibi. User-Agent kimliğin parçası değildir; cookie silinirse yeni tarayıcı cihazı oluşur.
+_Avoid_: Tarayıcı türü, User-Agent oturumu
+
+**Anonimleştirilmiş Hesap**:
+Kimlik, iletişim, profil, konum, kimlik bilgisi ve kullanıcı üretimi serbest metni geri döndürülemez biçimde temizlenmiş; yalnız finansal ve yasal kayıtların referans bütünlüğü için kimliksiz bir kabuk olarak tutulan hesap.
+_Avoid_: Devre dışı hesap, silme talebi

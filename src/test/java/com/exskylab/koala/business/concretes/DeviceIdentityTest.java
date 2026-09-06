@@ -1,6 +1,8 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.core.helpers.DeviceIdentity;
+import com.exskylab.koala.core.helpers.ClientPlatform;
+import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.dataAccess.DeviceDao;
 import com.exskylab.koala.entities.Device;
 import com.exskylab.koala.entities.User;
@@ -77,6 +79,16 @@ class DeviceIdentityTest {
     }
 
     @Test
+    void anAndroidClientWithoutADeviceIdRetainsTheLegacyUserAgentFallback() {
+        when(deviceDao.findByUserAndNameAndType(any(), any(), any())).thenReturn(Optional.empty());
+
+        assertDoesNotThrow(() -> deviceManager.findOrCreateDevice(
+                user, "1.1.1.1", DART_UA, null, ClientPlatform.ANDROID));
+
+        verify(deviceDao, never()).findByUser_IdAndClientDeviceId(any(), any());
+    }
+
+    @Test
     void lookupPrefersTheHeaderOverTheUserAgent() {
         Device existing = new Device();
         existing.setClientDeviceId(PHONE_A);
@@ -100,5 +112,46 @@ class DeviceIdentityTest {
         assertNull(DeviceIdentity.sanitize("id\nwith\nnewline"));
         assertNull(DeviceIdentity.sanitize(null));
         assertEquals(PHONE_A, DeviceIdentity.sanitize("  " + PHONE_A + "  "));
+    }
+
+    @Test
+    void webDevicesAreMatchedByClientIdAndAlwaysClassifiedAsBrowsers() {
+        when(deviceDao.findByUser_IdAndClientDeviceId(user.getId(), PHONE_A)).thenReturn(Optional.empty());
+
+        Device browser = deviceManager.findOrCreateDevice(user, "1.1.1.1", "opaque-bff-label", PHONE_A,
+                ClientPlatform.WEB);
+
+        assertEquals(com.exskylab.koala.entities.DeviceType.WEB_BROWSER, browser.getType());
+        assertEquals(PHONE_A, browser.getClientDeviceId());
+    }
+
+    @Test
+    void twoWebProfileIdsCreateIndependentBrowserDevices() {
+        when(deviceDao.findByUser_IdAndClientDeviceId(user.getId(), PHONE_A)).thenReturn(Optional.empty());
+        when(deviceDao.findByUser_IdAndClientDeviceId(user.getId(), PHONE_B)).thenReturn(Optional.empty());
+
+        Device first = deviceManager.findOrCreateDevice(
+                user, "1.1.1.1", "Chrome", PHONE_A, ClientPlatform.WEB);
+        Device second = deviceManager.findOrCreateDevice(
+                user, "1.1.1.1", "Safari", PHONE_B, ClientPlatform.WEB);
+
+        assertNotEquals(first.getId(), second.getId());
+        assertEquals(com.exskylab.koala.entities.DeviceType.WEB_BROWSER, first.getType());
+        assertEquals(com.exskylab.koala.entities.DeviceType.WEB_BROWSER, second.getType());
+    }
+
+    @Test
+    void aWebLoginCannotFallBackToTheUserAgent() {
+        assertThrows(ValidationException.class, () -> deviceManager.findOrCreateDevice(
+                user, "1.1.1.1", "Mozilla/5.0", null, ClientPlatform.WEB));
+
+        verify(deviceDao, never()).findByUserAndNameAndType(any(), any(), any());
+    }
+
+    @Test
+    void aWebSessionLookupWithAnInvalidDeviceIdNeverFallsBack() {
+        assertTrue(deviceManager.findDevice(user, "Mozilla/5.0", "invalid", ClientPlatform.WEB).isEmpty());
+
+        verify(deviceDao, never()).findByUserAndNameAndType(any(), any(), any());
     }
 }

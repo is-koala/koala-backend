@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-06-03-app-settings-audit" author="koala">
+        <addColumn tableName="app_settings">
+            <column name="created_at" type="TIMESTAMPTZ"/>
+            <column name="updated_at" type="TIMESTAMPTZ"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
+            <column name="deleted_by_id" type="UUID"/>
+        </addColumn>
+
+        <sql>
+            UPDATE app_settings SET created_at = now() WHERE created_at IS NULL
+        </sql>
+
+        <addNotNullConstraint tableName="app_settings" columnName="created_at"
+                              columnDataType="TIMESTAMPTZ"/>
+
+        <addForeignKeyConstraint baseTableName="app_settings" baseColumnNames="created_by_id"
+                                 constraintName="fk_app_settings_created_by"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="app_settings" baseColumnNames="updated_by_id"
+                                 constraintName="fk_app_settings_updated_by"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="app_settings" baseColumnNames="deleted_by_id"
+                                 constraintName="fk_app_settings_deleted_by"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+
+        <createIndex tableName="app_settings" indexName="idx_app_settings_is_deleted">
+            <column name="is_deleted"/>
+        </createIndex>
+
+        <rollback>
+            <dropIndex tableName="app_settings" indexName="idx_app_settings_is_deleted"/>
+            <dropForeignKeyConstraint baseTableName="app_settings"
+                                      constraintName="fk_app_settings_deleted_by"/>
+            <dropForeignKeyConstraint baseTableName="app_settings"
+                                      constraintName="fk_app_settings_updated_by"/>
+            <dropForeignKeyConstraint baseTableName="app_settings"
+                                      constraintName="fk_app_settings_created_by"/>
+            <dropColumn tableName="app_settings" columnName="deleted_by_id"/>
+            <dropColumn tableName="app_settings" columnName="deleted_at"/>
+            <dropColumn tableName="app_settings" columnName="is_deleted"/>
+            <dropColumn tableName="app_settings" columnName="updated_by_id"/>
+            <dropColumn tableName="app_settings" columnName="created_by_id"/>
+            <dropColumn tableName="app_settings" columnName="updated_at"/>
+            <dropColumn tableName="app_settings" columnName="created_at"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

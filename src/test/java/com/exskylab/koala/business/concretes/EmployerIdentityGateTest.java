@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.support.FallbackSettings;
 import com.exskylab.koala.business.abstracts.*;
 import com.exskylab.koala.core.dtos.address.request.AddressWriteDto;
 import com.exskylab.koala.core.dtos.job.request.CreateIndividualJobDto;
@@ -61,7 +62,7 @@ class EmployerIdentityGateTest {
                 mock(JobAlertService.class), mock(GalleryService.class), mock(CompanyFollowService.class),
                 mock(JobApplicationDao.class), mock(JobAssignmentDao.class), mock(NotificationService.class),
                 mock(MessageResolver.class), new JobSearchProperties(),
-                new PricingManager(new CommissionCalculator(new CommissionProperties())));
+                new PricingManager(FallbackSettings.commissionCalculator()));
 
         when(jobDao.save(any())).thenAnswer(i -> i.getArgument(0));
     }

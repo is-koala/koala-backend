@@ -17,6 +17,7 @@ import com.exskylab.koala.core.dtos.auth.response.AuthSetPasswordDto;
 import com.exskylab.koala.core.dtos.auth.response.TokenResponseDto;
 import com.exskylab.koala.core.helpers.BearerTokenExtractor;
 import com.exskylab.koala.core.helpers.ClientContext;
+import com.exskylab.koala.core.helpers.ClientIpResolver;
 import com.exskylab.koala.core.security.JwtService;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.core.utilities.results.SuccessResult;
@@ -37,11 +38,13 @@ public class AuthController {
 
     private final AuthService authService;
     private final JwtService jwtService;
+    private final ClientIpResolver clientIpResolver;
 
 
-    public AuthController(AuthService authService, JwtService jwtService) {
+    public AuthController(AuthService authService, JwtService jwtService, ClientIpResolver clientIpResolver) {
         this.authService = authService;
         this.jwtService = jwtService;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @SecurityRequirements
@@ -101,7 +104,8 @@ public class AuthController {
                                                                                     HttpServletRequest request){
 
 
-        var response = authService.completeRegistration(authCompleteRegistrationDto, ClientContext.from(request));
+        var response = authService.completeRegistration(authCompleteRegistrationDto,
+                ClientContext.from(request, clientIpResolver));
 
 
         return ResponseEntity.status(HttpStatus.CREATED).body(
@@ -117,7 +121,7 @@ public class AuthController {
 
     @SecurityRequirements
     @Operation(summary = "Giriş yap",
-            description = "Erişim ve yenileme token üretir. Cihaz X-Device-Id başlığıyla eşlenir.")
+            description = "Erişim ve yenileme token üretir. Web çağrılarında X-Client-Platform: web ve geçerli X-Device-Id zorunludur; cihaz yalnız bu kimlikle eşlenir. Eski mobil istemcilerin User-Agent geçiş davranışı korunur.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Giriş başarılı"),
             @ApiResponse(responseCode = "401", description = "E-posta ya da parola hatalı",
@@ -129,7 +133,7 @@ public class AuthController {
     public ResponseEntity<SuccessDataResult<TokenResponseDto>> login(@RequestBody @Valid AuthLoginDto authLoginDto, HttpServletRequest request){
 
 
-        var response = authService.login(authLoginDto, ClientContext.from(request));
+        var response = authService.login(authLoginDto, ClientContext.from(request, clientIpResolver));
 
         return ResponseEntity.status(HttpStatus.OK).body(
                 new SuccessDataResult<>(
@@ -144,7 +148,7 @@ public class AuthController {
 
     @SecurityRequirements
     @Operation(summary = "Erişim token yenile",
-            description = "Süresi dolmuş bir erişim token ile de çağrılabilir; yetkiyi veren şey yenileme token, oturumun aktifliği ve cihaz eşleşmesidir. Sahte imzalı token yine reddedilir.")
+            description = "Süresi dolmuş bir erişim token ile de çağrılabilir; yetkiyi veren şey yenileme token, oturumun aktifliği ve cihaz eşleşmesidir. Web çağrısı login ile aynı X-Device-Id değerini taşır; eksik veya geçersiz değer isteği reddeder, değişmiş değer oturumu geçersiz kılar. Sahte imzalı token yine reddedilir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Yeni token çifti üretildi"),
             @ApiResponse(responseCode = "401", description = "Yenileme token geçersiz, oturum kapatılmış ya da cihaz eşleşmiyor",
@@ -154,7 +158,8 @@ public class AuthController {
     public ResponseEntity<SuccessDataResult<TokenResponseDto>> refreshToken(@RequestBody @Valid RefreshTokenDto refreshTokenDto, HttpServletRequest request){
         UUID sessionId = jwtService.extractSessionIdAllowingExpired(BearerTokenExtractor.extract(request));
 
-        var response = authService.refreshToken(refreshTokenDto, sessionId, ClientContext.from(request));
+        var response = authService.refreshToken(refreshTokenDto, sessionId,
+                ClientContext.from(request, clientIpResolver));
 
         return ResponseEntity.status(HttpStatus.OK).body(
                 new SuccessDataResult<>(

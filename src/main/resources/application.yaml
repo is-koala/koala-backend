@@ -60,7 +60,7 @@ spring:
 
 server:
   port: ${SERVER_PORT:8080}
-  forward-headers-strategy: framework
+  forward-headers-strategy: none
   compression:
     enabled: ${SERVER_COMPRESSION_ENABLED:true}
     mime-types: application/json,application/javascript,text/javascript,text/css,text/html,text/plain
@@ -70,7 +70,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       probes:
@@ -110,12 +110,23 @@ springdoc:
     enabled: ${SPRINGDOC_ENABLED:false}
     path: /v3/api-docs
 
+admin:
+  bootstrap:
+    email: ${ADMIN_BOOTSTRAP_EMAIL:}
+
 app:
   minimum-version: ${APP_MINIMUM_VERSION:}
   api-url: ${API_URL:http://localhost:8080}
   web-base-url: ${WEB_BASE_URL:http://localhost:3000}
+  trusted-proxies: ${APP_TRUSTED_PROXIES:}
   cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+
+koala:
+  staff:
+    issuer-uri: ${STAFF_ISSUER_URI:}
+    jwk-set-uri: ${STAFF_JWK_SET_URI:}
+    audience: ${STAFF_AUDIENCE:koala-api}
 
 payments:
   return-base-url: ${PAYMENTS_RETURN_BASE_URL:koala-staging://}
@@ -158,6 +169,9 @@ rate-limit:
   address-search:
     max-attempts: ${RATE_LIMIT_ADDRESS_SEARCH_MAX_ATTEMPTS:60}
     window: ${RATE_LIMIT_ADDRESS_SEARCH_WINDOW:1m}
+  public:
+    max-attempts: ${RATE_LIMIT_PUBLIC_MAX_ATTEMPTS:120}
+    window: ${RATE_LIMIT_PUBLIC_WINDOW:1m}
 
 commission:
   rate: ${COMMISSION_RATE:0.075}
@@ -195,6 +209,14 @@ assignment:
     zone-id: ${ASSIGNMENT_UNPAID_EXPIRY_ZONE_ID:Europe/Istanbul}
     cron: ${ASSIGNMENT_UNPAID_EXPIRY_CRON:0 45 * * * *}
 
+audit:
+  retention:
+    enabled: ${AUDIT_RETENTION_ENABLED:true}
+    core-months: ${AUDIT_RETENTION_CORE_MONTHS:24}
+    financial-core-months: ${AUDIT_RETENTION_FINANCIAL_CORE_MONTHS:120}
+    detail-months: ${AUDIT_RETENTION_DETAIL_MONTHS:6}
+    cron: ${AUDIT_RETENTION_CRON:0 30 3 * * *}
+
 identity:
   passive-authentication:
     enabled: ${IDENTITY_PASSIVE_AUTH_ENABLED:false}
@@ -206,6 +228,10 @@ realtime:
   enabled: ${REALTIME_ENABLED:true}
   endpoint: ${REALTIME_ENDPOINT:/ws}
   typing-timeout: ${REALTIME_TYPING_TIMEOUT:5s}
+  origins:
+    production: ${STOMP_PRODUCTION_ORIGIN:}
+    staging: ${STOMP_STAGING_ORIGIN:}
+    development: ${STOMP_DEVELOPMENT_ORIGIN:}
 
 cancellation:
   free-window-hours: ${CANCELLATION_FREE_WINDOW_HOURS:24}
@@ -244,10 +270,23 @@ upload:
 company-follow:
   enabled: ${COMPANY_FOLLOW_ENABLED:true}
 
+account-deletion:
+  enabled: ${ACCOUNT_DELETION_ENABLED:true}
+  waiting-period: ${ACCOUNT_DELETION_WAITING_PERIOD:30d}
+  batch-size: ${ACCOUNT_DELETION_BATCH_SIZE:100}
+  cron: ${ACCOUNT_DELETION_CRON:0 30 2 * * *}
+
+error-monitoring:
+  enabled: ${SENTRY_ENABLED:false}
+  dsn: ${SENTRY_DSN:}
+  environment: ${SENTRY_ENVIRONMENT:}
+  release: ${SENTRY_RELEASE:}
+
 iyzico:
   apiKey: ${IYZICO_API_KEY:}
   secretKey: ${IYZICO_SECRET_KEY:}
   baseUrl: ${IYZICO_BASE_URL:https://sandbox-api.iyzipay.com}
+  deployment: ${SERVICE_ENVIRONMENT:local}
   settlementEnabled: ${IYZICO_SETTLEMENT_ENABLED:true}
   settlement-retry:
     enabled: ${IYZICO_SETTLEMENT_RETRY_ENABLED:true}

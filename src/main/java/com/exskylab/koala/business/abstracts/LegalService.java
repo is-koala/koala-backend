@@ -9,6 +9,10 @@ import com.exskylab.koala.entities.User;
 
 import java.util.List;
 import java.util.UUID;
+import java.time.Instant;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import com.exskylab.koala.entities.AccountDeletionStatus;
 
 public interface LegalService {
 
@@ -23,4 +27,14 @@ public interface LegalService {
     List<ConsentRecord> getConsentsOfUser(UUID userId);
 
     AccountDeletionRequest requestAccountDeletion(User user, String reason);
+
+    AccountDeletionRequest getCurrentDeletionRequest(UUID userId);
+
+    Page<AccountDeletionRequest> getDeletionRequests(AccountDeletionStatus status, Pageable pageable);
+
+    AccountDeletionRequest rejectDeletionRequest(UUID requestId, String reason);
+
+    List<UUID> findDueDeletionRequestIds(Instant dueBefore, Instant attemptBefore, Pageable pageable);
+
+    boolean processDeletionRequest(UUID requestId);
 }

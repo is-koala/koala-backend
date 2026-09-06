@@ -1,7 +1,7 @@
 package com.exskylab.koala.core.configs;
 
-import com.exskylab.koala.core.properties.CorsProperties;
 import com.exskylab.koala.core.properties.RealtimeProperties;
+import com.exskylab.koala.core.properties.StompOriginProperties;
 import com.exskylab.koala.core.realtime.StompAuthChannelInterceptor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
@@ -21,20 +21,20 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final StompAuthChannelInterceptor authInterceptor;
     private final RealtimeProperties realtimeProperties;
-    private final CorsProperties corsProperties;
+    private final StompOriginProperties originProperties;
 
     public WebSocketConfig(StompAuthChannelInterceptor authInterceptor,
                            RealtimeProperties realtimeProperties,
-                           CorsProperties corsProperties) {
+                           StompOriginProperties originProperties) {
         this.authInterceptor = authInterceptor;
         this.realtimeProperties = realtimeProperties;
-        this.corsProperties = corsProperties;
+        this.originProperties = originProperties;
     }
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint(realtimeProperties.getEndpoint())
-                .setAllowedOriginPatterns(corsProperties.getAllowedOrigins().toArray(String[]::new));
+                .setAllowedOrigins(originProperties.allowedOrigins().toArray(String[]::new));
     }
 
     @Override

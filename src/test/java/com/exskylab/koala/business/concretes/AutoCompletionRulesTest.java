@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.support.FallbackSettings;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.*;
 import com.exskylab.koala.core.helpers.*;
@@ -48,13 +49,14 @@ class AutoCompletionRulesTest {
 
         manager = new JobAssignmentManager(jobAssignmentDao, mock(SecurityService.class),
                 mock(JobAssignmentMapper.class), mock(IyzicoPaymentService.class), contacts,
-                mock(UserService.class), new PricingManager(new CommissionCalculator(new CommissionProperties())),
+                mock(UserService.class), new PricingManager(FallbackSettings.commissionCalculator()),
                 mock(PaymentService.class), new PaymentStateMachine(),
                 new AppProperties("http://localhost:8080", "http://localhost:3000"),
                 mock(BankAccountService.class), new PageableSanitizer(),
                 new AssignmentParticipants(contacts), badgeService,
                 payoutService, properties, new com.exskylab.koala.core.properties.UnpaidExpiryProperties(), passthroughSettings(), mock(com.exskylab.koala.business.abstracts.GalleryService.class),
-                mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class), mock(org.springframework.context.ApplicationEventPublisher.class));
+                mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class), mock(org.springframework.context.ApplicationEventPublisher.class),
+                new com.exskylab.koala.core.monitoring.PaymentMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()));
 
         when(jobAssignmentDao.save(any())).thenAnswer(i -> i.getArgument(0));
     }

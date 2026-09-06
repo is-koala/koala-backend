@@ -5,6 +5,7 @@ import com.exskylab.koala.core.properties.AppProperties;
 import com.exskylab.koala.core.properties.StorageProperties;
 import com.exskylab.koala.entities.ApplicationStatus;
 import com.exskylab.koala.entities.Address;
+import com.exskylab.koala.entities.AddressPrecision;
 import com.exskylab.koala.entities.AssignmentStatus;
 import com.exskylab.koala.entities.City;
 import com.exskylab.koala.entities.Company;
@@ -217,12 +218,24 @@ class MapperCharacterizationTest {
     }
 
     @Test
-    void theJobSummaryCarriesCoordinatesSoTheMapCanRenderIt() {
+    void anUnprotectedSavedJobSummaryDefaultsToApproximateCoordinates() {
         var dto = jobMapper.toJobSummaryDto(individualJob());
 
-        assertEquals(40.98, dto.getLatitude());
-        assertEquals(29.02, dto.getLongitude());
+        assertEquals(40.99, dto.getLatitude());
+        assertEquals(29.03, dto.getLongitude());
+        assertEquals(AddressPrecision.APPROXIMATE, dto.getAddressPrecision());
         assertEquals("Istanbul", dto.getCityName());
+    }
+
+    @Test
+    void nestedApplicationAndAssignmentSummariesAlsoDefaultToApproximateCoordinates() {
+        var application = jobApplicationMapper.toMyApplicationDto(application());
+        var assignment = jobAssignmentMapper.toMyAssignmentDto(assignment(individualJob()));
+
+        assertEquals(40.99, application.job().getLatitude());
+        assertEquals(AddressPrecision.APPROXIMATE, application.job().getAddressPrecision());
+        assertEquals(40.99, assignment.job().getLatitude());
+        assertEquals(AddressPrecision.APPROXIMATE, assignment.job().getAddressPrecision());
     }
 
     @Test
@@ -289,8 +302,8 @@ class MapperCharacterizationTest {
         address.setThoroughfare("Moda Caddesi");
         address.setBuildingNumber("1");
         address.setPostalCode("34710");
-        address.setLatitude(new BigDecimal("40.980000"));
-        address.setLongitude(new BigDecimal("29.020000"));
+        address.setLatitude(new BigDecimal("40.987654"));
+        address.setLongitude(new BigDecimal("29.034567"));
         return address;
     }
 

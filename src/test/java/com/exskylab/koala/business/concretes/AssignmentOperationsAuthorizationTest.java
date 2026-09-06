@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.support.FallbackSettings;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.BadgeService;
 import com.exskylab.koala.business.abstracts.CompanyContactService;
@@ -78,7 +79,7 @@ class AssignmentOperationsAuthorizationTest {
                 mock(com.exskylab.koala.core.mappers.JobAssignmentMapper.class),
                 mock(com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService.class),
                 mock(CompanyContactService.class), mock(com.exskylab.koala.business.abstracts.UserService.class),
-                new PricingManager(new com.exskylab.koala.core.helpers.CommissionCalculator(new com.exskylab.koala.core.properties.CommissionProperties())),
+                new PricingManager(FallbackSettings.commissionCalculator()),
                 mock(com.exskylab.koala.business.abstracts.PaymentService.class),
                 new com.exskylab.koala.core.helpers.PaymentStateMachine(),
                 new com.exskylab.koala.core.properties.AppProperties("http://localhost:8080", "http://localhost:3000"),
@@ -86,7 +87,8 @@ class AssignmentOperationsAuthorizationTest {
                 new com.exskylab.koala.core.helpers.PageableSanitizer(), participants, badgeService,
                 payoutService, new com.exskylab.koala.core.properties.AutoCompletionProperties(),
                 new com.exskylab.koala.core.properties.UnpaidExpiryProperties(), passthroughSettings(),
-                mock(com.exskylab.koala.business.abstracts.GalleryService.class), mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class), mock(org.springframework.context.ApplicationEventPublisher.class));
+                mock(com.exskylab.koala.business.abstracts.GalleryService.class), mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class), mock(org.springframework.context.ApplicationEventPublisher.class),
+                new com.exskylab.koala.core.monitoring.PaymentMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()));
 
         when(cancellationDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(disputeDaoStub.save(any())).thenAnswer(i -> i.getArgument(0));

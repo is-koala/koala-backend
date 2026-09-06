@@ -29,7 +29,7 @@ Bu dosya projeyi konu konu anlatır: mimari, alınmış kararlar ve gerekçeleri
 4. **Firebase servis hesabı** — `PushService`'in FCM uygulaması için (§2s).
 5. **SMS sağlayıcı anahtarı** — `SMS_API_KEY` boşken telefon doğrulama kodu üretilir ama teslim edilmez.
 6. **Dokploy'dan `QA_MARKETPLACE_SEED_VERSION`, `QA_WORKER_EMAIL`, `QA_WORKER_PASSWORD`, `QA_EMPLOYER_EMAIL`, `QA_EMPLOYER_PASSWORD` kaldırılmalı** — seed kaldırıldı (ADR-0008), bu değişkenler işlevsiz ve parola taşıyorlar.
-7. **İş kategorisi kataloğunun kurulması** — kategori seed'i kaldırıldı (§2m). Prod ve taze veritabanları kategorisiz; kategori ilanın zorunlu alanı olduğu için katalog `POST /admin/job-categories` ile kurulmadan **hiç ilan açılamaz**. Mobil istemcinin ikon eşlemesi `code` üzerinden gittiği için eski kodların (`PHOTOGRAPHY`, `WAITER`, `PET_CARE`, `DESIGN`, `BARISTA`) yeniden verilmesi gerekebilir.
+7. **İlk admin ve iş kategorisi kataloğu** — taze bir veritabanında ilk yönetici `ADMIN_BOOTSTRAP_EMAIL` verilip uygulama yeniden başlatılarak doğar (§2f3); değişken ilk admin oluştuktan sonra kaldırılmalı. Kategori seed'i kaldırıldı (§2m). Prod ve taze veritabanları kategorisiz; kategori ilanın zorunlu alanı olduğu için katalog `POST /admin/job-categories` ile kurulmadan **hiç ilan açılamaz**. Mobil istemcinin ikon eşlemesi `code` üzerinden gittiği için eski kodların (`PHOTOGRAPHY`, `WAITER`, `PET_CARE`, `DESIGN`, `BARISTA`) yeniden verilmesi gerekebilir.
 8. **R2'deki mevcut nesnelerin S3'e kopyalanması** (§2ab), yasal metinlerin avukattan gelmesi, ve prod'da WebSocket'in `wss://` üzerinden servis edildiğinin teyidi (§2ai).
 
 **Açık kalan kararlar** (ayrıntı §7'de):
@@ -47,6 +47,7 @@ Bu dosya projeyi konu konu anlatır: mimari, alınmış kararlar ve gerekçeleri
 Faz 15'te yüzey baştan geçirildi. Bunlar **kural**, `ApiConventionTest` bunları derleme zamanında değil test zamanında koruyor:
 
 - **Yönetim işlemleri `/admin/**` altında, istisnasız.** `@PreAuthorize` kullanılmadığı, tüm yetki `SecurityConfig`'te path matcher olduğu için prefix tek satırlık koruma sağlıyor: `.requestMatchers("/admin/**").hasRole("ADMIN")`. Prefix olmasaydı her yeni admin ucunu tek tek korumayı hatırlamak gerekirdi ve unutulan uç sessizce her `USER`'a açık kalırdı. **Test, `hasRole("ADMIN")` taşıyan her kuralın yolunun `/admin` ile başladığını doğruluyor.**
+  - **Bu kapının hangi token'ı kabul ettiği ayrı bir sorudur** ve cevabı tek yerde yazılıdır: [ADR-0010](docs/adr/0010-split-staff-identity-from-koala-authorization.md) §Geçiş. Marketplace `ROLE_ADMIN` ile Keycloak `koala-staff` kimliğinin hangi aşamada geçerli olduğunu, `ROLE_ADMIN` yolunun ömrünü ve kesim koşullarını orada oku — buraya kopyalama.
 - **İç içelik daima üst kaynaktan aşağı.** `/job-assignments/{id}/reviews`, `/users/{id}/badges` — asla `/reviews/job-assignments/{id}` değil.
 - **Durum değiştiren işlem kendi POST ucunu alır.** `/respond`, `/complete`, `/cancel`, `/confirm`. Tek bir `PATCH .../status` ucuna hepsini yığmak yerine, her geçişin `SecurityConfig`'te kendi satırı olsun diye.
 - **Uç yolları sondaki eğik çizgi taşımaz** (§4'teki tuzak), **aynı fiil+yol iki handler'da olamaz.**
@@ -190,7 +191,7 @@ Servis ve controller katmanı düz anahtar kullanır: `"{user.not.found}"`. Çö
 
 Hesap tek yerde: `core/helpers/CommissionCalculator`. Girdi doğrulaması, `HALF_UP` yuvarlama ve bileşenlerin toplamının tahsil edilen tutara eşit olması orada garanti ediliyor.
 
-**Uygulanan oran kayda yazılıyor.** `JobAssignment` artık `worker_payout`, `commission_amount`, `commission_rate` ve `total_charged` taşıyor. Oran `COMMISSION_RATE` env'inden geliyor; değiştiğinde geçmiş kayıtlar hangi oranla hesaplandığını korur — mutabakat bunsuz yapılamaz.
+**Uygulanan oran kayda yazılıyor.** `JobAssignment` artık `worker_payout`, `commission_amount`, `commission_rate` ve `total_charged` taşıyor. Oran çalışma zamanı ayarından okunuyor (§2ac); değiştiğinde geçmiş kayıtlar hangi oranla hesaplandığını korur — mutabakat bunsuz yapılamaz.
 
 ## 2f. Kimlik ve principal
 
@@ -204,6 +205,95 @@ Hesap tek yerde: `core/helpers/CommissionCalculator`. Girdi doğrulaması, `HALF
 Eskiden `getAuthenticatedUserFromContext()` ve `getAuthenticatedUserFromDatabase()` diye iki metot vardı ve **farklı gerçeklikler döndürüyorlardı**: biri istek başında SecurityContext'e konmuş detached nesneyi, diğeri veritabanındakini. `userDao.save(contextUser)` körlemesine merge ettiği için araya giren güncelleme sessizce eziliyordu. İki metot tek metoda indirildi; bu sınıf hata artık yapısal olarak mümkün değil.
 
 **`AuditorAwareImpl` referans kullanır.** `getReferenceById` ile proxy alır, böylece her denetimli kayıtta fazladan `SELECT` atılmaz.
+
+**Back-office personeli bu principal'in dışındadır.** `UserPrincipal` marketplace kimliğidir; personel kendi kimlik sağlayıcısında ve kendi principal tipinde yaşar. `/admin/**`'ın hangi token'ı kabul ettiği ve personel aktörünün servis katmanına nasıl geçirildiği [ADR-0010](docs/adr/0010-split-staff-identity-from-koala-authorization.md) §Geçiş'te.
+
+**`SessionAuthFilter` servlet konteynerine kaydedilmez.** `@Component` olduğu için Spring Boot onu güvenlik zincirinin dışında bir kez daha kaydediyordu; `SecurityConfig` bunu kapalı bir `FilterRegistrationBean` ile iptal ediyor. Bugün davranış farkı yok — `OncePerRequestFilter` ikinci çalıştırmayı zaten atlıyordu. Gerekçe ve `/admin/**` ikinci zinciri geldiğinde neyi patlatacağı ADR-0010 §Geçiş'te; `SessionAuthFilterRegistrationIT` sabitliyor.
+
+## 2f2. Rol satırları — anahtar, tekillik ve rol verme kaydı
+
+`authorities` tablosu üç yapısal eksikle canlıya çıkmıştı: birincil anahtarı yoktu (ADR-0010 bunu yazmış ama düzeltmemişti), `(user_id, role)` üzerinde tekillik kısıtı yoktu ve rolü kimin ne zaman verdiği hiçbir yerde durmuyordu. `ROLE_ADMIN` şirket onaylıyor, escrow'dan para salıyor ve çalışma zamanı ayarlarını değiştiriyor; "bu kişi ne zaman ve kimin eliyle admin oldu" sorusunun veritabanında cevabı yoktu.
+
+`2026/09/06-34-authorities-key-and-grant-provenance.xml` altı changeset'te bunu kapatıyor ve **sıra kritik**: önce mükerrer temizliği, sonra kısıtlar. Java tarafı `Set<Role>` olduğu için uygulamadan bakınca tekrar görünmüyordu ama veritabanı aynı satırı iki kez kabul ediyordu; canlıda tek bir mükerrer çift varsa temizlik adımı olmadan `uk_authorities_user_role` "could not create unique index" ile patlar ve **Liquibase açılışta durduğu için uygulama hiç ayağa kalkmaz.** `AuthoritiesDuplicateMigrationIT` tam bunu sabitliyor: changeset'leri geri alıp mükerrer satır yazıyor ve changelog'u yeniden koşuyor — temizlik kısıttan sonraya alınırsa test kırmızıya döner.
+
+**Birincil anahtar `(user_id, role)` bileşiği, ayrı bir `id` sütunu değil.** Yüzey sütunu eklemek `@ElementCollection` eşlemesini bozardı; bileşik anahtar hem mevcut eşlemeyi olduğu gibi bırakıyor hem tekilliği garanti ediyor.
+
+**`granted_at` `TIMESTAMPTZ`.** Issue metni `TIMESTAMP` diyor ama §2h'nin kuralı ve `TimestampTimeZoneIT` başka türlüsüne izin vermiyor — saat dilimsiz kalan tek istisna `jobs.start_date_time`/`end_date_time`.
+
+**İkisi de null bırakılabilir.** Sistem kullanıcısının seed satırının veren kimsesi yok; `NOT NULL` yapmak o satır için uydurma bir değer yazmayı zorlardı. Mevcut satırların `granted_at` değeri migration'da `now()` ile dolduruluyor, `granted_by_id` null kalıyor.
+
+**`uk_authorities_user_role` birincil anahtarla teknik olarak fazlalık** — Postgres'te ikinci bir benzersiz indeks demek. Kısıt adıyla issue'da isteniyor ve kullanıcı başına bir-iki satır taşıyan bir tabloda maliyeti ihmal edilebilir olduğu için bırakıldı; tekilliği zaten `pk_authorities` sağlıyor, ileride sadeleştirilmek istenirse düşürülebilir.
+
+### `@ElementCollection` ölçüldü: yalnızca koleksiyon değiştirilince siliyor
+
+Issue'nun kritik doğrulaması `AuthoritiesGrantProvenanceIT` ile gerçek Postgres'te ölçüldü, sonuç ikiye ayrılıyor:
+
+| Yazma biçimi | Hibernate ne yapıyor | `granted_at` / `granted_by_id` |
+|---|---|---|
+| `user.getAuthorities().add(rol)` | yalnızca yeni satır için `INSERT` | **korunuyor** |
+| `user.setAuthorities(yeniKume)` | tüm satırlar `DELETE`, hepsi yeniden `INSERT` | **siliniyor** |
+
+Yani delete-then-insert davranışı koşulsuz değil: koleksiyon **örneği** değiştiğinde Hibernate onu dereference edilmiş sayıp toptan siliyor, yerinde mutasyonda ise satır bazlı çalışıyor.
+
+**Karar: `@ElementCollection` bölünmedi, `UserAuthority` entity'si açılmadı.** Gerekçe:
+
+1. Kayıp yalnızca toptan değiştirmede oluşuyor ve bugün ana koddaki tek `setAuthorities` çağrısı `AuthManager`'daki **yeni** kullanıcı kaydı — henüz veritabanında satırı olmadığı için kaybedecek bir kaydı yok.
+2. Ayrı entity'ye geçmek `User.authorities` tipini değiştirir; `UserPrincipal`, `UserMapper.roles` eşlemesi, `SessionDao` entity graph'i, `ImageManager` ve `CvManager` yetki kontrolleri bu tipe bakıyor. Kimlik doğrulamanın tam ortasında, rol verme ucu henüz yazılmamışken yapılacak bir değişiklik değil.
+3. Bileşik anahtar zaten `UserAuthority`'nin sağlayacağı tekilliği veriyor; kalan tek fark provenance'ın hangi yazma biçiminde hayatta kaldığı — ve bu bir kural yazarak kapanıyor.
+
+**Kural: kayıtlı bir kullanıcıya rol verirken `setAuthorities` kullanılmaz, `getAuthorities().add(...)` kullanılır.** Rol verme ucu yazılırken (ayrı issue) `granted_at`/`granted_by_id` açık bir `UPDATE` ile doldurulacak; Hibernate bu sütunları eşlemediği için kendiliğinden yazmıyor.
+
+`AuthorityGrantSafetyTest` bu kuralı yapısal olarak koruyor: ana kodda `AuthManager` dışında bir `setAuthorities` çağrısı belirirse test kırmızıya döner ve buraya yönlendirir. Muafiyet listesi de kontrol ediliyor — `AuthManager`'daki çağrı kalkarsa liste bayatlamış demektir.
+
+## 2f3. Rol verme uçları ve ilk admin
+
+`ROLE_ADMIN` şirket onaylıyor, escrow'dan para salıyor ve çalışma zamanı ayarlarını değiştiriyordu ama **onu veren hiçbir uç yoktu**: prod'da yeni bir admin ancak psql'e girip elle `INSERT INTO authorities` yazılarak doğuyordu. İz bırakmıyor, paylaşılan psql erişimi gerektiriyor ve yanlış `user_id` yazıldığında sessizce yanlış kişiyi admin yapıyordu.
+
+`AdminController` altında üç uç açıldı — `GET`, `POST /admin/users/{userId}/roles` ve `DELETE /admin/users/{userId}/roles/{role}`. Ayrı bir controller açılmadı: yol `/admin/users` altında ve o yüzey zaten `AdminController`'da. `SecurityConfig`'te üçü için ayrı satır var; `/admin/**` prefix'i zaten koruyor ama sözleşme açık satırı tercih ediyor (§0b).
+
+**Bu uçların ömrü ADR-0010 §Geçiş'te yazılı.** `/admin/**` bugün yalnız marketplace `ROLE_ADMIN` kabul ediyor ve bu geçici bir köprü; kesimden sonra bu üç uç **kalır**, yalnız personel kimliğiyle korunur. Gerekçenin tek kaynağı o ADR, buraya kopyalanmıyor.
+
+**Üçünün izinleri §2au'da.** `GET` → `user.read`, `POST`/`DELETE` → `user.role.manage`. `role.manage` neden kullanılmadığı ve iznin neden yalnız `OWNER`'da olduğu orada.
+
+**Rol verme kaydı ayrı bir `UPDATE` ile yazılıyor.** §2f2'nin kuralı gereği koleksiyon yerinde mutasyona uğruyor (`getAuthorities().add(...)`), ama Hibernate `granted_at`/`granted_by_id` sütunlarını eşlemediği için onları kendiliğinden yazmıyor. `UserDao` üzerinde iki native `@Modifying` sorgusu var: veren belliyken ikisini birden yazan, bootstrap'ta yalnız zamanı yazan. İki ayrı metot olmasının nedeni teknik: native sorguda null bir `UUID` parametresi bağlandığında Hibernate parametre tipini çıkaramıyor; `granted_by_id` zaten null doğduğu için bootstrap yolunda ona hiç dokunulmuyor.
+
+**Okuma da native.** Provenance sütunları eşlenmediği için JPQL onlara uzanamıyor. `findRoleGrants` `authorities` tablosunu `users` ile `LEFT JOIN`'leyip arayüz projeksiyonu döndürüyor. **Takma adlar çift tırnak içinde**: Postgres tırnaksız takma adı küçük harfe katlar ve `grantedAt` alanı eşleşmez; tırnak bunu deterministik yapıyor.
+
+**Yazma sonrası açık `saveAndFlush`.** Rol kaldırıldığında `save` yetmiyor — `DELETE` transaction sonunda gidiyor ve aynı transaction içinden native/JDBC okuyan her şey satırı hâlâ görüyor. Verme yolunda zaten `@Modifying(flushAutomatically = true)` flush'u zorluyor; iki yolun da aynı davranması için ikisi de `saveAndFlush` kullanıyor.
+
+**Domain kuralları ve neden bu sırayla:**
+
+| Kural | Yanıt | Neden |
+|---|---|---|
+| Bilinmeyen `userId` | 404 | `getById` zaten böyle davranıyor |
+| Sistem kullanıcısı (`00000000-…-0001`) | 409 | seed satırı, kimliği yok, girişi yok |
+| `ROLE_USER` bu uçtan alınamaz | 409 | marketplace üyeliğinin taşıyıcısı o |
+| Kullanıcı rolü zaten taşımıyor | 200, sessiz | silme idempotent |
+| Admin kendi `ROLE_ADMIN`'ini alamaz | 409 | kendini kilitleme |
+| Sistemdeki son `ROLE_ADMIN` alınamaz | 409 | sıfır adminli sistem uçlardan kurtarılamaz |
+| Zaten var olan rol verilir | 200, ikinci satır yok | bileşik anahtar zaten engellerdi, kural onu 409'a düşürmüyor |
+
+**Son admin kuralı bugün HTTP üzerinden erişilemez, ve bu bilinçli.** İsteği yapan kişi `ROLE_ADMIN` taşımak zorunda; hedef başkasıysa sistemde en az iki admin var, hedef kendisiyse bir üstteki kural önce ateşliyor. Yani kural bugün ölü görünüyor. Yine de duruyor çünkü ADR-0010'un kesiminden sonra isteği yapan kişi **marketplace admini olmayacak** — personel kimliğiyle gelen biri son `ROLE_ADMIN`'i alabilir hâle gelir ve kural o gün asıl işini yapar. Bu yüzden testi birim seviyesinde (`RoleGrantRulesTest`), sayım mock'lanarak yazıldı; uç testi yalnızca kuralın yanlış ateşlemediğini doğruluyor.
+
+**Sayımdan sistem kullanıcısı düşülüyor.** `countUsersWithRole` `user_id <> '00000000-…-0001'` taşıyor. Düşülmeseydi seed satırı sayıyı daima ≥1 tutar ve kural hiçbir zaman ateşlemezdi; oysa o hesabın parolası düz metin `'N/A_PASSWORD'`, yani geçerli bir BCrypt hash'i değil ve **o hesapla giriş yapılamıyor**. Kurtarıcı bir admin değil.
+
+**Sistem kullanıcısının id'si artık tek yerde:** `core/constants/SystemUser`. Öncesinde `SecurityManager` ve `AuditorAwareImpl` aynı UUID'yi ayrı ayrı yazıyordu; üçüncü kopya yerine sabit çıkarıldı. `ID_TEXT` derleme zamanı sabiti olduğu için native sorgu metnine de aynı kaynaktan giriyor.
+
+### İlk admin — seçenek (a), açılışta çalışan runner
+
+Issue iki yol öneriyordu: **(a)** `ADMIN_BOOTSTRAP_EMAIL` verildiğinde açılışta o hesaba `ROLE_ADMIN` yazan idempotent bir `ApplicationRunner`, **(b)** `scripts/` altında parametreli bir psql runbook. **(a) seçildi.**
+
+Gerekçe: (b) elle SQL yazmayı ortadan kaldırmıyor, yalnızca kopyalanacak bir metin veriyor — yanlış `user_id` yazma riski ve paylaşılan psql erişimi ihtiyacı olduğu yerde kalır, üstelik çalıştırıldığına dair uygulama tarafında hiçbir iz kalmaz. (a)'da hedef **e-posta ile** seçiliyor, işlem loglanıyor ve idempotent olduğu için ikinci açılışta hiçbir şey yazmıyor. Kabul kriteri de bunu istiyor: taze bir veritabanında **elle SQL yazmadan, belgelenmiş tek bir adımla** ilk admin oluşturulabilmeli.
+
+**Tek adım şu:** `ADMIN_BOOTSTRAP_EMAIL` değişkenine, kayıt akışını normal biçimde tamamlamış bir hesabın e-postası yazılır ve uygulama yeniden başlatılır. Açılışta o hesap `ROLE_ADMIN` alır ve `POST /admin/job-categories` çağrılabilir hâle gelir — ADR-0009 gereği kategori kataloğu yalnız oradan kurulabildiği ve kategori ilanın zorunlu alanı olduğu için ilk admin **ürünün açılmasının önkoşulu**. İlk admin doğduktan sonra değişken kaldırılmalı; sonraki roller uçlardan veriliyor.
+
+**Kullanıcı yoksa uygulama düşmez, uyarı loglanır.** `bootstrapAdminRole` `{user.not.found.by.email}` fırlatıyor, runner onu — ve beklenmeyen her `RuntimeException`'ı — yakalayıp `WARN` yazıyor. Yanlış yazılmış bir e-posta yüzünden prod'un açılmaması, elde edilecek katılıktan pahalı. E-posta `LogMasks.email` ile maskeli loglanıyor (§2i).
+
+**`granted_by_id` null bırakılıyor.** Rolü veren bir insan yok; sistem kullanıcısını uydurma bir veren olarak yazmak kaydı yanlış yapardı. `granted_at` doluyor, yani "ne zaman" sorusunun cevabı var.
+
+**`NoStartupDataSeedingTest`'e tek muafiyet açıldı.** O test ADR-0008'in kaldırdığı QA seed runner'ının geri gelmesini engelliyor; yasağın konusu **örnek veri üretmek**. Bootstrap runner veri üretmiyor — zaten var olan bir hesaba bir rol satırı yazıyor, hem de ancak açıkça bir ortam değişkeni verildiğinde. `AuthorityGrantSafetyTest`'teki desen kopyalandı: muafiyet listesi `AdminBootstrapRunner.java` ile sınırlı ve ikinci bir test listenin bayatlamadığını doğruluyor. Yeni bir runner eklenirse test yine kırmızıya döner.
+
+**Konfigürasyon `admin.bootstrap.email`**, `AdminBootstrapProperties` ile bağlanıyor. Boş ya da yalnız boşluk içeren değer "verilmemiş" sayılıyor; e-posta aranmadan önce `trim` ediliyor.
 
 ## 2g. Entity kimliği
 
@@ -225,7 +315,7 @@ Eskiden `getAuthenticatedUserFromContext()` ve `getAuthenticatedUserFromDatabase
 
 **Okuma yolu DEBUG.** `Getting/Fetching/Retrieving/Listing` ile başlayan 18 manager logu DEBUG'a indirildi — erişim logu geldikten sonra bunlar gürültüydü. Yazma işlemleri INFO kalır, denetim izi onlar.
 
-**Erişim logu istemci IP'sini taşır.** Öncesinde satırda metot, yol, durum, süre ve kullanıcı vardı ama IP yoktu — kötüye kullanım araştırılamıyor, hız sınırı isabetleri eşleştirilemiyordu. İstemci IP'si tek yerden geliyor: `ClientIpResolver`. Öncesinde `RateLimitFilter` ve `ClientContext` `X-Forwarded-For`'u ayrı ayrı ayrıştırıyordu; oysa `forward-headers-strategy: framework` açık olduğu için Spring'in `ForwardedHeaderFilter`'ı zincirin en dışında başlığı tüketip kaldırıyor — **o kod hiç çalışmıyordu.** Artık üç yer de `getRemoteAddr()` okuyor.
+**Erişim logu istemci IP'sini taşır.** İstemci IP'si tek yerden gelir: `ClientIpResolver`. Doğrudan bağlantı `getRemoteAddr()` değeridir; `Forwarded` veya `X-Forwarded-For` yalnız doğrudan kaynak `app.trusted-proxies` içindeki bir IP/CIDR ise okunur. Güvenilmeyen istemcinin başlığı yok sayılır. Spring'in başlığı güven sınırı bilmeden tüketmemesi için `forward-headers-strategy: none`; zinciri yalnız bu çözücü işler. BFF gelen yönlendirme başlıklarını kopyalamaz, bağlantı IP'siyle tek değer yazar.
 
 **PII maskelenir.** `core/helpers/LogMasks`: e-posta yerel kısmı maskeli (`y***@gmail.com`, alan adı kalır ki başarısız giriş takip edilebilsin), telefonun son dört hanesi, IBAN'ın baş ve sonu, TCKN hiç. Kimlik gerektiğinde kullanıcı **id**'si yazılır.
 
@@ -239,22 +329,23 @@ Eskiden `getAuthenticatedUserFromContext()` ve `getAuthenticatedUserFromDatabase
 
 ## 2j. Hız sınırı
 
-**Dört kova var, yazma uçlarının hepsi kapsanıyor.** İlk sürümde yalnızca altı uç listeliydi; mesaj gönderme, ilan açma, başvuru ve dosya yükleme tümüyle sınırsızdı — yükleme en pahalısı, her istek kod çözme + metadata temizleme + S3 yazma yapıyor.
+**Beş kova var, yazma ve pahalı genel uçların hepsi kapsanıyor.**
 
 | Kova | Kapsam | Varsayılan | Anahtar |
 |---|---|---|---|
-| `AUTH` | giriş, kayıt akışı, şifre sıfırlama, kimlik doğrulama | 10 / 1 dk | yol + IP |
+| `AUTH` | giriş, kayıt akışı, şifre sıfırlama, kimlik doğrulama | 10 / 1 dk | yol + IP + hedef özeti |
 | `UPLOAD` | görsel, özgeçmiş, profil fotoğrafı, logo, rozet görseli | 20 / 1 dk | kova + IP |
 | `MESSAGE` | mesaj gönderme | 30 / 1 dk | kova + IP |
+| `PUBLIC` | ilan listesi/detayı/görselleri ve adres ağ geçidi | 120 / 1 dk | kova + IP |
 | `WRITE` | **diğer tüm** POST/PUT/PATCH/DELETE | 60 / 1 dk | kova + IP |
 
 **`WRITE` bilerek yakalayıcı.** Yeni bir yazma ucu eklendiğinde listeye yazılması gerekmez, kendiliğinden kapsanır — `SecurityConfig`'teki `anyRequest().authenticated()` ile aynı mantık: unutulan uç açıkta kalmaz.
 
-**Yazma kovalarının anahtarında yol yok.** `AUTH` yol bazlı kalıyor (giriş ve kayıt ayrı bütçeler), ama yükleme ve yazmada anahtar yalnızca kova + IP: aksi hâlde her ilan kimliği kendi bütçesini alır ve kaynaklar arasında gezinen bir bot hiç sınıra takılmaz.
+**Yazma kovalarının anahtarında yol yok.** `AUTH` yol bazlı kalır ve gövdedeki e-posta/telefon/token gibi hedefin SHA-256 özeti IP'ye eklenir; aynı BFF IP'sindeki bir hesabın başarısız denemesi diğer hesabı kilitlemez ve ham PII sayaç anahtarına girmez. Yükleme, genel okuma ve yazmada anahtar yalnızca kova + IP'dir.
 
 **Anahtar IP, kullanıcı değil.** `RateLimitFilter` güvenlik zincirinin dışında (`HIGHEST_PRECEDENCE + 20`) çalıştığı için o noktada principal henüz yok. Kullanıcı bazlı sınır istenirse filtrenin `SessionAuthFilter`'dan sonraya, güvenlik zincirinin içine taşınması gerekir.
 
-**Okuma uçları sınırlanmıyor.** Sayfa boyutu zaten 100 ile sınırlı (§2l) ve mobil istemci açılışta seri istek atıyor; yanlış pozitif riski kazancından büyük.
+**Diğer okuma uçları sınırlanmıyor.** Genel ilan korpusu ve adres sağlayıcı ağ geçidi `PUBLIC` kovasındadır; kimlikli profil okumaları sınır dışıdır.
 
 Aşıldığında 429 ve `TOO_MANY_REQUESTS` döner.
 
@@ -308,9 +399,9 @@ Testlerde `rate-limit.enabled=false`; açıkça test eden sınıflar `@TestPrope
 
 ## 2m. İstemci sözleşmesi
 
-**Cihaz kimliği `X-Device-Id` başlığından gelir.** User-Agent'a bağlı eşleme kaldırıldı: Dart/Flutter varsayılan olarak `Dart/3.x (dart:io)` gönderdiği için aynı kullanıcının iki telefonu tek cihaz sayılıyor, Dart sürümü değişince **tüm oturumlar düşüyordu**. İstemci kurulum başına sabit bir id üretip her istekte bu başlıkla gönderir. Başlık yoksa eski User-Agent türetmesine düşülür — web istemcileri bu yüzden bozulmadı. Biçim `[A-Za-z0-9._:-]{8,128}`; uymayan değer yok sayılır.
+**Cihaz kimliği `X-Device-Id` başlığından gelir.** Web BFF `X-Client-Platform: web` gönderdiğinde biçimi `[A-Za-z0-9._:-]{8,128}` olan cihaz kimliği login ve refresh için zorunludur; User-Agent yalnız okunabilir etikettir ve `WEB_BROWSER` eşleşmesine katılmaz. Cookie silinirse yeni tarayıcı cihazı oluşur, eski oturum kullanıcı tarafından oturum yüzeyinden kapatılır. Platform başlığı göndermeyen eski mobil sürümlerde User-Agent geçiş davranışı korunur.
 
-`ClientContext.from(request)` ip, User-Agent ve cihaz kimliğini tek nesnede toplar; auth imzalarında üç ayrı parametre taşınmaz.
+`ClientContext.from(request, clientIpResolver)` güvenilir istemci IP'si, User-Agent, cihaz kimliği ve platformu tek nesnede toplar.
 
 **`GET /users/me` istemcinin yönlendirme kararı için gerekeni döner:** `employer`, `emailVerified`, `phoneVerified`, `identityVerified`, `roles` ve `companies[{companyId, companyName, role, approved}]`. Öncesinde `isEmployer` yalnızca tek seferlik kayıt akışında dönüyordu, giriş sonrası kullanıcının işveren mi çalışan mı olduğu öğrenilemiyordu.
 
@@ -336,7 +427,7 @@ Testlerde `rate-limit.enabled=false`; açıkça test eden sınıflar `@TestPrope
 
 **`ConversationDto` liste için gerekeni taşıyor.** Sohbet listesi son mesaj metnini ve okunmamış sayısını çiziyordu, ikisi de yoktu; istemci satır başına ayrı istek atmak zorunda kalıyordu. `lastMessageBody` `Conversation` üzerine **denormalize edildi** (mesaj gönderilirken yazılıyor), `unreadCount` ise sayfadaki tüm konuşmalar için `countUnreadByConversationIds` ile **tek sorguda** toplanıyor. Yani liste iki sorgu: konuşmalar + sayaçlar.
 
-**İki ayrı ilan DTO'su var.** `JobSummaryDto` liste ve harita için — enlem/boylam taşır. `JobDetailDto` detay sayfası için — açıklama, görevler, yaş aralığı, kıyafet kuralı, tam adres, ilan sahibi ve şirket. `GET /jobs/{id}` özet değil detay döner.
+**İki ayrı ilan DTO'su var.** `JobSummaryDto` liste ve harita için, `JobDetailDto` detay sayfası için. İkisi de `addressPrecision` taşır. Tam adres ve gerçek koordinat yalnız ilan sahibi, etkin ataması (`PENDING_CONFIRMATION`/`CONFIRMED`/`IN_PROGRESS`) bulunan işçi veya `addressPublic=true` olan şirket ilanında döner. Tamamlanan/iptal edilen atamalarda adres yeniden gizlenir ve bireysel ilanlarda `addressPublic` değeri dikkate alınmaz. Diğer çağrılarda sokak, bina, kapı, posta kodu ve yön tarifi temizlenir; koordinat iki ondalığa yuvarlanır. `JobAddressVisibility` bu kararı ve maskelemeyi tek yerde tutar. `GET /jobs/{id}` özet değil detay döner.
 
 **Yenileme ucu süresi dolmuş erişim token'ıyla çalışır.** `/auth/refresh-token` zaten *token süresi dolduğu için* çağrılıyor; iki yerde birden reddediliyordu:
 1. `SessionAuthFilter` `permitAll` uçlarda bile başlığı ayrıştırıp `ExpiredJwtException` fırlatıyordu → filtre artık `shouldNotFilter` ile bu ucu atlıyor. Uç kendi kimlik doğrulamasını yapıyor, filtrenin katacağı bir şey yok.
@@ -446,18 +537,9 @@ Uyuşmazlık yalnızca **emanette para varken** açılabilir, atama başına ayn
 
 **Değerlendirme bildirimi `ReviewManager` içinde, rozet değerlendirmesinden sonra.** Kaydedilmemiş ya da reddedilmiş bir değerlendirme kimseye bildirilmez — çağrı akışın sonunda, `ConflictException` atılan yolların ötesinde. Yazan kişiye bildirim gitmez, yalnızca hakkında yazılana. `ReviewRulesTest` ikisini de sabitliyor. Her gönderim `try/catch` içinde — bildirim teslim edilemese de iş akışı düşmez, iş alarmındaki desenin aynısı.
 
-**Kategoriler yeniden dağıtıldı.** Önceden on üç gönderim noktasının onu `ACCOUNT_SECURITY` idi; şirket daveti ve şirket oluşturma da öyle işaretliydi. Faz 9B'deki **kanal bazlı bildirim tercihi** buna dayanacağı için yanlış kategori sonradan veri göçü demekti: kullanıcı pazarlama iletisini kapatmak istediğinde şifre sıfırlamayı da kapatmak zorunda kalırdı.
+**Kategoriler yeniden dağıtıldı.** Önceden on üç gönderim noktasının onu `ACCOUNT_SECURITY` idi; şirket daveti ve şirket oluşturma da öyle işaretliydi. Kanal bazlı bildirim tercihi buna dayanacağı için yanlış kategori sonradan veri göçü demekti: kullanıcı pazarlama iletisini kapatmak istediğinde şifre sıfırlamayı da kapatmak zorunda kalırdı. `COMPANY_UPDATES` bu ayrım için eklendi.
 
-| Kategori | Ne taşır | Kapatılabilir mi |
-|---|---|---|
-| `ACCOUNT_SECURITY` | kayıt, giriş, şifre sıfırlama, e-posta/telefon doğrulama | **hayır**, işlemsel |
-| `APPLICATION_UPDATES` | başvuru, atama, tamamlama, ödeme, uyuşmazlık, iptal | hayır, işlemsel |
-| `IDENTITY_VERIFICATION` | kimlik doğrulandı | hayır |
-| `COMPANY_UPDATES` | şirket oluşturma, yetkili daveti ve cevabı | **hayır**, işlemsel (§2at) |
-| `JOB_ALERTS` | iş alarmı, takip edilen şirketin yeni ilanı | evet |
-| `MARKETINGS` / `NEWSLETTER` | ticari ileti | evet, **açık rıza şart** |
-
-`COMPANY_UPDATES` bu ayrım için eklendi.
+**Kategori → kapatılabilirlik tablosu buradan kaldırıldı; tek kaynak `NotificationCategoryKind`.** Tercih katmanı (§2at) geldiğinde bu bilgi enum'a taşındı ve burada ikinci bir kopya bırakmak iki gerçeklik üretiyordu. Hangi kategorinin kapatılabildiği, varsayılanının ne olduğu ve ticari sayılıp sayılmadığı için **§2at'ye** ya da doğrudan enum'a bak.
 
 **`AgreementType.COMMERCIAL_MESSAGE` rızası hâlâ ayrı bir şey.** Kayıtta toplanan bu onay `ConsentRecord`'a yazılıyor ve **kanal tercihine dönüşmüyor**: `MARKETINGS`/`NEWSLETTER` kayıt sırasında sözleşme onaylansa bile **kapalı** kalıyor ve kullanıcı bildirim tercihlerinden açana kadar gönderim yapılamıyor. Bu bilinçli — sözleşme onayı şemsiye izin, kanal bazlı açma ayrı ve açık bir eylem olmalı (§2at). Gönderim kapısı ve rıza kaydı §2at'de. İYS entegrasyonu yapılmadı — kapsamı `docs/research/iys-commercial-message-integration.md` içinde.
 
@@ -601,6 +683,45 @@ Artık `SettlementOperation.REFUND` var ve `/payment/refund` çağrılıyor (`pa
 
 **Hâlâ sandbox'ta uçtan uca doğrulanmadı.** Yukarıdakiler dokümana karşı doğru; gerçek bir sandbox işlemiyle teyit edilmesi gereken tek şey kısmi iade + disapprove ikilisinin sıralamasıdır. `iyzico.settlementEnabled=false` ile kuyruk tümüyle kapalı tutulabilir.
 
+## 2x2. 3DS doğrulaması — `mdStatus` kapısı
+
+**`mdStatus` okunmuyordu ve 3DS doğrulaması geçmemiş ödeme emanet açıyordu.** `paymentStatus = SUCCESS` "sağlayıcı işlemi tamamladı" demek; kart sahibinin bankasında doğrulandığını **söylemiyor**. İkisi ayrışabilir ve iyzico bunu üretecek bir test kartı yayımlıyor: `4131111111111117` → `Success but mdStatus is 0` (`/ek-bilgiler/test-kartlari`). O ödeme bugüne kadar emanete giriyor, işçi işe başlayabiliyor, ters ibraz riski tümüyle bizde kalıyordu.
+
+Artık `completeFromCallback` yalnız `mdStatus = 1` iken emanet açıyor.
+
+**Değerlerin anlamı iyzico'nun kendi dokümantasyonundan** (`/odeme-metotlari/api/3ds/3ds-entegrasyonu` ve İngilizce eşi `/en/payment-methods/api/3ds/3ds-implementation`). Tablo başlığı bilerek "başarısızlık senaryoları" — `1` tabloda hiç yok:
+
+| `mdStatus` | iyzico'nun tanımı |
+|---|---|
+| `1` | başarılı; tabloda değil, şemada `1: Başarılı` |
+| `0` | 3-D Secure imzası geçersiz veya doğrulama |
+| `-1` | `0` ile aynı; QNB Finansbank'a özel |
+| `2` | kart sahibi veya bankası sisteme kayıtlı değil |
+| `3` | kartın bankası sisteme kayıtlı değil |
+| `4` | doğrulama denemesi; kart sahibi sonra kayıt olmayı seçmiş |
+| `5` | doğrulama yapılamıyor |
+| `6` | 3-D Secure hatası |
+| `7` | sistem hatası |
+| `8` | bilinmeyen kart no |
+
+Aynı sayfaların `/payment/v2/3dsecure/auth` şeması bunu tek cümleyle bağlıyor: `1: Başarılı`, `0,2-8: Başarısız`. `2`, `3` ve `4` bazı hazırlayıcıların "attempted" diye kabul ettiği hâller ama **iyzico kendi belgesinde üçünü de başarısız sayıyor**; biz de öyle sayıyoruz.
+
+**Kapı beyaz liste, kara liste değil.** `mdStatus == 1` yazılı; `0,2..8` dışlansaydı `-1` (yalnız Türkçe tabloda ve OpenAPI `enum`'unda geçiyor, "başarısız" aralığı yazısında geçmiyor) sessizce başarı sayılırdı. Yarın listeye bir değer eklenirse de beyaz liste kendiliğinden güvenli tarafta kalır.
+
+**Alan yoksa ödeme reddediliyor — bilinçli olarak kapalı düşülüyor.** iyzico dört ayrı sayfada "`mdStatus` parametresi sadece 3DS işlemlerinde görünecektir" diyor. Yani alanın yokluğunun iki okuması var: (a) işlem 3DS'siz geçti, (b) yanıt beklediğimiz gibi değil. İkisini ayırt edemiyoruz ve ayırt edemediğimiz durumda **parayı korumaktan yana yanılıyoruz** — §2y2'deki ortam kapısıyla aynı yön. Alan yokken başarı saymak, tam olarak kapatmaya çalıştığımız açığın yeniden açılması olurdu: doğrulanmamış bir işlem emanete girer.
+
+Bedeli açıkça yazılı olsun: **Checkout Form bir gün 3DS'siz bir ödeme geçirirse onu da reddederiz.** iyzico'nun CF'nin 3DS'i hangi kurala göre seçtiğini yazmadığı `docs/runbooks/payments.md` §6.3'te duruyor. Böyle bir işlemde sağlayıcı tarafında para çekilmiş olabilir; operasyonel karşılığı tutar uyuşmazlığıyla aynıdır — panelden `conversation_id` ile elle iade (runbook §1). Canlıya geçişte doğrulanacak ilk şey budur; kalıcı çözüm istenirse `forceThreeDS` (§6.3'te belgelenmemiş olarak işaretli) iyzico'dan yazılı teyit alındıktan sonra gönderilir.
+
+**Bir çelişki not edilmeli.** CF sorgulama yanıtının OpenAPI şeması (`/odeme-metotlari/odeme-formu/cf-entegrasyonu/cf-sorgulama`) `mdStatus`'u **saymıyor**; ama aynı doküman setindeki CF örnek yanıtı (`.../cf-ornek-entegrasyon`) `"mdStatus": 1` içeriyor ve resmî `iyzipay-java` SDK'sında `CheckoutForm`, `PaymentResource`'tan `getMdStatus()`'u miras alıyor. İkisi de iyzico. Alanın geleceğini varsayıyoruz ama şema garanti etmediği için okuma null'a dayanıklı ve karar fail-closed.
+
+**Kapı dolandırıcılık dalından önce.** `mdStatus != 1` ve `fraudStatus == 0` birlikte gelirse ödeme `IN_REVIEW`'da beklemez, `FAILED` olur: `IN_REVIEW`'dan çıkış zaten otomatik değil ve doğrulanmamış bir işlemi "belki sonra onaylanır" diye tutmanın anlamı yok.
+
+**Ret sebebi mesaj anahtarı, ham değer değil.** `payments.failure_reason` istemciye `GET /job-assignments/{id}/payments` ile aynen dönüyor (`PaymentAttemptDto`), yani sağlayıcı detayı için uygun bir yer değil. Kayda `{payment.3ds.verification.failed}` yazılıyor; sayısal `mdStatus` yalnız log satırında (`Payment {} rejected: 3-D Secure verification did not succeed, mdStatus={}`). Operatör için korelasyon yine `conversation_id`.
+
+**Reddedilen deneme sıradan bir başarısız denemedir.** `payments.status = FAILED`, `completed_at` damgalı, atama `PENDING_COLLECTION`/`FAILED` → `FAILED`; emanet açılmaz, atamaya kırılım yazılmaz, `JobAssignmentDao`'ya hiç dokunulmaz. İşveren yeniden deneyebilir. Zaten `SUCCEEDED` olan ödemede idempotanlık kısa devresi önce çalıştığı için ikinci callback sağlayıcıya hiç gitmez (§2k); reddedilen denemede ise kısa devre yok, tekrar sorulur ve sonuç yine `FAILED` olur.
+
+**Sandbox'ta doğrulanmadı.** `4131111111111117` ile gerçek bir sandbox işlemi yapılmadı; kural iyzico dokümantasyonuna ve sahte sağlayıcı yanıtlarına karşı sabitlendi (`PaymentCallbackTest`, `IyzicoProtocolTest`).
+
 ## 2y. Mutabakat outbox'ı
 
 Faz 8B'de sağlayıcı çağrısı `PayoutManager` içinden **senkron** yapılıyordu ve hata durumunda tüm işlem geri alınıyordu — yani `Payout` kaydı da yazılmıyordu ve **kimse yeniden denemiyordu**. Iyzico bir dakikalığına düşse para emanette kilitli kalırdı.
@@ -618,6 +739,48 @@ Bir süre bu yarım kaldı: `markPayoutProcessing` yalnızca `APPROVE` için ça
 **`PayoutStatus.COMPLETED` bilerek kullanılmıyor.** Sağlayıcı `approve` çağrısı yalnızca talimatın kabul edildiğini söyler; paranın işçinin banka hesabına geçtiğini söyleyen bir geri bildirim yok. O geçiş Iyzico ödeme raporuyla mutabakat gerektiriyor, Faz 11B'nin kalan parçası.
 
 **Bu entegrasyon hâlâ sandbox'ta uçtan uca doğrulanmadı** (protokol denetimi §2x'te yapıldı, dört blocker düzeltildi). `iyzico.settlementEnabled=false` iken hiç kuyruğa girilmez, `iyzico.settlement-retry.enabled=false` iken kuyruk işlenmez — ikisi de prod'a kademeli geçiş için.
+
+## 2y2. Sandbox/canlı ayrımı — açılış kapısı
+
+Sandbox ile canlı arasındaki tek fark `IYZICO_BASE_URL` ve anahtar çiftiydi;
+ikisi de serbest metindi. Staging'e yanlışlıkla canlı anahtar yüklemek hiçbir
+şey kırmıyordu — test amaçlı bir ilan gerçek parayla ödenirdi ve bunu fark
+etmenin yolu ekstreye bakmaktı.
+
+`IyzicoProperties` artık ortamı biliyor. `iyzico.deployment`, `docs/environments.md`
+sözleşmesindeki `SERVICE_ENVIRONMENT` değerine bağlı; `@AssertTrue` ikisinin
+eşleşmesini açılış şartı yapıyor:
+
+| `SERVICE_ENVIRONMENT` | İzin verilen sağlayıcı ortamı |
+|---|---|
+| `production` | yalnız `https://api.iyzipay.com` |
+| `staging` | yalnız `https://sandbox-api.iyzipay.com` |
+| `local` / tanımsız | sandbox veya loopback (`localhost`, `127.0.0.1`, `::1`) |
+
+Dört karar açıklama istiyor:
+
+**Yeni bir değişken uydurulmadı.** Ortam adı zaten `SERVICE_ENVIRONMENT`'ta
+duruyordu ve `docs/environments.md` onu staging zorunluluğu olarak yazıyor.
+İkinci bir "hangi ortamdayız" değişkeni açmak ikisinin ayrışabileceği bir
+gelecek üretirdi.
+
+**Tanınmayan host her ortamda reddediliyor.** Yalnız "canlı mı sandbox mı" diye
+bakmak yetmez; `https://api.iyzipay.com.saldirgan.test` iki listeye de girmez ve
+sessizce kabul edilirdi. Host tam eşleşme, şema `https` zorunlu. Loopback bunun
+istisnası: `IyzicoProtocolTest` sahte bir HTTP sunucusuna konuşuyor ve testler
+`local` sayılıyor.
+
+**Tanınmayan ortam adı açılışı düşürüyor.** `SERVICE_ENVIRONMENT=prod` yazılırsa
+enum bağlanamaz ve uygulama açılmaz. Alternatifi — bilinmeyeni "production
+değil" saymak — production'ı sessizce sandbox'a düşürürdü.
+
+**Tanımsız ortam `local` sayılıyor, `production` değil.** Değişken hiç
+verilmezse en dar hak kazanılır: canlı `baseUrl` reddedilir. Yanılma yönü her
+zaman parayı korumaktan yana.
+
+`IyzicoProperties.baseUrl` alanının Java varsayılanı da sandbox; yapılandırma
+tümüyle kaybolsa bile canlıya düşülmez. Kuralı `IyzicoEnvironmentSplitTest`
+on iki kuralla sabitliyor. Operasyon tarafı `docs/runbooks/payments.md`'de.
 
 ## 2z. Gerçek zamanlı katman
 
@@ -661,7 +824,7 @@ Bir süre bu yarım kaldı: `markPayoutProcessing` yalnızca `APPROVE` için ça
 | `public/` | giriş istemeyen belgeler (sözleşme metinleri) | nesne özel kalır, `/uploads/public/**` kısa ömürlü imzalı adrese yönlendirir |
 | `files/` | özgeçmiş, kimlik belgesi | nesne özel kalır, `/uploads/files/**` **kimlik doğrulaması ister**, sonra imzalı adrese yönlendirir |
 
-İmzalı adresin ömrü `storage.signed-url-minutes` (varsayılan 15 dk). Yönlendirme uçları `StorageDownloadController`'da; tanınmayan önek 400 döner, yani depo anahtarı uydurup rastgele nesne çekilemez.
+İmzalı adresin ömrü `storage.signed-url-minutes` (varsayılan 3 dk). Yönlendirme uçları `StorageDownloadController`'da; tanınmayan önek 400 döner, yani depo anahtarı uydurup rastgele nesne çekilemez.
 
 **Özel dosyada kimlik doğrulaması yetmez, sahiplik de kontrol edilir.** `/uploads/files/**` `SecurityConfig`'te `hasAnyRole("USER","ADMIN")` — yani **giriş yapmış herkes**. Tek koruma anahtarın tahmin edilemez olmasıydı; §2ab'nin "tahmin edilemez URL yeterli koruma değildir" ilkesiyle çelişiyordu. `CvService.assertCanDownload` eklendi: `media.createdBy` istek atanla eşleşmiyorsa ve kişi ADMIN değilse **404** döner (403 değil — dosyanın varlığı da sızmasın diye). Görsellerde bu kontrol yok, olmamalı da; onlar zaten CDN'den herkese açık.
 
@@ -696,6 +859,10 @@ Politika sayıları artık deploy istemiyor. `app_settings` tablosu ve `GET/PUT 
 | `cancellation.late-fee-rate` | pencere içinde iptalde kesilen oran | 0,50 |
 | `assignment.unpaid-expiry.hours-before-start` | ödenmemiş atama iş başlangıcına kaç saat kala düşer | 6 |
 | `app.minimum-version` | bu sürümün altındaki istemci 426 alır; boşsa kapı kapalı | boş |
+| `commission.rate` | işveren ücretine eklenen hizmet bedeli oranı | 0,075 |
+| `app.minimum-version.ios` | iOS eşiği; yoksa tekil eşiğe düşer | boş |
+| `app.minimum-version.android` | Android eşiği; yoksa tekil eşiğe düşer | boş |
+| `app.minimum-version.web` | bağımsız web eşiği; boşsa yalnız web kapısı kapalı | boş |
 
 **Konfigürasyon hâlâ varsayılan.** `SettingsService` önce tabloya bakar, satır yoksa `application.yaml` değerine düşer. Yani tablo boş bir veritabanı da doğru çalışır ve env ile ilk değer verilebilir.
 
@@ -703,7 +870,11 @@ Politika sayıları artık deploy istemiyor. `app_settings` tablosu ve `GET/PUT 
 
 **Bozuk değer patlatmaz.** Tabloda sayısal olmayan bir şey varsa uyarı loglanır ve varsayılana düşülür; yanlış bir elle güncelleme iptal hesabını ya da zamanlayıcıyı durdurmaz.
 
-**Komisyon oranı bilerek dışarıda.** `commission.rate` uygulandığı anda `JobAssignment` üzerine yazılıyor (§2e) ve mutabakat ona bakıyor; canlıda değiştirilebilir yapmak geçmiş kayıtlarla bugünkü oranı karıştırma riskini artırır. Değişecekse deploy ile.
+**Komisyon oranı da bu tabloya taşındı.** Eskiden yalnızca `COMMISSION_RATE` env'iydi ve değiştirmek konteyner yeniden başlatmak demekti — ürünün en gelir-belirleyici sayısı, ondan daha az kritik olan iptal cezası oranından daha zor değişiyordu. Taşımak güvenli, çünkü ADR-0002 fiyatı ilan yayınlanırken donduruyor ve uygulanan oran `Job`, `JobAssignment` ve `Payment` satırlarına yazılıyor (§2e): oran değişse bile geçmiş kayıtlar hangi oranla hesaplandıklarını korur, mutabakat bozulmaz. `CommissionCalculator` her hesapta tabloya bakar, satır yoksa `application.yaml` değerine düşer; `COMMISSION_RATE` artık yalnızca **başlangıç değeri**.
+
+**Oran anahtarlarının aralığı doğrulanıyor.** `commission.rate` ve `cancellation.late-fee-rate` için "sayısal mı" kontrolü yetmiyordu: `1.5` kabul edilseydi işveren işçi ücretinin 2,5 katını öderdi, negatif oran komisyonu iadeye çevirirdi. İkisi de `[0, 1]` aralığında olmak zorunda; dışarısı `setting.value.out.of.range` ile 400 döner. Saat ve gün anahtarları bu kuraldan etkilenmez.
+
+**`AppSetting` artık `BaseEntity`'yi genişletiyor — elle dört alan eklenmedi.** Tablo dört sütundan ibaretti; bir ayarı kimin ne zaman değiştirdiğinin tek izi bir `log.info` satırıydı ve log döngüsü dolduğunda kayboluyordu. İki seçenek vardı: `BaseEntity`'yi genişletmek (denetim + soft delete sütunları birlikte gelir) ya da `created_at`/`updated_at`/`created_by_id`/`updated_by_id` alanlarını elle eklemek. `BaseEntity` seçildi çünkü (1) elle eklemek `@CreatedBy`/`@LastModifiedBy` + `@EntityListeners(AuditingEntityListener.class)` bloğunu kopyalamak demekti ve denetlenen her satırın aynı görünmesi kuralını bozardı, (2) `deleted_by_id` bedava geldiği için ileride bir silme ucu eklenirse hard delete kazası olmaz, (3) üç fazladan sütunun maliyeti beş satırlık bir tabloda yok. Bedeli: `@SQLDelete` + `@SQLRestriction` zorunlu oldu (§8) ve `setting_key` üzerindeki benzersizlik kısmi indeks değil — soft delete edilen bir satır anahtarı işgal etmeye devam eder. Bugün silme ucu olmadığı için bu bir sorun değil; eklenirse indeks `uk_users_email_active` gibi kısmileştirilmeli.
 
 ## 2ad. Olgunlaşma özellikleri (Faz 11C)
 
@@ -1063,17 +1234,39 @@ KOALA_CHIP_DIR=/tmp/chip KOALA_CSCA_DIR=/opt/koala/csca ./mvnw test -Dtest=RealC
 
 **Önizleme bağlayıcı değil.** Kutu açıkken cezasız pencere kapanırsa gösterilen tutar ile kesilen tutar farklı olabilir. Bunu kilitlemek için önizlemeye bir geçerlilik süresi ve iptalde doğrulama gerekirdi; fark saniyeler mertebesinde olduğu için yapılmadı.
 
+## 2ar2. Başvurunun geri çekilmesi
+
+`POST /job-applications/{applicationId}/withdraw`. Öncesinde `JobApplicationsController` tek uç barındırıyordu ve o da **işverenin** cevabıydı; başvuran tarafında hiçbir çıkış yolu yoktu. İşi başka yerden alan ya da yanlış ilana başvuran kullanıcı `APPLIED` durumunda asılı kalıyor, işveren de aslında müsait olmayan bir adayı kabul edebiliyordu — kabul anında `JobAssignment` doğduğu ve işveren ödeme oturumu açtığı için boşluk doğrudan ödeme akışına dokunuyordu.
+
+**Geri çekme bir durum değişikliğidir, soft delete değil.** `JobApplication` `@SQLDelete` + `@SQLRestriction` taşıyor (§8); geri çekme bunlara hiç dokunmaz, yalnızca `status`'ü `WITHDRAWN` yapar. Kayıt tabloda kalır, `is_deleted` `false` kalır, işverenin başvuru listesinde `WITHDRAWN` olarak görünmeye devam eder. `ApplicationWithdrawalIT` bunu gerçek Postgres'te satır sayısı ve `is_deleted` üzerinden doğruluyor — ikisi karıştırılırsa başvuru geçmişi sessizce kaybolurdu.
+
+**Yalnızca sahibi, yalnızca `APPLIED` durumundan.** Başkasının başvurusu **404** alır (403 değil — kaynağın varlığı sızmaz, §0b). `ACCEPTED` geri çekilemez: orada artık bir `JobAssignment` var ve iptalin kendi akışı, kendi ceza politikası işliyor (§2p). `ACCEPTED` / `REJECTED` / `WITHDRAWN` için **409**.
+
+**Geri çekilmiş başvuru artık kabul edilemez.** `respondToApplication` `WITHDRAWN` durumunda `ConflictException` ile **409** döner ve bunun kendi anahtarı var (`job.application.already.withdrawn`); "zaten yanıtlanmış" mesajı burada yalan olurdu. Bu kapı olmadan geri çekme yalnızca bir etiket olurdu — işveren yine kabul eder, atama ve ödeme oturumu yine doğardı.
+
+**Yeniden başvuru kararı: `WITHDRAWN` bir başvuru yeniden başvuruyu engellemez.** Mükerrer başvuru kapısı `existsByJobIdAndUserId`'den `existsByJobIdAndUserIdAndStatusNot(jobId, userId, WITHDRAWN)`'a daraltıldı. Gerekçe: engelleseydi geri çekme kullanıcı için tek yönlü bir kapı olurdu — fikrini değiştiren ya da yanlışlıkla geri çeken kişi ilan hâlâ `OPEN` iken bir daha başvuramaz, tek çaresi işverene mesaj atmak olurdu; bu da geri çekme düğmesini kullanılmaz derecede korkutucu yapardı. Kötüye kullanım riski (başvur–geri çek–başvur döngüsü) düşük: her yeni başvuru yeni bir satır, yani işverenin gördüğü geçmiş bozulmuyor ve gerekirse ileride sayıya bağlı bir kural eklenebilir. Karar `ApplicationWithdrawalTest` ve `ApplicationWithdrawalIT` içinde iki yönlü test edildi: `WITHDRAWN` engellemiyor, `APPLIED` engellemeye devam ediyor.
+
+**`hasApplied` bilerek daraltılmadı.** O metot mesajlaşma kapısını besliyor (`MessagingManager.assertMayConverse`): "bu ilanla ilişkisi var mı?" sorusunun cevabı. Daraltılsaydı başvurusunu geri çeken kullanıcı ile işveren arasındaki mevcut sohbet aniden **403** dönerdi — oysa geri çekmenin sebebini konuşmak tam da o anda gerekiyor. İki kontrol farklı soruları soruyor: biri "şu an canlı bir başvurusu var mı", diğeri "bu ilana hiç dokundu mu".
+
+**`answeredDateTime` geri çekme anını da taşıyor.** Ayrı bir `withdrawnDateTime` kolonu açılmadı; alan başvurunun terminal duruma geçtiği anı ifade ediyor ve `MyApplicationDto` üzerinden zaten dönüyor. Yeni kolon migration gerektirir, sıralama kümesine (`MY_APPLICATIONS_SORTABLE`) ikinci bir zaman alanı sokar ve istemcide iki alanın hangisine bakılacağı sorusunu doğururdu.
+
+**Migration gerekmedi.** `job_applications.status` `VARCHAR(255)` ve check constraint taşımıyor; enum'a değer eklemek şema değişikliği istemiyor.
+
+**İşverene bildirim gidiyor.** `ActivityNotificationService.applicationWithdrawn` mevcut altyapıyı kullanıyor (in-app + push + e-posta, hepsi ayrı ayrı try/catch içinde). Alıcı `job.getCreator()` — `assignmentAnswered` ile aynı işveren tanımı.
+
+**Mobil istemci bu ucu kullanmadan önce enum'unu genişletmeli.** `koala-mobile` `ApplicationStatus.values.firstWhere` ile ayrıştırıyor; `WITHDRAWN` bilinmeyen bir değerken sunucu bunu döndürürse istemci düşer. Sıra: önce istemcide enum, sonra düğme.
+
 ## 2as. Asgari istemci sürümü kapısı
 
 `/v1` bilerek eklenmedi (§9). Yerine `MinimumAppVersionFilter`: istemci `X-App-Version` gönderir, eşiğin altındaysa **426 Upgrade Required** alır ve `errorCategory: CLIENT_TOO_OLD` ile birlikte `X-Minimum-App-Version` başlığı döner — istemci kullanıcıya hangi sürüme çıkması gerektiğini söyleyebilsin diye.
 
 **Eşik `app_settings` içinde, yani deploy'suz değişir.** Eski bir istemciyi aniden engellemek tam da deploy beklemeden yapılmak istenen şey. Ama §2ac'deki ayar yüzeyi sayısal değer zorunlu tutuyordu; `app.minimum-version` için doğrulama sürüm biçimine göre yapılıyor (`AppVersion.isParsable`), diğer anahtarlarda sayısal kuralı aynen duruyor.
 
-**Boş eşik kapıyı tümüyle kapatır** ve varsayılan boş. Yani özellik yazıldı ama kimseyi engellemiyor; engellemek bilinçli bir `PUT /admin/settings` çağrısı gerektiriyor.
+**Eşik platforma göre seçilir.** iOS ve Android kendi eşiği yoksa tekil `app.minimum-version` değerine düşer. Başlıksız eski mobil çağrı da tekil eşiği kullanır. Web kendi eşiğini kullanır ve boş web eşiği yalnız web kapısını kapatır; böylece mobil zorunlu sürümü web'i düşürmez.
 
 **Karşılaştırma sayısal, alfabetik değil.** `1.10.0` `1.9.0`'dan büyüktür — string karşılaştırması bunu ters çevirirdi. `+build7` gibi ekler ve eksik bileşenler (`1.4` = `1.4.0`) tolere ediliyor.
 
-**Üç durumda kapı hiç çalışmaz:** başlık gelmemişse, başlık ayrıştırılamıyorsa, ya da yol muaf listesinde. Muaflar: sağlık uçları, **`/payments/callback`** (iyzico başlık göndermez, engellemek ödemeyi düşürürdü), `/uploads/**`, takip pikseli ve Swagger. Başlıksız isteğin geçmesi bilinçli — web istemcisi ve `curl` ile yapılan operasyon çağrıları kırılmasın.
+**Platform eşiği varken bozuk sürüm kapıyı atlayamaz.** Parse edilemeyen veya eksik web/iOS/Android sürümü 426 alır. Başlıksız eski mobil çağrı geriye uyumluluk için geçer. Muaflar: sağlık uçları, **`/payments/callback`**, `/uploads/**`, takip pikseli ve Swagger; tüm platformlarda geçer.
 
 **Filtre güvenlik zincirinin dışında** (`HIGHEST_PRECEDENCE + 15`), hız sınırından önce: eski istemcinin isteği kimlik doğrulamaya kadar hiç gitmemeli.
 
@@ -1098,7 +1291,7 @@ gerekip gerekmediği oradan türüyor. §2s'deki tablo bu enum'a taşındı, art
 kombinasyonu tutar; satırı olmayan kombinasyon `kind`'ın varsayılanına düşer. Yeni bir kategori eklendiğinde
 mevcut kullanıcılar için veri göçü gerekmiyor — kayıt anında 21 satır açan tasarımın tersi.
 
-**İşlemsel bildirimin kapatılamaması iki yerde, ikisi de bilinçli.** `UpdateNotificationPrefsDto` üzerindeki
+**İşlemsel bildirimin kapatılamaması iki yerde, ikisi de bilinçli.** `UpdateNotificationPreferencesDto` üzerindeki
 `@AssertTrue` istemciye 400 + alan mesajı döndürür (§2ah'nin çapraz alan kuralı); `isAllowed` ise
 `kind.isOptional()` değilse **satıra hiç bakmadan** `true` döner. Birincisi API sözleşmesi, ikincisi garanti:
 veritabanına elle yazılmış ya da göçten kalmış bir satır bile ödeme bildirimini susturamaz.
@@ -1109,8 +1302,29 @@ veritabanına elle yazılmış ya da göçten kalmış bir satır bile ödeme bi
 gönderim noktası eklendiğinde tercihi kontrol etmeyi hatırlamak gerekmiyor. Bastırılan gönderim `null`
 döner, `Notification` satırı **açılmaz** ve kuyruğa girmez.
 
-**Alıcısı olmayan e-posta hiçbir zaman bastırılmaz.** Şirket daveti gibi akışlar henüz Koala kullanıcısı
-olmayan bir adrese gidiyor; `recipient == null` olduğunda tercih sorulmaz.
+**Alıcısı olmayan e-posta hiçbir zaman bastırılmaz.** `recipient == null` olduğunda tercih sorulmaz — henüz
+Koala kullanıcısı olmayan bir adrese gönderim yapan akışlar için. Bu boşluk **iki** yerde geçerli:
+`AuthManager.startRegistration` (kayıt doğrulaması; `User` satırı henüz yok, ortada yalnızca
+`PendingRegistration` var) ve `CompanyManager.sendCompanyCreatedMail`'in şirket adresine giden ilk postası
+(aşağıda). **Yetkili daveti bu listede değil:** `CompanyContactInvitationManager` alıcıyı `userService.getByEmail`
+ile buluyor, bulamazsa `ResourceNotFoundException` atıyor — davet her zaman kayıtlı bir kullanıcıya gider ve
+`setRecipient` çağırır. Bir gönderim noktası eklerken ölçüt "adres kayıtlı bir kullanıcıya ait olabilir mi",
+"bu akış davet gibi mi görünüyor" değil.
+
+**`sendCompanyCreatedMail` iki posta gönderiyor ve yalnızca birinin alıcısı var — bilinçli.** İlki
+`company.email` adresine gidiyor: bu adres `CreateCompanyRequestDto` üzerinden serbest metin olarak geliyor,
+yalnızca `@Email` ile doğrulanıyor ve hiçbir yerde `User` tablosuyla eşleştirilmiyor (`updateCompany` ile de
+değiştirilebiliyor). Tipik değeri `info@sirket.com` gibi bir kurum adresi; arkasında bir Koala hesabı olması
+gerekmiyor, olsa bile o hesabın sahibi olduğunu gösteren bir kanıt yok. Bu yüzden `recipient` boş bırakıldı:
+doldurmak için adresi `User` tablosunda aramak gerekirdi ve rastlantısal bir eşleşme postayı **başkasının**
+tercihine tabi kılardı. İkincisi kurucunun kendi adresine gidiyor; `contact.getUser()` oturum sahibinin ta
+kendisi, yani her zaman bilinen bir `User` — orada `setRecipient` **çağrılır**. Asimetri budur ve hata değildir:
+ayrım "postanın konusu ne" değil, "hedefin arkasında kimliğini doğrulayabildiğimiz bir kullanıcı var mı".
+
+Kurucuya giden posta bir süre alıcısız gidiyordu; sonucu `notifications.recipient_id`'nin boş kalması ve
+`COMPANY_UPDATES` kapatılmış olsa bile postanın gönderilmesiydi. `CompanyCreationNotificationTest` üç kuralı da
+sabitliyor — kurucunun postasında alıcı var, şirket adresine gidende yok, ve şirket adresi kurucunun adresiyle
+birebir aynı olsa bile yok (adresin eşleşmesi kimlik kanıtı değil).
 
 **Abonelikten çıkma bağlantısı e-postaya kendiliğinden biniyor, ama yalnızca ticari iletide.** `sendEmail`,
 kategori `COMMERCIAL` ise `unsubscribeUrl`'i template parametrelerine ekler ve `emails/layout.html` altbilgisi
@@ -1184,6 +1398,96 @@ dilimine ait (`docs/research/iys-commercial-message-integration.md`).
 **İYS entegrasyonu bu dilimde yapılmadı.** Kapsam, zamanlama, gerekçe ve açık kalan hukuk sorusu
 `docs/research/iys-commercial-message-integration.md` içinde; takip issue'su Dalga 7 altında.
 
+---
+
+## 2au. Personel yetkilendirmesi — `/admin/**` ikinci zinciri
+
+`/admin/**`'ın hangi kimliği kabul ettiği burada değil, [ADR-0010](docs/adr/0010-split-staff-identity-from-koala-authorization.md) §Geçiş'te yazılıdır. Burada yalnız mekanizma anlatılır.
+
+**İki zincir var, ikisi de `SecurityFilterChain` bean'i.** `StaffSecurityConfig` `@Order(1)` ile `/admin/**`'ı alır, `SecurityConfig` `@Order(2)` ile geri kalanı. Sıralama açıkça verilmek zorunda: iki zincirli bir uygulamada bean tanım sırası güvenilir değildir. `SecurityConfig`'teki `/admin/**` → `hasRole("ADMIN")` satırı duruyor ama artık erişilmiyor; kesim o satırın silinmesidir ve `ApiConventionTest` onu bugün hâlâ arıyor.
+
+**Kimlik ayrımı bearer token çözücüsünde yapılır.** Marketplace token'ı bir OAuth2 bearer JWT değil; `iss` doğrulanmıyor, geçerliliği `sessions` satırına bağlı. `StaffBearerTokenResolver` token'ın `iss` claim'ini **doğrulamadan** okur ve güvenilen issuer listesinde değilse token'ı resource server'a hiç vermez — istek `SessionAuthFilter`'a düşer. Doğrulama `JwtIssuerAuthenticationManagerResolver` üzerinden yapılır; allow-list orada, `iss`'e körü körüne güvenilmez.
+
+**Resource server kendi `ProviderManager`'ını kullanır.** `HttpSecurity`'nin paylaşılan yöneticisi kullanılsaydı, başarısız bir JWT doğrulaması `ProviderManager`'ın parent'ına düşer, parent global `authenticationManager` bean'i olduğu için kendine döner ve **süresi dolmuş her token `StackOverflowError` üretirdi**. Süresi geçerli token'larda bu hata görünmez; testte yakalandı.
+
+**JWKS tembel çekilir.** `NimbusJwtDecoder.withJwkSetUri(...)` açılışta ağa çıkmaz; `withIssuerLocation(...)` çıkardı ve `auth.iskoala.com` çözülmediği için uygulama açılmazdı. `koala.staff.issuer-uri` boşken zincir OAuth2 bloğunu hiç kurmaz.
+
+**Anotasyon yoksa reddedilir.** `StaffPermissionAuthorizationManager` isteği `RequestMappingHandlerMapping` üzerinden handler'a bağlar ve `@RequiresPermission` arar; yoksa reddeder. Bu yüzden eşleşmeyen bir `/admin/...` yolu 404 değil 403 döner — güvenlik kararı fail-closed verilir. `RequestMappingHandlerMapping` `ObjectProvider` ile alınır; doğrudan enjekte edilseydi güvenlik zinciriyle bean döngüsü çıkardı.
+
+**İzinler token'a girmez.** Token yalnız `realm_access.roles` taşır; rol→izin çözümü her istekte veritabanından, DAG aşağı gezilerek yapılır. Tanınmayan rol adı ve tanınmayan izin kodu **loglanıp atlanır** — bilinmeyen bir kod yüzünden uygulamanın açılmaması rollback'i imkânsızlaştırırdı. Bunu `StaffRoleGraphSeedTest` CI'da yakalar.
+
+**`StaffPermission` metadata taşır.** Her sabit `code`, `mutating` ve `sensitivity` (`NORMAL`/`PERSONAL_DATA`/`FINANCIAL`) verir; denetim kaydı bunları okuyarak neyin yazılacağına ve satırın ne kadar saklanacağına karar veriyor (§2av). `@RequiresPermission` ayrıca non-GET uçlarda bir `action` adı ister. `AdminPermissionMappingIT` dört şeyi birden sabitliyor: her `/admin` mapping'i anotasyon taşır, adı geçen her izin gerçek bir sabittir, her non-GET bir eylem adı verir ve **bir yazma ucu okuma izniyle korunamaz**. İzin adı vermeyen tek anotasyon `/admin/me`'dedir; test bunun başka yerde kullanılmamasını da kontrol eder.
+
+**Roller ADR-0010 gereği Keycloak'ta, izinler Koala'da.** Rol grafiği `06-20-staff-authorization.xml` ile seed'lenir çünkü Keycloak kapısı açıldığı anda arkası boş olmamalıdır. Grafik `koala-admin/docs/keycloak-setup.md` §3'teki composite rollerle birebir aynıdır ve görev ayrılığı (OWNER dışında hiçbir rol hem trust hem finans dalını kapsayamaz) testle sabitlenir.
+
+**Bilinen 12 izne üç tane eklendi.** `content.moderate` (şikayet incelemesi ve görsel kaldırma), `badge.manage`, `settings.manage`. Sebep: `AdminPermissionMappingIT` her yönetim ucunun bir izin adı vermesini şart koşuyor ve bu üç yüzey listedeki hiçbir izne düşmüyordu. Alternatif, şikayet incelemesini `dispute.resolve` ile korumak olurdu; o da `DISPUTE_HANDLER`'a görsel silme yetkisi verirdi.
+
+**Dördüncüsü `user.role.manage`.** #35'in açtığı üç uç (§2f3) bu dilim indikten sonra izinsiz kaldı; anotasyon yoksa zincir reddettiği için `UserRoleGrantIT`'in sekiz HTTP testi 403 aldı — kapı doğru çalıştı, eksik olan izin adıydı. `GET /admin/users/{userId}/roles` mevcut `user.read`'e düşüyor; `POST` ve `DELETE` yeni `user.role.manage` (mutating, `NORMAL`) ile korunuyor, denetim eylem adları `user.role.grant` ve `user.role.revoke`.
+
+**`role.manage` bilinçli olarak kullanılmadı.** `role.manage` personel tarafındaki rol→izin DAG'ını yönetir; `user.role.manage` ise marketplace kullanıcısına `ROLE_ADMIN` verir. İkisi aynı izin olsaydı, personel rollerinin izinlerini düzenleyebilen biri aynı yetkiyle marketplace admini basabilirdi; `keycloak-setup.md` §3'ün görev ayrılığı kuralı tam burada delinirdi. Gerekçe ADR-0010'un `staff.manage`/`role.manage` ayrımını yapma gerekçesiyle aynı. `user.read_pii` de uygun değildi: rol listesi kişisel veri değil, ayrıca okuma izni yazma ucunu koruyamıyor (`AdminPermissionMappingIT`).
+
+**`user.role.manage` yalnız `OWNER`'a seed'lendi.** Marketplace `ROLE_ADMIN` basmak sistemdeki en geniş etkili işlem; `staff.manage` ve `role.manage` de aynı sebeple yalnız `OWNER`'da. Destek ya da güven dalına verilseydi, kendi hesabına admin rolü yazıp bütün izin grafiğini atlamak tek istek olurdu. `SUPPORT_AGENT` rol listesini zaten `user.read` üzerinden görebiliyor; yazma ayrı bir karar olarak `OWNER`'da bırakıldı.
+
+**Personel tabloları `BaseEntity`'yi genişletmez.** `BaseEntity` `created_by_id`/`updated_by_id` üzerinden `users`'a yabancı anahtar kurar; ADR-0010 iki yönde de bağ kurulmamasını şart koşuyor.
+
+**Para taşıyan metotlara anotasyon konmaz.** `PayoutService`/`PayoutManager` metotlarını otomatik tamamlama zamanlayıcısı boş bir `SecurityContext` ile çağırıyor; anotasyon konsaydı zamanlayıcı sessizce dururdu. Personel tarafı `StaffPayoutManager` facade'ından geçer: aktörü parametre olarak alır, izni denetler, sonra korumasız iç metodu çağırır. Aktör `null` ise istek köprü aşamasındaki marketplace `ROLE_ADMIN`'dendir.
+
+---
+
+## 2av. Admin denetim kaydı — ikiye bölünmüş iz
+
+Öncesinde admin eylem kaydı **yoktu**. `created_by_id`/`updated_by_id` üzerine yazılıyor, okuma hiç kaydedilmiyordu; `app_settings`'in denetim kolonu §2ac ile geldiğinde bile "kim değiştirdi" sorusunun cevabı tek bir `log.info` satırıydı ve log döngüsü dolunca kayboluyordu. `cancellation.late-fee-rate` — doğrudan para etkileyen sayı — iz bırakmadan değiştirilebiliyordu.
+
+**İki tablo, iki saklama süresi.** Ayrım ilk satır yazılmadan yapıldı; sonrası yasal süre baskısı altında veri migrasyonu olurdu.
+
+| | Tablo | İçerik | Süre |
+|---|---|---|---|
+| **Çekirdek** | `admin_audit_entries` | kim, hangi izin, hangi eylem, hangi kayıt id'si, ne zaman, izin/ret, `mutating`, `sensitivity` | 24 ay — `FINANCIAL` ise **10 yıl** |
+| **Detay** | `admin_audit_entry_details` | istek gövdesi, IP, user agent, önce/sonra değerler | 6 ay ya da KVKK silme talebi |
+
+Detay yabancı anahtarı `ON DELETE CASCADE`: çekirdek gidince detay da gider. Ters yön serbesttir ve KVKK silme talebinin yaptığı tam olarak budur — detay silinir, çekirdek kalır.
+
+**Süreler satır yazılırken damgalanıyor.** `retain_until` ve `purge_after` birer kolon; temizlik işi tek bir `where` cümlesi oluyor ve "bu satır ne kadar kalacak" sorusu satıra bakılarak cevaplanıyor. Süreyi çalışma zamanında hesaplasaydık, `audit.retention.*` değeri değiştiğinde geçmiş satırların ömrü de geriye dönük değişirdi.
+
+**Yazma, yetki kararının verildiği yerde.** `StaffPermissionAuthorizationManager` kararı verdikten sonra koşulsuz olarak `StaffAuditRecorder.observe(...)` çağırıyor. Loglamayı unutmanın tek yolu `@RequiresPermission`'ı kaldırmak, o da isteği zaten reddettirir (§2au). Kapsam kararı manager'lara dağılmadı: tek kural `core/helpers/AuditScope` içinde ve birim testi var.
+
+**Satır istek sonunda tek seferde yazılıyor, bilinçli olarak.** `StaffAuditFilter` kaydı yetki katmanından alıp `finally` bloğunda yazıyor. Sebep: istek gövdesi ancak handler onu okuduktan sonra elde edilebiliyor (`ContentCachingRequestWrapper` okunmayanı önbelleğe almaz) ve önce/sonra değerleri o ana kadar bilinmiyor. Filtre yetki filtresinden **önce** zincire giriyor, yani reddedilen istekte de çalışıyor. Garanti kaybolmuyor: kaydı üreten çağrı hâlâ yetki kararının içinde, filtre yalnızca boşaltma mekanizması.
+
+**Kapsam kuralı — `AuditScope.isAuditable`:**
+
+1. Reddedilen istek **daima** yazılır (`allowed = false`). Yetki yükseltme denemesini görünür kılan tek şey o satır.
+2. Her değişiklik yazılır. `mutating` izin sabitinden okunur **ve** metot GET değilse geçerlidir; `GET /admin/companies` `company.approve` iznini taşıyor ama hiçbir şeyi değiştirmiyor.
+3. Hassas okuma yazılır: izinlerin en yükseği `NORMAL` değilse (`PERSONAL_DATA` ya da `FINANCIAL`), filtre olmasa bile.
+4. Tek bir kaydı hedefleyen okuma yazılır (yolda değişken varsa).
+5. Filtreli arama yazılır. `/admin/users` araması `lower(email) LIKE %query%` çalıştırıyor: bir e-posta yazmak o kişinin Koala kullanıcısı olduğunu **doğruluyor**. Yanıt DTO'su temiz (`SafeUserDto`) ama **sorgunun kendisi kişisel veri.**
+6. Geri kalan yazılmaz — filtresiz liste yüklemesi loglanmaz. `page`, `size` ve `sort` filtre sayılmaz; sayfa çevirmek arama değildir.
+
+**Kimliksiz istek denetlenmiyor.** Anonim bir `/admin/**` isteği 401 alır ve satır açmaz: kaydedilecek bir aktör yok, üstelik herkesin tabloyu doldurabilmesi olurdu. Anotasyonu olmayan (yani eşleşmeyen) bir `/admin/...` yolu da yazılmaz — `AdminPermissionMappingIT` her gerçek mapping'in anotasyon taşıdığını garanti ettiği için böyle bir istek var olmayan bir uca gidiyordur.
+
+**Denetim kaydını okumak da denetleniyor ve özyinelemiyor.** `audit.read` `PERSONAL_DATA` olduğu için `GET /admin/audit-log` üçüncü kurala giriyor. Özyineleme diye bir şey oluşmuyor çünkü denetim yazması bir veritabanı `INSERT`'ü, yeni bir HTTP isteği değil: güvenlik zinciri istek başına bir kez değerlendiriliyor, yani okuma **tam olarak bir** satır üretiyor. Üstelik satır yanıt üretildikten sonra yazıldığı için okuma **kendi satırını hiçbir zaman görmüyor**. Büyüme çarpan değil toplama: iki okuma iki satır. `AdminAuditTrailIT` ikisini de sabitliyor — ilk okuma boş sayfa döndürüyor, ikincisi tek satır görüyor ve tabloda iki satır oluyor.
+
+**Aktör alanları — `koala-admin` için nullability sözleşmesi.** `actorDisplayName` daima dolu. `actorStaffId` iki durumda null: token geçerli ama `staff_members` kaydı yok (o zaman ad Keycloak subject'i olur, §2au), ve istek köprü aşamasındaki marketplace `ROLE_ADMIN`'den geliyor (o zaman marketplace kullanıcı id'si yazılır, kaydı olmayan test principal'lerinde null kalır). `resourceId` **null yerine boş string**: liste ya da arama isteğinin hedeflediği tek bir kayıt yoktur ve panelin null denetimi yapmak zorunda kalması istenmedi. `permission` izin adı vermeyen tek anotasyonda (`/admin/me`) `none`, `action` ise okuma uçlarında izin koduna düşer.
+
+**Saklama işi `AdminAuditRetentionScheduler`'da**, günde bir. Önce detay, sonra çekirdek siliniyor; ikisi ayrı adım çünkü detayı süresi dolduğunda düşürmek çekirdeğe dokunmadan yapılmalı. Hata koşuyu düşürmez, loglanır. `audit.retention.enabled=false` ile tümüyle susturulur (testlerde kapalı). Zamanlayıcı tek örnek varsayıyor (§7, Faz 11D) ama silme idempotent olduğu için ikinci örnek zarar vermez.
+
+**KVKK silme talebi `LegalManager.requestAccountDeletion` üzerinden tetikleniyor.** Talep kabul edildiğinde o kullanıcının id'sini `resource_id` olarak taşıyan satırların **detayı** siliniyor, çekirdek kalıyor. Açık yükümlülük yüzünden reddedilen talep hiçbir şey silmiyor. **Sınırı yazılı olsun:** eşleşme `resource_id` üzerinden, yani `/admin/users/{id}/...` satırlarını yakalıyor; o kişinin adı başka bir kaydın istek gövdesinde geçiyorsa o detay bu yolla silinmez. Kapsamı genişletmek gövde içinde arama demek ve bugün gerekmedi.
+
+**Önce/sonra değerleri `StaffAuditContext.capture` ile veriliyor.** Bugün tek çağıran `SettingsManager.update`; issue'nun şikayet ettiği `cancellation.late-fee-rate` artık iz bırakmadan değiştirilemiyor. Yeni bir yazma ucunun önce/sonra taşıması isteniyorsa manager'a tek satır ekleniyor, denetim satırı zaten yazılıyor.
+
+**İstek gövdesi yalnızca JSON'da ve 8 KB'a kadar önbelleğe alınıyor.** Multipart yükleme (rozet görseli) sarmalanmıyor — akışı tamponlamak yüklemeyi iki kez belleğe almak olurdu. Reddedilen istekte gövde hiç okunmadığı için `requestBody` null kalır: yapılmamış bir yazmanın gövdesini saklamanın değeri, reddedilen her isteğin gövdesini tamponlama maliyetinden düşük.
+
+**Async dispatch bugün kapsamda değil.** `OncePerRequestFilter` varsayılan olarak async dispatch'te çalışmaz, yani `/admin/**` altına bir gün `DeferredResult`/`Callable` döndüren bir uç eklenirse satır handler bitmeden yazılır ve önce/sonra değerleri kaçar. Bugün böyle bir uç yok; eklenirse filtre `shouldNotFilterAsyncDispatch` üzerinden gözden geçirilmeli.
+
+**Denetim yazması patlarsa istek düşmüyor, `ERROR` loglanıyor.** Satır o noktada yanıt zaten istemciye gitmiş oluyor; exception fırlatmak başarılı bir 200'ü sonradan 500'e çeviremez, yalnızca gürültü üretirdi. Bu bilinen bir boşluk: veritabanı hatası satır kaybettirir. "Unutmak imkânsız" garantisi kod yolu içindir, veritabanı dayanıklılığı için değil.
+
+**Sorgu üç yerde Postgres'in null tip çıkarımından kaçıyor.** `cast(:x as Instant)` HQL'de tanınmıyor (`unrecognized cast target type`), `cast(:x as Boolean)` ise geçerli HQL ama null'ı `bytea` olarak gönderip `cannot cast type bytea to boolean` veriyor. Bu yüzden `from`/`to` boşken sınır değerlere (`Instant.EPOCH` ve `9999-12-31`) düşüyor ve `allowed` için ayrı bir `filterByOutcome` bayrak parametresi var. Metin süzgeçleri §2l'deki `cast(:query as string)` deyimini kullanıyor.
+
+**Denetim tabloları `BaseEntity`'yi genişletmez ve soft delete taşımaz.** §2au'nun gerekçesi (personel tarafı `users`'a yabancı anahtar kurmaz) burada da geçerli; ayrıca saklama işinin işi zaten **fiziksel** silmek. Soft delete edilen bir denetim satırı saklama süresini hiç doldurmazdı.
+
+**Detay 1:1 ilişkisi `@MapsId` ile çekirdeğin anahtarını paylaşıyor** ve okuma sorgusu `left join fetch` kullanıyor: sayfa başına 20 satır için ikinci bir sorgu turu açılmıyor (§2af). To-one fetch join sayfalamayı belleğe taşımıyor, o tuzak koleksiyon fetch'ine ait (§2l).
+
+---
+
 ## 3. Testler
 
 `src/test/resources/application.properties` testlerin ayağa kalkması için gereken minimum değerleri sağlar. Buradan bir satır silmeden önce neye yaradığını bil:
@@ -1193,8 +1497,15 @@ dilimine ait (`docs/research/iys-commercial-message-integration.md`).
 - `app.api-url` / `app.web-base-url` ve `payments.return-base-url` — doğrulanmış yapılandırmalardır, boş bırakılamaz.
 - `spring.mail.*` — `EmailConsumer` constructor'ında `JavaMailSender` istiyor. Bu değerler yoksa Boot mail bean'ini hiç oluşturmaz ve context "No qualifying bean of type JavaMailSender" ile düşer. Testlerde gerçek SMTP'ye bağlanılmaz.
 - `spring.rabbitmq.listener.*.auto-startup=false` — testlerde RabbitMQ'ya bağlanılmıyor.
+- `spring.datasource.hikari.maximum-pool-size=4`, `minimum-idle=0`, `idle-timeout=10000` — aşağıdaki bağlantı bütçesi.
 
 Datasource'u `AbstractIntegrationTest` içindeki Testcontainers sağlar. Konteyner `static` ve tüm entegrasyon testleri aynı örneği paylaşır; sınıf başına yeni Postgres kaldırmak paketi dakikalarca uzatıyor.
+
+**Bağlantı bütçesi: her önbelleğe alınan context tek Postgres kabından pay alır.** Spring TestContext her farklı yapılandırma için ayrı bir context açar ve kapatmaz — `@DynamicPropertySource` metot kümesi, `@MockitoBean` seti, `@TestPropertySource`, `@ActiveProfiles` ve `@AutoConfigureMockMvc` hepsi ayrı bir önbellek anahtarı üretir. Her context kendi Hikari havuzunu kurar; **Hikari varsayılanı `maximumPoolSize=10` ve `minimumIdle` ona eşit**, yani boşta duran bir context bile on bağlantıyı tutmaya çalışır. `postgres:17` kabı varsayılan `max_connections=100`, `superuser_reserved_connections=3` ile geliyor — sıradan kullanıcıya 97 kalıyor.
+
+Bu sessiz bir tavandır ve **çarpma bir gün tutmaz**: #35 ile paket on context açıyordu (100 istek, 97 arz — sınırın hemen dibi, hâlâ yeşil), personel dilimi `AbstractStaffIntegrationTest` ile ikinci bir `@DynamicPropertySource` kümesi getirince on birinciyi açtı ve tavan aşıldı. Belirti yanıltıcıydı: `/admin/**` ile hiç ilgisi olmayan `PasswordResetIT` beş testinde "Failed to load ApplicationContext" verdi — o context sırada **sonuncu** yüklendiği için bağlantısız kalan oydu. Gerçek sebep yığının dibindeki `PSQLException: FATAL: sorry, too many clients already`; log'daki `ConnectException: Connection refused` satırları RabbitMQ'ya ait ve `main`'de de var, ilgisiz.
+
+Çözüm havuzu küçültmek, kabı büyütmek değil: context sayısını kontrol edemiyoruz (36 `*IT` sınıfı, her yeni test tabanı bir tane daha açabilir), havuz boyutunu edebiliyoruz ve MockMvc testleri tek iş parçacıklı, dörtten fazlasını hiç kullanmıyor. `minimum-idle=0` boştaki context'in havuzunu doldurmasını engelliyor, `idle-timeout` da tuttuğunu geri veriyor. `IntegrationTestConnectionBudgetTest` aritmetiği sabitliyor: yirmi context bütçesi × havuz boyutu ≤ 97. Havuz kapağını kaldıran ilk commit'te kırmızıya döner.
 
 **Yetkilendirme testleri saf birim testi.** `JobApplicationAuthorizationTest` ve `PaymentSessionAuthorizationTest` Spring context'i kaldırmadan, mock'lanmış bağımlılıklarla manager'ı doğrudan kurar. İkisi de yazıldığında kırmızıydı: yabancı bir kullanıcı hem başvuru kabul edebiliyor hem ödeme oturumu başlatabiliyordu. Yeni bir yetki dalı eklerken bu iki dosyaya karşılık gelen test yazılmalı.
 
@@ -1234,6 +1545,10 @@ Kural: bu tür testlerde başlangıç zamanı `LocalDateTime.now(POLICY_ZONE)` �
 
 **Faz 21 testleri.** `GalleryRulesTest` on üç kural sabitliyor: ilk görsel kapak olur, ikincisi kapağı çalmaz, sınır aşımı 409, ilan galerisi şirket galerisinden seçebilir, yabancı görsel 404, bireysel ilanın seçecek şirket galerisi yok, kapaksız istek yine de kapak üretir, kapak silinince sıradaki devralır, listeden düşen kayıt silinir, kapak URL'leri tek sorguda toplanır, aynı görsel iki kez listelenemez, iki kapak seçilemez.
 
+**Komisyon oranı çalışma zamanı testleri.** `CommissionRateRuntimeIT` üç kural sabitliyor: tabloda satır yokken env varsayılanı uygulanır, satır yazıldığında yeni oran **yeniden başlatmadan** geçerli olur, ve oran değiştikten sonra daha önce fiyatlanmış `jobs`/`job_assignments`/`payments` satırlarının `commission_rate` sütunu değişmez — bu sonuncusu ADR-0002'yi koruyor. `SettingsAdministrationIT` altı kural: aralık dışı komisyon ve iptal cezası oranı 400 alır, aralık içi 200, ayarı değiştiren admin `updated_by_id`'ye yazılır, `updated_at` dolar ve `GET /admin/settings` bunu döndürür. `SettingsRulesTest` aralık kurallarını birim düzeyinde de sabitliyor; sınırların kendisi (0 ve 1) kabul edilir, saat anahtarları kuraldan etkilenmez.
+
+Birim testlerde `CommissionCalculator` artık `FallbackSettings.commissionCalculator(...)` ile kuruluyor — hesap `SettingsService`'e bağlı olduğu için her çağrı yerinde bir sahte kurmak yerine tek yerden veriliyor.
+
 **Faz 16/17 testleri.** `StorageKeysTest` anahtar üretimini, uzantı beyaz listesini, Türkçe ad katlamasını, yol geçişi savunmasını ve önek→URL eşlemesini sabitliyor — özgeçmişin CDN'e düşmediğini `UserProfileContractTest` doğruluyor. `SettingsRulesTest` tanımsız anahtarın reddedildiğini ve bozuk değerin varsayılana düştüğünü sabitliyor.
 
 **Faz 12B/13 testleri.** `BadgeRulesTest` artık kural veritabanından okunduğu için genişledi: pasifleştirilen rozet verilmiyor ama sahipleri koruyor, eşiksiz kural hiçbir şey vermiyor, eşiksiz kural kaydedilemiyor, kod çakışması reddediliyor ve **kodda karşılığı olmayan uydurma bir rozet yalnızca satır eklenerek veriliyor**. `PresenceRulesTest` çok cihazlı bağlantı sayımını sabitliyor.
@@ -1243,6 +1558,12 @@ Kural: bu tür testlerde başlangıç zamanı `LocalDateTime.now(POLICY_ZONE)` �
 **Faz 19 testleri.** `ErrorCodeTest` (yedi tipli yüzey, mesaj anahtarından türeyen kod), `LocaleSafetyTest` (locale'siz büyük/küçük harf yok), `RequestValidationTest` (çapraz alan kuralları DTO'da), `StompSubscriptionSecurityTest` (abonelik yetkisi).
 
 **Faz 18 testleri.** `AggregateBoundaryTest` (manager→DAO sınırı, gerekçeli muafiyetler), `EagerFetchCoverageIT` (liste sorgularında lazy eşlikçi zorunluluğu). `LogPrivacyTest` genişletildi: artık yalnızca getter'ları değil, **değişken/parametre üzerinden** geçen kişisel veriyi de yakalıyor — yazıldığı anda iki gerçek sızıntı buldu (`JavaMailSenderManager` ham e-posta, `PhoneVerificationManager` ham telefon).
+
+**Denetim kaydı testleri (§2av).** `AuditScopeTest` on dört kural sabitliyor: her değişiklik yazılır, reddedilen istek yazılır, filtresiz liste yüklemesi yazılmaz, filtreli arama yazılır, tek kayıt okuması yazılır, hassas okuma filtresiz de yazılır, sayfalama parametresi filtre değildir, boş parametre filtre değildir, GET mutating izin altında bile değiştirmez, `sensitivity` izinlerin en yükseğidir, kaynak türü `/admin` altındaki koleksiyondur, kayıt id'si yolun ilk değişkenidir, hedefsiz istek null yerine boş string verir. `AdminAuditRetentionSchedulerTest` dört kural: her koşuda iki pencere de uygulanır, kapalıyken hiçbir şey silinmez, patlayan koşu zamanlayıcıdan kaçmaz, varsayılan süreler 24/120/6 aydır.
+
+`AdminAuditTrailIT` on dokuz kural — gerçek HTTP üzerinden: izin verilen değişiklik aktör/izin/eylem/kayıt ile yazılır, detay gövde-IP-istemciyi taşır, `cancellation.late-fee-rate` artık iz bırakmadan değişmez, reddedilen istek `allowed = false` yazar, filtreli kullanıcı araması yazılır, filtresiz yükleme yazılmaz, sayfa çevirmek arama değildir, tek kayıt okuması yazılır, finansal satır 10 yıl normal satır 2 yıl saklanır, anonim istek tabloyu doldurmaz, köprü admini de denetlenir, denetim kaydını okumak yazılır ama kendi satırını döndürmez, ikinci okuma tek satır ekler, uç `audit.read` istiyor ve reddi de yazılıyor, çekirdek alanların hepsi dönüyor, detay silinince çekirdek dönmeye devam ediyor, beş süzgecin hepsi sunucuda daraltıyor, aktör süzgeci bir kişinin yaptıklarını buluyor, tanınmayan sıralama alanı 400 dönüyor.
+
+`AdminAuditStorageIT` bölünmeyi gerçek Postgres'te doğruluyor (çekirdek detay silinince kalır, cascade ters yönde çalışır, iki yarı kendi tarihini taşır); `AdminAuditRetentionIT` saklama ve KVKK silmesini (10 yıl / 24 ay / 6 ay damgaları, süresi dolan detay çekirdeği bırakır, süresi dolan çekirdek detayı götürür, penceredeki satıra dokunulmaz, silme talebi yalnız o kişinin detayını siler, ikinci silme zararsız). KVKK tetiği `LegalConsentTest` içinde: kabul edilen talep silme çağırır, engellenen talep hiçbir şey silmez.
 
 **`ApiConventionTest` yüzeyi yapısal olarak koruyor.** Kaynak kodu tarayıp §0b'deki altı kuralı doğruluyor: admin kuralı `/admin` dışında bir yol gösteremez, aynı fiil+yol iki handler'da olamaz, yol sondaki eğik çizgi taşıyamaz, DTO adı HTTP fiili içeremez, 32 karakteri aşamaz, `request`/`response` dışında duramaz. Yeni bir uç eklerken bedava koruma.
 
@@ -1257,6 +1578,8 @@ Kural: bu tür testlerde başlangıç zamanı `LocalDateTime.now(POLICY_ZONE)` �
 **`MapperCharacterizationTest` eşleme davranışını sabitliyor.** Spring context'siz, üretilen `…MapperImpl` sınıflarını doğrudan kurar. MapStruct geçişinden önce yazıldı ve iki testi kırmızıydı; geçiş ikisini de yeşile çevirdi.
 
 **`ErrorContractIT` HTTP sözleşmesini koruyor.** Yetkisiz erişimin 403, eksik Authorization başlığının 401 döndüğünü doğrular. İkisi de eskiden 500 dönüyordu — biri yanlış `AccessDeniedException` import'u yüzünden, diğeri null başlıkta `substring(7)` çağrıldığı için.
+
+**Başvuru geri çekme testleri.** `ApplicationWithdrawalTest` on üç kural sabitliyor (§2ar2): sahibi `APPLIED` başvurusunu geri çeker, başkasınınki **404**, bilinmeyen kimlik 404, `ACCEPTED` ve `REJECTED` **409**, iki kez geri çekme 409, kayıt silinmez ve `delete` hiç çağrılmaz, işverene bildirim gider, geri çekilmiş başvuru kabul de red de **edilemez**, `WITHDRAWN` yeniden başvuruyu engellemez ama `APPLIED` engeller, `hasApplied` daraltılmadığı için mesajlaşma kapısı açık kalır. `ApplicationWithdrawalIT` aynı davranışı gerçek Postgres'te dört kuralla doğruluyor: satır tabloda kalır ve `is_deleted` `false`'tur, `APPLIED` süzgecinden düşüp `WITHDRAWN` süzgecinde görünür, işverenin listesinde durur, mükerrer başvuru kapısı yalnızca canlı başvuruda kapanır.
 
 **`EntityGraphPathsIT` neden var.** `@EntityGraph` içindeki `attributePaths` derleyicinin denetlemediği düz metin; yanlış bir yol ancak o sorgu çalıştırıldığında patlıyor. `JobAssignmentDao` içinde `job.creator.addresses` yazıyordu, oysa `User.address` tekil — `PATCH /job-assignments/{id}/status` her çağrıda çöküyordu ve kimse fark etmemişti. Test tüm DAO'ları tarayıp her yolu JPA metamodel'ine karşı doğruluyor. Yeni bir entity graph eklerken bu test bedava koruma sağlıyor.
 
@@ -1320,7 +1643,7 @@ Denetim bulguları `K-01`…`K-42` kodlarıyla numaralandırılmış; commit mes
 |---|---|---|
 | **20** | **Referans veri olgunlaştırma.** Ayrıntı aşağıda | ürün + veri |
 | **7C** | **Iyzico kalanları.** Dolandırıcılık incelemesi (`fraudStatus=0`) webhook tüketicisi — `IN_REVIEW`'daki ödeme bugün kendiliğinden çözülmüyor (§2x). Ayrıca kısmi iade + disapprove sıralamasının sandbox'ta teyidi | sandbox erişimi |
-| **9B** | Yasal kalanlar: anonimleştirme adımı, `Invoice`, `AuditLog`, İYS entegrasyonu, kanal bazlı bildirim tercihi, ETBİS, depolama saklama politikası (§8) | **hukuk** |
+| **9B** | Yasal kalanlar: anonimleştirme adımı, `Invoice`, `AuditLog`, İYS entegrasyonu, ETBİS, depolama saklama politikası (§8) | **hukuk** |
 | **11D** | **Çok örneklilik.** Beş yerde tek örnek varsayımı: hız sınırı sayacı (§2j), otomatik tamamlama zamanlayıcısı (§2u), mutabakat zamanlayıcısı (§2y), presence haritası ve STOMP basit broker'ı (§2z). **Şu an tek örnek çalışacak, ertelendi** — Redis + `ShedLock` + RabbitMQ STOMP relay | ertelendi |
 
 ### İstemcide değişmesi gerekenler (Faz 15'ten sonra biriken)
@@ -1336,6 +1659,7 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 | Bildirim akışı artık `IN_APP` döndürüyor: `NotificationDto` içinde `body`, `targetType`, `targetId` var | §2s |
 | `POST /users/me/notifications/{id}/read` tek bildirimi işaretler | §2s |
 | `ApiErrorType` HTTP kodundan değil `errorCategory` alanından okunur | §2d |
+| Rol yönetimi: `GET/POST /admin/users/{userId}/roles`, `DELETE /admin/users/{userId}/roles/{role}` | §2f3 |
 | Faz 15'in yol değişiklikleri | §0b tablosu |
 | `JobCategory.code` yorumu | kodlar artık addan türemiyor (§2m) |
 | İşlerim ekranı tek uçtan: `GET /users/me/work` | Faz 22 (§2al) |
@@ -1404,11 +1728,12 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 
 **Hiçbir denetimli kayıt fiziksel olarak silinmez.** `BaseEntity` `isDeleted` / `deletedAt` / `deletedBy` taşır; her entity `@SQLDelete` ile `DELETE`'i `UPDATE ... SET is_deleted = true`'a çevirir ve `@SQLRestriction("is_deleted = false")` ile silinmişler varsayılan sorgulardan düşer.
 
-**Kolonlar migration'da tablo adı sabitlenmeden eklendi.** `created_at` taşıyan her tablo taranıyor — `BaseEntity` alt sınıflarının tamamı bu şekilde yakalanıyor, yeni tablo eklendiğinde changelog'a elle isim yazmaya gerek yok.
+**Kolonlar migration'da tablo adı sabitlenmeden eklendi.** `created_at` taşıyan her tablo taranıyor — `BaseEntity` alt sınıflarının tamamı bu şekilde yakalanıyor, yeni tablo eklendiğinde changelog'a elle isim yazmaya gerek yok. **Ama yalnızca o migration'dan önce var olan tablolar.** `app_settings` sonradan (28-03) ve `created_at`'siz doğduğu için taramaya yakalanmamıştı; `BaseEntity`'ye taşınırken (§2ac) denetim ve soft delete sütunlarını kendi changelog'uyla (`2026/09/06-03`) aldı.
 
 **Kapsam dışı bırakılanlar ve gerekçeleri:**
 - `PendingRegistration` — **bilerek hard delete.** Kaydını hiç tamamlamamış birinin e-postasını süresiz saklamak koruma değil, gereksiz veri tutma. Kayıt akışı zaten sil-ve-yeniden-oluştur mantığıyla çalışıyor.
 - `CompanyContact` ve `JobCategory` — `BaseEntity` alt sınıfı değiller, denetim kolonları yok. `CompanyContact` bir üyelik kaydı ve silinmesi geçmiş kaybı demek; ileride `BaseEntity`'ye taşınmalı.
+- `AdminAuditEntry` ve `AdminAuditEntryDetail` — **bilerek hard delete.** Saklama işinin işi zaten fiziksel silmek; soft delete edilen bir denetim satırı süresini hiç doldurmazdı (§2av).
 - `EmailVerification`, `PhoneVerification`, `IdentityVerification` tek tabloyu (`user_verifications`) paylaşıyor; `@SQLDelete` kök sınıf `UserVerification` üzerinde, alt sınıflarda ayrıca yok. Aynı durum `Media` hiyerarşisi için de geçerli.
 
 **Benzersizlik kısmi indekslerle çözüldü.** `uk_users_email_active` ve `uk_bank_accounts_iban_active` yalnızca `is_deleted = false` satırları kapsıyor — hesabını silen kullanıcı aynı e-postayla yeniden kaydolabiliyor.

@@ -2,6 +2,7 @@ package com.exskylab.koala.core.exceptions;
 
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.helpers.MessageResolver;
+import com.exskylab.koala.core.monitoring.BackendErrorMonitor;
 import com.exskylab.koala.core.utilities.results.ErrorCategory;
 import com.exskylab.koala.core.utilities.results.ErrorResult;
 import com.exskylab.koala.core.utilities.results.FieldError;
@@ -34,9 +35,11 @@ import java.util.List;
 public class GlobalExceptionHandler {
 
     private final MessageResolver messageResolver;
+    private final BackendErrorMonitor backendErrorMonitor;
 
-    public GlobalExceptionHandler(MessageResolver messageResolver) {
+    public GlobalExceptionHandler(MessageResolver messageResolver, BackendErrorMonitor backendErrorMonitor) {
         this.messageResolver = messageResolver;
+        this.backendErrorMonitor = backendErrorMonitor;
     }
 
     @ExceptionHandler(KoalaException.class)
@@ -44,6 +47,7 @@ public class GlobalExceptionHandler {
         HttpStatus status = ex.getHttpStatus();
         if (status.is5xxServerError()) {
             log.error("Koala hatasi: {}", ex.getErrorCode(), ex);
+            backendErrorMonitor.capture(ex, ex.getErrorCode());
         } else {
             log.warn("Koala hatasi: {} - {}", ex.getErrorCode(), ex.getMessage());
         }
@@ -128,6 +132,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Result> handleUnexpected(Exception ex) {
         log.error("Beklenmeyen hata [correlationId={}]", MDC.get("correlationId"), ex);
+        backendErrorMonitor.capture(ex, "UNEXPECTED");
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "{unexpected.error}", null, ErrorCategory.UNEXPECTED, null);
     }
 

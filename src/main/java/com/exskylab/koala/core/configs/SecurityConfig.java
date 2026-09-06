@@ -1,8 +1,10 @@
 package com.exskylab.koala.core.configs;
 
 import com.exskylab.koala.core.security.SessionAuthFilter;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -28,6 +30,7 @@ public class SecurityConfig {
     }
 
     @Bean
+    @Order(2)
     public SecurityFilterChain filterChain(HttpSecurity httpSecurity) throws Exception {
         return httpSecurity
                 .csrf(AbstractHttpConfigurer::disable)
@@ -71,6 +74,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/companies/{companyId}/images/{imageId}").hasAnyRole("USER", "ADMIN")
 
                         //admin endpoints
+                        .requestMatchers(HttpMethod.GET, "/admin/users/{userId}/roles").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/admin/users/{userId}/roles").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/admin/users/{userId}/roles/{role}").hasRole("ADMIN")
                         .requestMatchers("/admin/**").hasRole("ADMIN")
 
                         //image endpoints
@@ -125,6 +131,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/legal/consents/me").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/legal/consents").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/legal/account-deletion").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/legal/account-deletion").hasAnyRole("USER", "ADMIN")
 
                         //reference data (public)
                         .requestMatchers(HttpMethod.GET, "/reference/**").permitAll()
@@ -148,6 +155,7 @@ public class SecurityConfig {
 
                         //job-application endpoints
                         .requestMatchers(HttpMethod.POST, "/job-applications/{applicationId}/respond").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/job-applications/{applicationId}/withdraw").hasAnyRole("USER", "ADMIN")
 
 
 
@@ -238,6 +246,14 @@ public class SecurityConfig {
                 .build();
     }
 
+
+
+    @Bean
+    public FilterRegistrationBean<SessionAuthFilter> sessionAuthFilterRegistration() {
+        FilterRegistrationBean<SessionAuthFilter> registration = new FilterRegistrationBean<>(sessionAuthFilter);
+        registration.setEnabled(false);
+        return registration;
+    }
 
 
     @Bean

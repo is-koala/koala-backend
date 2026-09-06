@@ -19,4 +19,6 @@ public interface DisputeService {
     Page<Dispute> getPending(Pageable pageable);
 
     boolean hasActiveDispute(UUID jobAssignmentId);
+
+    boolean hasActiveDisputeForUser(UUID userId);
 }

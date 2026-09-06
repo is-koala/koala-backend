@@ -6,6 +6,7 @@ import com.exskylab.koala.core.dtos.notificationPreference.request.UnsubscribeDt
 import com.exskylab.koala.core.dtos.notificationPreference.request.UpdateNotificationPreferencesDto;
 import com.exskylab.koala.core.dtos.notificationPreference.response.NotificationPreferenceDto;
 import com.exskylab.koala.core.helpers.ClientContext;
+import com.exskylab.koala.core.helpers.ClientIpResolver;
 import com.exskylab.koala.core.utilities.results.ErrorResult;
 import com.exskylab.koala.core.utilities.results.Result;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
@@ -35,9 +36,12 @@ import java.util.List;
 public class NotificationPreferencesController {
 
     private final NotificationPreferenceService notificationPreferenceService;
+    private final ClientIpResolver clientIpResolver;
 
-    public NotificationPreferencesController(NotificationPreferenceService notificationPreferenceService) {
+    public NotificationPreferencesController(NotificationPreferenceService notificationPreferenceService,
+                                             ClientIpResolver clientIpResolver) {
         this.notificationPreferenceService = notificationPreferenceService;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @Operation(summary = "Bildirim tercihlerimi getir",
@@ -68,7 +72,8 @@ public class NotificationPreferencesController {
             @RequestBody @Valid UpdateNotificationPreferencesDto request, HttpServletRequest httpRequest) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
-                notificationPreferenceService.updateMyPreferences(request, ClientContext.from(httpRequest)),
+                notificationPreferenceService.updateMyPreferences(
+                        request, ClientContext.from(httpRequest, clientIpResolver)),
                 NotificationPreferenceMessages.UPDATED, HttpStatus.OK));
     }
 
@@ -86,7 +91,8 @@ public class NotificationPreferencesController {
     public ResponseEntity<Result> unsubscribe(@RequestBody @Valid UnsubscribeDto request,
                                               HttpServletRequest httpRequest) {
 
-        notificationPreferenceService.unsubscribe(request.getToken(), ClientContext.from(httpRequest));
+        notificationPreferenceService.unsubscribe(
+                request.getToken(), ClientContext.from(httpRequest, clientIpResolver));
 
         return ResponseEntity.ok(new SuccessResult(
                 NotificationPreferenceMessages.UNSUBSCRIBED, HttpStatus.OK));

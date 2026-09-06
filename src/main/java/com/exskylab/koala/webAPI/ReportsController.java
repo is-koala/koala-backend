@@ -1,5 +1,7 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.core.security.RequiresPermission;
+import com.exskylab.koala.entities.StaffPermission;
 import com.exskylab.koala.core.utilities.results.ErrorResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -78,6 +80,7 @@ public class ReportsController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Şikayetler listelendi")
     })
+    @RequiresPermission(StaffPermission.CONTENT_MODERATE)
     @GetMapping("/admin/reports")
     public ResponseEntity<SuccessDataResult<PageDto<ReportDto>>> byStatus(
             @RequestParam ReportStatus status, @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
@@ -97,6 +100,7 @@ public class ReportsController {
             @ApiResponse(responseCode = "409", description = "Şikayet zaten sonuçlandırılmış",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
+    @RequiresPermission(value = StaffPermission.CONTENT_MODERATE, action = "report.review")
     @PostMapping("/admin/reports/{reportId}/review")
     public ResponseEntity<SuccessDataResult<ReportDto>> review(
             @PathVariable UUID reportId, @RequestBody @Valid ReviewReportDto request) {

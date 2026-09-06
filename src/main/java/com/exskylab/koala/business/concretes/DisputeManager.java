@@ -147,4 +147,10 @@ public class DisputeManager implements DisputeService {
     public boolean hasActiveDispute(UUID jobAssignmentId) {
         return disputeDao.existsByJobAssignmentIdAndStatusIn(jobAssignmentId, ACTIVE);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasActiveDisputeForUser(UUID userId) {
+        return disputeDao.existsActiveForUser(userId, ACTIVE);
+    }
 }

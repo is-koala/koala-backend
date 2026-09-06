@@ -5,6 +5,7 @@ import com.exskylab.koala.entities.JobEmployerType;
 import com.exskylab.koala.entities.JobStatus;
 import com.exskylab.koala.entities.JobType;
 import com.exskylab.koala.entities.SalaryType;
+import com.exskylab.koala.entities.AddressPrecision;
 import com.exskylab.koala.core.dtos.payment.response.PricingBreakdownDto;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -14,6 +15,7 @@ import lombok.Setter;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 @Getter
 @Setter
@@ -51,4 +53,7 @@ public class JobSummaryDto {
     private Double latitude;
 
     private Double longitude;
+
+    @Schema(description = "Harita koordinatının yaklaşık mı kesin mi olduğunu belirtir.")
+    private AddressPrecision addressPrecision;
 }

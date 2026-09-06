@@ -19,6 +19,11 @@ import java.io.IOException;
 public class RequestLoggingFilter extends OncePerRequestFilter {
 
     public static final String USER_ID_ATTRIBUTE = "app.userId";
+    private final ClientIpResolver clientIpResolver;
+
+    public RequestLoggingFilter(ClientIpResolver clientIpResolver) {
+        this.clientIpResolver = clientIpResolver;
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
@@ -33,7 +38,7 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
 
             String line = "{} {} -> {} ({} ms) user={} ip={}";
             Object[] args = {request.getMethod(), request.getRequestURI(), status, durationMs,
-                    userId == null ? "anonymous" : userId, ClientIpResolver.resolve(request)};
+                    userId == null ? "anonymous" : userId, clientIpResolver.resolve(request)};
 
             if (status >= 500) {
                 log.error(line, args);

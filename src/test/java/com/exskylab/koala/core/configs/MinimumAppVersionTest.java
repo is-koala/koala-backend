@@ -28,9 +28,16 @@ class MinimumAppVersionTest {
     }
 
     private MockHttpServletResponse run(String path, String version) throws Exception {
+        return run(path, version, null);
+    }
+
+    private MockHttpServletResponse run(String path, String version, String platform) throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", path);
         if (version != null) {
             request.addHeader("X-App-Version", version);
+        }
+        if (platform != null) {
+            request.addHeader("X-Client-Platform", platform);
         }
         MockHttpServletResponse response = new MockHttpServletResponse();
         filter.doFilter(request, response, chain);
@@ -113,5 +120,41 @@ class MinimumAppVersionTest {
         assertFalse(AppVersion.isAtLeast("1.9.0", "1.10.0"));
         assertTrue(AppVersion.isAtLeast("1.4", "1.4.0"));
         assertTrue(AppVersion.isAtLeast("1.4.0+build7", "1.4.0"));
+    }
+
+    @Test
+    void anIosMinimumDoesNotBlockAnOlderWebBuild() throws Exception {
+        when(settings.stringValue(eq("app.minimum-version.web"), anyString())).thenReturn("");
+        when(settings.stringValue(eq("app.minimum-version.ios"), anyString())).thenReturn("2.0.0");
+
+        assertEquals(200, run("/jobs", "1.0.0", "web").getStatus());
+        verify(chain).doFilter(any(), any());
+    }
+
+    @Test
+    void aWebBuildBelowItsOwnMinimumIsRejected() throws Exception {
+        when(settings.stringValue(eq("app.minimum-version.web"), anyString())).thenReturn("1.2.0");
+
+        MockHttpServletResponse response = run("/jobs", "1.1.0", "web");
+
+        assertEquals(426, response.getStatus());
+        assertEquals("1.2.0", response.getHeader("X-Minimum-App-Version"));
+    }
+
+    @Test
+    void anUnparsableBuildCannotBypassAPlatformMinimum() throws Exception {
+        when(settings.stringValue(eq("app.minimum-version.android"), anyString())).thenReturn("2.0.0");
+
+        assertEquals(426, run("/jobs", "surum-yok", "android").getStatus());
+    }
+
+    @Test
+    void everyPlatformCanReachAlwaysAllowedPaths() throws Exception {
+        when(settings.stringValue(anyString(), anyString())).thenReturn("99.0.0");
+
+        assertEquals(200, run("/actuator/health/readiness", "0.0.1", "ios").getStatus());
+        assertEquals(200, run("/actuator/health/readiness", "0.0.1", "android").getStatus());
+        assertEquals(200, run("/actuator/health/readiness", "0.0.1", "web").getStatus());
+        assertEquals(200, run("/actuator/health/readiness", "0.0.1", "unknown").getStatus());
     }
 }

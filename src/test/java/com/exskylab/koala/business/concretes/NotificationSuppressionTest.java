@@ -164,10 +164,10 @@ class NotificationSuppressionTest {
 
     @Test
     void anEmailToAnAddressWithoutAKoalaAccountIsNeverSuppressed() {
-        SendEmailDto invitation = email(NotificationCategory.COMPANY_UPDATES);
-        invitation.setRecipient(null);
+        SendEmailDto toCompanyAddress = email(NotificationCategory.COMPANY_UPDATES);
+        toCompanyAddress.setRecipient(null);
 
-        manager.sendEmail(invitation, DispatchPriority.NORMAL, true);
+        manager.sendEmail(toCompanyAddress, DispatchPriority.NORMAL, true);
 
         verify(producer).sendEmailTask(any());
     }

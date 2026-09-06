@@ -10,6 +10,7 @@ import com.exskylab.koala.core.dtos.jobApplication.request.CreateJobApplicationD
 import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationDetailDto;
 import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicantDto;
 import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationDto;
+import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.mappers.JobApplicationMapper;
@@ -21,6 +22,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
+import com.exskylab.koala.core.helpers.JobAddressVisibility;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,6 +33,10 @@ import java.util.UUID;
 @Service
 @Slf4j
 public class JobApplicationManager implements JobApplicationService {
+
+    private static final java.util.Set<AssignmentStatus> ADDRESS_VISIBLE_ASSIGNMENT_STATUSES =
+            java.util.EnumSet.of(AssignmentStatus.PENDING_CONFIRMATION, AssignmentStatus.CONFIRMED,
+                    AssignmentStatus.IN_PROGRESS);
 
     private static final java.util.Set<String> MY_APPLICATIONS_SORTABLE =
             java.util.Set.of("applicationDateTime", "answeredDateTime", "status");
@@ -47,6 +53,7 @@ public class JobApplicationManager implements JobApplicationService {
     private final ActivityNotificationService activityNotificationService;
     private final BankAccountService bankAccountService;
     private final PricingService pricingService;
+    private final JobAddressVisibility addressVisibility = new JobAddressVisibility();
 
 
     public JobApplicationManager(JobApplicationDao jobApplicationDao, JobService jobService,
@@ -82,7 +89,8 @@ public class JobApplicationManager implements JobApplicationService {
             throw new ValidationException(JobApplicationMessages.USER_CANNOT_APPLY_TO_OWN_JOB);
         }
 
-        if (jobApplicationDao.existsByJobIdAndUserId(jobId, authenticatedUser.getId())) {
+        if (jobApplicationDao.existsByJobIdAndUserIdAndStatusNot(jobId, authenticatedUser.getId(),
+                ApplicationStatus.WITHDRAWN)) {
             throw new ValidationException(JobApplicationMessages.USER_ALREADY_APPLIED_TO_JOB);
         }
 
@@ -150,6 +158,11 @@ public class JobApplicationManager implements JobApplicationService {
         });
 
 
+        if (jobApplication.getStatus() == ApplicationStatus.WITHDRAWN) {
+            log.error("Job application with id: {} has been withdrawn by its applicant", applicationId);
+            throw new ConflictException(JobApplicationMessages.JOB_APPLICATION_ALREADY_WITHDRAWN);
+        }
+
         if (jobApplication.getStatus() == ApplicationStatus.ACCEPTED || jobApplication.getStatus() == ApplicationStatus.REJECTED) {
             log.error("Job application with id: {} has already been responded to", applicationId);
             throw new ValidationException(JobApplicationMessages.JOB_APPLICATION_ALREADY_RESPONDED);
@@ -194,6 +207,39 @@ public class JobApplicationManager implements JobApplicationService {
 
         return jobApplicationMapper.toJobApplicationsApplicationIdPatchResponseDto(jobApplication);
 
+    }
+
+    @Override
+    @Transactional
+    public JobApplicationDetailDto withdrawApplication(UUID applicationId) {
+        log.info("Withdrawing application with id: {}", applicationId);
+
+        JobApplication jobApplication = jobApplicationDao.findById(applicationId).orElseThrow(() -> {
+            log.error("Job application with id: {} not found", applicationId);
+            return new ResourceNotFoundException(JobApplicationMessages.JOB_APPLICATION_NOT_FOUND);
+        });
+
+        UUID authenticatedUserId = securityService.getAuthenticatedUserId();
+        if (!jobApplication.getUser().getId().equals(authenticatedUserId)) {
+            log.warn("User with id: {} is not the owner of application with id: {}",
+                    authenticatedUserId, applicationId);
+            throw new ResourceNotFoundException(JobApplicationMessages.JOB_APPLICATION_NOT_FOUND);
+        }
+
+        if (jobApplication.getStatus() != ApplicationStatus.APPLIED) {
+            log.error("Job application with id: {} is not withdrawable in status: {}",
+                    applicationId, jobApplication.getStatus());
+            throw new ConflictException(JobApplicationMessages.JOB_APPLICATION_NOT_WITHDRAWABLE);
+        }
+
+        jobApplication.setStatus(ApplicationStatus.WITHDRAWN);
+        jobApplication.setAnsweredDateTime(Instant.now());
+        jobApplicationDao.save(jobApplication);
+        log.info("Job application with id: {} withdrawn", applicationId);
+
+        activityNotificationService.applicationWithdrawn(jobApplication);
+
+        return jobApplicationMapper.toJobApplicationsApplicationIdPatchResponseDto(jobApplication);
     }
 
     private void assertReadyToWork(User applicant) {
@@ -259,8 +305,14 @@ public class JobApplicationManager implements JobApplicationService {
                 ? jobApplicationDao.findAllByUserId(userId, pageable)
                 : jobApplicationDao.findAllByUserIdAndStatus(userId, status, pageable);
 
-        PageDto<MyApplicationDto> result = PageDto.of(page,
-                jobApplicationMapper.toMyApplicationDtoList(page.getContent()));
+        List<MyApplicationDto> summaries = page.getContent().stream().map(application -> {
+            MyApplicationDto dto = jobApplicationMapper.toMyApplicationDto(application);
+            boolean activeAssignment = application.getAssignment() != null
+                    && ADDRESS_VISIBLE_ASSIGNMENT_STATUSES.contains(application.getAssignment().getStatus());
+            addressVisibility.protect(application.getJob(), dto.job(), userId, activeAssignment);
+            return dto;
+        }).toList();
+        PageDto<MyApplicationDto> result = PageDto.of(page, summaries);
         galleryService.fillJobCovers(result.content().stream().map(MyApplicationDto::job).toList());
         return result;
     }
