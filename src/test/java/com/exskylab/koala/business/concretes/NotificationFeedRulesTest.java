@@ -1,6 +1,7 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.DeviceService;
+import com.exskylab.koala.business.abstracts.IysService;
 import com.exskylab.koala.business.abstracts.NotificationPreferenceService;
 import com.exskylab.koala.business.abstracts.UnsubscribeTokenService;
 import com.exskylab.koala.business.abstracts.SecurityService;
@@ -47,7 +48,8 @@ class NotificationFeedRulesTest {
 
         manager = new NotificationManager(notificationDao, mock(NotificationProducerService.class),
                 mock(DeviceService.class), new ObjectMapper(),
-                security, new PageableSanitizer(), preferences, mock(UnsubscribeTokenService.class));
+                security, new PageableSanitizer(), preferences, mock(UnsubscribeTokenService.class),
+                mock(IysService.class));
 
         when(notificationDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(notificationDao.findAllByRecipientIdAndChannelOrderByCreatedAtDesc(any(), any(), any()))

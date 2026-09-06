@@ -1,6 +1,7 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.SecurityService;
+import com.exskylab.koala.business.abstracts.IysService;
 import com.exskylab.koala.business.abstracts.UnsubscribeTokenService;
 import com.exskylab.koala.core.dtos.notificationPreference.request.NotificationPreferenceEntryDto;
 import com.exskylab.koala.core.dtos.notificationPreference.request.UpdateNotificationPreferencesDto;
@@ -45,6 +46,7 @@ class NotificationPreferenceRulesTest {
     private CommercialMessageConsentDao consentDao;
     private UnsubscribeTokenService unsubscribeTokenService;
     private SecurityService securityService;
+    private IysService iysService;
     private NotificationPreferenceManager manager;
     private User user;
 
@@ -65,9 +67,10 @@ class NotificationPreferenceRulesTest {
 
         consentDao = mock(CommercialMessageConsentDao.class);
         unsubscribeTokenService = mock(UnsubscribeTokenService.class);
+        iysService = mock(IysService.class);
 
         manager = new NotificationPreferenceManager(preferenceDao, consentDao, unsubscribeTokenService,
-                securityService);
+                securityService, iysService);
     }
 
     private void storedRow(NotificationCategory category, NotificationChannel channel, boolean enabled) {
@@ -165,8 +168,8 @@ class NotificationPreferenceRulesTest {
     }
 
     @Test
-    void theResolvedViewNeverOffersAChannelThatCarriesNoPreference() {
-        assertTrue(manager.getMyPreferences().stream().noneMatch(entry -> entry.channel() == NotificationChannel.SMS));
+    void theResolvedViewOffersSmsAsAUserPreference() {
+        assertTrue(manager.getMyPreferences().stream().anyMatch(entry -> entry.channel() == NotificationChannel.SMS));
     }
 
     @Test
