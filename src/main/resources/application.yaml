@@ -155,6 +155,7 @@ notification-preferences:
 
 rate-limit:
   enabled: ${RATE_LIMIT_ENABLED:true}
+  eviction-cron: ${RATE_LIMIT_EVICTION_CRON:0 */10 * * * *}
   max-attempts: ${RATE_LIMIT_MAX_ATTEMPTS:10}
   window: ${RATE_LIMIT_WINDOW:1m}
   upload:
@@ -166,6 +167,12 @@ rate-limit:
   write:
     max-attempts: ${RATE_LIMIT_WRITE_MAX_ATTEMPTS:60}
     window: ${RATE_LIMIT_WRITE_WINDOW:1m}
+  realtime-subscribe:
+    max-attempts: ${RATE_LIMIT_REALTIME_SUBSCRIBE_MAX_ATTEMPTS:30}
+    window: ${RATE_LIMIT_REALTIME_SUBSCRIBE_WINDOW:1m}
+  realtime-message:
+    max-attempts: ${RATE_LIMIT_REALTIME_MESSAGE_MAX_ATTEMPTS:60}
+    window: ${RATE_LIMIT_REALTIME_MESSAGE_WINDOW:1m}
   address-search:
     max-attempts: ${RATE_LIMIT_ADDRESS_SEARCH_MAX_ATTEMPTS:60}
     window: ${RATE_LIMIT_ADDRESS_SEARCH_WINDOW:1m}

@@ -7,25 +7,31 @@ import java.time.Instant;
 import java.util.UUID;
 
 public record RealtimeEventDto(RealtimeEventType type, UUID conversationId, UUID userId,
-                               MessageDto message, Boolean online, Instant at) {
+                               MessageDto message, Boolean online, Instant at,
+                               RealtimeErrorDto error) {
 
     public static RealtimeEventDto message(UUID conversationId, MessageDto message) {
         return new RealtimeEventDto(RealtimeEventType.MESSAGE, conversationId,
-                message.senderId(), message, null, Instant.now());
+                message.senderId(), message, null, Instant.now(), null);
     }
 
     public static RealtimeEventDto typing(UUID conversationId, UUID userId) {
         return new RealtimeEventDto(RealtimeEventType.TYPING, conversationId, userId,
-                null, null, Instant.now());
+                null, null, Instant.now(), null);
     }
 
     public static RealtimeEventDto read(UUID conversationId, UUID userId) {
         return new RealtimeEventDto(RealtimeEventType.READ, conversationId, userId,
-                null, null, Instant.now());
+                null, null, Instant.now(), null);
     }
 
     public static RealtimeEventDto presence(UUID userId, boolean online) {
         return new RealtimeEventDto(RealtimeEventType.PRESENCE, null, userId,
-                null, online, Instant.now());
+                null, online, Instant.now(), null);
+    }
+
+    public static RealtimeEventDto subscriptionRefused(String destination, String errorCode, String message) {
+        return new RealtimeEventDto(RealtimeEventType.ERROR, null, null,
+                null, null, Instant.now(), new RealtimeErrorDto(destination, errorCode, message));
     }
 }

@@ -24,12 +24,30 @@ ve sağlayıcı kaynaklarıyla çalıştırır.
 - `PAYMENTS_RETURN_BASE_URL=koala-staging://`
 - `IYZICO_BASE_URL=https://sandbox-api.iyzipay.com`
 - `MAIL_DELIVERY_MODE=ALLOWLIST`; allowlist dışındaki teslimat reddedilir
+- `STOMP_STAGING_ORIGIN=https://staging.iskoala.com`
 - DB, RabbitMQ, S3 ve Google anahtarları production ile ortak olamaz
 
 `SERVICE_ENVIRONMENT` ile `IYZICO_BASE_URL` artık açılışta karşılıklı
 doğrulanıyor: staging canlı Iyzico ortamına, production sandbox'a bağlanamaz ve
 eşleşmeyen yapılandırmada uygulama hiç açılmaz. Kural ve operasyon adımları
 `docs/runbooks/payments.md` içinde.
+
+## STOMP handshake origin'leri
+
+ADR-0011 gereği REST CORS allowlist'i boştur ve web origin'i oraya **eklenmez**;
+tarayıcının doğrudan konuştuğu tek yüzey STOMP handshake'idir ve onun allowlist'i
+ayrıdır. Değerler ortam başına verilir, yalnız tam origin eşleşmesi kabul edilir
+ve boş bırakılan değer o ortamın tarayıcı bağlantısını **tümüyle kapatır**:
+
+| Değişken | Local | Staging | Production |
+| --- | --- | --- | --- |
+| `STOMP_PRODUCTION_ORIGIN` | boş | boş | `https://iskoala.com` |
+| `STOMP_STAGING_ORIGIN` | boş | `https://staging.iskoala.com` | boş |
+| `STOMP_DEVELOPMENT_ORIGIN` | `http://localhost:3000` | boş | boş |
+
+Origin başlığı taşımayan native (mobil) bağlantılar bu listeden etkilenmez.
+Soket `wss://` üzerinden servis edilmeli; TLS reverse proxy'de sonlanır ve kod
+bunu zorlayamaz (CLAUDE.md §2ai).
 
 Staging web `X-Robots-Tag: noindex, nofollow, noarchive` ile tümden kapatılır ve
 Dokploy proxy katmanında HTTP Basic Auth arkasında tutulur. Parola ve anahtarlar

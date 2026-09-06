@@ -4,7 +4,6 @@
 
 Bu dosya projeyi konu konu anlatır: mimari, alınmış kararlar ve gerekçeleri, tuzaklar. Bir konuya dokunmadan önce ilgili başlığı oku.
 
-
 ## 0. Nerede kaldık — oturum devri
 
 **Son durum (30.08.2026):** 156 endpoint, 64 entity, 97 test dosyası, 44 Liquibase changelog, 536 mesaj anahtarı. `./mvnw verify` — 604 birim testi yeşil; entegrasyon testleri Docker gerektirir.
@@ -180,7 +179,6 @@ Servis ve controller katmanı düz anahtar kullanır: `"{user.not.found}"`. Çö
 
 **`details` yalnızca doğrulama hatalarında.** `{field, message}` çiftleri, mesajları çözümlenmiş hâlde — istemci ham anahtar görmez.
 
-
 **HTTP kodu exception'ın kendisinde.** `KoalaException` bir `HttpStatus` taşır; alt sınıflar constructor'da belirler (404, 403, 409, 401, 502). `errorCode` sınıf adından türetilir: `UserNotFoundException` → `USER_NOT_FOUND`. Eskiden hepsi ayrımsız 400 dönüyordu.
 
 **İstemciye iç detay sızmaz.** Beklenmeyen hatalarda gövdeye sabit bir metin yazılır, exception yalnızca correlation ID ile loglanır.
@@ -349,7 +347,20 @@ Gerekçe: (b) elle SQL yazmayı ortadan kaldırmıyor, yalnızca kopyalanacak bi
 
 Aşıldığında 429 ve `TOO_MANY_REQUESTS` döner.
 
+**Soket tarafında iki bütçe daha var ve bunlar yukarıdaki tablonun parçası değil.** `RateLimitFilter` bir servlet filtresi; STOMP kareleri ona hiç uğramıyor, dolayısıyla `Bucket` enum'unda karşılıkları yok ve **429 dönmüyorlar**. Sayaç `StompAuthChannelInterceptor` içinden, aynı `RateLimiter` üzerinden düşülüyor:
+
+| Bütçe | Kapsam | Varsayılan | Anahtar |
+|---|---|---|---|
+| `stomp-subscribe` | STOMP `SUBSCRIBE` kareleri | 30 / 1 dk | önek + STOMP oturum id'si |
+| `stomp-message` | STOMP `SEND` kareleri | 60 / 1 dk | önek + STOMP oturum id'si |
+
+**Anahtar STOMP oturumudur, IP değil** — issue'nun istediği sınır "bağlantı başına". `SUBSCRIBE` bütçesi yetki kontrolünden **önce** tükeniyor, yani bir bot veritabanına hiç dokunmadan durduruluyor.
+
+**İki bütçenin aşım davranışı farklı, ve fark bilinçli.** `SUBSCRIBE` aşımı `TooManyRequestsException` fırlatır; bu §2ai'deki yola girip `REALTIME_TOO_MANY_FRAMES` koduyla o aboneliğe ret karesi olarak döner, bağlantı ayakta kalır. `SEND` aşımında ise kare **sessizce düşürülür** (`preSend` null döndürür): karenin cevaplanabileceği bir abonelik id'si yok, `ERROR` göndermek soketi kapatırdı ve bu tam da bu issue'nun kapatmaya çalıştığı davranış olurdu. Bugün tek `@MessageMapping` yazıyor göstergesi; tuşa basıldıkça olay üreten bir istemcinin dakikada 60'ı aşması olağan, ve bunun bedeli bütün gerçek zamanlı oturumu kaybetmek olamaz. Yazıyor göstergesi zaten en iyi çaba — §2z'nin "gerçek zamanlı katman iyileştirme, tek kaynak değil" kuralının aynısı.
+
 Sayaç bellekte (`ConcurrentHashMap`), yani **tek örnek varsayımıyla çalışıyor**. Birden fazla örnek çalıştırıldığında sınır örnek başına uygulanır; o noktada Redis'e taşınmalı.
+
+**Sayaç artık gerçekten temizleniyor.** `RateLimiter.evictExpired` baştan beri yazılıydı ama **hiçbir yerden çağrılmıyordu**; süresi dolmuş her pencere haritada kalıyordu. IP anahtarlarında bu yavaş bir sızıntıydı, gerçek zamanlı bütçeler geldiğinde hızlandı: anahtar STOMP oturumu olduğu için **her yeni WebSocket bağlantısı kalıcı bir satır** bırakırdı. `RateLimiterEvictionScheduler` on dakikada bir süpürüyor; adım idempotent olduğu için çok örnekli kurulumda da zararsız.
 
 Testlerde `rate-limit.enabled=false`; açıkça test eden sınıflar `@TestPropertySource` ile kendi ayarını verir.
 
@@ -794,6 +805,8 @@ on iki kuralla sabitliyor. Operasyon tarafı `docs/runbooks/payments.md`'de.
 - `/topic/presence/{userId}` — o kullanıcının `PRESENCE` olayları.
 - `/app/conversations/{id}/typing` — istemcinin yazıyor bildirimi. **Sunucu tarafta yetki kontrolü var** (`assertParticipant`), yoksa yabancı biri herhangi bir konuşmaya olay basabilirdi.
 
+**Zarfın beşinci olay tipi `ERROR`.** Reddedilen bir abonelik, denenen hedefin kendi aboneliğine `type: ERROR` ve `error: {destination, errorCode, message}` taşıyan bir `RealtimeEventDto` alır; gerekçe ve mekanik §2ai'de.
+
 **Sohbet listesi için kişisel kuyruk var.** Yeni mesaj hem konuşma topic'ine hem **her iki tarafın** `/user/queue/messages` kuyruğuna gidiyor. Öncesinde yalnızca konuşma topic'i vardı; sohbet listesini canlı tutmak için istemcinin 20 ayrı topic'e abone olması gerekiyordu, o yüzden liste ancak elle tazelenince güncelleniyordu. Kopya iki tarafa da gider — gönderenin *ikinci cihazındaki* liste de güncellensin diye. Sohbeti açık olan istemci aynı olayı iki kanaldan alır, `message.id` ile tekilleştirmesi gerekir.
 
 **Kullanıcı hedefi id ile anahtarlanıyor, e-posta ile değil.** `UserPrincipal` bir `UserDetails` ve `getUsername()` e-posta döndürüyor; `Authentication.getName()` de onu kullandığı için `convertAndSendToUser(userId, …)` hiçbir zaman eşleşmezdi. `RealtimeAuthentication` yalnızca `getName()`'i ezip kullanıcı id'sini döndürüyor. E-posta değişebilir bir tanımlayıcı, yönlendirmeyi ona bağlamak istenmedi.
@@ -969,7 +982,25 @@ Ayrıca taşıma sınırları kondu: mesaj 64 KB, gönderim tamponu 512 KB, gön
 
 **TLS bu katmanın dışında.** Soket `wss://` üzerinden servis edilmeli; şifreleme reverse proxy'de sonlanıyor. Uygulama `ws://` ile de çalışır, bu yüzden **prod'da proxy'nin TLS sonlandırdığından emin olunmalı** — kod bunu zorlayamaz.
 
-`StompSubscriptionSecurityTest` on bir senaryoyu sabitliyor, `RealtimeFanoutTest` yedi tanesini.
+**Yetkisiz abonelik artık bağlantıyı düşürmüyor.** Yetki reddi `preSend` içinden bir `ForbiddenException` olarak çıkıyordu ve Spring'in varsayılan davranışı bunu bir STOMP `ERROR` karesine çevirip **soketi `CloseStatus.PROTOCOL_ERROR` (1002) ile kapatıyordu** (`StompSubProtocolHandler.sendErrorMessage`, `finally` bloğu). Sonucu şuydu: izinli bir konuşmaya abone olmuş istemci, ikinci bir izinsiz aboneliği denediği anda **ilk aboneliğini de kaybediyordu**; tek bir yanlış id bütün gerçek zamanlı oturumu düşürüyordu.
+
+`StompErrorFrameHandler` bunu kapatıyor — `StompEndpointRegistry.setErrorHandler` ile takılan bir `StompSubProtocolErrorHandler`. `SUBSCRIBE` reddinde `ERROR` yerine, **başarısız aboneliğin kendi `id`'sine adreslenmiş bir `MESSAGE` karesi** dönüyor; `sendToClient` yalnızca komut `ERROR` olduğunda kapattığı için bağlantı ayakta kalıyor ve istemci reddi tam da denediği aboneliğin callback'inde görüyor.
+
+**Bu, issue'nun lafzıyla STOMP spec'i arasındaki çelişkinin çözümü.** Issue "ilgili aboneliğe hata frame'i dönsün" diyor; ama STOMP 1.2'de `ERROR` karesi tanımı gereği bağlantıyı sonlandırır ve Spring de öyle davranır. İkisi birden olamaz. Seçilen taraf kabul kriteri: bağlantı düşmüyor, hata bilgisi aboneliğe gidiyor.
+
+**Zarf değişmedi, `RealtimeEventDto` genişledi.** Ret karesi de aynı zarfı taşıyor: `type: ERROR` ve `error: {destination, errorCode, message}`. Ayrı bir gövde şekli seçilseydi, `/topic/conversations/{id}` callback'i bazen `RealtimeEventDto` bazen başka bir şey alırdı; istemci `type` üzerinde zaten dallanıyor.
+
+**`CONNECT` reddi hâlâ soketi kapatıyor ve kapatmalı** — kimliği doğrulanmamış bir bağlantıyı açık tutmanın anlamı yok. Değişen şey `ERROR` karesinin **metni**: Spring'in varsayılanı `ex.getMessage()` yazıyordu, yani istemciye `Failed to send message to clientInboundChannel` gibi iç detay gidiyordu. Artık katalogdan çözülmüş metin gidiyor (`{realtime.frame.rejected}`, ya da hata bir `KoalaException` ise onun anahtarı). **Token bu karede hiçbir zaman görünmüyordu** — `MessageDeliveryException` başarısız mesajı yalnızca `toString()`'e ekler, Spring ise `getMessage()` okur; yine de `StompErrorFrameTest` bunu regresyon olarak sabitliyor.
+
+**Asıl kusur origin allowlist'inde değil, CORS filtresindeydi.** `realtime.origins.*` ve `OriginHandshakeInterceptor` baştan doğruydu ama **hiç çalışmıyordu**: `CorsConfig` filtresi `/**` altına kayıtlı ve REST allowlist'i ADR-0011 gereği **boş**, dolayısıyla `Origin` başlığı taşıyan her handshake isteği daha güvenlik zinciri sırasında **403** alıyordu. Yani `STOMP_PRODUCTION_ORIGIN` ne yazarsa yazsın `https://iskoala.com` üzerinden tarayıcı STOMP bağlantısı **kurulamıyordu**; allowlist ölü koddu. Tarayıcı WebSocket handshake'i CORS'a tabi değildir (preflight yok, `Access-Control-Allow-Origin` aranmaz) ama sunucudaki `CorsFilter` `Origin` başlığını görüp reddediyordu.
+
+`CorsConfig` artık gerçek zamanlı uç için **hiç CORS görüşü bildirmiyor** (`getCorsConfiguration` null döner), kararı tümüyle `OriginHandshakeInterceptor`'a bırakıyor. İki allowlist'in ayrı olması ADR-0011'in kararı; bu düzeltme o ayrımı fiilen çalışır hâle getiriyor. `/ws` için CORS yapılandırması **kopyalanmadı** — kopyalansaydı aynı origin listesi iki yerde durur ve ayrışırdı.
+
+**Muafiyet yol bazlı, `Upgrade` başlığına bakmıyor.** Yani `/ws` ve altındaki her istek CORS filtresini atlıyor, yalnızca gerçek handshake değil. Bu kabul edilebilir çünkü o önek **yalnızca** STOMP ucunu servis ediyor; altına ikinci bir handler eklenirse muafiyetin daraltılması gerekir.
+
+**Ret metni her zaman varsayılan dilde.** `MessageResolver` `LocaleContextHolder`'dan okuyor ve soket iş parçacığında `Accept-Language` çözümlenmiş bir istek yok; §2aj'nin "başlık yoksa Türkçe" varsayılanına düşülüyor. İstemcinin dilini soket üzerinden taşımak isteniyorsa `CONNECT` karesine bir dil başlığı eklenip burada okunması gerekir — bugün yapılmadı.
+
+`StompSubscriptionSecurityTest` on bir senaryoyu, `StompErrorFrameTest` ikisini, `StompConnectionRateLimitTest` üçünü ve `RealtimeFanoutTest` yedisini sabitliyor. `RealtimeHandshakeIT` beş kuralı **gerçek soket üzerinden** kanıtlıyor: izinli origin bağlanır, tanınmayan origin handshake'i geçemez, origin taşımayan native istemci bağlanır, geçersiz token oturum açamaz, ve **yetkisiz abonelik bağlantıyı düşürmeden o aboneliğe ret karesi döndürür**.
 
 ## 2aj. İki dil tek yerden
 
@@ -1606,6 +1637,10 @@ Birim testlerde `CommissionCalculator` artık `FallbackSettings.commissionCalcul
 
 **Faz 19 testleri.** `ErrorCodeTest` (yedi tipli yüzey, mesaj anahtarından türeyen kod), `LocaleSafetyTest` (locale'siz büyük/küçük harf yok), `RequestValidationTest` (çapraz alan kuralları DTO'da), `StompSubscriptionSecurityTest` (abonelik yetkisi).
 
+**Gerçek zamanlı güvenlik testleri (§2ai).** `StompErrorFrameTest` iki kural: reddedilen abonelik soketi kapatan `ERROR` karesiyle değil, kendi aboneliğine adreslenmiş bir `MESSAGE` karesiyle yanıtlanır; başarısız `CONNECT` iç detay değil katalog metni döndürür ve token'ı hiçbir zaman yankılamaz. `StompConnectionRateLimitTest` üç kural: abonelik seli bütçe dolunca reddedilir, mesaj seli de öyle, ve bir bağlantı başka bir bağlantının bütçesini harcayamaz. `CorsContractTest` bir kural kazandı: **gerçek zamanlı handshake REST CORS allowlist'ine tabi değildir** — bu kural olmadan boş allowlist bütün tarayıcı bağlantılarını 403 ile kesiyordu.
+
+`RealtimeHandshakeIT` bunları gerçek bir soket üzerinde `WebSocketStompClient` ile doğruluyor ve `webEnvironment = RANDOM_PORT` kullandığı için **`@Transactional` olamaz** — sunucu ayrı bir iş parçacığında kendi transaction'ında okuyor, geri alınan bir test transaction'ındaki kullanıcı/oturum satırlarını göremez. Satırlar her testte benzersiz e-posta ve cihaz kimliğiyle yazılıyor.
+
 **Faz 18 testleri.** `AggregateBoundaryTest` (manager→DAO sınırı, gerekçeli muafiyetler), `EagerFetchCoverageIT` (liste sorgularında lazy eşlikçi zorunluluğu). `LogPrivacyTest` genişletildi: artık yalnızca getter'ları değil, **değişken/parametre üzerinden** geçen kişisel veriyi de yakalıyor — yazıldığı anda iki gerçek sızıntı buldu (`JavaMailSenderManager` ham e-posta, `PhoneVerificationManager` ham telefon).
 
 **Denetim kaydı testleri (§2av).** `AuditScopeTest` on dört kural sabitliyor: her değişiklik yazılır, reddedilen istek yazılır, filtresiz liste yüklemesi yazılmaz, filtreli arama yazılır, tek kayıt okuması yazılır, hassas okuma filtresiz de yazılır, sayfalama parametresi filtre değildir, boş parametre filtre değildir, GET mutating izin altında bile değiştirmez, `sensitivity` izinlerin en yükseğidir, kaynak türü `/admin` altındaki koleksiyondur, kayıt id'si yolun ilk değişkenidir, hedefsiz istek null yerine boş string verir. `AdminAuditRetentionSchedulerTest` dört kural: her koşuda iki pencere de uygulanır, kapalıyken hiçbir şey silinmez, patlayan koşu zamanlayıcıdan kaçmaz, varsayılan süreler 24/120/6 aydır.
@@ -1771,7 +1806,6 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 - **Anonim değerlendirme — yapılmayacak** (§2am).
 
 **Sandbox'ta doğrulanması gereken:** Iyzico akışı uçtan uca test edilmedi. Protokol dokümana karşı denetlendi ve dört blocker düzeltildi (§2x), ama gerçek bir sandbox işlemiyle görülmesi gerekenler: ödeme → emanet → işçiye çıkış zinciri, ve **kısmi iade + disapprove ikilisinin sıralaması** — doküman marketplace'te bu ikisinin birlikte kullanımına dair sıra vermiyor. Faz 7C.
-
 
 ## 8. Soft delete
 
