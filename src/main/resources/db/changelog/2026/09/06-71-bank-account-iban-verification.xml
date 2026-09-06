@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-06-71-bank-account-verification-attempt" author="koala">
+        <addColumn tableName="bank_accounts">
+            <column name="verification_reference" type="VARCHAR(32)"/>
+            <column name="verification_amount" type="NUMERIC(19,2)"/>
+            <column name="verification_started_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="verification_expires_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="verified_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="verification_attempts" type="INTEGER" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="account_holder_name_verified" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <sql>
+            CREATE UNIQUE INDEX uk_bank_accounts_verification_reference
+                ON bank_accounts (verification_reference)
+                WHERE verification_reference IS NOT NULL;
+        </sql>
+        <rollback>
+            <sql>DROP INDEX IF EXISTS uk_bank_accounts_verification_reference;</sql>
+            <dropColumn tableName="bank_accounts" columnName="account_holder_name_verified"/>
+            <dropColumn tableName="bank_accounts" columnName="verification_attempts"/>
+            <dropColumn tableName="bank_accounts" columnName="verified_at"/>
+            <dropColumn tableName="bank_accounts" columnName="verification_expires_at"/>
+            <dropColumn tableName="bank_accounts" columnName="verification_started_at"/>
+            <dropColumn tableName="bank_accounts" columnName="verification_amount"/>
+            <dropColumn tableName="bank_accounts" columnName="verification_reference"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-06-71-bank-account-verify-permission" author="koala">
+        <sql>
+            INSERT INTO staff_role_permissions (id, staff_role_id, permission_code, created_at)
+            SELECT gen_random_uuid(), role.id, 'bank.account.verify', now()
+            FROM staff_roles role
+            WHERE role.code = 'FINANCE_OFFICER'
+            ON CONFLICT ON CONSTRAINT uk_staff_role_permissions_role_code DO NOTHING;
+        </sql>
+        <rollback>
+            <sql>
+                DELETE FROM staff_role_permissions
+                WHERE permission_code = 'bank.account.verify';
+            </sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>
