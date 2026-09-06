@@ -27,30 +27,42 @@ public class StaffPermissionAuthorizationManager implements AuthorizationManager
     private static final AuthorizationDecision DENIED = new AuthorizationDecision(false);
 
     private final ObjectProvider<RequestMappingHandlerMapping> handlerMappings;
+    private final StaffAuditRecorder staffAuditRecorder;
 
     public StaffPermissionAuthorizationManager(
-            @Qualifier("requestMappingHandlerMapping") ObjectProvider<RequestMappingHandlerMapping> handlerMappings) {
+            @Qualifier("requestMappingHandlerMapping") ObjectProvider<RequestMappingHandlerMapping> handlerMappings,
+            StaffAuditRecorder staffAuditRecorder) {
         this.handlerMappings = handlerMappings;
+        this.staffAuditRecorder = staffAuditRecorder;
     }
 
     @Override
     public AuthorizationResult authorize(Supplier<? extends Authentication> authentication,
                                          RequestAuthorizationContext context) {
 
-        RequiresPermission required = requiredBy(context.getRequest());
+        HttpServletRequest request = context.getRequest();
+        RequiresPermission required = requiredBy(request);
         if (required == null) {
             log.warn("Yetki anotasyonu olmayan yönetim isteği reddedildi: {} {}",
-                    context.getRequest().getMethod(), context.getRequest().getRequestURI());
+                    request.getMethod(), request.getRequestURI());
             return DENIED;
         }
 
         Authentication current = authentication.get();
+        AuthorizationDecision decision = decide(current, required);
+
+        staffAuditRecorder.observe(request, required, current, decision.isGranted());
+
+        return decision;
+    }
+
+    private static AuthorizationDecision decide(Authentication current, RequiresPermission required) {
         if (current == null || !current.isAuthenticated()) {
             return DENIED;
         }
 
         if (current.getPrincipal() instanceof StaffPrincipal staff) {
-            return decide(staff, required);
+            return decideForStaff(staff, required);
         }
 
         boolean marketplaceAdmin = current.getAuthorities().stream()
@@ -59,7 +71,7 @@ public class StaffPermissionAuthorizationManager implements AuthorizationManager
         return marketplaceAdmin ? GRANTED : DENIED;
     }
 
-    private static AuthorizationDecision decide(StaffPrincipal staff, RequiresPermission required) {
+    private static AuthorizationDecision decideForStaff(StaffPrincipal staff, RequiresPermission required) {
         if (!staff.isRegistered()) {
             return DENIED;
         }
