@@ -61,7 +61,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
             PARSER.parse("/companies"),
             PARSER.parse("/companies/{companyId}/images"),
             PARSER.parse("/jobs/{jobId}/images"),
-            PARSER.parse("/admin/badges/{badgeId}/icon"));
+            PARSER.parse("/admin/badges/{badgeId}/icon"),
+            PARSER.parse("/disputes/{disputeId}/evidence"));
 
     private static final PathPattern MESSAGE_PATH =
             PARSER.parse("/conversations/{conversationId}/messages");
