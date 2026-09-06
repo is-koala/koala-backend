@@ -619,6 +619,10 @@ Kurallar (`cancellation.*` env'lerinden ayarlanır):
 
 İptal atama başına tektir (`uk_cancellations_assignment_active`), yalnızca `PENDING_CONFIRMATION`/`CONFIRMED`/`IN_PROGRESS` durumlarında mümkün.
 
+**İptal iadesi atamanın "son iadesi" değildir.** İptal akışı ürettiği `Refund` kaydını aynı transaction içinde `cancellations.refund_id` ile doğrudan bağlar; cevap da yalnız bu bağlantının durumunu taşır. Controller iptalden sonra `refunds` tablosuna ikinci bir sorgu atmaz. Böylece sonradan açılan bir uyuşmazlık ya da personel iadesi, geçmiş iptalin yaşam döngüsü diye gösterilemez. Migration öncesi iptallerde güvenilir bir nedensellik anahtarı bulunmadığı için `refund_id` bilinçli olarak nullable'dır ve eski kaydın `refundStatus`/`refundCompletedAt` alanları `null` dönebilir; tutar veya zamana bakarak tahmin yapılmaz.
+
+**İptal para alanları JSON'da exact decimal string'dir.** `CancellationPreviewDto` ve `CancellationDto` içindeki `feeRate`, `feeAmount` ve `refundAmount` `BigDecimal.toPlainString()` eşdeğeriyle çıkar; bilimsel gösterim kullanılmaz ve veritabanındaki ölçek korunur. Hesap ve kalıcılık katmanında para yine `BigDecimal`'dır (§2e).
+
 **Açık uyuşmazlık emaneti dondurur.** `PayoutManager.releaseToWorker` artık `disputeDao.existsByJobAssignmentIdAndStatusIn(..., ACTIVE)` kontrolü yapıyor; açık uyuşmazlık varsa para işçiye çıkmaz. Bu kontrol `PaymentStateMachine`'in içine konmadı çünkü state machine para durumunu bilir, uyuşmazlığı bilmez.
 
 Uyuşmazlık yalnızca **emanette para varken** açılabilir, atama başına aynı anda bir tane açık kalabilir (`uk_disputes_assignment_open` kısmi indeksi `status <> 'RESOLVED'` ile). Çözüm admin'de: `RELEASE_TO_WORKER` parayı çıkarır, `REFUND_EMPLOYER` iade eder, `DISMISSED` emanete dokunmaz.

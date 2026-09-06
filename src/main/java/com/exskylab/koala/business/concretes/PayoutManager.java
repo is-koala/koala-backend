@@ -23,7 +23,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -139,12 +138,6 @@ public class PayoutManager implements PayoutService {
     @Transactional(readOnly = true)
     public List<Payout> getPayoutsForWorker(UUID workerId) {
         return payoutDao.findAllByWorkerIdOrderByCreatedAtDesc(workerId);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public Optional<Refund> getLatestRefundForAssignment(UUID jobAssignmentId) {
-        return refundDao.findFirstByPaymentJobAssignmentIdOrderByCreatedAtDesc(jobAssignmentId);
     }
 
     private Payment settledPayment(UUID jobAssignmentId) {

@@ -81,8 +81,8 @@ class CancellationPreviewTest {
 
         CancellationPreviewDto preview = manager.previewCancellation(a.getId());
 
-        assertEquals(0, preview.feeRate().signum());
-        assertEquals(0, new BigDecimal("1500.00").compareTo(preview.refundAmount()));
+        assertEquals("0.0000", preview.feeRate());
+        assertEquals("1500.00", preview.refundAmount());
         assertTrue(preview.cancellableNow());
     }
 
@@ -91,7 +91,7 @@ class CancellationPreviewTest {
         JobAssignment a = assignment(AssignmentStatus.CONFIRMED, startsInHours(72));
         when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
 
-        assertEquals(0, manager.previewCancellation(a.getId()).feeRate().signum());
+        assertEquals("0.0000", manager.previewCancellation(a.getId()).feeRate());
     }
 
     @Test
@@ -101,9 +101,9 @@ class CancellationPreviewTest {
 
         CancellationPreviewDto preview = manager.previewCancellation(a.getId());
 
-        assertEquals(0, new BigDecimal("0.50").compareTo(preview.feeRate()));
-        assertEquals(0, new BigDecimal("750.00").compareTo(preview.feeAmount()));
-        assertEquals(0, new BigDecimal("750.00").compareTo(preview.refundAmount()));
+        assertEquals("0.5000", preview.feeRate());
+        assertEquals("750.00", preview.feeAmount());
+        assertEquals("750.00", preview.refundAmount());
     }
 
     @Test
@@ -113,7 +113,7 @@ class CancellationPreviewTest {
 
         CancellationPreviewDto preview = manager.previewCancellation(a.getId());
 
-        assertEquals(0, preview.refundAmount().signum());
+        assertEquals("0.00", preview.refundAmount());
         assertTrue(preview.noticeMinutes() <= 0);
     }
 

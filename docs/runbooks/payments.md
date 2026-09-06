@@ -185,6 +185,12 @@ ile düzelt. Bunu yapan kişi olayı issue'ya yazar.
 **İade emanete geri dönmez.** `refundEmployer` atamayı `REFUNDED` yapar; bu
 durumdan çıkış yoktur. Yanlış atamaya iade başlatıldıysa geri alınamaz.
 
+İptal akışının ürettiği iade `cancellations.refund_id` üzerinden ilgili iptal
+kaydına doğrudan bağlıdır. Bir iptalin yaşam döngüsünü incelerken atamanın en son
+iadesini seçme; sonradan açılmış personel veya uyuşmazlık iadeleri aynı atamaya
+ait olabilir. Migration öncesi iptallerde bu nedensellik kanıtlanamadığı için
+bağlantı boş kalabilir.
+
 ## 4. Mutabakat farkı
 
 Bizim tarafımızdaki üç kaynak: `payments` (ne tahsil ettik),
@@ -453,4 +459,3 @@ başlatılamaz ve mühendislik tarafı bunları bekler.
 9. **Rotasyon sahibinin atanması.** Bölüm 5'teki tablodaki "Ödeme sahibi"
    bugün bir isim değil, bir rol. Canlı anahtarlar alınırken gerçek kişi
    yazılmalı.
-

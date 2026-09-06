@@ -12,6 +12,7 @@ import com.exskylab.koala.core.dtos.cancellation.response.CancellationPreviewDto
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.core.helpers.Concealment;
 import com.exskylab.koala.core.helpers.CancellationPolicy;
+import com.exskylab.koala.core.helpers.PlainDecimalStringConverter;
 import com.exskylab.koala.dataAccess.CancellationDao;
 import com.exskylab.koala.entities.*;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
@@ -96,11 +97,11 @@ public class CancellationManager implements CancellationService {
         assignment.setStatus(AssignmentStatus.CANCELLED);
         jobAssignmentService.save(assignment);
 
-        Cancellation saved = cancellationDao.save(cancellation);
-
         if (escrowHeld && outcome.refundAmount().signum() > 0) {
-            payoutService.refundEmployer(jobAssignmentId, outcome.refundAmount(), reason);
+            cancellation.setRefund(payoutService.refundEmployer(jobAssignmentId, outcome.refundAmount(), reason));
         }
+
+        Cancellation saved = cancellationDao.save(cancellation);
 
         log.info("Assignment {} cancelled by {} ({}), notice {} min, fee {}, refund {}",
                 jobAssignmentId, actorId, party, notice.toMinutes(),
@@ -128,7 +129,9 @@ public class CancellationManager implements CancellationService {
         boolean cancellableNow = CANCELLABLE.contains(assignment.getStatus())
                 && !cancellationDao.existsByJobAssignmentId(jobAssignmentId);
 
-        return new CancellationPreviewDto(outcome.feeRate(), outcome.feeAmount(), outcome.refundAmount(),
+        return new CancellationPreviewDto(PlainDecimalStringConverter.convert(outcome.feeRate()),
+                PlainDecimalStringConverter.convert(outcome.feeAmount()),
+                PlainDecimalStringConverter.convert(outcome.refundAmount()),
                 notice.toMinutes(), cancellableNow);
     }
 
