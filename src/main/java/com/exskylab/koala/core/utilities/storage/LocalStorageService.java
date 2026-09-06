@@ -37,7 +37,7 @@ public class LocalStorageService implements StorageService {
             log.info("File stored locally: {}", target);
             return key;
         } catch (IOException e) {
-            log.error("Local file store failed for {}: {}", key, e.getMessage());
+            log.error("Local file store failed for {}", key, e);
             throw new ValidationException(StorageMessages.UPLOAD_FAILED);
         }
     }
@@ -48,7 +48,7 @@ public class LocalStorageService implements StorageService {
             Files.deleteIfExists(resolve(key));
             log.info("Local file deleted: {}", key);
         } catch (IOException e) {
-            log.error("Local file delete failed for {}: {}", key, e.getMessage());
+            log.error("Local file delete failed for {}", key, e);
             throw new ValidationException(StorageMessages.DELETE_FAILED);
         }
     }
@@ -62,7 +62,7 @@ public class LocalStorageService implements StorageService {
             }
             return Files.readAllBytes(source);
         } catch (IOException e) {
-            log.error("Local file read failed for {}: {}", key, e.getMessage());
+            log.error("Local file read failed for {}", key, e);
             throw new ValidationException(StorageMessages.DOWNLOAD_FAILED);
         }
     }

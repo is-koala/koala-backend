@@ -50,7 +50,7 @@ public class EmailConsumer {
         try{
             notification = notificationService.getById(emailTaskDto.id());
         }catch (Exception e){
-            log.error("Notification not found to send mail ID: {}. Aborting request.", emailTaskDto.id(), e.getMessage());
+            log.error("Notification not found to send mail ID: {}. Aborting request.", emailTaskDto.id(), e);
             throw new AmqpRejectAndDontRequeueException(
                     "Email notification does not exist: " + emailTaskDto.id(), e);
         }
@@ -94,7 +94,7 @@ public class EmailConsumer {
             notification.setSentAt(Instant.now());
             log.info("Email task sent for id: {}", emailTaskDto.id());
         }catch (Exception e){
-            log.error("Email task could not be sent for id: {}, Error: {}", emailTaskDto.id(), e.getMessage());
+            log.error("Email task could not be sent for id: {}", emailTaskDto.id(), e);
             notification.setStatus(NotificationStatus.FAILED);
             String failureMessage = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
             notification.setFailureReason(failureMessage.substring(0, Math.min(failureMessage.length(), 255)));

@@ -146,7 +146,7 @@ public class NotificationManager implements NotificationService {
         try {
             notification.setTemplateParameters(objectMapper.writeValueAsString(finalTemplateParameters));
         } catch (JacksonException e) {
-            log.error("Error while serializing template parameters for email with {} ErrorMessage: {}", recipientInfo, e.getMessage());
+            log.error("Error while serializing template parameters for email with {}", recipientInfo, e);
             throw new ExternalServiceException("{parameters.could.not.serialize}");
         }
 
@@ -230,7 +230,7 @@ public class NotificationManager implements NotificationService {
         try {
             notification.setTemplateParameters(objectMapper.writeValueAsString(finalTemplateParameters));
         } catch (JacksonException e) {
-            log.error("Error while serializing template parameters for email with userId: {} ErrorMessage: {}", sendSmsDto.getRecipient().getId(), e.getMessage());
+            log.error("Error while serializing template parameters for email with userId: {}", sendSmsDto.getRecipient().getId(), e);
             throw new ExternalServiceException("{parameters.could.not.serialize}");
         }
 
@@ -314,7 +314,7 @@ public class NotificationManager implements NotificationService {
             try{
                 notification.setTemplateParameters(objectMapper.writeValueAsString(finalTemplateParameters));
             }catch (JacksonException e){
-                log.error("Error while serializing template parameters for push notification with userId: {} ErrorMessage: {}", recipient.getId(), e.getMessage());
+                log.error("Error while serializing template parameters for push notification with userId: {}", recipient.getId(), e);
                 throw new ExternalServiceException("{parameters.could.not.serialize}");
             }
 
@@ -376,17 +376,17 @@ public class NotificationManager implements NotificationService {
                 switch (channel) {
                     case EMAIL -> {
                         log.error("Critical email notification could not be queued for notification id: {}. " +
-                                "The process will stop.", id);
+                                "The process will stop.", id, e);
                         throw new ExternalServiceException("{critical.email.dispatch.failed}");
                     }
                     case SMS -> {
                         log.error("Critical SMS notification could not be queued for notification id: {}. " +
-                                "The process will stop.", id);
+                                "The process will stop.", id, e);
                         throw new ExternalServiceException("{critical.sms.dispatch.failed}");
                     }
                     case PUSH -> {
                         log.error("Critical push notification could not be queued for notification id: {}. " +
-                                "The process will stop.", id);
+                                "The process will stop.", id, e);
                         throw new ExternalServiceException("{critical.push.dispatch.failed}");
                     }
                     default -> throw new ValidationException("{invalid.notification.channel}");
@@ -395,7 +395,7 @@ public class NotificationManager implements NotificationService {
             }
 
             log.error("Non-critical notification could not be queued for notification id: {}. " +
-                    "The process will continue. A cleanup job might handle this.", id);
+                    "The process will continue. A cleanup job might handle this.", id, e);
 
         }
     }

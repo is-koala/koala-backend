@@ -505,7 +505,7 @@ public class UserManager implements UserService {
         log.info("Updating address for user with ID: {}", currentUser.getId());
 
         var address = addressService.createAddress(addressDto);
-        log.info("Created address for user with AddressId: {}, UserId: ", address.getId(), currentUser.getId());
+        log.info("Created address for user with AddressId: {}, UserId: {}", address.getId(), currentUser.getId());
 
         currentUser.setAddress(address);
 
