@@ -1682,7 +1682,27 @@ Liste üç ayda bir güncelleniyor; `scripts/fetch-csca-anchors.sh` çalıştır
 
 **Sertifikaların sekizi explicit EC parameters kullanıyor** ve JDK'nın varsayılan `CertificateFactory`'si bunları `Only named ECParameters supported` ile reddediyor — üstelik reddedilenler en güncel olanları. Bu yüzden hem `CscaTrustStore` hem zincir doğrulaması **açıkça BouncyCastle sağlayıcısını** kullanıyor. Varsayılan sağlayıcıyla 12 sertifikanın yalnızca 4'ü yükleniyordu; sessizce eksik güven kümesiyle çalışmak, doğru kartı reddetmek demekti.
 
-**Açık soru: kimlik kartı hangi CSCA'ya zincirleniyor?** Listedeki sertifikaların çoğu adında "Passport" taşıyor. TCKK ICAO 9303 uyumlu bir eMRTD ama Document Signer'ının bu CSCA'lardan birine bağlanıp bağlanmadığı **doğrulanmadı**. Bağlanmıyorsa `UNTRUSTED_DOCUMENT_SIGNER` alınır ve NVİ'den kimlik kartına özel CSCA istenmesi gerekir. **Gerçek bir kartla test edilecek ilk şey bu.**
+**Kimlik kartı hangi CSCA'ya zincirleniyor — cevaplandı (6 Eylül 2026).** Gerçek bir kartla değil, kartı okuyan bir uygulamanın (ReadID Me) teşhis ekranından öğrenildi: Document Signer'ın issuer'ı `CN=T.C. Seyahat Belgesi Kök Sertifika Hizmet Sağlayıcısı – Sürüm 1, OU=Nüfus ve Vatandaşlık İşleri Genel Müdürlüğü, O=Türkiye Cumhuriyeti İçişleri Bakanlığı, C=TR`.
+
+**Paketlenen ilk 12 çıpanın hiçbiri bu değildi.** Sekizi `CN=Passport CSCA Turkey`, dördü `CN=CSCA Turkey`; hepsi pasaport kökleri. Kimlik kartının kökü ayrı ve BSI master list'inde yok — ReadID de (ICAO master list'iyle) zincir kuramadı, yani eksiklik bizim listemize özgü değildi.
+
+**Kök NVİ'nin kendi açık deposunda yayımlanıyor:** `https://sbdepo.tckk.gov.tr/`. Üçü de indirildi, SHA-256 parmak izleri sayfada yayımlananla doğrulandı ve `csca/` altına kondu:
+
+| dosya | kök | geçerlilik |
+|---|---|---|
+| `csca-tr-12.der` | Seyahat Belgesi Kök — Sürüm 1 | 2014-08-25 → **2029-08-25** |
+| `csca-tr-13.der` | Seyahat Belgesi Kök — Sürüm 2 | 2023-02-14 → 2038-02-10 |
+| `csca-tr-14.der` | Seyahat Belgesi Kök **Mavi Kart** — Sürüm 1 | 2022-08-27 → 2037-08-27 |
+
+Sürüm 1'in doğru kök olduğunun ikinci kanıtı tarihte: karttaki DS sertifikası `2029-08-25 07:46:43 GMT`'de bitiyor, `csca-tr-12` de **aynı saniyede**. Bir DS sertifikası kökünden uzun yaşayamaz.
+
+`BundledTrustAnchorsTest.theTravelDocumentRootThatSignsIdentityCardsIsBundled` bu çıpayı SHA-256 parmak iziyle sabitliyor. **Bu testi doğrularken tuzak var:** `target/classes/csca/` bayat kalıyor, çıpayı kaynak ağacından silmek testi kırmızıya döndürmüyor. `rm -rf target/classes/csca` gerekiyor — §1'in `rm -rf target/test-classes` uyarısının kaynak dosyalar için karşılığı.
+
+**`csca-tr-00` ve `csca-tr-03`'ün süresi 2026-07-28'de doldu** ve kimse yenilemedi, çünkü `scripts/fetch-csca-anchors.sh` git'e hiç alınmadı. Liste üç ayda bir güncelleniyor; betiğin commit edilmemiş olması sessiz bir tek-kişi bağımlılığı.
+
+**Gerçek kartın teşhisinden çıkan diğer cevaplar:** erişim kontrolü **BAC** (PACE şart değil), veri grupları **1, 2, 5, 11, 12, 15** (DG11 ve DG15 ikisi de var), **Active Authentication çalışıyor** (imza doğrulandı), Chip Authentication yok, LDS 1.7, bütün DG hash'leri SOD ile eşleşiyor. Yani `sod`/`dg1`/`dg11`/`dg15` zincirinin tamamı gerçek kartta karşılığını buluyor; eksik olan tek şey çıpaydı.
+
+**Kalan doğrulama:** bu çıpalarla `RealChipVerificationTest`'in gerçekten `SONUC : DOGRULANDI` vermesi henüz görülmedi — ham `sod.b64`/`dg1.b64` dökümü gerekiyor (is-koala/koala-backend#70).
 
 **Gerçek kart dökümü tek komutla denenir:**
 
