@@ -146,8 +146,8 @@ public class IyzicoPaymentService {
         result.setPaymentId(text(root, "paymentId"));
         result.setConversationId(text(root, "conversationId"));
         result.setPaymentStatus(text(root, "paymentStatus"));
-        result.setFraudStatus(root.has("fraudStatus") && !root.path("fraudStatus").isNull()
-                ? root.path("fraudStatus").asInt() : null);
+        result.setFraudStatus(integer(root, "fraudStatus"));
+        result.setMdStatus(integer(root, "mdStatus"));
         result.setPrice(decimal(root, "price"));
         result.setPaidPrice(decimal(root, "paidPrice"));
         result.setCurrency(text(root, "currency"));
@@ -160,8 +160,9 @@ public class IyzicoPaymentService {
             result.setItemPaidPrice(decimal(first, "paidPrice"));
         }
 
-        log.info("iyzico: payment result for conversationId {} is paymentStatus={} fraudStatus={}",
-                request.getConversationId(), result.getPaymentStatus(), result.getFraudStatus());
+        log.info("iyzico: payment result for conversationId {} is paymentStatus={} fraudStatus={} mdStatus={}",
+                request.getConversationId(), result.getPaymentStatus(), result.getFraudStatus(),
+                result.getMdStatus());
         return result;
     }
 
@@ -332,6 +333,11 @@ public class IyzicoPaymentService {
     private static String text(JsonNode node, String field) {
         JsonNode value = node.path(field);
         return value.isMissingNode() || value.isNull() ? null : value.asString();
+    }
+
+    private static Integer integer(JsonNode node, String field) {
+        JsonNode value = node.path(field);
+        return value.isMissingNode() || value.isNull() ? null : value.asInt();
     }
 
     private static BigDecimal decimal(JsonNode node, String field) {

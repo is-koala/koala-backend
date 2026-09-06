@@ -31,6 +31,7 @@ import java.util.UUID;
 public class PaymentManager implements PaymentService {
 
     private static final String CURRENCY = "TRY";
+    private static final Integer VERIFIED_BY_THREE_D_SECURE = 1;
 
     private final PaymentDao paymentDao;
     private final IyzicoPaymentService iyzicoPaymentService;
@@ -103,6 +104,12 @@ public class PaymentManager implements PaymentService {
             log.info("Payment {} was not completed by the provider, paymentStatus={}",
                     payment.getId(), result.getPaymentStatus());
             return fail(payment, "paymentStatus=" + result.getPaymentStatus());
+        }
+
+        if (!VERIFIED_BY_THREE_D_SECURE.equals(result.getMdStatus())) {
+            log.warn("Payment {} rejected: 3-D Secure verification did not succeed, mdStatus={}",
+                    payment.getId(), result.getMdStatus());
+            return fail(payment, PaymentMessages.THREE_D_SECURE_FAILED);
         }
 
         if (result.getFraudStatus() != null && result.getFraudStatus() == -1) {
