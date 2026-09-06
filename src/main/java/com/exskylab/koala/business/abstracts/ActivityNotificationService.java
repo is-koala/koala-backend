@@ -1,6 +1,7 @@
 package com.exskylab.koala.business.abstracts;
 
 import com.exskylab.koala.entities.Cancellation;
+import com.exskylab.koala.entities.Company;
 import com.exskylab.koala.entities.Dispute;
 import com.exskylab.koala.entities.JobApplication;
 import com.exskylab.koala.entities.JobAssignment;
@@ -32,4 +33,6 @@ public interface ActivityNotificationService {
     void reviewReceived(Review review);
 
     void identityVerified(User user);
+
+    void companyApprovalDecided(Company company);
 }

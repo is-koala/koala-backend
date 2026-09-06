@@ -34,6 +34,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 
@@ -60,6 +61,7 @@ public class CompanyManager implements CompanyService {
     private final CompanyContactService companyContactService;
     private final GalleryService galleryService;
     private final CompanyFollowService companyFollowService;
+    private final ActivityNotificationService activityNotificationService;
     
 
     public CompanyManager(CompanyDao companyDao, UserService userService,
@@ -69,7 +71,8 @@ public class CompanyManager implements CompanyService {
                           EntityManager entityManager, CompanyMapper companyMapper,
                           CompanyContactService companyContactService, GalleryService galleryService,
                           CompanyFollowService companyFollowService,
-                                PageableSanitizer pageableSanitizer) {
+                                PageableSanitizer pageableSanitizer,
+                          ActivityNotificationService activityNotificationService) {
         this.companyDao = companyDao;
         this.userService = userService;
         this.notificationService = notificationService;
@@ -83,6 +86,7 @@ public class CompanyManager implements CompanyService {
         this.galleryService = galleryService;
         this.companyFollowService = companyFollowService;
             this.pageableSanitizer = pageableSanitizer;
+        this.activityNotificationService = activityNotificationService;
     }
 
     @Override
@@ -117,7 +121,7 @@ public class CompanyManager implements CompanyService {
         company.setTaxNumber(createCompanyRequestDto.getTaxNumber());
         company.setType(companyType);
         company.setAddress(address);
-        company.setApproved(false);
+        company.setApprovalStatus(CompanyApprovalStatus.PENDING);
 
         if (logo != null && !logo.isEmpty()) {
             var image = imageService.uploadImage(logo);
@@ -260,10 +264,16 @@ public class CompanyManager implements CompanyService {
     @Override
     @Transactional(readOnly = true)
     public CompanyDto getCompanyDetail(UUID companyId) {
-        CompanyDto company = companyMapper.toCompanyDto(getCompanyById(companyId));
+        Company entity = getCompanyById(companyId);
+        UUID viewerId = securityService.getAuthenticatedUserId();
+
+        CompanyDto company = companyMapper.toCompanyDto(entity);
         company.setFollowerCount(companyFollowService.followerCount(companyId));
-        company.setFollowing(companyFollowService.isFollowing(companyId,
-                securityService.getAuthenticatedUserId()));
+        company.setFollowing(companyFollowService.isFollowing(companyId, viewerId));
+
+        if (companyContactService.isUserAContactOfCompany(companyId, viewerId)) {
+            company.setApprovalNote(entity.getApprovalNote());
+        }
         return company;
     }
 
@@ -320,25 +330,51 @@ public class CompanyManager implements CompanyService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Company> getCompaniesByApproval(boolean approved, Pageable requested) {
+    public Page<Company> searchCompanies(CompanyApprovalStatus status, String query, Pageable requested) {
         pageableSanitizer.rejectUnknownSort(requested, COMPANY_SORTABLE);
-        return companyDao.findAllByApproved(approved,
+        String trimmed = query == null || query.isBlank() ? null : query.trim();
+        return companyDao.search(status, trimmed,
                 pageableSanitizer.sanitize(requested, COMPANY_SORTABLE, COMPANY_SORT));
     }
 
     @Override
     @Transactional
-    public Company approveCompany(UUID companyId) {
+    public Company approveCompany(UUID companyId, String note) {
         Company company = getCompanyById(companyId);
 
-        if (company.isApproved()) {
+        if (company.getApprovalStatus() == CompanyApprovalStatus.APPROVED) {
             throw new ConflictException(AdminMessages.COMPANY_ALREADY_APPROVED);
         }
 
-        company.setApproved(true);
-        Company saved = companyDao.save(company);
+        Company saved = decide(company, CompanyApprovalStatus.APPROVED, note);
         log.info("Company {} approved by admin {}", companyId, securityService.getAuthenticatedUserId());
+        activityNotificationService.companyApprovalDecided(saved);
         return saved;
+    }
+
+    @Override
+    @Transactional
+    public Company rejectCompany(UUID companyId, String reason) {
+        Company company = getCompanyById(companyId);
+
+        if (company.getApprovalStatus() == CompanyApprovalStatus.APPROVED) {
+            throw new ConflictException(AdminMessages.APPROVED_COMPANY_CANNOT_BE_REJECTED);
+        }
+        if (company.getApprovalStatus() == CompanyApprovalStatus.REJECTED) {
+            throw new ConflictException(AdminMessages.COMPANY_ALREADY_REJECTED);
+        }
+
+        Company saved = decide(company, CompanyApprovalStatus.REJECTED, reason);
+        log.info("Company {} rejected by admin {}", companyId, securityService.getAuthenticatedUserId());
+        activityNotificationService.companyApprovalDecided(saved);
+        return saved;
+    }
+
+    private Company decide(Company company, CompanyApprovalStatus status, String note) {
+        company.setApprovalStatus(status);
+        company.setApprovalNote(note == null || note.isBlank() ? null : note.trim());
+        company.setApprovalDecidedAt(Instant.now());
+        return companyDao.save(company);
     }
 
     private void requireCompanyMember(UUID companyId) {

@@ -50,8 +50,8 @@ class CompanyInvitationDeliveryIT extends AbstractIntegrationTest {
         insertUser(companyAdminId, null);
         insertUser(inviteeId, INVITEE_TC);
 
-        jdbc.update("insert into companies (id, created_at, is_deleted, name, tax_number, email, is_approved) "
-                        + "values (?, now(), false, ?, ?, ?, true)",
+        jdbc.update("insert into companies (id, created_at, is_deleted, name, tax_number, email, approval_status) "
+                        + "values (?, now(), false, ?, ?, ?, 'APPROVED')",
                 companyId, "Davet Kanali " + companyId, String.valueOf(Math.abs(companyId.hashCode())),
                 "company-" + companyId + "@example.com");
 

@@ -7,6 +7,10 @@ import com.exskylab.koala.core.helpers.MessageResolver;
 import com.exskylab.koala.entities.ApplicationStatus;
 import com.exskylab.koala.entities.AssignmentStatus;
 import com.exskylab.koala.entities.Cancellation;
+import com.exskylab.koala.entities.Company;
+import com.exskylab.koala.entities.CompanyApprovalStatus;
+import com.exskylab.koala.entities.CompanyContact;
+import com.exskylab.koala.entities.CompanyContactRole;
 import com.exskylab.koala.entities.Dispute;
 import com.exskylab.koala.entities.Job;
 import com.exskylab.koala.entities.JobApplication;
@@ -68,6 +72,74 @@ class ActivityNotificationRulesTest {
         ArgumentCaptor<SendPushToUserDto> captor = ArgumentCaptor.forClass(SendPushToUserDto.class);
         verify(notificationService).sendPushToUser(captor.capture(), any(), anyBoolean());
         return captor.getValue();
+    }
+
+    private Company company(CompanyApprovalStatus status, User... admins) {
+        Company company = new Company();
+        company.setId(UUID.randomUUID());
+        company.setName("Yalancı Kahve Ltd.");
+        company.setApprovalStatus(status);
+
+        for (User admin : admins) {
+            CompanyContact contact = new CompanyContact();
+            contact.setUser(admin);
+            contact.setRole(CompanyContactRole.ADMIN);
+            company.addContact(contact);
+        }
+        return company;
+    }
+
+    @Test
+    void anApprovalDecisionReachesTheCompanyAdmin() {
+        manager.companyApprovalDecided(company(CompanyApprovalStatus.APPROVED, employer));
+
+        assertEquals(employer, captured().getRecipient());
+        assertEquals("Yalancı Kahve Ltd.", captured().getTitle());
+    }
+
+    @Test
+    void aCompanyDecisionCannotBeSilencedByAPreference() {
+        manager.companyApprovalDecided(company(CompanyApprovalStatus.REJECTED, employer));
+
+        assertEquals(NotificationCategory.COMPANY_UPDATES, captured().getCategory());
+    }
+
+    @Test
+    void aCompanyDecisionOnlyReachesTheAdminsNotTheStaff() {
+        Company company = company(CompanyApprovalStatus.APPROVED, employer);
+        CompanyContact staff = new CompanyContact();
+        staff.setUser(worker);
+        staff.setRole(CompanyContactRole.STAFF);
+        company.addContact(staff);
+
+        manager.companyApprovalDecided(company);
+
+        verify(notificationService, times(1)).sendPushToUser(any(), any(), anyBoolean());
+        assertEquals(employer, captured().getRecipient());
+    }
+
+    @Test
+    void aCompanyDecisionFeedEntryPointsAtTheCompany() {
+        Company company = company(CompanyApprovalStatus.REJECTED, employer);
+
+        manager.companyApprovalDecided(company);
+
+        verify(notificationService).sendInApp(argThat(dto -> {
+            assertEquals(com.exskylab.koala.entities.NotificationTargetType.COMPANY, dto.getTargetType());
+            assertEquals(company.getId(), dto.getTargetId());
+            return true;
+        }));
+    }
+
+    @Test
+    void approvalAndRejectionDoNotSayTheSameThing() {
+        manager.companyApprovalDecided(company(CompanyApprovalStatus.APPROVED, employer));
+        String approvalBody = captured().getBody();
+
+        reset(notificationService);
+        manager.companyApprovalDecided(company(CompanyApprovalStatus.REJECTED, employer));
+
+        assertNotEquals(approvalBody, captured().getBody());
     }
 
     @Test
