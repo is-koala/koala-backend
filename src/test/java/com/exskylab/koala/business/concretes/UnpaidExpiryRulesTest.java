@@ -47,7 +47,7 @@ class UnpaidExpiryRulesTest {
         manager = new CancellationManager(cancellationDao, jobAssignmentService, mock(UserService.class),
                 security, new AssignmentParticipants(mock(com.exskylab.koala.business.abstracts.CompanyContactService.class)),
                 new CancellationPolicy(new CancellationProperties(), passthroughSettings()),
-                mock(PayoutService.class), notifications);
+                mock(PayoutService.class), mock(com.exskylab.koala.business.abstracts.DisputeService.class), notifications);
 
         when(cancellationDao.save(any())).thenAnswer(i -> i.getArgument(0));
     }

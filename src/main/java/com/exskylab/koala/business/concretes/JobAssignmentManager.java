@@ -517,6 +517,15 @@ public class JobAssignmentManager implements JobAssignmentService {
     }
 
     @Override
+    @Transactional
+    public JobAssignment getDetailedByIdForUpdate(UUID assignmentId) {
+        jobAssignmentDao.findByIdForUpdate(assignmentId)
+                .orElseThrow(() -> new ResourceNotFoundException(JobAssignmentMessages.NOT_FOUND));
+        return jobAssignmentDao.findWithDetailsForPaymentById(assignmentId)
+                .orElseThrow(() -> new ResourceNotFoundException(JobAssignmentMessages.NOT_FOUND));
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public AdminAssignmentDto getAdminDetail(UUID assignmentId) {
         return jobAssignmentMapper.toAdminAssignmentDto(getDetailedById(assignmentId));

@@ -4,9 +4,11 @@ import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.CancellationService;
+import com.exskylab.koala.business.abstracts.DisputeService;
 import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.CancellationMessages;
+import com.exskylab.koala.core.constants.DisputeMessages;
 import com.exskylab.koala.core.constants.JobAssignmentMessages;
 import com.exskylab.koala.core.dtos.cancellation.response.CancellationPreviewDto;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
@@ -43,12 +45,14 @@ public class CancellationManager implements CancellationService {
     private final AssignmentParticipants participants;
     private final CancellationPolicy policy;
     private final PayoutService payoutService;
+    private final DisputeService disputeService;
     private final ActivityNotificationService activityNotificationService;
 
     public CancellationManager(CancellationDao cancellationDao, JobAssignmentService jobAssignmentService,
                                UserService userService, SecurityService securityService,
                                AssignmentParticipants participants, CancellationPolicy policy,
                                PayoutService payoutService,
+                               DisputeService disputeService,
                                ActivityNotificationService activityNotificationService) {
         this.cancellationDao = cancellationDao;
         this.jobAssignmentService = jobAssignmentService;
@@ -57,13 +61,14 @@ public class CancellationManager implements CancellationService {
         this.participants = participants;
         this.policy = policy;
         this.payoutService = payoutService;
+        this.disputeService = disputeService;
         this.activityNotificationService = activityNotificationService;
     }
 
     @Override
     @Transactional
     public Cancellation cancelAssignment(UUID jobAssignmentId, String reason) {
-        JobAssignment assignment = jobAssignmentService.getDetailedById(jobAssignmentId);
+        JobAssignment assignment = jobAssignmentService.getDetailedByIdForUpdate(jobAssignmentId);
 
         UUID actorId = securityService.getAuthenticatedUserId();
         CancellationParty party = participants.partyOf(assignment, actorId)
@@ -72,6 +77,10 @@ public class CancellationManager implements CancellationService {
 
         if (!CANCELLABLE.contains(assignment.getStatus())) {
             throw new ConflictException(CancellationMessages.NOT_CANCELLABLE);
+        }
+
+        if (disputeService.hasActiveDispute(jobAssignmentId)) {
+            throw new ConflictException(DisputeMessages.BLOCKS_RELEASE);
         }
 
         if (cancellationDao.existsByJobAssignmentId(jobAssignmentId)) {
@@ -127,7 +136,8 @@ public class CancellationManager implements CancellationService {
                 party, escrowHeld ? assignment.getTotalCharged() : null, notice);
 
         boolean cancellableNow = CANCELLABLE.contains(assignment.getStatus())
-                && !cancellationDao.existsByJobAssignmentId(jobAssignmentId);
+                && !cancellationDao.existsByJobAssignmentId(jobAssignmentId)
+                && !disputeService.hasActiveDispute(jobAssignmentId);
 
         return new CancellationPreviewDto(PlainDecimalStringConverter.convert(outcome.feeRate()),
                 PlainDecimalStringConverter.convert(outcome.feeAmount()),

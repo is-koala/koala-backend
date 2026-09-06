@@ -7,8 +7,10 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import org.springframework.stereotype.Repository;
 
@@ -17,6 +19,10 @@ import java.util.UUID;
 
 @Repository
 public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select a from JobAssignment a where a.id = :id")
+    Optional<JobAssignment> findByIdForUpdate(@Param("id") UUID id);
 
     @EntityGraph(attributePaths = {
             "worker",
