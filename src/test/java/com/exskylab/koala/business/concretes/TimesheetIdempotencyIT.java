@@ -14,6 +14,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -87,6 +88,23 @@ class TimesheetIdempotencyIT extends AbstractIntegrationTest {
         Integer count = jdbcTemplate.queryForObject(
                 "select count(*) from work_sessions where job_assignment_id = ?", Integer.class, assignmentId);
         assertEquals(1, count);
+    }
+
+    @Test
+    void retryWithNanosecondCapturedAtMatchesPostgresStoredPayload() {
+        UUID eventId = UUID.randomUUID();
+        Instant capturedAt = Instant.now().minusSeconds(60).with(java.time.temporal.ChronoField.NANO_OF_SECOND,
+                123_456_789);
+
+        WorkSession first = timesheetService.checkIn(assignmentId,
+                new CheckPointDto(new BigDecimal("41.015137"), new BigDecimal("28.979530"), eventId, capturedAt));
+        Instant storedCapturedAt = jdbcTemplate.queryForObject(
+                "select check_in_captured_at from work_sessions where id = ?", Instant.class, first.getId());
+        assertEquals(capturedAt.truncatedTo(ChronoUnit.MICROS), storedCapturedAt);
+        WorkSession retry = timesheetService.checkIn(assignmentId,
+                new CheckPointDto(new BigDecimal("41.015137"), new BigDecimal("28.979530"), eventId, capturedAt));
+
+        assertEquals(first.getId(), retry.getId());
     }
 
     @Test

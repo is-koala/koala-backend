@@ -123,7 +123,7 @@ class TimesheetManagerOfflineEventTest {
                 .thenReturn(Optional.of(original));
 
         WorkSession result = manager.checkIn(assignment.getId(), point(
-                "41.0151374", "28.9795304", eventId, capturedAt));
+                "41.0151374", "28.9795304", eventId, capturedAt.plusNanos(789)));
 
         assertEquals(original, result);
         verify(workSessionDao, never()).save(any());
@@ -156,7 +156,7 @@ class TimesheetManagerOfflineEventTest {
                 .thenReturn(Optional.of(closed));
 
         WorkSession result = manager.checkOut(assignment.getId(), point(
-                "41.015137", "28.979530", eventId, capturedAt));
+                "41.015137", "28.979530", eventId, capturedAt.plusNanos(789)));
 
         assertEquals(closed, result);
         verify(workSessionDao, never()).findByJobAssignmentIdAndCheckOutAtIsNull(any());
