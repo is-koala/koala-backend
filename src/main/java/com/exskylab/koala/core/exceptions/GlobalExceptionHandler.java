@@ -70,7 +70,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Result> handleHttpMessageNotReadable(HttpMessageNotReadableException ex) {
-        log.warn("Govdesi okunamayan istek: {}", ex.getMostSpecificCause().getMessage());
+        log.warn("Govdesi okunamayan istek [type=HttpMessageNotReadableException, "
+                + "errorCode=REQUEST_MALFORMED, correlationId={}]", MDC.get("correlationId"));
         return build(HttpStatus.BAD_REQUEST, "{request.body.unreadable}", null, ErrorCategory.REQUEST_MALFORMED, null);
     }
 

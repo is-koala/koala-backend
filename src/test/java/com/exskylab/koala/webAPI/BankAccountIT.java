@@ -1,5 +1,9 @@
 package com.exskylab.koala.webAPI;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import com.exskylab.koala.core.exceptions.GlobalExceptionHandler;
 import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.core.producers.user.UserProducerService;
 import com.exskylab.koala.entities.Role;
@@ -14,6 +18,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.slf4j.LoggerFactory;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.Set;
@@ -31,6 +36,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 
@@ -180,7 +187,37 @@ class BankAccountIT extends AbstractIntegrationTest {
                         .content("{\"iban\":\"" + foreignIban + "\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCategory").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.details[0].field").value("iban"))
                 .andExpect(content().string(not(containsString(foreignIban))));
+    }
+
+    @Test
+    void malformedJsonNeverWritesTheRawIbanToTheExceptionHandlerLog() throws Exception {
+        String rawIban = "TR180006200119000006672315";
+        Logger logger = (Logger) LoggerFactory.getLogger(GlobalExceptionHandler.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            mockMvc.perform(post("/users/me/bank-accounts")
+                            .with(user(principal(userId)))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"iban\":\"broken\"}" + rawIban))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errorCategory").value("REQUEST_MALFORMED"))
+                    .andExpect(content().string(not(containsString(rawIban))));
+
+            String handlerLogs = appender.list.stream()
+                    .map(ILoggingEvent::getFormattedMessage)
+                    .reduce("", (left, right) -> left + "\n" + right);
+            assertFalse(handlerLogs.contains(rawIban));
+            assertTrue(handlerLogs.contains("REQUEST_MALFORMED"));
+            assertTrue(handlerLogs.contains("correlationId="));
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
     }
 
     @Test

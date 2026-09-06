@@ -1,8 +1,7 @@
 package com.exskylab.koala.core.dtos.bankAccount.request;
 
 import com.exskylab.koala.core.constants.UserMessages;
-import com.exskylab.koala.core.helpers.IbanValidator;
-import jakarta.validation.constraints.AssertTrue;
+import com.exskylab.koala.core.customValidations.ValidTurkishIban;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -16,10 +15,6 @@ import lombok.Setter;
 public class SaveBankAccountDto {
 
     @NotBlank(message = UserMessages.INVALID_IBAN)
+    @ValidTurkishIban
     private String iban;
-
-    @AssertTrue(message = UserMessages.INVALID_IBAN)
-    public boolean isIbanValid() {
-        return IbanValidator.isValid(iban);
-    }
 }

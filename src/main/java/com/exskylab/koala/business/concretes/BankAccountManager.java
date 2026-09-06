@@ -70,10 +70,7 @@ public class BankAccountManager implements BankAccountService {
         bankAccountDao.lockUserAccounts(userId);
         BankAccount account = requireOwned(accountId, userId);
 
-        bankAccountDao.clearPrimary(userId);
-        account.setPrimaryAccount(true);
-
-        BankAccount saved = bankAccountDao.save(account);
+        BankAccount saved = makePrimary(userId, account);
         log.info("Bank account {} selected as primary for user {}", accountId, userId);
         return saved;
     }
@@ -100,12 +97,7 @@ public class BankAccountManager implements BankAccountService {
         Optional<BankAccount> matchingAccount = bankAccountDao
                 .findByUserIdAndIbanAndActiveTrue(user.getId(), normalized);
         if (matchingAccount.isPresent()) {
-            BankAccount account = matchingAccount.get();
-            if (!account.isPrimaryAccount()) {
-                bankAccountDao.clearPrimary(user.getId());
-                account.setPrimaryAccount(true);
-            }
-            BankAccount saved = bankAccountDao.save(account);
+            BankAccount saved = makePrimary(user.getId(), matchingAccount.get());
             log.info("Existing bank account {} selected as primary for user {}", saved.getId(), user.getId());
             return saved;
         }
@@ -145,5 +137,11 @@ public class BankAccountManager implements BankAccountService {
     private BankAccount requireOwned(UUID accountId, UUID userId) {
         return bankAccountDao.findByIdAndUserIdAndActiveTrue(accountId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException(BankAccountMessages.NOT_FOUND));
+    }
+
+    private BankAccount makePrimary(UUID userId, BankAccount account) {
+        bankAccountDao.clearPrimary(userId);
+        account.setPrimaryAccount(true);
+        return bankAccountDao.save(account);
     }
 }
