@@ -250,6 +250,11 @@ cancellation:
   late-fee-rate: ${CANCELLATION_LATE_FEE_RATE:0.50}
   zone-id: ${CANCELLATION_ZONE_ID:Europe/Istanbul}
 
+timesheet:
+  max-offline-age: ${TIMESHEET_MAX_OFFLINE_AGE:72h}
+  max-future-skew: ${TIMESHEET_MAX_FUTURE_SKEW:5m}
+  zone-id: ${TIMESHEET_ZONE_ID:Europe/Istanbul}
+
 session:
   refresh-validity-days: ${SESSION_REFRESH_VALIDITY_DAYS:30}
   refresh-sliding-window-days: ${SESSION_REFRESH_SLIDING_WINDOW_DAYS:7}
