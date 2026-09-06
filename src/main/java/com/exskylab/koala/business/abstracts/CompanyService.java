@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.abstracts;
 
+import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.core.dtos.company.request.CreateCompanyRequestDto;
 import com.exskylab.koala.core.dtos.company.response.CompanyDto;
 import com.exskylab.koala.core.dtos.companyContact.request.InviteContactToCompanyDto;
@@ -59,7 +60,7 @@ public interface CompanyService {
 
     Page<Company> searchCompanies(CompanyApprovalStatus status, String query, Pageable pageable);
 
-    Company approveCompany(UUID companyId, String note);
+    Company approveCompany(StaffPrincipal actor, UUID companyId, String note);
 
-    Company rejectCompany(UUID companyId, String reason);
+    Company rejectCompany(StaffPrincipal actor, UUID companyId, String reason);
 }

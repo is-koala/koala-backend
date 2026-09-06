@@ -26,9 +26,16 @@ public class SecurityManager implements SecurityService {
     public UserPrincipal getAuthenticatedPrincipal() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
-        if (authentication == null || !authentication.isAuthenticated()
-                || !(authentication.getPrincipal() instanceof UserPrincipal principal)) {
+        if (authentication == null || !authentication.isAuthenticated()) {
             throw new ResourceNotFoundException("{user.not.authenticated}");
+        }
+
+        if (!(authentication.getPrincipal() instanceof UserPrincipal principal)) {
+            throw new IllegalStateException(
+                    "securityService.getAuthenticated* marketplace kullanıcısı bekliyor ama kimlik "
+                            + authentication.getPrincipal().getClass().getSimpleName()
+                            + ". /admin/** altındaki bir metot bunu çağıramaz — log satırında bile. "
+                            + "Aktörü StaffPrincipal olarak parametreyle al.");
         }
 
         return principal;
