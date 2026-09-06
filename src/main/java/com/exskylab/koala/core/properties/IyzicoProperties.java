@@ -81,10 +81,11 @@ public class IyzicoProperties {
         String normalizedHost = host.toLowerCase(Locale.ROOT);
 
         if (LOOPBACK_HOSTS.contains(normalizedHost)) {
-            return ProviderEnvironment.LOOPBACK;
+            return isPlainOrigin(uri) && ("http".equals(scheme) || "https".equals(scheme))
+                    ? ProviderEnvironment.LOOPBACK : ProviderEnvironment.UNKNOWN;
         }
 
-        if (!"https".equals(scheme)) {
+        if (!"https".equals(scheme) || !isPlainOrigin(uri) || uri.getPort() != -1) {
             return ProviderEnvironment.UNKNOWN;
         }
 
@@ -97,6 +98,14 @@ public class IyzicoProperties {
         }
 
         return ProviderEnvironment.UNKNOWN;
+    }
+
+    private boolean isPlainOrigin(URI uri) {
+        String path = uri.getRawPath();
+        return uri.getRawUserInfo() == null
+                && uri.getRawQuery() == null
+                && uri.getRawFragment() == null
+                && (path == null || path.isEmpty());
     }
 
     @AssertTrue(message = "iyzico.base-url must be the iyzico environment that iyzico.deployment allows: "

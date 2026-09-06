@@ -27,6 +27,7 @@ import java.util.Collection;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 
 @Slf4j
@@ -47,6 +48,11 @@ public class PassiveAuthenticationVerifier {
     }
 
     public PassiveAuthenticationResult verify(byte[] securityObject, byte[] dataGroup1, byte[] dataGroup11) {
+        return verify(securityObject, dataGroup1, dataGroup11, null);
+    }
+
+    public PassiveAuthenticationResult verify(byte[] securityObject, byte[] dataGroup1, byte[] dataGroup11,
+                                              byte[] dataGroup15) {
         if (trustAnchors.isEmpty()) {
             throw new PassiveAuthenticationException(IdentityMessages.NO_TRUST_ANCHORS,
                     "no CSCA trust anchors are configured");
@@ -89,8 +95,25 @@ public class PassiveAuthenticationVerifier {
             additional = AdditionalPersonalDetails.parse(dataGroup11).orElse(null);
         }
 
+        verifyChipKeyIsSigned(lds, dataGroup15);
+
         return new PassiveAuthenticationResult(identityNumber, birthDate, mrz, additional,
                 documentSigner.getSubjectX500Principal().getName(), sha256Hex(securityObject));
+    }
+
+    private static void verifyChipKeyIsSigned(LdsSecurityObject lds, byte[] dataGroup15) {
+        if (dataGroup15 == null || dataGroup15.length == 0) {
+            return;
+        }
+
+        byte[] expected = lds.findHashForDataGroup(15)
+                .orElseThrow(() -> new PassiveAuthenticationException(IdentityMessages.CHIP_KEY_UNSIGNED,
+                        "a DG15 was supplied but the signed security object lists no DG15 hash"));
+
+        if (!MessageDigest.isEqual(expected, digest(lds.hashAlgorithm(), dataGroup15))) {
+            throw new PassiveAuthenticationException(IdentityMessages.DATA_GROUP_TAMPERED,
+                    "DG15 hash does not match the signed security object");
+        }
     }
 
     private CMSSignedData parse(byte[] securityObject) {
@@ -190,14 +213,19 @@ public class PassiveAuthenticationVerifier {
         }
 
         byte[] hashForDataGroup(int number) {
+            return findHashForDataGroup(number)
+                    .orElseThrow(() -> new PassiveAuthenticationException(IdentityMessages.SOD_UNREADABLE,
+                            "the security object carries no hash for data group " + number));
+        }
+
+        Optional<byte[]> findHashForDataGroup(int number) {
             for (int i = 0; i < dataGroupHashes.size(); i++) {
                 ASN1Sequence entry = ASN1Sequence.getInstance(dataGroupHashes.getObjectAt(i));
                 if (ASN1Integer.getInstance(entry.getObjectAt(0)).intValueExact() == number) {
-                    return ASN1OctetString.getInstance(entry.getObjectAt(1)).getOctets();
+                    return Optional.of(ASN1OctetString.getInstance(entry.getObjectAt(1)).getOctets());
                 }
             }
-            throw new PassiveAuthenticationException(IdentityMessages.SOD_UNREADABLE,
-                    "the security object carries no hash for data group " + number);
+            return Optional.empty();
         }
     }
 

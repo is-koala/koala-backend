@@ -2,10 +2,12 @@ package com.exskylab.koala.dataAccess;
 
 import com.exskylab.koala.entities.Dispute;
 import com.exskylab.koala.entities.DisputeStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.stereotype.Repository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,6 +18,13 @@ import java.util.UUID;
 
 @Repository
 public interface DisputeDao extends JpaRepository<Dispute, UUID> {
+
+    @Query("select d.jobAssignment.id from Dispute d where d.id = :id")
+    Optional<UUID> findJobAssignmentIdById(@Param("id") UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select d from Dispute d where d.id = :id")
+    Optional<Dispute> findByIdForUpdate(@Param("id") UUID id);
 
     Optional<Dispute> findByJobAssignmentIdAndStatusIn(UUID jobAssignmentId, List<DisputeStatus> statuses);
 

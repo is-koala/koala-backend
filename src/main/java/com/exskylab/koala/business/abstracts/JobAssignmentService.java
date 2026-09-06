@@ -37,6 +37,8 @@ public interface JobAssignmentService {
 
     JobAssignment getDetailedById(UUID assignmentId);
 
+    JobAssignment getDetailedByIdForUpdate(UUID assignmentId);
+
     AdminAssignmentDto getAdminDetail(UUID assignmentId);
 
     long countCompletedForWorker(UUID workerId);

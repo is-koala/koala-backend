@@ -54,6 +54,10 @@ public class Cancellation extends BaseEntity {
     @Column(name = "refund_amount", precision = 19, scale = 2, nullable = false)
     private BigDecimal refundAmount;
 
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "refund_id", unique = true)
+    private Refund refund;
+
     @Column(name = "cancelled_at", nullable = false)
     private Instant cancelledAt;
 }

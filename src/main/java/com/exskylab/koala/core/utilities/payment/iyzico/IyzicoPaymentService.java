@@ -20,13 +20,17 @@ import tools.jackson.databind.ObjectMapper;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.math.BigDecimal;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
+import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Component
@@ -119,6 +123,14 @@ public class IyzicoPaymentService {
 
         JsonNode root = call(HttpMethod.POST, IyzicoEndpoints.CHECKOUT_FORM_INITIALIZE, request,
                 "payment session initiation");
+        verifyResponseSignature(root, List.of("conversationId", "token"), Set.of());
+        String responseConversationId = text(root, "conversationId");
+        String responseToken = text(root, "token");
+        if (!java.util.Objects.equals(request.getConversationId(), responseConversationId)
+                || responseToken == null || responseToken.isBlank()
+                || !isAllowedHostedCheckoutUrl(text(root, "paymentPageUrl"))) {
+            throw new ExternalServiceException(PaymentMessages.PROVIDER_RESPONSE_INVALID);
+        }
 
         PaymentSessionResponseDto response = new PaymentSessionResponseDto();
         response.setStatus(root.path("status").asString());
@@ -140,11 +152,14 @@ public class IyzicoPaymentService {
 
         JsonNode root = call(HttpMethod.POST, IyzicoEndpoints.CHECKOUT_FORM_RETRIEVE, body,
                 "payment result retrieval");
+        verifyResponseSignature(root, List.of("paymentStatus", "paymentId", "currency", "basketId",
+                "conversationId", "paidPrice", "price", "token"), Set.of("paidPrice", "price"));
 
         IyzicoPaymentResultResponseDto result = new IyzicoPaymentResultResponseDto();
         result.setStatus(root.path("status").asString());
         result.setPaymentId(text(root, "paymentId"));
         result.setConversationId(text(root, "conversationId"));
+        result.setToken(text(root, "token"));
         result.setPaymentStatus(text(root, "paymentStatus"));
         result.setFraudStatus(integer(root, "fraudStatus"));
         result.setMdStatus(integer(root, "mdStatus"));
@@ -154,10 +169,15 @@ public class IyzicoPaymentService {
         result.setBasketId(text(root, "basketId"));
 
         JsonNode items = root.path("itemTransactions");
-        if (items.isArray() && !items.isEmpty()) {
+        result.setItemCount(items.isArray() ? items.size() : 0);
+        if (result.getItemCount() > 0) {
             JsonNode first = items.get(0);
             result.setPaymentTransactionId(text(first, "paymentTransactionId"));
+            result.setItemId(text(first, "itemId"));
+            result.setItemPrice(decimal(first, "price"));
             result.setItemPaidPrice(decimal(first, "paidPrice"));
+            result.setItemSubMerchantPrice(decimal(first, "subMerchantPrice"));
+            result.setItemSubMerchantKey(text(first, "subMerchantKey"));
         }
 
         log.info("iyzico: payment result for conversationId {} is paymentStatus={} fraudStatus={} mdStatus={}",
@@ -262,12 +282,13 @@ public class IyzicoPaymentService {
             status = e.getStatusCode();
             responseBody = e.getResponseBodyAsString();
         } catch (Exception e) {
-            log.error("iyzico: {} could not reach {}: {}", operation, url, e.getMessage());
+            log.error("iyzico: {} could not reach the provider ({})",
+                    operation, e.getClass().getSimpleName());
             throw new ExternalServiceException(PaymentMessages.PROVIDER_UNAVAILABLE);
         }
 
         if (responseBody == null || responseBody.isBlank()) {
-            log.error("iyzico: {} returned HTTP {} with an empty body from {}", operation, status, url);
+            log.error("iyzico: {} returned HTTP {} with an empty body", operation, status);
             throw new ExternalServiceException(PaymentMessages.PROVIDER_UNAVAILABLE);
         }
 
@@ -275,14 +296,16 @@ public class IyzicoPaymentService {
         try {
             root = objectMapper.readTree(responseBody);
         } catch (Exception e) {
-            log.error("iyzico: {} returned HTTP {} from {} with a body that is not JSON: {}",
-                    operation, status, url, abbreviate(responseBody));
+            log.error("iyzico: {} returned HTTP {} with a non-JSON body", operation, status);
             throw new ExternalServiceException(PaymentMessages.PROVIDER_UNAVAILABLE);
         }
 
         if (!"success".equals(root.path("status").asString())) {
-            log.error("iyzico: {} rejected with HTTP {}, errorCode={} errorMessage={}", operation, status,
-                    text(root, "errorCode"), text(root, "errorMessage"));
+            log.error("iyzico: {} failed with HTTP {}, errorCode={}", operation, status,
+                    text(root, "errorCode"));
+            if (status.is5xxServerError() || status.value() == 408 || status.value() == 429) {
+                throw new ExternalServiceException(PaymentMessages.PROVIDER_UNAVAILABLE);
+            }
             throw new ExternalServiceException(PaymentMessages.PROVIDER_REJECTED);
         }
 
@@ -300,11 +323,6 @@ public class IyzicoPaymentService {
             trimmed = trimmed.substring(0, trimmed.length() - 1);
         }
         return trimmed;
-    }
-
-    private static String abbreviate(String body) {
-        String flattened = body.replaceAll("\\s+", " ").trim();
-        return flattened.length() <= 500 ? flattened : flattened.substring(0, 500) + "…";
     }
 
     private HttpHeaders createIyzicoHeaders(String uriPath, String jsonBody, String randomKey) throws Exception {
@@ -352,14 +370,81 @@ public class IyzicoPaymentService {
         }
     }
 
-    private String generateIyzicoV2Signature(String randomKey, String payload)
-            throws NoSuchAlgorithmException, InvalidKeyException {
-        Mac sha256Hmac = Mac.getInstance("HmacSHA256");
-        sha256Hmac.init(new SecretKeySpec(
-                iyzicoProperties.getSecretKey().getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+    private String generateIyzicoV2Signature(String randomKey, String payload) {
+        return hmacSha256(randomKey + payload);
+    }
 
-        byte[] hash = sha256Hmac.doFinal((randomKey + payload).getBytes(StandardCharsets.UTF_8));
-        return bytesToHex(hash);
+    private void verifyResponseSignature(JsonNode root, List<String> fields, java.util.Set<String> decimalFields) {
+        String provided = text(root, "signature");
+        try {
+            String payload = fields.stream()
+                    .map(field -> responseSignatureValue(root, field, decimalFields.contains(field)))
+                    .reduce((left, right) -> left + ":" + right)
+                    .orElse("");
+            String expected = responseHmac(payload);
+            if (provided == null || !MessageDigest.isEqual(expected.getBytes(StandardCharsets.US_ASCII),
+                    provided.toLowerCase(Locale.ROOT).getBytes(StandardCharsets.US_ASCII))) {
+                throw new ExternalServiceException(PaymentMessages.PROVIDER_RESPONSE_INVALID);
+            }
+        } catch (ExternalServiceException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new ExternalServiceException(PaymentMessages.PROVIDER_RESPONSE_INVALID);
+        }
+    }
+
+    private String responseSignatureValue(JsonNode root, String field, boolean decimalField) {
+        String value = text(root, field);
+        if (value == null) {
+            throw new ExternalServiceException(PaymentMessages.PROVIDER_RESPONSE_INVALID);
+        }
+        return decimalField ? new BigDecimal(value).stripTrailingZeros().toPlainString() : value;
+    }
+
+    private String responseHmac(String payload) {
+        return hmacSha256(payload);
+    }
+
+    private String hmacSha256(String payload) {
+        try {
+            Mac sha256Hmac = Mac.getInstance("HmacSHA256");
+            sha256Hmac.init(new SecretKeySpec(
+                    iyzicoProperties.getSecretKey().getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            return bytesToHex(sha256Hmac.doFinal(payload.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException | InvalidKeyException exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+
+    private boolean isAllowedHostedCheckoutUrl(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        try {
+            URI uri = URI.create(value);
+            if (uri.getUserInfo() != null || uri.getHost() == null || uri.getFragment() != null) {
+                return false;
+            }
+            String host = uri.getHost().toLowerCase(Locale.ROOT);
+            return switch (iyzicoProperties.providerEnvironment()) {
+                case SANDBOX -> "https".equalsIgnoreCase(uri.getScheme())
+                        && uri.getPort() == -1 && "sandbox-cpp.iyzipay.com".equals(host);
+                case LIVE -> "https".equalsIgnoreCase(uri.getScheme())
+                        && uri.getPort() == -1 && "cpp.iyzipay.com".equals(host);
+                case LOOPBACK -> sameOrigin(uri, URI.create(baseUrl()));
+                default -> false;
+            };
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
+    }
+
+    private static boolean sameOrigin(URI candidate, URI configured) {
+        return candidate.getScheme() != null
+                && candidate.getScheme().equalsIgnoreCase(configured.getScheme())
+                && candidate.getHost() != null
+                && candidate.getHost().equalsIgnoreCase(configured.getHost())
+                && candidate.getPort() == configured.getPort();
     }
 
     private static String bytesToHex(byte[] hash) {

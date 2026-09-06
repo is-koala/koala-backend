@@ -2,6 +2,7 @@ package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.exceptions.ConflictException;
+import com.exskylab.koala.core.exceptions.ExternalServiceException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
 import com.exskylab.koala.business.abstracts.SettlementService;
@@ -37,6 +38,7 @@ class PayoutReleaseTest {
     private JobAssignmentDao jobAssignmentDao;
     private DisputeDao disputeDao;
     private SettlementService settlementService;
+    private BankAccountService bankAccountService;
     private PayoutManager payoutManager;
 
     private final UUID assignmentId = UUID.randomUUID();
@@ -47,7 +49,7 @@ class PayoutReleaseTest {
         refundDao = mock(RefundDao.class);
         paymentService = mock(PaymentService.class);
         jobAssignmentDao = mock(JobAssignmentDao.class);
-        BankAccountService bankAccountService = mock(BankAccountService.class);
+        bankAccountService = mock(BankAccountService.class);
         disputeDao = mock(DisputeDao.class);
         settlementService = mock(SettlementService.class);
 
@@ -56,7 +58,20 @@ class PayoutReleaseTest {
 
         when(payoutDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(refundDao.save(any())).thenAnswer(i -> i.getArgument(0));
-        when(bankAccountService.findPrimaryAccount(any())).thenReturn(Optional.empty());
+        when(settlementService.enqueue(any(), any(), any())).thenReturn(Optional.of(new SettlementTask()));
+        when(settlementService.enqueueRefund(any(), any(), any())).thenReturn(Optional.of(new SettlementTask()));
+        when(bankAccountService.findVerifiedPrimaryAccount(any()))
+                .thenAnswer(invocation -> Optional.of(verifiedAccount()));
+    }
+
+    private BankAccount verifiedAccount() {
+        BankAccount account = new BankAccount();
+        account.setId(UUID.randomUUID());
+        account.setIban("TR180006200119000006672315");
+        account.setPrimaryAccount(true);
+        account.setActive(true);
+        account.setVerificationStatus(BankAccountVerificationStatus.VERIFIED);
+        return account;
     }
 
     private JobAssignment assignment(AssignmentStatus status, PaymentStatus paymentStatus) {
@@ -71,7 +86,7 @@ class PayoutReleaseTest {
         assignment.setWorkerPayout(new BigDecimal("1000.00"));
         assignment.setTotalCharged(new BigDecimal("1075.00"));
 
-        when(jobAssignmentDao.findById(assignmentId)).thenReturn(Optional.of(assignment));
+        when(jobAssignmentDao.findByIdForUpdate(assignmentId)).thenReturn(Optional.of(assignment));
         return assignment;
     }
 
@@ -86,6 +101,35 @@ class PayoutReleaseTest {
 
     private Payment settledPaymentFor(JobAssignment assignment) {
         return settledPaymentExists();
+    }
+
+    @Test
+    void anActiveDisputeFreezesAnEmployerRefund() {
+        JobAssignment assignment = assignment(AssignmentStatus.CONFIRMED, PaymentStatus.HELD_IN_ESCROW);
+        settledPaymentFor(assignment);
+        when(disputeDao.existsByJobAssignmentIdAndStatusIn(assignmentId, DisputeManager.ACTIVE))
+                .thenReturn(true);
+
+        assertThrows(ConflictException.class,
+                () -> payoutManager.refundEmployer(assignmentId, null, "uyuşmazlık sürüyor"));
+
+        assertEquals(PaymentStatus.HELD_IN_ESCROW, assignment.getPaymentStatus());
+        verify(refundDao, never()).save(any());
+        verify(settlementService, never()).enqueueRefund(any(), any(), any());
+        verify(jobAssignmentDao).findByIdForUpdate(assignmentId);
+    }
+
+    @Test
+    void refundIsNotReportedWhenItCannotBeQueued() {
+        JobAssignment assignment = assignment(AssignmentStatus.CONFIRMED, PaymentStatus.HELD_IN_ESCROW);
+        settledPaymentFor(assignment);
+        when(settlementService.enqueueRefund(any(), any(), any())).thenReturn(Optional.empty());
+
+        assertThrows(ExternalServiceException.class,
+                () -> payoutManager.refundEmployer(assignmentId, null, "tam iade"));
+
+        assertEquals(PaymentStatus.HELD_IN_ESCROW, assignment.getPaymentStatus());
+        verify(refundDao, never()).save(any());
     }
 
     @Test
@@ -112,6 +156,19 @@ class PayoutReleaseTest {
     }
 
     @Test
+    void releaseIsNotReportedWhenItCannotBeQueued() {
+        JobAssignment assignment = assignment(AssignmentStatus.COMPLETED, PaymentStatus.HELD_IN_ESCROW);
+        settledPaymentExists();
+        when(settlementService.enqueue(any(), any(), eq(SettlementOperation.APPROVE)))
+                .thenReturn(Optional.empty());
+
+        assertThrows(ExternalServiceException.class, () -> payoutManager.releaseToWorker(assignmentId));
+
+        assertEquals(PaymentStatus.HELD_IN_ESCROW, assignment.getPaymentStatus());
+        verify(payoutDao, never()).save(any());
+    }
+
+    @Test
     void releasingWithoutASettledPaymentIsRejected() {
         assignment(AssignmentStatus.COMPLETED, PaymentStatus.HELD_IN_ESCROW);
         when(paymentService.getSettledPaymentFor(assignmentId))
@@ -131,6 +188,29 @@ class PayoutReleaseTest {
         payoutManager.releaseToWorker(assignmentId);
 
         verify(payoutDao, never()).save(any());
+    }
+
+    @Test
+    void moneyIsNotReleasedToAWorkerWhoseIbanOwnershipIsUnproven() {
+        JobAssignment assignment = assignment(AssignmentStatus.COMPLETED, PaymentStatus.HELD_IN_ESCROW);
+        settledPaymentExists();
+        when(bankAccountService.findVerifiedPrimaryAccount(any())).thenReturn(Optional.empty());
+
+        assertThrows(ConflictException.class, () -> payoutManager.releaseToWorker(assignmentId));
+
+        assertEquals(PaymentStatus.HELD_IN_ESCROW, assignment.getPaymentStatus());
+        verify(payoutDao, never()).save(any());
+        verify(settlementService, never()).enqueue(any(), any(), any());
+    }
+
+    @Test
+    void theReleasedPayoutPointsAtTheVerifiedAccount() {
+        assignment(AssignmentStatus.COMPLETED, PaymentStatus.HELD_IN_ESCROW);
+        settledPaymentExists();
+
+        Payout payout = payoutManager.releaseToWorker(assignmentId);
+
+        assertEquals(BankAccountVerificationStatus.VERIFIED, payout.getBankAccount().getVerificationStatus());
     }
 
     @Test
@@ -241,4 +321,5 @@ class PayoutReleaseTest {
         verify(settlementService).enqueueRefund(eq(payment), eq(assignment), eq(new BigDecimal("537.50")));
         verify(settlementService).enqueue(eq(payment), eq(assignment), eq(SettlementOperation.DISAPPROVE));
     }
+
 }

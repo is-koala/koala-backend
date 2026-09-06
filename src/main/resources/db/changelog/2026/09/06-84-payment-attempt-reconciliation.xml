@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-06-84-payment-attempt-reconciliation" author="codex">
+        <comment>Persist the immutable submerchant snapshot and make existing tokened attempts discoverable.</comment>
+        <addColumn tableName="payments">
+            <column name="provider_submerchant_key" type="VARCHAR(255)"/>
+        </addColumn>
+        <sql><![CDATA[
+            UPDATE payments
+               SET next_verification_at = CASE
+                       WHEN status = 'INITIATED' THEN GREATEST(
+                           CURRENT_TIMESTAMP,
+                           created_at + INTERVAL '35 minutes'
+                       )
+                       ELSE CURRENT_TIMESTAMP
+                   END
+             WHERE is_deleted = false
+               AND status IN ('INITIATED', 'VERIFY_PENDING', 'IN_REVIEW')
+               AND provider_token IS NOT NULL
+               AND next_verification_at IS NULL;
+        ]]></sql>
+        <rollback>
+            <dropColumn tableName="payments" columnName="provider_submerchant_key"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

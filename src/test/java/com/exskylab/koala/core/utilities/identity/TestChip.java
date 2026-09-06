@@ -28,6 +28,7 @@ import java.security.MessageDigest;
 import java.security.Security;
 import java.security.cert.TrustAnchor;
 import java.security.cert.X509Certificate;
+import java.security.spec.ECGenParameterSpec;
 import java.util.Date;
 import java.util.List;
 import java.util.Set;
@@ -112,6 +113,11 @@ final class TestChip {
     }
 
     byte[] securityObjectForHashes(byte[] dataGroup1Hash, byte[] dataGroup11Hash) throws Exception {
+        return securityObjectForHashes(dataGroup1Hash, dataGroup11Hash, null);
+    }
+
+    byte[] securityObjectForHashes(byte[] dataGroup1Hash, byte[] dataGroup11Hash,
+                                   byte[] dataGroup15Hash) throws Exception {
         ASN1EncodableVector hashEntry = new ASN1EncodableVector();
         hashEntry.add(new ASN1Integer(1));
         hashEntry.add(new DEROctetString(dataGroup1Hash));
@@ -124,6 +130,13 @@ final class TestChip {
             entry11.add(new ASN1Integer(11));
             entry11.add(new DEROctetString(dataGroup11Hash));
             hashes.add(new DERSequence(entry11));
+        }
+
+        if (dataGroup15Hash != null) {
+            ASN1EncodableVector entry15 = new ASN1EncodableVector();
+            entry15.add(new ASN1Integer(15));
+            entry15.add(new DEROctetString(dataGroup15Hash));
+            hashes.add(new DERSequence(entry15));
         }
 
         ASN1EncodableVector lds = new ASN1EncodableVector();
@@ -166,6 +179,25 @@ final class TestChip {
 
     byte[] securityObjectWithDg11(byte[] dg1, byte[] dg11) throws Exception {
         return securityObjectForHashes(sha256(dg1), sha256(dg11));
+    }
+
+    byte[] securityObjectWithDg15(byte[] dg1, byte[] dg15) throws Exception {
+        return securityObjectForHashes(sha256(dg1), null, sha256(dg15));
+    }
+
+    static byte[] dataGroup15() throws Exception {
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("EC", BouncyCastleProvider.PROVIDER_NAME);
+        generator.initialize(new ECGenParameterSpec("secp256r1"));
+
+        byte[] key = generator.generateKeyPair().getPublic().getEncoded();
+
+        byte[] wrapped = new byte[key.length + 4];
+        wrapped[0] = 0x6F;
+        wrapped[1] = (byte) 0x82;
+        wrapped[2] = (byte) (key.length >> 8);
+        wrapped[3] = (byte) (key.length & 0xFF);
+        System.arraycopy(key, 0, wrapped, 4, key.length);
+        return wrapped;
     }
 
     static byte[] sha256(byte[] content) throws Exception {

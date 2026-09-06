@@ -13,6 +13,7 @@ public class IdentityMessages {
     public static final String NAME_MISMATCH = "{identity.name.mismatch}";
     public static final String CHIP_NOT_PRESENT = "{identity.chip.not.present}";
     public static final String CHIP_KEY_UNREADABLE = "{identity.chip.key.unreadable}";
+    public static final String CHIP_KEY_UNSIGNED = "{identity.chip.key.unsigned}";
     public static final String CHALLENGE_INVALID = "{identity.challenge.invalid}";
     public static final String ACTIVE_AUTHENTICATION_REQUIRED = "{identity.active.authentication.required}";
 }

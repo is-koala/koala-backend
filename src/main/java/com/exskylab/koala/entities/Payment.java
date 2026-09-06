@@ -37,6 +37,9 @@ public class Payment extends BaseEntity {
     @Column(name = "provider_token", length = 512)
     private String providerToken;
 
+    @Column(name = "provider_submerchant_key", length = 255)
+    private String providerSubmerchantKey;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     private PaymentAttemptStatus status;
@@ -70,4 +73,10 @@ public class Payment extends BaseEntity {
 
     @Column(name = "completed_at")
     private Instant completedAt;
+
+    @Column(name = "verification_attempts", nullable = false)
+    private int verificationAttempts;
+
+    @Column(name = "next_verification_at")
+    private Instant nextVerificationAt;
 }

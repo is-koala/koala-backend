@@ -58,6 +58,10 @@ _Avoid_: Atama, ödeme oturumu
 Ödeme sağlayıcısının doğrulanmış cevabıyla backend tarafından kesinleştirilen finansal durum.
 _Avoid_: Dönüş URL'si durumu, WebView sonucu
 
+**İptal İadesi**:
+Belirli bir iptal kararının işveren için doğurduğu iade ve o iadenin yaşam döngüsü.
+_Avoid_: Atamanın son iadesi, atamadaki herhangi bir iade
+
 ## Konum
 
 **Adres Adayı**:

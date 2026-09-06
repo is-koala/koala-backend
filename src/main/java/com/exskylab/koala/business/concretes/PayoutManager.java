@@ -3,6 +3,7 @@ package com.exskylab.koala.business.concretes;
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.exceptions.ConflictException;
+import com.exskylab.koala.core.exceptions.ExternalServiceException;
 import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.business.abstracts.SettlementService;
 import com.exskylab.koala.core.constants.DisputeMessages;
@@ -60,7 +61,7 @@ public class PayoutManager implements PayoutService {
     @Override
     @Transactional
     public Payout releaseToWorker(UUID jobAssignmentId) {
-        JobAssignment assignment = jobAssignmentDao.findById(jobAssignmentId)
+        JobAssignment assignment = jobAssignmentDao.findByIdForUpdate(jobAssignmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(PayoutMessages.ASSIGNMENT_NOT_FOUND));
 
         if (payoutDao.existsByJobAssignmentId(jobAssignmentId)) {
@@ -77,18 +78,27 @@ public class PayoutManager implements PayoutService {
             throw new ConflictException(DisputeMessages.BLOCKS_RELEASE);
         }
 
+        BankAccount destination = bankAccountService
+                .findVerifiedPrimaryAccount(assignment.getWorker().getId())
+                .orElseThrow(() -> {
+                    log.warn("Release refused on assignment {}: worker {} has not proven IBAN ownership.",
+                            jobAssignmentId, assignment.getWorker().getId());
+                    return new ConflictException(PayoutMessages.WORKER_IBAN_NOT_VERIFIED);
+                });
+
         Payment payment = settledPayment(jobAssignmentId);
 
         Payout payout = new Payout();
         payout.setJobAssignment(assignment);
         payout.setPayment(payment);
         payout.setWorker(assignment.getWorker());
-        payout.setBankAccount(bankAccountService.findPrimaryAccount(assignment.getWorker().getId()).orElse(null));
+        payout.setBankAccount(destination);
         payout.setAmount(assignment.getWorkerPayout());
         payout.setCurrency(CURRENCY);
         payout.setStatus(PayoutStatus.PENDING);
 
-        settlementService.enqueue(payment, assignment, SettlementOperation.APPROVE);
+        settlementService.enqueue(payment, assignment, SettlementOperation.APPROVE)
+                .orElseThrow(() -> new ExternalServiceException(PayoutMessages.SETTLEMENT_NOT_QUEUED));
         stateMachine.transition(assignment, PaymentStatus.RELEASED_TO_WORKER);
 
         Payout saved = payoutDao.save(payout);
@@ -100,8 +110,12 @@ public class PayoutManager implements PayoutService {
     @Override
     @Transactional
     public Refund refundEmployer(UUID jobAssignmentId, BigDecimal amount, String reason) {
-        JobAssignment assignment = jobAssignmentDao.findById(jobAssignmentId)
+        JobAssignment assignment = jobAssignmentDao.findByIdForUpdate(jobAssignmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(PayoutMessages.ASSIGNMENT_NOT_FOUND));
+
+        if (disputeDao.existsByJobAssignmentIdAndStatusIn(jobAssignmentId, DisputeManager.ACTIVE)) {
+            throw new ConflictException(DisputeMessages.BLOCKS_RELEASE);
+        }
 
         if (!stateMachine.canRefund(assignment)) {
             throw new ConflictException(PayoutMessages.NOT_REFUNDABLE);
@@ -121,10 +135,12 @@ public class PayoutManager implements PayoutService {
         refund.setStatus(RefundStatus.PENDING);
         refund.setReason(reason);
 
-        settlementService.enqueueRefund(payment, assignment, refundAmount);
+        settlementService.enqueueRefund(payment, assignment, refundAmount)
+                .orElseThrow(() -> new ExternalServiceException(PayoutMessages.SETTLEMENT_NOT_QUEUED));
 
         if (refundAmount.compareTo(payment.getTotalCharged()) < 0) {
-            settlementService.enqueue(payment, assignment, SettlementOperation.DISAPPROVE);
+            settlementService.enqueue(payment, assignment, SettlementOperation.DISAPPROVE)
+                    .orElseThrow(() -> new ExternalServiceException(PayoutMessages.SETTLEMENT_NOT_QUEUED));
         }
 
         stateMachine.transition(assignment, PaymentStatus.REFUNDED);

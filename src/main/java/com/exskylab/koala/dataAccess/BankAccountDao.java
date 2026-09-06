@@ -25,6 +25,8 @@ public interface BankAccountDao extends JpaRepository<BankAccount, UUID> {
 
     Optional<BankAccount> findByUserIdAndIbanAndActiveTrue(UUID userId, String iban);
 
+    Optional<BankAccount> findByVerificationReferenceAndActiveTrue(String verificationReference);
+
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update BankAccount account set account.primaryAccount = false "
             + "where account.user.id = :userId and account.primaryAccount = true and account.active = true")
