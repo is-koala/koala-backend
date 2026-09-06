@@ -21,10 +21,9 @@ class ApiConventionTest {
     private static final Pattern CLASS_MAPPING = Pattern.compile("@RequestMapping\\(\"([^\"]*)\"\\)");
     private static final Pattern METHOD_MAPPING =
             Pattern.compile("@(Get|Post|Put|Patch|Delete)Mapping(?:\\(\\s*(?:value\\s*=\\s*)?\"([^\"]*)\")?");
-    private static final Pattern PLATFORM_ADMIN_ONLY_RULE =
+    private static final Pattern ADMIN_ONLY_RULE =
             Pattern.compile("\\.requestMatchers\\(([^)]*)\\)\\s*\\.has(?:Any)?Role\\(\\s*\"ADMIN\"\\s*\\)");
-    private static final Pattern ADMIN_RULE =
-            Pattern.compile("\\.requestMatchers\\(([^)]*)\\)\\s*\\.hasRole\\(\"ADMIN\"\\)");
+    private static final Pattern QUOTED_PATH = Pattern.compile("\"([^\"]*)\"");
 
     private record Route(String verb, String path, String controller) {
     }
@@ -54,6 +53,18 @@ class ApiConventionTest {
         }
     }
 
+    private static List<String> adminOnlyPaths(String config) {
+        List<String> paths = new ArrayList<>();
+        Matcher rule = ADMIN_ONLY_RULE.matcher(config);
+        while (rule.find()) {
+            Matcher path = QUOTED_PATH.matcher(rule.group(1));
+            while (path.find()) {
+                paths.add(path.group(1));
+            }
+        }
+        return paths;
+    }
+
     @Test
     void everyRouteStartsAtTheRootAndCarriesNoTrailingSlash() throws IOException {
         for (Route route : routes()) {
@@ -75,35 +86,52 @@ class ApiConventionTest {
 
     @Test
     void everyAdminOnlyRuleLivesUnderTheAdminPrefix() throws IOException {
-        Matcher rule = ADMIN_RULE.matcher(Files.readString(SECURITY_CONFIG));
-
-        while (rule.find()) {
-            Matcher path = Pattern.compile("\"([^\"]*)\"").matcher(rule.group(1));
-            while (path.find()) {
-                String value = path.group(1);
-                assertTrue(value.startsWith("/admin") || value.startsWith("/actuator"),
-                        "ADMIN'e kısıtlı uç /admin altında olmalı: " + value);
-            }
+        for (String value : adminOnlyPaths(Files.readString(SECURITY_CONFIG))) {
+            assertTrue(value.startsWith("/admin") || value.startsWith("/actuator"),
+                    "ADMIN'e kısıtlı uç /admin altında olmalı: " + value);
         }
     }
 
     @Test
     void noCompanyScopedRuleIsLockedToThePlatformAdminRole() throws IOException {
-        Matcher rule = PLATFORM_ADMIN_ONLY_RULE.matcher(Files.readString(SECURITY_CONFIG));
-        List<String> offenders = new ArrayList<>();
-
-        while (rule.find()) {
-            Matcher path = Pattern.compile("\"([^\"]*)\"").matcher(rule.group(1));
-            while (path.find()) {
-                String value = path.group(1);
-                if (value.startsWith("/companies") || value.startsWith("/contact-invitations")) {
-                    offenders.add(value);
-                }
-            }
-        }
+        List<String> offenders = adminOnlyPaths(Files.readString(SECURITY_CONFIG)).stream()
+                .filter(value -> value.startsWith("/companies") || value.startsWith("/contact-invitations"))
+                .toList();
 
         assertTrue(offenders.isEmpty(),
                 "Şirket yetkisi servis katmanında denetlenir, platform ADMIN rolüne kilitlenemez: " + offenders);
+    }
+
+    @Test
+    void theAdminOnlyScannerSeesHasRole() {
+        String config = """
+                .requestMatchers(HttpMethod.POST, "/widgets").hasRole("ADMIN")
+                """;
+
+        assertEquals(List.of("/widgets"), adminOnlyPaths(config),
+                "hasRole(\"ADMIN\") biçimi taramadan kaçamaz");
+    }
+
+    @Test
+    void theAdminOnlyScannerSeesHasAnyRoleWhenAdminIsTheOnlyRole() {
+        String config = """
+                .requestMatchers(HttpMethod.POST, "/widgets").hasAnyRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/gadgets").hasAnyRole( "ADMIN" )
+                """;
+
+        assertEquals(List.of("/widgets", "/gadgets"), adminOnlyPaths(config),
+                "tek rolü ADMIN olan hasAnyRole, hasRole(\"ADMIN\") ile aynı kısıttır");
+    }
+
+    @Test
+    void theAdminOnlyScannerLeavesMultiRoleRulesAlone() {
+        String config = """
+                .requestMatchers(HttpMethod.POST, "/widgets").hasAnyRole("USER", "ADMIN")
+                .requestMatchers(HttpMethod.GET, "/gadgets").hasAnyRole("ADMIN", "USER")
+                """;
+
+        assertEquals(List.of(), adminOnlyPaths(config),
+                "çok rollü kural ADMIN'e kısıtlama değildir");
     }
 
     @Test

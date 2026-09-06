@@ -39,7 +39,7 @@ public class ImagesController {
 
 
     @Operation(summary = "Görsel yükle",
-            description = "Metadata temizlenerek depoya yazılır. Yalnızca ADMIN rolüne açıktır.")
+            description = "Metadata temizlenerek depoya yazılır. Kimliği doğrulanmış her kullanıcıya açıktır.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Görsel yüklendi"),
             @ApiResponse(responseCode = "400", description = "Dosya boş, çok büyük ya da desteklenmeyen türde",
