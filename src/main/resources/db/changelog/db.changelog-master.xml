@@ -64,4 +64,5 @@
     <include file="db/changelog/2026/09/06-21-account-deletion-staff-permission.xml"/>
     <include file="db/changelog/2026/09/06-34-authorities-key-and-grant-provenance.xml"/>
     <include file="db/changelog/2026/09/06-40-admin-audit-log.xml"/>
+    <include file="db/changelog/2026/09/06-79-bank-account-collection.xml"/>
 </databaseChangeLog>

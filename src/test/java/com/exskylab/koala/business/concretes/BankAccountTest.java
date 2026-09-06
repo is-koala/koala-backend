@@ -4,6 +4,7 @@ import com.exskylab.koala.dataAccess.BankAccountDao;
 import com.exskylab.koala.entities.BankAccount;
 import com.exskylab.koala.entities.User;
 import com.exskylab.koala.core.exceptions.ValidationException;
+import com.exskylab.koala.business.abstracts.SecurityService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -11,6 +12,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -28,7 +30,7 @@ class BankAccountTest {
     @BeforeEach
     void setUp() {
         bankAccountDao = mock(BankAccountDao.class);
-        manager = new BankAccountManager(bankAccountDao);
+        manager = new BankAccountManager(bankAccountDao, mock(SecurityService.class));
 
         user = new User();
         user.setId(UUID.randomUUID());
@@ -45,7 +47,7 @@ class BankAccountTest {
         BankAccount account = manager.savePrimaryAccount(user, "TR18 0006 2001 1900 0006 6723 15");
 
         assertEquals("TR180006200119000006672315", account.getIban());
-        assertEquals("Ada Yilmaz", account.getAccountHolderName());
+        assertNull(account.getAccountHolderName());
         assertTrue(account.isPrimaryAccount());
         assertTrue(account.isActive());
     }

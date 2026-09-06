@@ -18,7 +18,7 @@ public final class IbanValidator {
             return false;
         }
 
-        if (!normalized.substring(0, 2).matches("[A-Z]{2}")) {
+        if (!normalized.startsWith("TR")) {
             return false;
         }
 

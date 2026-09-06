@@ -384,6 +384,12 @@ Testlerde `rate-limit.enabled=false`; açıkça test eden sınıflar `@TestPrope
 
 **IBAN artık `User` üzerinde değil.** `BankAccount` entity'sinde; birincil hesap `is_primary` ile işaretli, doğrulama `BankAccountManager` içinde. `users.iban` kolonu mevcut veriler `bank_accounts`'a kopyalandıktan sonra düşürüldü — iki kaynak bırakılmadı.
 
+**Banka hesabı HTTP yüzeyi koleksiyon tabanlı.** `GET/POST /users/me/bank-accounts`, `POST /users/me/bank-accounts/{accountId}/primary` ve `DELETE /users/me/bank-accounts/{accountId}` yalnızca oturum sahibinin kayıtlarına çalışır. DTO ham IBAN taşımaz; `maskedIban`, `id`, `primary` ve ilerideki sahiplik doğrulama akışına ayrılmış `verificationStatus` döner. İlk etkin hesap otomatik birincildir. Veritabanındaki kısmi benzersiz indeks aktif ve silinmemiş hesaplarda kullanıcı başına en fazla bir birincil kaydı garanti eder; kullanıcıya ait yazmalar transaction-scoped advisory lock ile seri hale getirildiği için eşzamanlı birincil seçimleri de bu invariant'ı bozmaz.
+
+**Eski profil yazma sözleşmesi geçiş boyunca korunuyor.** `PATCH /users/me { iban }` yeni bir IBAN gelirse mevcut birincil kaydı yerinde günceller, aynı IBAN ikincil hesaplarda zaten varsa yeni kayıt açmadan onu birincil yapar. `GET /users/me` içindeki `maskedIban` her zaman koleksiyonun mevcut birincil hesabından üretilir; `users.iban` geri getirilmez ve ikinci bir doğruluk kaynağı oluşmaz. Yeni koleksiyon ucuna yalnızca Türkiye IBAN'ı (`TR`, 26 karakter, mod-97) kabul edilir; ham değer yanıta, hata mesajına, telemetry'ye veya log'a yazılmaz.
+
+**`verificationStatus` bu dalgada yalnızca ileriye uyumlu veri sözleşmesidir.** Mevcut ve yeni hesaplar `UNVERIFIED` başlar; eski profil ucu bir IBAN'ı değiştirdiğinde durum yeniden `UNVERIFIED` olur ve beyana dayalı `accountHolderName` temizlenir. `PENDING`, `VERIFIED` ve `EXPIRED` değerlerinin geçişleri, zaman aşımı ve ödeme kapısı #71'in sorumluluğundadır; bu koleksiyon yüzeyi bunları uygulamaz ve ödeme semantiğini değiştirmez.
+
 `initiatePaymentSession` bütünüyle `@Transactional`: adres eksikliği ya da Iyzico hatası durumunda `Payment` kaydı da geri alınır, sahipsiz deneme kalmaz.
 
 ## 2l. Sayfalama ve ilan araması

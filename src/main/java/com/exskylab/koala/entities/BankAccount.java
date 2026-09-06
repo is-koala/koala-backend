@@ -40,4 +40,8 @@ public class BankAccount extends BaseEntity {
 
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "verification_status", nullable = false, length = 32)
+    private BankAccountVerificationStatus verificationStatus = BankAccountVerificationStatus.UNVERIFIED;
 }
