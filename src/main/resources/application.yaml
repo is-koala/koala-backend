@@ -205,6 +205,14 @@ assignment:
     zone-id: ${ASSIGNMENT_UNPAID_EXPIRY_ZONE_ID:Europe/Istanbul}
     cron: ${ASSIGNMENT_UNPAID_EXPIRY_CRON:0 45 * * * *}
 
+audit:
+  retention:
+    enabled: ${AUDIT_RETENTION_ENABLED:true}
+    core-months: ${AUDIT_RETENTION_CORE_MONTHS:24}
+    financial-core-months: ${AUDIT_RETENTION_FINANCIAL_CORE_MONTHS:120}
+    detail-months: ${AUDIT_RETENTION_DETAIL_MONTHS:6}
+    cron: ${AUDIT_RETENTION_CRON:0 30 3 * * *}
+
 identity:
   passive-authentication:
     enabled: ${IDENTITY_PASSIVE_AUTH_ENABLED:false}

@@ -5,6 +5,7 @@ import com.exskylab.koala.business.abstracts.SettingsService;
 import com.exskylab.koala.core.constants.SettingKeys;
 import com.exskylab.koala.core.helpers.AppVersion;
 import com.exskylab.koala.core.constants.SettingMessages;
+import com.exskylab.koala.core.security.StaffAuditContext;
 import com.exskylab.koala.dataAccess.AppSettingDao;
 import com.exskylab.koala.entities.AppSetting;
 import com.exskylab.koala.core.exceptions.ValidationException;
@@ -109,8 +110,10 @@ public class SettingsManager implements SettingsService {
             return created;
         });
 
+        String previous = setting.getValue();
         setting.setValue(value.trim());
         AppSetting saved = appSettingDao.save(setting);
+        StaffAuditContext.capture(previous, saved.getValue());
 
         log.info("Setting {} changed to {}", key, saved.getValue());
         return saved;

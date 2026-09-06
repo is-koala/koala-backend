@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.business.abstracts.StaffAuditService;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.dtos.legal.request.ConsentDecisionDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
@@ -28,6 +29,7 @@ class LegalConsentTest {
     private ConsentRecordDao consentRecordDao;
     private AccountDeletionRequestDao deletionDao;
     private com.exskylab.koala.business.abstracts.JobAssignmentService jobAssignmentService;
+    private StaffAuditService staffAuditService;
     private LegalManager legalManager;
 
     private AgreementVersion terms;
@@ -41,8 +43,10 @@ class LegalConsentTest {
         consentRecordDao = mock(ConsentRecordDao.class);
         deletionDao = mock(AccountDeletionRequestDao.class);
         jobAssignmentService = mock(com.exskylab.koala.business.abstracts.JobAssignmentService.class);
+        staffAuditService = mock(StaffAuditService.class);
 
-        legalManager = new LegalManager(agreementVersionDao, consentRecordDao, deletionDao, jobAssignmentService);
+        legalManager = new LegalManager(agreementVersionDao, consentRecordDao, deletionDao,
+                jobAssignmentService, staffAuditService);
 
         terms = agreement(AgreementType.TERMS_OF_SERVICE, true);
         privacy = agreement(AgreementType.PRIVACY_POLICY, true);
@@ -156,5 +160,21 @@ class LegalConsentTest {
         assertEquals(AccountDeletionStatus.REQUESTED, request.getStatus());
         assertEquals("artik kullanmiyorum", request.getReason());
         assertNotNull(request.getRequestedAt());
+    }
+
+    @Test
+    void anErasureRequestDropsTheAuditDetailAboutThatPerson() {
+        legalManager.requestAccountDeletion(user, "kvkk");
+
+        verify(staffAuditService).eraseDetailsForResource(user.getId().toString());
+    }
+
+    @Test
+    void aBlockedErasureRequestErasesNothing() {
+        when(jobAssignmentService.hasMoneyInEscrowFor(user.getId())).thenReturn(true);
+
+        assertThrows(ConflictException.class, () -> legalManager.requestAccountDeletion(user, "kvkk"));
+
+        verify(staffAuditService, never()).eraseDetailsForResource(any());
     }
 }

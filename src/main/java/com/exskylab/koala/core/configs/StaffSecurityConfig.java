@@ -1,7 +1,9 @@
 package com.exskylab.koala.core.configs;
 
+import com.exskylab.koala.business.abstracts.StaffAuditService;
 import com.exskylab.koala.core.properties.StaffTokenProperties;
 import com.exskylab.koala.core.security.SessionAuthFilter;
+import com.exskylab.koala.core.security.StaffAuditFilter;
 import com.exskylab.koala.core.security.StaffAuthenticationManagerResolver;
 import com.exskylab.koala.core.security.StaffBearerTokenResolver;
 import com.exskylab.koala.core.security.StaffPermissionAuthorizationManager;
@@ -23,19 +25,22 @@ public class StaffSecurityConfig {
     private final StaffBearerTokenResolver staffBearerTokenResolver;
     private final StaffAuthenticationManagerResolver staffAuthenticationManagerResolver;
     private final StaffTokenProperties staffTokenProperties;
+    private final StaffAuditService staffAuditService;
 
     public StaffSecurityConfig(SessionAuthFilter sessionAuthFilter,
                                SecurityExceptionConfig securityExceptionConfig,
                                StaffPermissionAuthorizationManager staffPermissionAuthorizationManager,
                                StaffBearerTokenResolver staffBearerTokenResolver,
                                StaffAuthenticationManagerResolver staffAuthenticationManagerResolver,
-                               StaffTokenProperties staffTokenProperties) {
+                               StaffTokenProperties staffTokenProperties,
+                               StaffAuditService staffAuditService) {
         this.sessionAuthFilter = sessionAuthFilter;
         this.securityExceptionConfig = securityExceptionConfig;
         this.staffPermissionAuthorizationManager = staffPermissionAuthorizationManager;
         this.staffBearerTokenResolver = staffBearerTokenResolver;
         this.staffAuthenticationManagerResolver = staffAuthenticationManagerResolver;
         this.staffTokenProperties = staffTokenProperties;
+        this.staffAuditService = staffAuditService;
     }
 
     @Bean
@@ -56,7 +61,9 @@ public class StaffSecurityConfig {
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-                .addFilterAfter(sessionAuthFilter, BearerTokenAuthenticationFilter.class);
+                .addFilterAfter(sessionAuthFilter, BearerTokenAuthenticationFilter.class)
+
+                .addFilterAfter(new StaffAuditFilter(staffAuditService), SessionAuthFilter.class);
 
         if (staffTokenProperties.isConfigured()) {
             httpSecurity.oauth2ResourceServer(resourceServer -> resourceServer

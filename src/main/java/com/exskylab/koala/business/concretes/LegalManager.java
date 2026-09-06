@@ -3,6 +3,7 @@ package com.exskylab.koala.business.concretes;
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.LegalService;
+import com.exskylab.koala.business.abstracts.StaffAuditService;
 import com.exskylab.koala.core.constants.LegalMessages;
 import com.exskylab.koala.core.dtos.legal.request.ConsentDecisionDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
@@ -33,14 +34,17 @@ public class LegalManager implements LegalService {
     private final ConsentRecordDao consentRecordDao;
     private final AccountDeletionRequestDao accountDeletionRequestDao;
     private final JobAssignmentService jobAssignmentService;
+    private final StaffAuditService staffAuditService;
 
     public LegalManager(AgreementVersionDao agreementVersionDao, ConsentRecordDao consentRecordDao,
                         AccountDeletionRequestDao accountDeletionRequestDao,
-                        JobAssignmentService jobAssignmentService) {
+                        JobAssignmentService jobAssignmentService,
+                        StaffAuditService staffAuditService) {
         this.agreementVersionDao = agreementVersionDao;
         this.consentRecordDao = consentRecordDao;
         this.accountDeletionRequestDao = accountDeletionRequestDao;
         this.jobAssignmentService = jobAssignmentService;
+        this.staffAuditService = staffAuditService;
     }
 
     @Override
@@ -133,7 +137,9 @@ public class LegalManager implements LegalService {
         request.setRequestedAt(Instant.now());
 
         AccountDeletionRequest saved = accountDeletionRequestDao.save(request);
-        log.info("Account deletion requested for user id: {}", user.getId());
+        int erased = staffAuditService.eraseDetailsForResource(user.getId().toString());
+        log.info("Account deletion requested for user id: {}, {} audit detail rows erased.",
+                user.getId(), erased);
         return saved;
     }
 

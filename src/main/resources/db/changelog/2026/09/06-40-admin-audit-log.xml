@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-06-40-01-admin-audit-entries" author="koala">
+        <createTable tableName="admin_audit_entries">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="occurred_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+            <column name="actor_staff_id" type="UUID"/>
+            <column name="actor_display_name" type="VARCHAR(200)"><constraints nullable="false"/></column>
+            <column name="permission" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="action" type="VARCHAR(96)"><constraints nullable="false"/></column>
+            <column name="resource_type" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="resource_id" type="VARCHAR(128)"><constraints nullable="false"/></column>
+            <column name="allowed" type="BOOLEAN"><constraints nullable="false"/></column>
+            <column name="mutating" type="BOOLEAN"><constraints nullable="false"/></column>
+            <column name="sensitivity" type="VARCHAR(16)"><constraints nullable="false"/></column>
+            <column name="retain_until" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+        </createTable>
+        <createIndex tableName="admin_audit_entries" indexName="ix_admin_audit_entries_occurred_at">
+            <column name="occurred_at" descending="true"/>
+        </createIndex>
+        <createIndex tableName="admin_audit_entries" indexName="ix_admin_audit_entries_actor">
+            <column name="actor_staff_id"/>
+            <column name="occurred_at" descending="true"/>
+        </createIndex>
+        <createIndex tableName="admin_audit_entries" indexName="ix_admin_audit_entries_resource">
+            <column name="resource_type"/>
+            <column name="resource_id"/>
+        </createIndex>
+        <createIndex tableName="admin_audit_entries" indexName="ix_admin_audit_entries_retain_until">
+            <column name="retain_until"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="2026-09-06-40-02-admin-audit-entry-details" author="koala">
+        <createTable tableName="admin_audit_entry_details">
+            <column name="audit_entry_id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="request_body" type="TEXT"/>
+            <column name="ip" type="VARCHAR(45)"/>
+            <column name="user_agent" type="VARCHAR(512)"/>
+            <column name="before_value" type="TEXT"/>
+            <column name="after_value" type="TEXT"/>
+            <column name="purge_after" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="admin_audit_entry_details" baseColumnNames="audit_entry_id"
+                                 constraintName="fk_admin_audit_entry_details_entry"
+                                 referencedTableName="admin_audit_entries" referencedColumnNames="id"
+                                 onDelete="CASCADE"/>
+        <createIndex tableName="admin_audit_entry_details" indexName="ix_admin_audit_entry_details_purge_after">
+            <column name="purge_after"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>
