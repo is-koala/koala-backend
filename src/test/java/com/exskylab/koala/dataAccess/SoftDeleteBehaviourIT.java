@@ -1,7 +1,7 @@
 package com.exskylab.koala.dataAccess;
 
 import com.exskylab.koala.support.AbstractIntegrationTest;
-import com.exskylab.koala.entities.LoginAttempt;
+import com.exskylab.koala.entities.University;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -24,66 +24,65 @@ class SoftDeleteBehaviourIT extends AbstractIntegrationTest {
             "üyelik satırı; rol geri alınınca fiziksel olarak silinir ve iz denetim kaydında kalır (§2au)");
 
     @Autowired
-    private LoginAttemptDao loginAttemptDao;
+    private UniversityDao universityDao;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    private UUID persistAttempt() {
-        LoginAttempt attempt = new LoginAttempt();
-        attempt.setEmailAttempted("soft@example.com");
-        attempt.setSuccess(false);
-        return loginAttemptDao.save(attempt).getId();
+    private UUID persistUniversity() {
+        University university = new University();
+        university.setName("soft-delete-ornegi");
+        return universityDao.save(university).getId();
     }
 
     @Test
     @Transactional
     void deletingAnEntityLeavesTheRowInTheTable() {
-        UUID id = persistAttempt();
-        loginAttemptDao.deleteById(id);
-        loginAttemptDao.flush();
+        UUID id = persistUniversity();
+        universityDao.deleteById(id);
+        universityDao.flush();
 
         Integer rowsInTable = jdbcTemplate.queryForObject(
-                "select count(*) from login_attempts where id = ?", Integer.class, id);
+                "select count(*) from universities where id = ?", Integer.class, id);
         assertEquals(1, rowsInTable, "Satir tablodan fiziksel olarak silinmemeliydi.");
 
         Boolean flag = jdbcTemplate.queryForObject(
-                "select is_deleted from login_attempts where id = ?", Boolean.class, id);
+                "select is_deleted from universities where id = ?", Boolean.class, id);
         assertTrue(Boolean.TRUE.equals(flag), "is_deleted true olmaliydi.");
     }
 
     @Test
     @Transactional
     void aDeletedRowDisappearsFromNormalQueries() {
-        UUID id = persistAttempt();
-        loginAttemptDao.deleteById(id);
-        loginAttemptDao.flush();
-        loginAttemptDao.findAll();
+        UUID id = persistUniversity();
+        universityDao.deleteById(id);
+        universityDao.flush();
+        universityDao.findAll();
 
-        assertTrue(loginAttemptDao.findById(id).isEmpty(),
+        assertTrue(universityDao.findById(id).isEmpty(),
                 "Silinmis kayit varsayilan sorgudan dusmeliydi.");
     }
 
     @Test
     @Transactional
     void aLiveRowIsStillVisible() {
-        UUID id = persistAttempt();
-        loginAttemptDao.flush();
+        UUID id = persistUniversity();
+        universityDao.flush();
 
-        assertTrue(loginAttemptDao.findById(id).isPresent());
+        assertTrue(universityDao.findById(id).isPresent());
     }
 
     @Test
     void reconciliationCanStillReachDeletedRowsThroughNativeSql() {
-        UUID id = persistAttempt();
-        loginAttemptDao.deleteById(id);
-        loginAttemptDao.flush();
+        UUID id = persistUniversity();
+        universityDao.deleteById(id);
+        universityDao.flush();
 
-        List<String> emails = jdbcTemplate.queryForList(
-                "select email_attempted from login_attempts where id = ?", String.class, id);
+        List<String> names = jdbcTemplate.queryForList(
+                "select name from universities where id = ?", String.class, id);
 
-        assertEquals(1, emails.size(), "Mutabakat sorgusu silinmis kaydi hala gorebilmeli.");
-        assertEquals("soft@example.com", emails.get(0));
+        assertEquals(1, names.size(), "Mutabakat sorgusu silinmis kaydi hala gorebilmeli.");
+        assertEquals("soft-delete-ornegi", names.get(0));
     }
 
     @Test
