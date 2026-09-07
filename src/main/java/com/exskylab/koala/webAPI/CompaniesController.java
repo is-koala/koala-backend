@@ -19,7 +19,10 @@ import com.exskylab.koala.core.dtos.company.request.UpdateCompanyRequestDto;
 import com.exskylab.koala.core.dtos.company.response.CompanyDto;
 import com.exskylab.koala.core.dtos.companyContact.request.InviteContactToCompanyDto;
 import com.exskylab.koala.core.dtos.companyContactInvitation.response.CompanyContactInvitationDto;
+import com.exskylab.koala.core.constants.JobMessages;
+import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.job.request.CreateCompanyJobDto;
+import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
 import com.exskylab.koala.core.dtos.job.response.CompanyJobDto;
 import com.exskylab.koala.core.dtos.companyContact.response.CompanyContactDto;
 import com.exskylab.koala.core.constants.GalleryMessages;
@@ -35,6 +38,9 @@ import com.exskylab.koala.core.utilities.results.SuccessResult;
 import com.exskylab.koala.entities.CompanyContactInvitation;
 import com.exskylab.koala.entities.Job;
 import jakarta.validation.Valid;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -151,6 +157,28 @@ public class CompaniesController {
                         CompanyMessages.JOB_CREATED_SUCCESS,
                         HttpStatus.CREATED
                 ));
+    }
+
+    @Operation(summary = "Şirketin ilanları",
+            description = "Şirketin bütün ilanlarını, hangi yetkilinin açtığından bağımsız olarak listeler; "
+                    + "yalnızca kendi açtıklarınız için GET /users/me/jobs kullanılır. "
+                    + "Yalnızca şirketin yetkilisi listeleyebilir. Sayfalıdır; sıralama yalnızca createdAt, "
+                    + "salary, startDateTime ve title alanlarına izin verir. Tam adres yalnız ilanı açan "
+                    + "yetkiliye ve adresi herkese açılmış ilanlarda döner, diğer yetkililere yaklaşık konum gider.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "İlanlar listelendi"),
+            @ApiResponse(responseCode = "400", description = "Sıralama alanı desteklenmiyor",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "403", description = "Şirketin yetkilisi değilsiniz",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @GetMapping("/{companyId}/jobs")
+    public ResponseEntity<SuccessDataResult<PageDto<JobSummaryDto>>> companyJobs(
+            @PathVariable UUID companyId,
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
+
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                jobService.getJobsOfCompany(companyId, pageable), JobMessages.JOBS_LISTED, HttpStatus.OK));
     }
 
     @Operation(summary = "Şirket detayı",

@@ -60,6 +60,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/companies/{companyId}/contact-invitations").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/companies/{companyId}/contact-invitations").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/companies/{companyId}/jobs").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/companies/{companyId}/jobs").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/companies/{companyId}").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/companies/{companyId}").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/companies/{companyId}/contacts").hasAnyRole("USER", "ADMIN")

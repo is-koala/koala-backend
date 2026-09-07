@@ -358,6 +358,26 @@ public class JobManager implements JobService {
 
     @Override
     @Transactional(readOnly = true)
+    public PageDto<JobSummaryDto> getJobsOfCompany(UUID companyId, Pageable requested) {
+        UUID viewerId = securityService.getAuthenticatedUserId();
+        if (!companyContactService.isUserAContactOfCompany(companyId, viewerId)) {
+            log.warn("User {} is not a contact of company {}; company job listing refused", viewerId, companyId);
+            throw new ForbiddenException(JobMessages.USER_IS_NOT_A_CONTACT_OF_COMPANY);
+        }
+
+        pageableSanitizer.rejectUnknownSort(requested, SORTABLE_FIELDS);
+        Pageable pageable = pageableSanitizer.sanitize(requested, SORTABLE_FIELDS, DEFAULT_SORT);
+
+        Page<Job> jobs = jobDao.findAllByCompanyId(companyId, pageable);
+        return enrich(PageDto.of(jobs, job -> {
+            JobSummaryDto summary = jobMapper.toJobSummaryDto(job);
+            addressVisibility.protect(job, summary, viewerId, false);
+            return summary;
+        }));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<GalleryImageDto> getJobGallery(UUID jobId) {
         if (!jobDao.existsById(jobId)) {
             throw new ResourceNotFoundException(JobMessages.JOB_NOT_FOUND);

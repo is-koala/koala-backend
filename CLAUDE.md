@@ -2003,6 +2003,16 @@ Sıkıştırma yalnızca Swagger için değil: `application/json` de kapsamda, y
 
 `JobManager → JobApplicationDao` doğrudan; `JobApplicationManager` zaten `JobService`'e bağlı olduğu için servis üzerinden gitmek ters yön döngü olurdu (§2ae kuralı, muafiyet `AggregateBoundaryTest`'te gerekçeli).
 
+**İlanı listeleyen iki uç var ve ikisi ayrı soruya cevap veriyor.** `GET /users/me/jobs` "ben hangi ilanları açtım", `GET /companies/{companyId}/jobs` "bu şirketin hangi ilanları var". Ayrım şu ana kadar yoktu: tek liste ucu `findAllByCreatorId` üzerinden gidiyordu, yani **bir şirketin iki yetkilisi varsa birinin açtığı ilanı diğeri hiçbir listede göremiyordu** — `Job.company` dolu olmasına rağmen "bu şirketin ilanları" sorusunu soracak yol yoktu. Şirket yetkilileri yüzeyi (is-koala/koala-web#30, #31) indiği için ikinci yetkili artık gerçek bir kullanıcı ve kusur kuramsal değil.
+
+**Sorgu yazılmıştı, hiç bağlanmamıştı.** `JobDao.findAllByCompanyId` baştan beri duruyordu ve `git grep` tanımından başka hiçbir çağrı göstermiyordu; ihtiyaç öngörülmüş, uç açılmamış, ölü kaldığı için de kimse fark etmemişti (is-koala/koala-backend#120).
+
+**Şirket ucunda yetki 403, kendi verim uçlarındaki 404 deseni değil.** `CompanyManager.requireCompanyMember` üyesi olmadığın şirket için 404 döndürüyor; orada gizlenen bir şey de yok, çünkü kontrol saf `exists…` sorgusu (§2d2). Burada 404'e çekmek fazladan hiçbir bit saklamazdı: şirketin varlığı zaten `GET /companies/{companyId}` ile her oturumlu kullanıcıya açık, yani gizlenecek varlık yok. Kontrol yeni bir mekanizma kurmuyor, `CompanyContactService.isUserAContactOfCompany`'yi çağırıyor — `JobApplicationManager` ve `requireJobEditor` ile aynı desen — ve `ADMIN`/`STAFF` ayrımı yapmıyor: STAFF zaten ilan açıp kapatabiliyor (§2s), açtığını listeleyememesi tutarsız olurdu.
+
+**Yetki kontrolü sıralama doğrulamasından önce.** Yabancı bir kullanıcı bozuk bir `sort` gönderdiğinde 400 değil 403 alıyor; kapı fail-closed sırada, §2d2'nin "yetkilendirme durum kontrolünden önce gelir" kuralıyla aynı yön.
+
+**ADR-0003 bu uçta da geçerli ve sonucu şu:** ilanı açmayan yetkili, adresi herkese açılmamış bir şirket ilanında **yaklaşık** konum görüyor. `JobAddressVisibility` bugün `EXACT`'ı ilan sahibine, etkin atamalı işçiye ve `addressPublic` şirket ilanına veriyor; "şirketin herhangi bir yetkilisi" o listede yok. Yeni uç bu kararı değiştirmiyor, mevcut süzgeci uyguluyor — değiştirmek `GET /jobs/{id}` ve aramayı da etkilerdi, yani ADR'yi devralacak ayrı bir karar işi. `CompanyJobListingIT` iki dalı da (yaklaşık ve `addressPublic=true` ile kesin) uçtan uca sabitliyor.
+
 **`POST /jobs/{jobId}/cancel` kapatmadan farklı.** `close` yalnızca yeni başvuruyu durdurur, `cancel` ilanı `CANCELLED` yapar ve başvuranlara bildirim gönderir. Kayıt silinmez — başvuru geçmişi korunmalı, bu yüzden `DELETE` tercih edilmedi.
 
 **İptal, devam eden atama varken reddedilir.** `PENDING_CONFIRMATION`, `CONFIRMED` ya da `IN_PROGRESS` bir atama varsa 409 döner. Aksi hâlde ilan iptali, emanetteki parayı ve iptal politikasını (§2p) arkadan dolanan ikinci bir yol olurdu; o durumda atamanın kendi iptal akışı kullanılır.

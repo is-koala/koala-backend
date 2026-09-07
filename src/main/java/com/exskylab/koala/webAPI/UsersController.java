@@ -248,7 +248,11 @@ public class UsersController {
 
 
     @Operation(summary = "Açtığım ilanlar",
-            description = "Sayfalıdır. Sıralama yalnızca createdAt, salary, startDateTime ve title alanlarına izin verir; listede olmayan bir alan 400 döner.")
+            description = "Yalnızca oturum sahibinin kendi açtığı ilanları döner. Şirket adına açılmış bir ilan "
+                    + "yalnızca onu açan yetkilinin listesinde görünür; şirketin bütün ilanları için "
+                    + "GET /companies/{companyId}/jobs kullanılır. İki uç iki ayrı soruya cevap verir. "
+                    + "Sayfalıdır. Sıralama yalnızca createdAt, salary, startDateTime ve title alanlarına izin "
+                    + "verir; listede olmayan bir alan 400 döner.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "İlanlar listelendi"),
             @ApiResponse(responseCode = "400", description = "Sıralama alanı desteklenmiyor",

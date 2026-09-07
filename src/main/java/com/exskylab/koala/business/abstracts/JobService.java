@@ -48,6 +48,8 @@ public interface JobService {
 
     PageDto<JobSummaryDto> getJobsOfCurrentUser(Pageable pageable);
 
+    PageDto<JobSummaryDto> getJobsOfCompany(UUID companyId, Pageable pageable);
+
     void closeJob(UUID jobId);
 
     void cancelJob(UUID jobId);
