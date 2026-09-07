@@ -20,6 +20,7 @@ import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.helpers.JobAddressVisibility;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
@@ -41,6 +42,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -308,52 +310,50 @@ public class JobManager implements JobService {
     @Override
     @Transactional(readOnly = true)
     public PageDto<JobSummaryDto> search(JobSearchCriteriaDto criteria, Pageable requested, UUID viewerId) {
-        pageableSanitizer.rejectUnknownSort(requested, SORTABLE_FIELDS);
-        Pageable pageable = pageableSanitizer.sanitize(requested, SORTABLE_FIELDS, DEFAULT_SORT);
+        return listJobs(requested, viewerId, pageable -> {
+            Page<UUID> ids = jobDao.searchIds(
+                    JobStatus.OPEN,
+                    java.time.LocalDateTime.now(searchProperties.zone()),
+                    blankToNull(criteria.getQuery()),
+                    criteria.getCategoryId(),
+                    criteria.getCityId(),
+                    criteria.getDistrictId(),
+                    criteria.getType(),
+                    criteria.getSalaryType(),
+                    criteria.getEmployerType(),
+                    criteria.getMinSalary(),
+                    criteria.getMaxSalary(),
+                    criteria.getInsuranceRequired(),
+                    criteria.getExperienceRequired(),
+                    criteria.getMinLatitude(),
+                    criteria.getMaxLatitude(),
+                    criteria.getMinLongitude(),
+                    criteria.getMaxLongitude(),
+                    pageable);
 
-        Page<UUID> ids = jobDao.searchIds(
-                JobStatus.OPEN,
-                java.time.LocalDateTime.now(searchProperties.zone()),
-                blankToNull(criteria.getQuery()),
-                criteria.getCategoryId(),
-                criteria.getCityId(),
-                criteria.getDistrictId(),
-                criteria.getType(),
-                criteria.getSalaryType(),
-                criteria.getEmployerType(),
-                criteria.getMinSalary(),
-                criteria.getMaxSalary(),
-                criteria.getInsuranceRequired(),
-                criteria.getExperienceRequired(),
-                criteria.getMinLatitude(),
-                criteria.getMaxLatitude(),
-                criteria.getMinLongitude(),
-                criteria.getMaxLongitude(),
-                pageable);
-
-        List<Job> jobs = inIdOrder(ids.getContent());
-        Set<UUID> assignedJobIds = assignedJobIds(ids.getContent(), viewerId);
-        List<JobSummaryDto> summaries = jobs.stream().map(job -> {
-            JobSummaryDto summary = jobMapper.toJobSummaryDto(job);
-            addressVisibility.protect(job, summary, viewerId, assignedJobIds.contains(job.getId()));
-            return summary;
-        }).toList();
-        return enrich(PageDto.of(ids, summaries));
+            return new PageImpl<>(inIdOrder(ids.getContent()), pageable, ids.getTotalElements());
+        });
     }
 
     @Override
     @Transactional(readOnly = true)
     public PageDto<JobSummaryDto> getJobsOfCurrentUser(Pageable requested) {
-        pageableSanitizer.rejectUnknownSort(requested, SORTABLE_FIELDS);
-        Pageable pageable = pageableSanitizer.sanitize(requested, SORTABLE_FIELDS, DEFAULT_SORT);
+        UUID viewerId = securityService.getAuthenticatedUserId();
+        return listJobs(requested, viewerId, pageable -> jobDao.findAllByCreatorId(viewerId, pageable));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageDto<JobSummaryDto> getJobsOfCompany(UUID companyId, Pageable requested) {
+        companyService.getCompanyById(companyId);
 
         UUID viewerId = securityService.getAuthenticatedUserId();
-        Page<Job> jobs = jobDao.findAllByCreatorId(viewerId, pageable);
-        return enrich(PageDto.of(jobs, job -> {
-            JobSummaryDto summary = jobMapper.toJobSummaryDto(job);
-            addressVisibility.protect(job, summary, viewerId, false);
-            return summary;
-        }));
+        if (!companyContactService.isUserAContactOfCompany(companyId, viewerId)) {
+            log.warn("User {} is not a contact of company {}; company job listing refused", viewerId, companyId);
+            throw new ForbiddenException(JobMessages.USER_IS_NOT_A_CONTACT_OF_COMPANY);
+        }
+
+        return listJobs(requested, viewerId, pageable -> jobDao.findAllByCompanyId(companyId, pageable));
     }
 
     @Override
@@ -453,6 +453,22 @@ public class JobManager implements JobService {
         job.setStatus(JobStatus.CLOSED);
         jobDao.save(job);
         log.info("Job {} closed by user {}", jobId, securityService.getAuthenticatedUserId());
+    }
+
+    private PageDto<JobSummaryDto> listJobs(Pageable requested, UUID viewerId,
+                                            Function<Pageable, Page<Job>> query) {
+        pageableSanitizer.rejectUnknownSort(requested, SORTABLE_FIELDS);
+        Pageable pageable = pageableSanitizer.sanitize(requested, SORTABLE_FIELDS, DEFAULT_SORT);
+
+        Page<Job> jobs = query.apply(pageable);
+        Set<UUID> assignedJobIds =
+                assignedJobIds(jobs.getContent().stream().map(Job::getId).toList(), viewerId);
+
+        return enrich(PageDto.of(jobs, job -> {
+            JobSummaryDto summary = jobMapper.toJobSummaryDto(job);
+            addressVisibility.protect(job, summary, viewerId, assignedJobIds.contains(job.getId()));
+            return summary;
+        }));
     }
 
     private PageDto<JobSummaryDto> enrich(PageDto<JobSummaryDto> page) {
