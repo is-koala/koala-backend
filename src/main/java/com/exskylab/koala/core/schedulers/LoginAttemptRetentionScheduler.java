@@ -28,7 +28,7 @@ public class LoginAttemptRetentionScheduler {
         try {
             int unattributed = loginAttemptService.purgeExpiredUnattributed();
             int attributed = loginAttemptService.purgeExpiredAttributed();
-            log.info("Login attempt retention run finished: {} ownerless rows and {} account rows removed.",
+            log.info("Login attempt retention run finished: {} unattributed rows and {} attributed rows removed.",
                     unattributed, attributed);
         } catch (Exception exception) {
             log.error("Login attempt retention run failed", exception);

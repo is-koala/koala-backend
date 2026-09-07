@@ -7,18 +7,18 @@
 
     <changeSet id="2026-09-07-03-01-login-attempt-retention-indexes" author="koala">
         <sql>
-            CREATE INDEX idx_login_attempts_ownerless_age
+            CREATE INDEX idx_login_attempts_unattributed_age
                 ON login_attempts (COALESCE(time_stamp, created_at)) WHERE user_id IS NULL;
             CREATE INDEX idx_login_attempts_attributed_age
                 ON login_attempts (COALESCE(time_stamp, created_at)) WHERE user_id IS NOT NULL;
-            CREATE INDEX idx_login_attempts_ownerless_email
+            CREATE INDEX idx_login_attempts_unattributed_email
                 ON login_attempts (LOWER(email_attempted)) WHERE user_id IS NULL;
         </sql>
         <rollback>
             <sql>
-                DROP INDEX idx_login_attempts_ownerless_age;
+                DROP INDEX idx_login_attempts_unattributed_age;
                 DROP INDEX idx_login_attempts_attributed_age;
-                DROP INDEX idx_login_attempts_ownerless_email;
+                DROP INDEX idx_login_attempts_unattributed_email;
             </sql>
         </rollback>
     </changeSet>
