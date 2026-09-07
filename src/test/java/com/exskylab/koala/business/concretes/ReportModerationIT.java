@@ -313,8 +313,8 @@ class ReportModerationIT extends AbstractIntegrationTest {
 
     @Test
     void aStaffModeratorCanActuallyDecideAndGetsTheWholeQueueRowBack() {
-        StaffPrincipal moderator = new StaffPrincipal(UUID.randomUUID(), "kc-subject", null,
-                "Moderator", Set.of("MODERATOR"), Set.of());
+        StaffPrincipal moderator = new StaffPrincipal(UUID.randomUUID(), "moderator@iskoala.com",
+                "Moderator", Set.of("MODERATOR"), Set.of(), false);
 
         AdminReportDto decided = reportService.review(moderator, openUserReportId,
                 ReportStatus.ACTIONED, "Hesap askiya alindi.");

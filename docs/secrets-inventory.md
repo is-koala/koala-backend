@@ -30,7 +30,8 @@ Mobile/web Maps keys are public identifiers that may enter their intended client
 | `DB_PASSWORD` | Application database login | dev/staging/prod | Application secret store | Per-environment restricted database role | Platform | Doğrulanmadı |
 | `POSTGRES_PASSWORD` | PostgreSQL container administrator login | local/staging/prod where self-hosted | Infrastructure secret store | Database bootstrap only; never exposed to application runtime | Platform database | Doğrulanmadı |
 | `RABBITMQ_PASSWORD` | Queue broker login | dev/staging/prod | Application secret store | Per vhost/environment | Platform | Doğrulanmadı |
-| `JWT_SECRET` | Access-token signing | staging/prod | Application secret store | Backend runtime only | Backend security | Doğrulanmadı |
+| `JWT_SECRET` | Access-token signing (marketplace and staff tokens alike) | staging/prod | Application secret store | Backend runtime only | Backend security | Doğrulanmadı |
+| `BOOTSTRAP_OWNER_PASSWORD` | First `OWNER` staff password on an empty `staff_members` table | staging/prod, one-off | Application secret store | **Must be deleted from Dokploy once the account exists and its password has been changed on first sign-in**; the bootstrap writes nothing when the table is not empty | Backend security | Doğrulanmadı |
 | `IYZICO_API_KEY`, `IYZICO_SECRET_KEY` | Payment API | sandbox/production | Payment secret store | Separate sandbox/production merchant scope | Payments | Doğrulanmadı |
 | `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY` | Media object access | staging/prod | Media secret store | Media bucket prefix only | Platform | Doğrulanmadı |
 | `BACKUP_ACCESS_KEY`, `BACKUP_SECRET_KEY` | Backup object access | staging/prod | Backup runner secret store | Separate principal; backup bucket only | Platform | Doğrulanmadı |

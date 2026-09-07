@@ -223,4 +223,26 @@ class RateLimitBucketTest {
         }
         return passed;
     }
+
+    @Test
+    void theStaffLoginEndpointSharesTheAuthBudget() throws Exception {
+        assertEquals(properties.getAuth().getMaxAttempts(),
+                passing("POST", "/admin/auth/login", "10.0.0.90", 40),
+                "personel girişi §2j'deki AUTH kovasına bağlı olmalı");
+    }
+
+    @Test
+    void theStaffLoginBudgetIsNotTheGenericWriteBudget() throws Exception {
+        assertEquals(properties.getWrite().getMaxAttempts(),
+                passing("POST", "/admin/staff", "10.0.0.91", 200),
+                "personel yönetimi yazması WRITE kovasında kalmalı");
+    }
+
+    @Test
+    void theStaffRefreshAndPasswordEndpointsAreAuthToo() throws Exception {
+        assertEquals(properties.getAuth().getMaxAttempts(),
+                passing("POST", "/admin/auth/refresh", "10.0.0.92", 40));
+        assertEquals(properties.getAuth().getMaxAttempts(),
+                passing("POST", "/admin/auth/password", "10.0.0.93", 40));
+    }
 }

@@ -135,10 +135,17 @@ class ApiConventionTest {
     }
 
     @Test
-    void everyRouteUnderTheAdminPrefixIsRestrictedToAdmins() throws IOException {
-        String config = Files.readString(SECURITY_CONFIG);
-        assertTrue(config.contains(".requestMatchers(\"/admin/**\").hasRole(\"ADMIN\")"),
-                "/admin/** kuralı SecurityConfig'te bulunmalı");
+    void everyRouteUnderTheAdminPrefixIsGuardedByTheStaffChain() throws IOException {
+        String staffConfig = Files.readString(
+                Paths.get("src/main/java/com/exskylab/koala/core/configs/StaffSecurityConfig.java"));
+
+        assertTrue(staffConfig.contains(".securityMatcher(\"/admin/**\")"),
+                "/admin/** ikinci zincire bağlı olmalı");
+        assertTrue(staffConfig.contains(".anyRequest().access(staffPermissionAuthorizationManager)"),
+                "kimlik doğrulama uçları dışındaki her /admin isteği izin kapısından geçmeli");
+
+        assertFalse(Files.readString(SECURITY_CONFIG).contains("\"/admin/**\").hasRole"),
+                "marketplace köprüsü kesildi, SecurityConfig'te /admin/** satırı kalmamalı (#98)");
 
         assertFalse(routes().stream().noneMatch(route -> route.path().startsWith("/admin")),
                 "en az bir admin ucu bekleniyordu");

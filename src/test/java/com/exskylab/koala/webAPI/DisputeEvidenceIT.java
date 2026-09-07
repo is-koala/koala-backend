@@ -2,7 +2,7 @@ package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.entities.Role;
-import com.exskylab.koala.support.AbstractIntegrationTest;
+import com.exskylab.koala.support.AbstractStaffIntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,7 +32,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @AutoConfigureMockMvc
-class DisputeEvidenceIT extends AbstractIntegrationTest {
+class DisputeEvidenceIT extends AbstractStaffIntegrationTest {
 
     private static final byte[] PNG = png();
 
@@ -85,6 +85,10 @@ class DisputeEvidenceIT extends AbstractIntegrationTest {
         jdbc.update("delete from job_categories where id = ?", categoryId);
         jdbc.update("delete from authorities where user_id in (?, ?, ?)", employerId, workerId, operatorId);
         jdbc.update("delete from users where id in (?, ?, ?)", employerId, workerId, operatorId);
+        jdbc.update("delete from admin_audit_entries");
+        jdbc.update("delete from staff_member_roles where staff_member_id in "
+                + "(select id from staff_members where email like 'evidence-%@iskoala.com')");
+        jdbc.update("delete from staff_members where email like 'evidence-%@iskoala.com'");
     }
 
     @Test
@@ -120,7 +124,9 @@ class DisputeEvidenceIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data[0].storageKey").doesNotExist());
 
         mockMvc.perform(get("/admin/disputes/{id}/evidence", disputeId)
-                        .with(user(principal(operatorId, Role.ROLE_USER, Role.ROLE_ADMIN))))
+                        .header("Authorization", "Bearer " + staffTokenFor(
+                                "evidence-" + UUID.randomUUID() + "@iskoala.com",
+                                "Uyuşmazlık Uzmanı", "DISPUTE_HANDLER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1))
                 .andExpect(jsonPath("$.data[0].storageKey").doesNotExist());

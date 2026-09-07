@@ -16,6 +16,7 @@ public interface StaffIdentityMapper {
 
     @Mapping(target = "roles", source = "roles")
     @Mapping(target = "permissions", source = "permissions")
+    @Mapping(target = "mustChangePassword", source = "mustChangePassword")
     StaffIdentityDto toIdentityDto(StaffPrincipal principal);
 
     default List<String> toSortedRoleNames(Collection<String> roles) {

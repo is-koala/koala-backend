@@ -87,7 +87,7 @@ public class StaffAuditRecorder {
 
         if (principal instanceof StaffPrincipal staff) {
             String name = staff.displayName() == null || staff.displayName().isBlank()
-                    ? staff.subject()
+                    ? staff.email()
                     : staff.displayName();
             return new Actor(staff.staffId(), name);
         }

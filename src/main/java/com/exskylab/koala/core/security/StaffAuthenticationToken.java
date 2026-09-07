@@ -1,19 +1,25 @@
 package com.exskylab.koala.core.security;
 
 import org.springframework.security.authentication.AbstractAuthenticationToken;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.oauth2.jwt.Jwt;
+
+import java.util.stream.Stream;
 
 public class StaffAuthenticationToken extends AbstractAuthenticationToken {
 
-    private final transient Jwt token;
+    public static final String STAFF_AUTHORITY = "STAFF";
+
+    private final transient String token;
 
     private final transient StaffPrincipal principal;
 
-    public StaffAuthenticationToken(Jwt token, StaffPrincipal principal) {
-        super(principal.permissions().stream()
-                .map(permission -> (org.springframework.security.core.GrantedAuthority)
-                        new SimpleGrantedAuthority("PERM_" + permission.getCode()))
+    public StaffAuthenticationToken(String token, StaffPrincipal principal) {
+        super(Stream.concat(
+                        Stream.of((GrantedAuthority) new SimpleGrantedAuthority(STAFF_AUTHORITY)),
+                        principal.permissions().stream()
+                                .map(permission -> (GrantedAuthority)
+                                        new SimpleGrantedAuthority("PERM_" + permission.getCode())))
                 .toList());
         this.token = token;
         this.principal = principal;
@@ -22,7 +28,7 @@ public class StaffAuthenticationToken extends AbstractAuthenticationToken {
 
     @Override
     public Object getCredentials() {
-        return token.getTokenValue();
+        return token;
     }
 
     @Override
@@ -32,6 +38,6 @@ public class StaffAuthenticationToken extends AbstractAuthenticationToken {
 
     @Override
     public String getName() {
-        return principal.subject();
+        return principal.email();
     }
 }

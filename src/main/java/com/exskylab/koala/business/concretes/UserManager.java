@@ -572,7 +572,7 @@ public class UserManager implements UserService {
             log.info("Role {} granted to user {} by bridge admin {}", role, target.getId(), grantedById);
         } else {
             userDao.stampRoleGrantTime(target.getId(), role.name(), Instant.now());
-            log.info("Role {} granted to user {} by staff {}", role, target.getId(), actor.subject());
+            log.info("Role {} granted to user {} by staff {}", role, target.getId(), actor.staffId());
         }
 
         return userDao.findRoleGrants(target.getId());

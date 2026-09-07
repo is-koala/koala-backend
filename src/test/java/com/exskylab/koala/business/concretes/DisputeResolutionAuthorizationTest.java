@@ -10,7 +10,6 @@ import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.security.StaffPrincipal;
-import com.exskylab.koala.support.StaffBridges;
 import com.exskylab.koala.dataAccess.DisputeDao;
 import com.exskylab.koala.entities.Dispute;
 import com.exskylab.koala.entities.DisputeResolution;
@@ -64,7 +63,7 @@ class DisputeResolutionAuthorizationTest {
                         new com.exskylab.koala.core.properties.UploadProperties()),
                 new com.exskylab.koala.core.properties.UploadProperties(),
                 jobAssignmentService, mock(UserService.class),
-                securityService, mock(AssignmentParticipants.class), new StaffPayoutManager(payoutService, StaffBridges.open()),
+                securityService, mock(AssignmentParticipants.class), new StaffPayoutManager(payoutService),
                 mock(ActivityNotificationService.class), new PageableSanitizer());
 
         JobAssignment assignment = new JobAssignment();
@@ -84,8 +83,8 @@ class DisputeResolutionAuthorizationTest {
     }
 
     private static StaffPrincipal staff(StaffPermission... permissions) {
-        return new StaffPrincipal(UUID.randomUUID(), "sub", "personel@iskoala.com", "Uyuşmazlık Uzmanı",
-                Set.of("DISPUTE_HANDLER"), Set.of(permissions));
+        return new StaffPrincipal(UUID.randomUUID(), "personel@iskoala.com", "Uyuşmazlık Uzmanı",
+                Set.of("DISPUTE_HANDLER"), Set.of(permissions), false);
     }
 
     @Test
@@ -175,11 +174,12 @@ class DisputeResolutionAuthorizationTest {
     }
 
     @Test
-    void theMarketplaceBridgeStillResolvesDisputesDuringTheTransition() {
-        disputeManager.resolveDispute(null, disputeId, DisputeResolution.RELEASE_TO_WORKER, "işçi haklı");
+    void theMarketplaceBridgeNoLongerResolvesDisputesNowThatItIsCut() {
+        assertThrows(ForbiddenException.class, () -> disputeManager.resolveDispute(
+                null, disputeId, DisputeResolution.RELEASE_TO_WORKER, "işçi haklı"));
 
-        verify(payoutService, times(1)).releaseToWorker(assignmentId);
-        assertEquals(DisputeStatus.RESOLVED, dispute.getStatus());
+        verifyNoInteractions(payoutService);
+        assertEquals(DisputeStatus.OPEN, dispute.getStatus());
     }
 
     @Test

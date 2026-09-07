@@ -19,7 +19,9 @@ class SoftDeleteBehaviourIT extends AbstractIntegrationTest {
 
     private static final Map<String, String> HARD_DELETE_TABLE_EXEMPTIONS = Map.of(
             "account_media_deletion_outbox",
-            "geçici operasyon kuyruğu; storage silme onayından sonra satır fiziksel olarak kaldırılır");
+            "geçici operasyon kuyruğu; storage silme onayından sonra satır fiziksel olarak kaldırılır",
+            "staff_member_roles",
+            "üyelik satırı; rol geri alınınca fiziksel olarak silinir ve iz denetim kaydında kalır (§2au)");
 
     @Autowired
     private LoginAttemptDao loginAttemptDao;

@@ -1,11 +1,11 @@
 package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.core.constants.SettingKeys;
-import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.dataAccess.UserDao;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.entities.User;
-import com.exskylab.koala.support.AbstractIntegrationTest;
+import com.exskylab.koala.core.constants.SystemUser;
+import com.exskylab.koala.support.AbstractStaffIntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,14 +21,13 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @AutoConfigureMockMvc
-class SettingsAdministrationIT extends AbstractIntegrationTest {
+class SettingsAdministrationIT extends AbstractStaffIntegrationTest {
 
     private static final String ADMIN_EMAIL = "settings-administration-it@koala.test";
 
@@ -43,6 +42,8 @@ class SettingsAdministrationIT extends AbstractIntegrationTest {
 
     private User admin;
 
+    private String settingsManager;
+
     @BeforeEach
     void createTheAdmin() {
         admin = userDao.findByEmail(ADMIN_EMAIL).orElseGet(() -> {
@@ -54,10 +55,17 @@ class SettingsAdministrationIT extends AbstractIntegrationTest {
             user.setAuthorities(Set.of(Role.ROLE_ADMIN));
             return userDao.saveAndFlush(user);
         });
+
+        settingsManager = staffTokenFor("settings-" + UUID.randomUUID() + "@iskoala.com", "Ayar Yöneticisi",
+                "OWNER");
     }
 
     @AfterEach
     void cleanUp() {
+        jdbcTemplate.update("delete from admin_audit_entries");
+        jdbcTemplate.update("delete from staff_member_roles where staff_member_id in "
+                + "(select id from staff_members where email like 'settings-%@iskoala.com')");
+        jdbcTemplate.update("delete from staff_members where email like 'settings-%@iskoala.com'");
         jdbcTemplate.update("delete from app_settings where setting_key = ?", SettingKeys.COMMISSION_RATE);
         jdbcTemplate.update("""
                 update app_settings
@@ -101,14 +109,15 @@ class SettingsAdministrationIT extends AbstractIntegrationTest {
 
         assertNotNull(row.get("created_at"), "created_at bos kalmis.");
         assertNotNull(row.get("updated_at"), "updated_at bos kalmis.");
-        assertEquals(admin.getId(), row.get("updated_by_id"));
+        assertEquals(SystemUser.ID, row.get("updated_by_id"),
+                "Personel yolunda users'a yazacak bir aktör yok; kim değiştirdiği admin denetim kaydında (§2av)");
     }
 
     @Test
     void theListedSettingCarriesWhenItWasLastChanged() throws Exception {
         writeRate(SettingKeys.COMMISSION_RATE, "0.10").andExpect(status().isOk());
 
-        mockMvc.perform(get("/admin/settings").with(user(UserPrincipal.from(admin, UUID.randomUUID()))))
+        mockMvc.perform(get("/admin/settings").header("Authorization", "Bearer " + settingsManager))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[?(@.key == '" + SettingKeys.COMMISSION_RATE + "')].updatedAt")
                         .isNotEmpty());
@@ -117,7 +126,7 @@ class SettingsAdministrationIT extends AbstractIntegrationTest {
     private org.springframework.test.web.servlet.ResultActions writeRate(String key, String value)
             throws Exception {
         return mockMvc.perform(put("/admin/settings/" + key)
-                .with(user(UserPrincipal.from(admin, UUID.randomUUID())))
+                .header("Authorization", "Bearer " + settingsManager)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"value\":\"" + value + "\"}"));
     }

@@ -1,7 +1,6 @@
 package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
-import com.exskylab.koala.support.StaffTokenIssuer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,7 +8,6 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.util.List;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -31,13 +29,7 @@ class AdminAssignmentReadIT extends AbstractStaffIntegrationTest {
     }
 
     private String tokenFor(String... roles) {
-        String subject = UUID.randomUUID().toString();
-        jdbcTemplate.update("""
-                insert into staff_members (id, keycloak_subject, email, display_name, is_active, created_at)
-                values (?, ?, ?, ?, true, now())
-                """, UUID.randomUUID(), subject, "assignment-read-" + subject + "@iskoala.com", "Okuyucu");
-
-        return StaffTokenIssuer.tokenFor(subject, List.of(roles));
+        return staffTokenFor("assignment-read-" + UUID.randomUUID() + "@iskoala.com", "Okuyucu", roles);
     }
 
     @Test

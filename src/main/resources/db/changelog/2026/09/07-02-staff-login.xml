@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-07-02-01-staff-member-credentials" author="koala">
+        <dropColumn tableName="staff_members" columnName="keycloak_subject"/>
+        <addColumn tableName="staff_members">
+            <column name="password_hash" type="VARCHAR(100)"/>
+            <column name="must_change_password" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="failed_login_attempts" type="INTEGER" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="locked_until" type="TIMESTAMPTZ"/>
+            <column name="token_version" type="INTEGER" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <addNotNullConstraint tableName="staff_members" columnName="password_hash"
+                              columnDataType="VARCHAR(100)"/>
+        <addUniqueConstraint tableName="staff_members" columnNames="email"
+                             constraintName="uk_staff_members_email"/>
+        <rollback>
+            <dropUniqueConstraint tableName="staff_members" constraintName="uk_staff_members_email"/>
+            <dropColumn tableName="staff_members" columnName="password_hash"/>
+            <dropColumn tableName="staff_members" columnName="must_change_password"/>
+            <dropColumn tableName="staff_members" columnName="failed_login_attempts"/>
+            <dropColumn tableName="staff_members" columnName="locked_until"/>
+            <dropColumn tableName="staff_members" columnName="token_version"/>
+            <addColumn tableName="staff_members">
+                <column name="keycloak_subject" type="VARCHAR(64)"/>
+            </addColumn>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-07-02-02-staff-member-roles" author="koala">
+        <createTable tableName="staff_member_roles">
+            <column name="staff_member_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="staff_role_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMPTZ"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="staff_member_roles" columnNames="staff_member_id, staff_role_id"
+                       constraintName="pk_staff_member_roles"/>
+        <addForeignKeyConstraint baseTableName="staff_member_roles" baseColumnNames="staff_member_id"
+                                 constraintName="fk_staff_member_roles_member"
+                                 referencedTableName="staff_members" referencedColumnNames="id"
+                                 onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableName="staff_member_roles" baseColumnNames="staff_role_id"
+                                 constraintName="fk_staff_member_roles_role"
+                                 referencedTableName="staff_roles" referencedColumnNames="id"/>
+        <createIndex tableName="staff_member_roles" indexName="ix_staff_member_roles_role">
+            <column name="staff_role_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="2026-09-07-02-03-staff-read-permission" author="koala">
+        <sql>
+            INSERT INTO staff_role_permissions (id, staff_role_id, permission_code, created_at)
+            SELECT gen_random_uuid(), r.id, 'staff.read', now()
+            FROM staff_roles r
+            WHERE r.code = 'OWNER'
+            ON CONFLICT ON CONSTRAINT uk_staff_role_permissions_role_code DO NOTHING;
+        </sql>
+        <rollback>
+            <sql>DELETE FROM staff_role_permissions WHERE permission_code = 'staff.read';</sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

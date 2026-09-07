@@ -1,7 +1,6 @@
 package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
-import com.exskylab.koala.support.StaffTokenIssuer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,7 +9,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -72,17 +70,8 @@ class StaffRoleAdministrationIT extends AbstractStaffIntegrationTest {
                 """, action);
     }
 
-    private String staffMember() {
-        String subject = UUID.randomUUID().toString();
-        jdbcTemplate.update("""
-                insert into staff_members (id, keycloak_subject, email, display_name, is_active, created_at)
-                values (?, ?, ?, ?, true, now())
-                """, UUID.randomUUID(), subject, "roles-" + subject + "@iskoala.com", "Rol Yöneticisi");
-        return subject;
-    }
-
     private String tokenFor(String... roles) {
-        return StaffTokenIssuer.tokenFor(staffMember(), List.of(roles));
+        return staffTokenFor("roles-" + UUID.randomUUID() + "@iskoala.com", "Rol Yöneticisi", roles);
     }
 
     private UUID roleId(String code) {

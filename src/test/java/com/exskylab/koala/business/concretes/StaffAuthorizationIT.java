@@ -49,8 +49,8 @@ class StaffAuthorizationIT extends AbstractIntegrationTest {
     }
 
     private static StaffPrincipal actor(String... roles) {
-        return new StaffPrincipal(UUID.randomUUID(), "sub-" + UUID.randomUUID(), "staff@iskoala.com",
-                "Deneme", Set.of(roles), Set.of());
+        return new StaffPrincipal(UUID.randomUUID(), "staff@iskoala.com",
+                "Deneme", Set.of(roles), Set.of(), false);
     }
 
     @Test

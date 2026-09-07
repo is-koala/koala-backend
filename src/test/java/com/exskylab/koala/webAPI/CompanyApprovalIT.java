@@ -12,7 +12,7 @@ import com.exskylab.koala.entities.CompanyType;
 import com.exskylab.koala.entities.NotificationChannel;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.entities.User;
-import com.exskylab.koala.support.AbstractIntegrationTest;
+import com.exskylab.koala.support.AbstractStaffIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,7 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @AutoConfigureMockMvc
-class CompanyApprovalIT extends AbstractIntegrationTest {
+class CompanyApprovalIT extends AbstractStaffIntegrationTest {
 
     private static final String OPERATOR_EMAIL = "company-approval-operator@koala.test";
     private static final String FOUNDER_EMAIL = "company-approval-founder@koala.test";
@@ -63,6 +63,12 @@ class CompanyApprovalIT extends AbstractIntegrationTest {
     private User founder;
     private User outsider;
 
+    private String operatorToken;
+
+    private String operatorToken() {
+        return operatorToken;
+    }
+
     @BeforeEach
     void seedTheQueue() {
         operator = userOf(OPERATOR_EMAIL, "Deniz", "Yönetici", Role.ROLE_ADMIN);
@@ -73,6 +79,13 @@ class CompanyApprovalIT extends AbstractIntegrationTest {
                 + "(select id from companies where tax_number like ?)", TAX_PREFIX + "%");
         jdbcTemplate.update("delete from companies where tax_number like ?", TAX_PREFIX + "%");
         jdbcTemplate.update("delete from notifications where recipient_id = ?", founder.getId());
+        jdbcTemplate.update("delete from admin_audit_entries");
+        jdbcTemplate.update("delete from staff_member_roles where staff_member_id in "
+                + "(select id from staff_members where email like 'company-approval-%@iskoala.com')");
+        jdbcTemplate.update("delete from staff_members where email like 'company-approval-%@iskoala.com'");
+
+        operatorToken = staffTokenFor("company-approval-" + UUID.randomUUID() + "@iskoala.com",
+                "Şirket Onaylayıcısı", "COMPANY_APPROVER");
     }
 
     private User userOf(String email, String firstName, String lastName, Role role) {
@@ -112,7 +125,7 @@ class CompanyApprovalIT extends AbstractIntegrationTest {
 
     private ResultActions asOperator(org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder
                                              request) throws Exception {
-        return mockMvc.perform(request.with(user(UserPrincipal.from(operator, UUID.randomUUID()))));
+        return mockMvc.perform(request.header("Authorization", "Bearer " + operatorToken()));
     }
 
     private ResultActions reject(UUID companyId, String body) throws Exception {

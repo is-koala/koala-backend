@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "koala.staff.bridge")
 public class StaffBridgeProperties {
 
-    private boolean open = true;
+    private boolean open = false;
 
     public boolean isOpen() {
         return open;

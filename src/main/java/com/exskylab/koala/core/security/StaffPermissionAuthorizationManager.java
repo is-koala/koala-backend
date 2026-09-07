@@ -79,7 +79,7 @@ public class StaffPermissionAuthorizationManager implements AuthorizationManager
     }
 
     private static AuthorizationDecision decideForStaff(StaffPrincipal staff, RequiresPermission required) {
-        if (!staff.isRegistered()) {
+        if (!staff.isRegistered() || staff.mustChangePassword()) {
             return DENIED;
         }
         if (required.value().length == 0) {

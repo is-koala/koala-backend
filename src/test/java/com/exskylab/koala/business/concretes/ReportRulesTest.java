@@ -130,8 +130,8 @@ class ReportRulesTest {
         when(securityService.getAuthenticatedUser())
                 .thenThrow(new ResourceNotFoundException("{user.not.authenticated}"));
 
-        StaffPrincipal moderator = new StaffPrincipal(UUID.randomUUID(), "kc-subject", null,
-                "Moderator", Set.of("MODERATOR"), Set.of());
+        StaffPrincipal moderator = new StaffPrincipal(UUID.randomUUID(), "moderator@iskoala.com",
+                "Moderator", Set.of("MODERATOR"), Set.of(), false);
 
         manager.review(moderator, report.getId(), ReportStatus.ACTIONED, "Icerik kaldirildi.");
 

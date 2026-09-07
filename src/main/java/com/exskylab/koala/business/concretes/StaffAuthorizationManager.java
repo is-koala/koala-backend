@@ -9,11 +9,9 @@ import com.exskylab.koala.core.security.StaffAuditContext;
 import com.exskylab.koala.core.security.StaffAuthorization;
 import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.core.security.StaffRoleView;
-import com.exskylab.koala.dataAccess.StaffMemberDao;
 import com.exskylab.koala.dataAccess.StaffRoleDao;
 import com.exskylab.koala.dataAccess.StaffRoleIncludeDao;
 import com.exskylab.koala.dataAccess.StaffRolePermissionDao;
-import com.exskylab.koala.entities.StaffMember;
 import com.exskylab.koala.entities.StaffPermission;
 import com.exskylab.koala.entities.StaffRole;
 import com.exskylab.koala.entities.StaffRoleInclude;
@@ -32,7 +30,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -45,27 +42,16 @@ public class StaffAuthorizationManager implements StaffAuthorizationService {
             .sorted(Comparator.comparing(StaffPermission::getCode))
             .toList();
 
-    private final StaffMemberDao staffMemberDao;
     private final StaffRoleDao staffRoleDao;
     private final StaffRolePermissionDao staffRolePermissionDao;
     private final StaffRoleIncludeDao staffRoleIncludeDao;
 
-    public StaffAuthorizationManager(StaffMemberDao staffMemberDao, StaffRoleDao staffRoleDao,
+    public StaffAuthorizationManager(StaffRoleDao staffRoleDao,
                                      StaffRolePermissionDao staffRolePermissionDao,
                                      StaffRoleIncludeDao staffRoleIncludeDao) {
-        this.staffMemberDao = staffMemberDao;
         this.staffRoleDao = staffRoleDao;
         this.staffRolePermissionDao = staffRolePermissionDao;
         this.staffRoleIncludeDao = staffRoleIncludeDao;
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public Optional<StaffMember> findActiveMember(String keycloakSubject) {
-        if (keycloakSubject == null || keycloakSubject.isBlank()) {
-            return Optional.empty();
-        }
-        return staffMemberDao.findByKeycloakSubjectAndActiveTrue(keycloakSubject);
     }
 
     @Override
@@ -79,7 +65,7 @@ public class StaffAuthorizationManager implements StaffAuthorizationService {
         if (seeds.size() < roleCodes.size()) {
             Set<String> known = seeds.stream().map(StaffRole::getCode).collect(java.util.stream.Collectors.toSet());
             roleCodes.stream().filter(code -> !known.contains(code)).forEach(code ->
-                    log.warn("Keycloak token'ında Koala'da karşılığı olmayan rol var, atlandı: {}", code));
+                    log.warn("staff_member_roles içinde Koala'da karşılığı olmayan rol var, atlandı: {}", code));
         }
 
         Set<UUID> closure = closureOf(seeds.stream().map(StaffRole::getId).collect(java.util.stream.Collectors.toSet()));
@@ -108,6 +94,13 @@ public class StaffAuthorizationManager implements StaffAuthorizationService {
             throw new ResourceNotFoundException(StaffMessages.ROLE_NOT_FOUND);
         }
         return view;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public StaffRole getRoleByCode(String roleCode) {
+        return staffRoleDao.findByCode(roleCode)
+                .orElseThrow(() -> new ResourceNotFoundException(StaffMessages.ROLE_NOT_FOUND));
     }
 
     private Map<UUID, StaffRoleView> graph() {

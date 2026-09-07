@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.security;
 
+import com.exskylab.koala.core.properties.StaffBridgeProperties;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -8,7 +9,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class MarketplaceBridgeLifetimeTest {
 
@@ -16,8 +17,6 @@ class MarketplaceBridgeLifetimeTest {
             Paths.get("src/main/java/com/exskylab/koala/core/configs/SecurityConfig.java");
     private static final Path FACADE =
             Paths.get("src/main/java/com/exskylab/koala/business/concretes/StaffPayoutManager.java");
-    private static final Path AUTHORIZATION_MANAGER =
-            Paths.get("src/main/java/com/exskylab/koala/core/security/StaffPermissionAuthorizationManager.java");
 
     private static final String BRIDGE_RULE = ".requestMatchers(\"/admin/**\").hasRole(\"ADMIN\")";
     private static final String ACTORLESS_BRANCH = "if (actor == null) {";
@@ -35,11 +34,25 @@ class MarketplaceBridgeLifetimeTest {
     }
 
     @Test
-    void theHttpDoorAndTheMoneyFacadeAskTheSameGate() throws IOException {
-        assertTrue(Files.readString(FACADE).contains(GATE),
-                "aktörsüz para hareketi köprünün açık olmasına bağlı olmalı");
-        assertTrue(Files.readString(AUTHORIZATION_MANAGER).contains(GATE),
-                "marketplace ROLE_ADMIN'in /admin/** kapısı aynı anahtara bağlı olmalı; "
-                        + "iki kapı ayrı anahtarlara bağlanırsa biri kesilirken diğeri açık kalır");
+    void theCutHasHappenedAndNeitherHalfCameBack() throws IOException {
+        assertFalse(Files.readString(SECURITY_CONFIG).contains(BRIDGE_RULE),
+                "marketplace ROLE_ADMIN'in /admin/** satırı kesimle birlikte silindi (#98)");
+        assertFalse(Files.readString(FACADE).contains(ACTORLESS_BRANCH),
+                "aktörsüz para dalı kesimle birlikte silindi (#98)");
+        assertFalse(Files.readString(FACADE).contains(GATE),
+                "para facade'ı artık köprü anahtarını hiç okumamalı; aktörsüz istek koşulsuz reddedilir");
+    }
+
+    @Test
+    void theBridgeIsClosedByDefaultAndOnlyTheHttpDoorCanBeReopened() throws IOException {
+        assertFalse(new StaffBridgeProperties().isOpen(),
+                "köprü varsayılanı kapalı olmalı: personel girişi indi (ADR-0014 §Sonuçlar)");
+
+        String door = Files.readString(
+                Paths.get("src/main/java/com/exskylab/koala/core/security/"
+                        + "StaffPermissionAuthorizationManager.java"));
+
+        assertEquals(true, door.contains(GATE),
+                "geri açılabilen tek kapı /admin/**'ın marketplace ROLE_ADMIN kapısı; para dalı geri açılamaz");
     }
 }

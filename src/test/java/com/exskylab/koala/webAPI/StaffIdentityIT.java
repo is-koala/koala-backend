@@ -1,7 +1,6 @@
 package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
-import com.exskylab.koala.support.StaffTokenIssuer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,7 +8,6 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.util.List;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.containsInAnyOrder;
@@ -32,26 +30,21 @@ class StaffIdentityIT extends AbstractStaffIntegrationTest {
         jdbcTemplate.update("delete from staff_members where email like 'identity-%@iskoala.com'");
     }
 
-    private String staffMember(String displayName) {
-        String subject = UUID.randomUUID().toString();
-        jdbcTemplate.update("""
-                insert into staff_members (id, keycloak_subject, email, display_name, is_active, created_at)
-                values (?, ?, ?, ?, true, now())
-                """, UUID.randomUUID(), subject, "identity-" + subject + "@iskoala.com", displayName);
-        return subject;
+    private String emailFor(String marker) {
+        return "identity-" + marker + "@iskoala.com";
     }
 
     @Test
     void theIdentityCarriesTheStaffRecordItsRolesAndItsResolvedPermissions() throws Exception {
-        String subject = staffMember("Trust Lideri");
-        String token = StaffTokenIssuer.tokenFor(subject, List.of("TRUST_LEAD"));
+        String email = emailFor(UUID.randomUUID().toString());
+        String token = staffTokenFor(email, "Trust Lideri", "TRUST_LEAD");
 
         mockMvc.perform(get("/admin/me").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.staffId").exists())
                 .andExpect(jsonPath("$.data.displayName").value("Trust Lideri"))
-                .andExpect(jsonPath("$.data.email").value("identity-" + subject + "@iskoala.com"))
+                .andExpect(jsonPath("$.data.email").value(email))
                 .andExpect(jsonPath("$.data.roles", containsInAnyOrder(
                         "DISPUTE_HANDLER", "MODERATOR", "SUPPORT_AGENT", "TRUST_LEAD")))
                 .andExpect(jsonPath("$.data.permissions", containsInAnyOrder(
@@ -60,19 +53,20 @@ class StaffIdentityIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
-    void aValidTokenWithoutAStaffRecordIsRefusedWithAccessDenied() throws Exception {
-        String token = StaffTokenIssuer.tokenFor(UUID.randomUUID().toString(), List.of("OWNER"));
+    void aSignedTokenForAStaffRecordThatNoLongerExistsIsRefused() throws Exception {
+        UUID staffId = createStaffMember(emailFor(UUID.randomUUID().toString()), "Silinen", "OWNER");
+        String token = staffAccessToken(staffId);
+        jdbcTemplate.update("delete from staff_member_roles where staff_member_id = ?", staffId);
+        jdbcTemplate.update("delete from staff_members where id = ?", staffId);
 
         mockMvc.perform(get("/admin/me").header("Authorization", "Bearer " + token))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.errorCategory").value("ACCESS_DENIED"));
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false));
     }
 
     @Test
     void aStaffMemberWithNoRoleStillLearnsWhoTheyAre() throws Exception {
-        String subject = staffMember("Rolsüz Personel");
-        String token = StaffTokenIssuer.tokenFor(subject, List.of());
+        String token = staffTokenFor(emailFor(UUID.randomUUID().toString()), "Rolsüz Personel");
 
         mockMvc.perform(get("/admin/me").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
