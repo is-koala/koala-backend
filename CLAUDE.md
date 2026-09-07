@@ -161,6 +161,22 @@ Servis ve controller katmanı düz anahtar kullanır: `"{user.not.found}"`. Çö
 
 **Katalog testle korunuyor.** `MessageCatalogTest` kaynak kodu tarayıp kullanılan her `{anahtar}` için hem `messages_tr` hem `messages_en` karşılığı olduğunu doğrular. Yeni bir sabit eklenip karşılığı yazılmazsa test kırmızıya döner — 206 anahtar elle takip edilemez.
 
+**Çözümleme zarfın en üstüyle sınırlı: `MessageResolvingAdvice` iç içe DTO alanlarına dokunmuyor.** Advice
+gövdeyi `Result`'a cast edip yalnız onun `message` alanını çözüyor; `data` içindeki bir DTO'nun kendi `String`
+alanına yazılmış `{anahtar}` istemciye **ham** gidiyor. Bu bir kusur değil kapsam — gövdeyi refleksiyonla
+gezip her `String`'i çözmek, kullanıcının yazdığı bir metin tesadüfen `{...}` biçiminde olduğunda onu da
+değiştirirdi. Kusur olan şey, kapsamın hiçbir yerde yazılı olmamasıydı: `VerificationInfoDto` tam bu tuzağa
+düşmüş ve istemciye `{email.verification.message}` göndermişti (is-koala/koala-backend#46).
+
+**İki test kapsamı sabitliyor.** `ResponseMessageResolutionTest` önce davranışı pinliyor — advice zarfın
+`message`'ını `Accept-Language`'a göre çözüyor, iç içe DTO alanını **olduğu gibi bırakıyor** — sonra
+`core/dtos` altındaki her `response`/`common` sınıfını tarayıp hiçbirinin ne `"{anahtar}"` literali ne bir
+`*Messages.SABIT` referansı taşımadığını doğruluyor. Yani bir sonraki DTO aynı tuzağa düştüğü anda derleme
+değil test kırmızıya dönüyor. **Taramanın kör noktası yazılı olsun (§3'teki #72 dersi):** yalnız `core/dtos`
+altındaki `response`/`common` yollarına bakıyor ve yalnız iki yazımı tanıyor — anahtarı çalışma zamanında
+birleştiren ya da DTO dışında bir sınıfta kuran bir kod görünmez. `request` DTO'ları bilerek dışarıda:
+oradaki `message = "{...}"` Bean Validation'ın anahtarı ve `GlobalExceptionHandler` onu zaten çözüyor (§2aj).
+
 **Hata zarfı — matmuhbackend deseninden alındı, iki ayrı kod alanıyla:**
 
 ```json
@@ -763,6 +779,31 @@ başvuru sonrası doğrulamaya yönlendirmek — `assertReadyToWork` bu yüzden 
 **Telefon değişikliği artık sessizce yutulmuyor.** `patchCurrentUser` içindeki blok boştu, yalnızca bir `//TODO` vardı — istek 200 dönüyor, numara değişmiyordu. Şimdi e-posta ile aynı desende: `phoneVerificationService.startPhoneVerification` çağrılıyor, numara **doğrulama tamamlanana kadar uygulanmıyor**, yanıttaki `pendingVerifications` içine `PHONE` girdisi düşüyor. Aynı numara gönderilirse hiçbir şey başlatılmaz. `UserPatchRulesTest` bunu sabitliyor.
 
 **`PhoneVerificationManager` bir süre taslak kaldı.** Kod üretiyor, hiçbir yere yazmıyor ve `null` döndürüyordu; `patchCurrentUser` de o null'ı `pendingVerifications` listesine ekliyordu. Yani yukarıdaki paragraf yazıldığı sırada doğru değildi. Artık `EmailVerificationManager` ile aynı desende: `PhoneVerification` kaydı açılıyor, 15 dakikalık altı haneli kod üretiliyor ve SMS kuyruğa alınıyor. **Ama SMS hâlâ teslim edilmiyor** — aşağıdaki tüketici eksiği geçerli.
+
+**`VerificationInfoDto.message` kaldırıldı, çözülmedi (is-koala/koala-backend#46).** Alan iki ayrı sebeple
+gösterilemez durumdaydı: taşıdığı değer ham anahtardı (`{email.verification.message}`) ve advice iç içe
+alanlara dokunmuyor (§2d), üstelik anahtarın karşılığı `E-posta doğrulama kodunuz: {0}` — hiç doldurulmayan
+bir yer tutucu. Issue iki yol öneriyordu: sunucuda **çözüp yer tutucuyu doldurmak** ya da alanı **kaldırmak**.
+Doldurmak seçilemezdi, çünkü `{0}`'ın karşılığı doğrulama kodunun kendisi: kodu `PATCH /users/me` yanıtına
+yazmak, kanalın sahipliğini kanıtlatmak için var olan doğrulamayı tümüyle geçersiz kılardı — kodu almak için
+e-postaya ya da telefona erişmek gerekmezdi. Kaldırmanın bedeli sıfır: `koala-web` alanı tip tanımında
+sayıyor ama hiç okumuyor, mobil ise metni kendi yazıyor ve alanı "arayüzde gösterilmemeli" diye
+işaretlemişti (is-koala/koala#34). `VerificationMessages`'taki iki sabit silindi ve öksüz kalan iki anahtar
+(`email.verification.message`, `phone.verification.message`) üç katalogdan da düşürüldü — duran bir anahtar
+sonradan yeniden çağrılabilir (§2ah2'deki gerekçenin aynısı). `verification.phone.code.sms` **düşmedi**: SMS
+gövdesini `PhoneVerificationManager` hâlâ ondan kuruyor.
+
+**Yerine `expiresAt` geldi ve tipi `Instant`.** §2h'nin ayrımı burada nettir: doğrulama kodunun ömrü bir
+**an**, duvar saati değil. Kod `Instant.now().plus(15, ChronoUnit.MINUTES)` ile üretiliyor ve
+`EmailVerification`/`PhoneVerification` entity'lerinde zaten `Instant` olarak, `TIMESTAMPTZ` kolonda duruyor;
+`LocalDateTime` seçmek "15 dakika sonra" ifadesini sunucunun saat dilimine bağlar ve istemci geri sayımı üç
+saat kaydırırdı. Alan doğrudan entity'den okunuyor, yani sunucunun yazdığı an ile istemcinin okuduğu an aynı
+kaynaktan geliyor. Şema değişmedi — kolon zaten vardı, yalnız DTO'ya çıkmıyordu.
+
+**Kazanılan şey mobildeki sayaç.** İstemci geri sayımı **ekranın açıldığı andan** başlatmak zorundaydı ve
+kullanıcı ekrana geç girerse sayaç gerçekle kayıyordu; bu yüzden sayaç bilgilendirme amaçlı bırakılmış ve
+giriş kapatılmamıştı — tek gerçek kaynak sunucunun 400'üydü. `expiresAt` geldiğine göre
+`verification_code_page` sayacı gerçek ana bağlanabilir.
 
 **`ConversationDto` liste için gerekeni taşıyor.** Sohbet listesi son mesaj metnini ve okunmamış sayısını çiziyordu, ikisi de yoktu; istemci satır başına ayrı istek atmak zorunda kalıyordu. `lastMessageBody` `Conversation` üzerine **denormalize edildi** (mesaj gönderilirken yazılıyor), `unreadCount` ise sayfadaki tüm konuşmalar için `countUnreadByConversationIds` ile **tek sorguda** toplanıyor. Yani liste iki sorgu: konuşmalar + sayaçlar.
 
@@ -2761,6 +2802,7 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 | İşveren istatistikleri `GET /users/{id}/employer-stats` | Faz 23 (§2am) |
 | `Review.anonymous` artık var: `POST /job-assignments/{id}/reviews` gövdesinde opsiyonel, `ReviewDto.author` anonimde `null` | §2am |
 | İptal kutusunda `GET /job-assignments/{id}/cancellation-preview` ile kesinti gösterilmeli | §2p |
+| `pendingVerifications[]` artık `message` taşımıyor, yerine `expiresAt` (ISO-8601, `Z`) var — doğrulama kodu sayacı bu ana bağlanmalı | §2m |
 | Başvuru ekranı: kimlik/adres/IBAN eksikse "Başvur" kapalı olmalı, uç 400 döndürüyor | §2ar |
 | IBAN sahipliği doğrulaması: `POST /users/me/bank-accounts/{id}/verification` talimatı verir (tutar, referans, hedef IBAN, son tarih); doğrulanmamış IBAN'lı işçi için emanet çıkışı 409 (`PAYOUT_WORKER_IBAN_NOT_VERIFIED`) ve ödeme oturumu 400 (`JOB_ASSIGNMENT_IBAN_NOT_VERIFIED_FOR_WORKER`) döner | §2k2 |
 | `BankAccountDto.verificationStatus` artık gerçek bir kapı: `UNVERIFIED`/`PENDING`/`VERIFIED`/`EXPIRED` | §2k2 |

@@ -1,6 +1,5 @@
 package com.exskylab.koala.core.dtos.userVerification.response;
 
-import com.exskylab.koala.core.constants.VerificationMessages;
 import com.exskylab.koala.entities.EmailVerification;
 import com.exskylab.koala.entities.PhoneVerification;
 import com.exskylab.koala.entities.UserVerification;
@@ -9,6 +8,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Getter
@@ -23,7 +23,7 @@ public class VerificationInfoDto {
 
     private String sentTo;
 
-    private String message;
+    private Instant expiresAt;
 
 
     public VerificationInfoDto(UserVerification verification) {
@@ -31,11 +31,11 @@ public class VerificationInfoDto {
         if (verification instanceof EmailVerification emailVerification) {
             this.type = "EMAIL";
             this.sentTo = emailVerification.getNewEmail();
-            this.message = VerificationMessages.EMAIL_VERIFICATION_MESSAGE;
+            this.expiresAt = emailVerification.getExpiresAt();
         }else if (verification instanceof PhoneVerification phoneVerification){
             this.type = "PHONE";
             this.sentTo = phoneVerification.getNewPhoneNumber();
-            this.message = VerificationMessages.PHONE_VERIFICATION_MESSAGE;
+            this.expiresAt = phoneVerification.getExpiresAt();
         }
     }
 
