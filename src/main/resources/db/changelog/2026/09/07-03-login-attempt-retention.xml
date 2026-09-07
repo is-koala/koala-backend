@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-07-03-01-login-attempt-retention-indexes" author="koala">
+        <sql>
+            CREATE INDEX idx_login_attempts_ownerless_age
+                ON login_attempts (COALESCE(time_stamp, created_at)) WHERE user_id IS NULL;
+            CREATE INDEX idx_login_attempts_attributed_age
+                ON login_attempts (COALESCE(time_stamp, created_at)) WHERE user_id IS NOT NULL;
+            CREATE INDEX idx_login_attempts_ownerless_email
+                ON login_attempts (LOWER(email_attempted)) WHERE user_id IS NULL;
+        </sql>
+        <rollback>
+            <sql>
+                DROP INDEX idx_login_attempts_ownerless_age;
+                DROP INDEX idx_login_attempts_attributed_age;
+                DROP INDEX idx_login_attempts_ownerless_email;
+            </sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

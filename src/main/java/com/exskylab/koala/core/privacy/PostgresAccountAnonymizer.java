@@ -189,8 +189,13 @@ public class PostgresAccountAnonymizer implements AccountAnonymizer {
                 """, userId);
         jdbcTemplate.update("update devices set name = null, client_device_id = null, push_token = null, is_deleted = true, deleted_at = now() where user_id = ?",
                 userId);
-        jdbcTemplate.update("update login_attempts set email_attempted = null, failure_reason = null, ip_address = null, device_name = null where user_id = ?",
-                userId);
+        jdbcTemplate.update("""
+                update login_attempts
+                   set email_attempted = null, failure_reason = null, ip_address = null, device_name = null
+                 where user_id = ?
+                    or (user_id is null and email_attempted is not null
+                        and lower(email_attempted) = (select lower(email) from users where id = ?))
+                """, userId, userId);
         jdbcTemplate.update("update identity_challenges set challenge = id::text, is_deleted = true, deleted_at = now() where user_id = ?",
                 userId);
         jdbcTemplate.update("""

@@ -235,6 +235,13 @@ audit:
     detail-months: ${AUDIT_RETENTION_DETAIL_MONTHS:6}
     cron: ${AUDIT_RETENTION_CRON:0 30 3 * * *}
 
+login-attempt:
+  retention:
+    enabled: ${LOGIN_ATTEMPT_RETENTION_ENABLED:true}
+    attributed-days: ${LOGIN_ATTEMPT_RETENTION_ATTRIBUTED_DAYS:365}
+    unattributed-days: ${LOGIN_ATTEMPT_RETENTION_UNATTRIBUTED_DAYS:30}
+    cron: ${LOGIN_ATTEMPT_RETENTION_CRON:0 50 3 * * *}
+
 bank:
   verification:
     collection-iban: ${BANK_VERIFICATION_COLLECTION_IBAN:}
