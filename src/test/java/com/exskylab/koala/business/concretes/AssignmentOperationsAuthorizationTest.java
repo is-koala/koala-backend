@@ -72,7 +72,8 @@ class AssignmentOperationsAuthorizationTest {
 
         cancellationManager = new CancellationManager(cancellationDao, jobAssignmentService, userService,
                 securityService, participants, policy, payoutService, disputeService,
-                mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class));
+                mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class),
+                mock(com.exskylab.koala.business.abstracts.PaymentService.class));
         disputeManager = new DisputeManager(disputeDaoStub,
                 mock(com.exskylab.koala.dataAccess.DisputeEvidenceDao.class),
                 mock(com.exskylab.koala.core.utilities.storage.StorageService.class),

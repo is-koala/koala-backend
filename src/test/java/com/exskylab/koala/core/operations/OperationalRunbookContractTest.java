@@ -1,10 +1,14 @@
 package com.exskylab.koala.core.operations;
 
+import com.exskylab.koala.core.monitoring.PaymentMetrics;
+import io.micrometer.core.instrument.Meter;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -62,6 +66,36 @@ class OperationalRunbookContractTest {
         assertTrue(restorePitr.contains("recovery.signal"));
         assertTrue(restorePitr.contains("recovery_target_time"));
         assertTrue(restorePitr.contains("restore-wal.sh"));
+    }
+
+    @Test
+    void theAbandonedInitiationTheSweepRecordsIsActuallyCoveredByAnAlert() throws Exception {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        new PaymentMetrics(registry).initiationAbandoned();
+
+        Meter recorded = registry.getMeters().stream()
+                .filter(meter -> meter.getId().getName().equals("koala.payment.operations"))
+                .filter(meter -> "abandoned".equals(meter.getId().getTag("outcome")))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Supurme bir sayac yazmali."));
+
+        String series = recorded.getId().getName().replace('.', '_') + "_total";
+        String operation = recorded.getId().getTag("operation");
+        String outcome = recorded.getId().getTag("outcome");
+        String alerts = Files.readString(Path.of("ops/monitoring/prometheus-alerts.yml"));
+
+        List<String> matching = alerts.lines()
+                .filter(line -> line.contains(series))
+                .filter(line -> line.contains("operation=\"" + operation + "\"")
+                        || line.contains("operation=~\"" + operation + "\""))
+                .filter(line -> line.contains("outcome=\"" + outcome + "\"")
+                        || line.contains("outcome=~\"" + outcome + "\""))
+                .toList();
+
+        assertFalse(matching.isEmpty(),
+                "Supurme " + series + "{operation=" + operation + ",outcome=" + outcome + "} yaziyor ama "
+                        + "hicbir alarm kurali bu seriyi izlemiyor; olay kimseye ulasmaz. Kurallar: " + alerts);
+        assertTrue(alerts.contains("KoalaPaymentInitiationAbandoned"));
     }
 
     @Test

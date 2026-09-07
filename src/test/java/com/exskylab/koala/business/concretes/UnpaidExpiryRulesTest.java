@@ -3,6 +3,7 @@ package com.exskylab.koala.business.concretes;
 import com.exskylab.koala.business.abstracts.ActivityNotificationService;
 import com.exskylab.koala.business.abstracts.CancellationService;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
+import com.exskylab.koala.business.abstracts.PaymentService;
 import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.UserService;
@@ -29,6 +30,7 @@ class UnpaidExpiryRulesTest {
     private CancellationDao cancellationDao;
     private JobAssignmentService jobAssignmentService;
     private ActivityNotificationService notifications;
+    private PaymentService paymentService;
     private CancellationManager manager;
 
     private final User employer = user();
@@ -40,6 +42,7 @@ class UnpaidExpiryRulesTest {
         cancellationDao = mock(CancellationDao.class);
         jobAssignmentService = mock(JobAssignmentService.class);
         notifications = mock(ActivityNotificationService.class);
+        paymentService = mock(PaymentService.class);
 
         SecurityService security = mock(SecurityService.class);
         when(security.getSystemUser()).thenReturn(system);
@@ -47,7 +50,8 @@ class UnpaidExpiryRulesTest {
         manager = new CancellationManager(cancellationDao, jobAssignmentService, mock(UserService.class),
                 security, new AssignmentParticipants(mock(com.exskylab.koala.business.abstracts.CompanyContactService.class)),
                 new CancellationPolicy(new CancellationProperties(), passthroughSettings()),
-                mock(PayoutService.class), mock(com.exskylab.koala.business.abstracts.DisputeService.class), notifications);
+                mock(PayoutService.class), mock(com.exskylab.koala.business.abstracts.DisputeService.class), notifications,
+                paymentService);
 
         when(cancellationDao.save(any())).thenAnswer(i -> i.getArgument(0));
     }
@@ -75,6 +79,28 @@ class UnpaidExpiryRulesTest {
         when(jobAssignmentService.getDetailedById(a.getId())).thenReturn(a);
         when(jobAssignmentService.getDetailedByIdForUpdate(a.getId())).thenReturn(a);
         return a;
+    }
+
+    @Test
+    void anAssignmentWithAnOpenPaymentAttemptIsNeverBlamedOnTheEmployerWithZeroRefund() {
+        JobAssignment a = assignment(AssignmentStatus.CONFIRMED, PaymentStatus.PENDING_COLLECTION);
+        when(paymentService.hasPendingAttemptForAssignment(a.getId())).thenReturn(true);
+
+        assertFalse(manager.expireUnpaidAssignment(a.getId()),
+                "Sonucu bilinmeyen bir odeme denemesi acikken atama iptal edilemez; para cekilmis olabilir.");
+        assertEquals(AssignmentStatus.CONFIRMED, a.getStatus());
+        verify(cancellationDao, never()).save(any());
+        verify(notifications, never()).assignmentExpired(any());
+    }
+
+    @Test
+    void aSweptInitiationStillCountsAsAnOpenAttemptForTheExpiryJob() {
+        JobAssignment a = assignment(AssignmentStatus.CONFIRMED, PaymentStatus.PENDING_COLLECTION);
+        when(paymentService.hasPendingAttemptForAssignment(a.getId())).thenReturn(true);
+
+        assertFalse(manager.expireUnpaidAssignment(a.getId()));
+
+        verify(paymentService).hasPendingAttemptForAssignment(a.getId());
     }
 
     @Test

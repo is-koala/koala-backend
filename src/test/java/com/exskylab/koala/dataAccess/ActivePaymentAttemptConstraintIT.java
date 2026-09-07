@@ -15,13 +15,23 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -44,15 +54,10 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
 
     @Test
     void databaseAllowsOnlyOneActiveAttemptPerAssignment() {
-        String definition = jdbcTemplate.queryForObject(
-                "select indexdef from pg_indexes where indexname = 'uk_payments_one_active_attempt'",
-                String.class);
+        String definition = activeAttemptIndexDefinition();
 
         assertTrue(definition.contains("UNIQUE INDEX"));
         assertTrue(definition.contains("job_assignment_id"));
-        assertTrue(definition.contains("INITIATED"));
-        assertTrue(definition.contains("VERIFY_PENDING"));
-        assertTrue(definition.contains("IN_REVIEW"));
 
         String tokenDefinition = jdbcTemplate.queryForObject(
                 "select indexdef from pg_indexes where indexname = 'uk_payments_provider_token'",
@@ -65,6 +70,45 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
                 where table_schema = 'public' and table_name = 'payments'
                   and column_name = 'provider_submerchant_key'
                 """, String.class));
+    }
+
+    @Test
+    void theIndexGuardsExactlyTheStatusSetJavaTreatsAsActive() {
+        Set<PaymentAttemptStatus> guardedBySql = statusesNamedIn(activeAttemptIndexDefinition());
+
+        assertEquals(EnumSet.copyOf(PaymentAttemptStatus.ACTIVE), guardedBySql,
+                "PaymentAttemptStatus.ACTIVE ile uk_payments_one_active_attempt ayni kumeyi tutmali; "
+                        + "Java'ya eklenip indekse eklenmeyen bir durum cift tahsilat deligi acar. "
+                        + "Java=" + PaymentAttemptStatus.ACTIVE + " SQL=" + guardedBySql);
+    }
+
+    @Test
+    void everyStatusJavaCallsActiveIsAlsoBlockedByTheDatabaseAtInsertTime() {
+        UUID jobId = UUID.randomUUID();
+        UUID assignmentId = UUID.randomUUID();
+        seedAssignment(jobId, assignmentId);
+
+        try {
+            for (PaymentAttemptStatus active : PaymentAttemptStatus.ACTIVE) {
+                UUID sitting = UUID.randomUUID();
+                jdbcTemplate.update("""
+                        insert into payments (id, created_at, is_deleted, job_assignment_id, conversation_id,
+                                              status, currency, verification_attempts)
+                        values (?, now(), false, ?, ?, ?::varchar, 'TRY', 0)
+                        """, sitting, assignmentId, UUID.randomUUID().toString(), active.name());
+
+                assertThrows(DataIntegrityViolationException.class, () -> jdbcTemplate.update("""
+                        insert into payments (id, created_at, is_deleted, job_assignment_id, conversation_id,
+                                              status, currency, verification_attempts)
+                        values (?, now(), false, ?, ?, 'INITIATED', 'TRY', 0)
+                        """, UUID.randomUUID(), assignmentId, UUID.randomUUID().toString()),
+                        active + " Java'da aktif sayiliyor ama veritabani ustune ikinci deneme aciyor.");
+
+                jdbcTemplate.update("delete from payments where id = ?", sitting);
+            }
+        } finally {
+            cleanUp(jobId, assignmentId);
+        }
     }
 
     @Test
@@ -87,18 +131,7 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
                         'CONFIRMED', 'PENDING_COLLECTION', '2026-09-v1', 'TRY',
                         1000.00, 0.0750, 75.00, 1075.00, 0)
                 """, assignmentId, jobId);
-        jdbcTemplate.execute("""
-                create or replace function delay_payment_attempt_insert() returns trigger as $$
-                begin
-                    perform pg_sleep(0.5);
-                    return new;
-                end;
-                $$ language plpgsql
-                """);
-        jdbcTemplate.execute("""
-                create trigger delay_payment_attempt_insert
-                before insert on payments for each row execute function delay_payment_attempt_insert()
-                """);
+        widenTheInsertWindow();
 
         try (var executor = Executors.newFixedThreadPool(2)) {
             CountDownLatch start = new CountDownLatch(1);
@@ -132,8 +165,7 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
                     where job_assignment_id = ? and status in ('INITIATED', 'VERIFY_PENDING', 'IN_REVIEW')
                     """, Integer.class, assignmentId));
         } finally {
-            jdbcTemplate.execute("drop trigger if exists delay_payment_attempt_insert on payments");
-            jdbcTemplate.execute("drop function if exists delay_payment_attempt_insert()");
+            narrowTheInsertWindow();
             jdbcTemplate.update("delete from payments where job_assignment_id = ?", assignmentId);
             jdbcTemplate.update("delete from job_assignments where id = ?", assignmentId);
             jdbcTemplate.update("delete from jobs where id = ?", jobId);
@@ -206,16 +238,12 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void anAbandonedInitiationBlocksPaymentUntilTheSweepMakesItVisible() {
+    void anAbandonedInitiationKeepsBlockingPaymentAndTheSweepOnlyMakesItVisible() {
         UUID jobId = UUID.randomUUID();
         UUID assignmentId = UUID.randomUUID();
         UUID paymentId = UUID.randomUUID();
         seedAssignment(jobId, assignmentId);
-        jdbcTemplate.update("""
-                insert into payments (id, created_at, is_deleted, job_assignment_id, conversation_id,
-                                      status, currency, verification_attempts)
-                values (?, now() - interval '1 hour', false, ?, ?, 'INITIATED', 'TRY', 0)
-                """, paymentId, assignmentId, UUID.randomUUID().toString());
+        seedStuckInitiation(paymentId, assignmentId);
 
         try {
             CommissionCalculator.Breakdown breakdown = breakdown();
@@ -231,18 +259,81 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
             assertEquals(List.of(paymentId), paymentService.findStuckInitiationIds());
             assertTrue(paymentService.abandonStuckInitiation(paymentId));
 
-            assertEquals("VERIFY_PENDING", jdbcTemplate.queryForObject(
-                    "select status from payments where id = ?", String.class, paymentId));
-            assertEquals("{payment.verification.pending}", jdbcTemplate.queryForObject(
-                    "select failure_reason from payments where id = ?", String.class, paymentId));
+            assertEquals("VERIFY_PENDING", statusOf(paymentId));
+            assertEquals("{payment.initiation.abandoned}", failureReasonOf(paymentId));
             assertNull(jdbcTemplate.queryForObject(
                     "select next_verification_at from payments where id = ?", Instant.class, paymentId));
 
             ConflictException stillBlocked = assertThrows(ConflictException.class,
                     () -> paymentService.startAttempt(assignment, breakdown));
             assertEquals("PAYMENT_ATTEMPT_IN_PROGRESS", stillBlocked.getErrorCode());
+
+            assertTrue(paymentService.findDueVerificationAttemptIds().stream().noneMatch(paymentId::equals),
+                    "Supurulen satirda token yok; mutabakat isi onu almamali, yoksa sonsuza kadar bosa doner.");
+            assertTrue(paymentService.findStuckInitiationIds().stream().noneMatch(paymentId::equals),
+                    "Supurme idempotent olmali; satir ikinci turda yeniden secilmemeli.");
+            assertTrue(idsReturnedByTheRunbookQuery().contains(paymentId),
+                    "Otomatik yol kalmadigi icin satiri gorunur kilan tek sey runbook kuyrugu; orada olmali.");
         } finally {
             cleanUp(jobId, assignmentId);
+        }
+    }
+
+    @Test
+    void theRunbookQueryReturnsTheRowTheSweepLeavesBehind() {
+        UUID jobId = UUID.randomUUID();
+        UUID assignmentId = UUID.randomUUID();
+        UUID paymentId = UUID.randomUUID();
+        seedAssignment(jobId, assignmentId);
+        seedStuckInitiation(paymentId, assignmentId);
+
+        try {
+            assertFalse(idsReturnedByTheRunbookQuery().contains(paymentId),
+                    "Supurulmemis satir kuyrukta gorunmemeli.");
+
+            assertTrue(paymentService.abandonStuckInitiation(paymentId));
+
+            assertTrue(idsReturnedByTheRunbookQuery().contains(paymentId),
+                    "docs/runbooks/payments.md icindeki kuyruk sorgusu supurulen satiri dondurmeli; "
+                            + "dondurmezse supurme sadece kovayi degistirmis, gorunurluk kurmamis olur.");
+        } finally {
+            cleanUp(jobId, assignmentId);
+        }
+    }
+
+    @Test
+    void theSweptRowIsTellableApartFromAnUncertainInitiationInTheDatabase() {
+        UUID jobId = UUID.randomUUID();
+        UUID assignmentId = UUID.randomUUID();
+        UUID swept = UUID.randomUUID();
+        UUID uncertain = UUID.randomUUID();
+        UUID otherJobId = UUID.randomUUID();
+        UUID otherAssignmentId = UUID.randomUUID();
+        seedAssignment(jobId, assignmentId);
+        seedAssignment(otherJobId, otherAssignmentId);
+        seedStuckInitiation(swept, assignmentId);
+        seedStuckInitiation(uncertain, otherAssignmentId);
+
+        try {
+            assertTrue(paymentService.abandonStuckInitiation(swept));
+            paymentService.markInitiationUncertain(uncertain);
+
+            assertEquals("VERIFY_PENDING", statusOf(swept));
+            assertEquals("VERIFY_PENDING", statusOf(uncertain));
+            assertNull(tokenOf(swept));
+            assertNull(tokenOf(uncertain));
+
+            assertEquals("{payment.initiation.abandoned}", failureReasonOf(swept));
+            assertEquals("{payment.verification.pending}", failureReasonOf(uncertain));
+
+            List<UUID> queue = idsReturnedByTheRunbookQuery();
+            assertTrue(queue.contains(swept), "Supurulen satir kuyrukta olmali: " + queue);
+            assertFalse(queue.contains(uncertain),
+                    "Kuyruk sorgusu yalniz supurulen satiri secmeli; sonucu bilinmeyen deneme baska bir "
+                            + "triyaj dalidir ve ayni kovaya dusmemeli: " + queue);
+        } finally {
+            cleanUp(jobId, assignmentId);
+            cleanUp(otherJobId, otherAssignmentId);
         }
     }
 
@@ -282,6 +373,59 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
         UUID jobId = UUID.randomUUID();
         UUID assignmentId = UUID.randomUUID();
         seedAssignment(jobId, assignmentId);
+        widenTheInsertWindow();
+
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            CyclicBarrier bothInsideTheirTransaction = new CyclicBarrier(2);
+            List<String> barrierFailures = java.util.Collections.synchronizedList(new ArrayList<>());
+            TransactionTemplate transactions = new TransactionTemplate(transactionManager);
+            java.util.concurrent.Callable<String> insert = () -> {
+                try {
+                    transactions.execute(status -> {
+                        JobAssignment reference = jobAssignmentDao.getReferenceById(assignmentId);
+                        Payment payment = new Payment();
+                        payment.setJobAssignment(reference);
+                        payment.setConversationId(UUID.randomUUID().toString());
+                        payment.setStatus(PaymentAttemptStatus.INITIATED);
+                        payment.setCurrency("TRY");
+                        try {
+                            bothInsideTheirTransaction.await(15, TimeUnit.SECONDS);
+                        } catch (InterruptedException | BrokenBarrierException | TimeoutException waiting) {
+                            barrierFailures.add(waiting.getClass().getSimpleName());
+                            throw new IllegalStateException("the two inserts never overlapped", waiting);
+                        }
+                        return paymentDao.saveAndFlush(payment);
+                    });
+                    return "SUCCESS";
+                } catch (DataIntegrityViolationException violation) {
+                    return constraintName(violation);
+                }
+            };
+
+            var first = executor.submit(insert);
+            var second = executor.submit(insert);
+
+            String firstOutcome = first.get(30, TimeUnit.SECONDS);
+            String secondOutcome = second.get(30, TimeUnit.SECONDS);
+            List<String> outcomes = List.of(firstOutcome, secondOutcome);
+            assertTrue(barrierFailures.isEmpty(),
+                    "Iki insert ayni anda acik transaction icinde olmaliydi; biri digerini beklemeden bitmis, "
+                            + "yani test 'indeks unique mi' seviyesine dusmus: " + barrierFailures);
+            assertEquals(1, outcomes.stream().filter("SUCCESS"::equals).count(),
+                    "exactly one insert must win, got " + outcomes);
+            assertEquals(1, outcomes.stream().filter("uk_payments_one_active_attempt"::equals).count(),
+                    "the loser must be rejected by the active-attempt index, got " + outcomes);
+            assertEquals(1, jdbcTemplate.queryForObject("""
+                    select count(*) from payments
+                    where job_assignment_id = ? and status in ('INITIATED', 'VERIFY_PENDING', 'IN_REVIEW')
+                    """, Integer.class, assignmentId));
+        } finally {
+            narrowTheInsertWindow();
+            cleanUp(jobId, assignmentId);
+        }
+    }
+
+    private void widenTheInsertWindow() {
         jdbcTemplate.execute("""
                 create or replace function delay_payment_attempt_insert() returns trigger as $$
                 begin
@@ -294,48 +438,76 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
                 create trigger delay_payment_attempt_insert
                 before insert on payments for each row execute function delay_payment_attempt_insert()
                 """);
+    }
 
-        try (var executor = Executors.newFixedThreadPool(2)) {
-            CountDownLatch start = new CountDownLatch(1);
-            TransactionTemplate transactions = new TransactionTemplate(transactionManager);
-            java.util.concurrent.Callable<String> insert = () -> {
-                start.await();
-                try {
-                    transactions.execute(status -> {
-                        JobAssignment reference = jobAssignmentDao.getReferenceById(assignmentId);
-                        Payment payment = new Payment();
-                        payment.setJobAssignment(reference);
-                        payment.setConversationId(UUID.randomUUID().toString());
-                        payment.setStatus(PaymentAttemptStatus.INITIATED);
-                        payment.setCurrency("TRY");
-                        return paymentDao.saveAndFlush(payment);
-                    });
-                    return "SUCCESS";
-                } catch (DataIntegrityViolationException violation) {
-                    return constraintName(violation);
-                }
-            };
+    private void narrowTheInsertWindow() {
+        jdbcTemplate.execute("drop trigger if exists delay_payment_attempt_insert on payments");
+        jdbcTemplate.execute("drop function if exists delay_payment_attempt_insert()");
+    }
 
-            var first = executor.submit(insert);
-            var second = executor.submit(insert);
-            start.countDown();
+    private String activeAttemptIndexDefinition() {
+        return jdbcTemplate.queryForObject(
+                "select indexdef from pg_indexes where indexname = 'uk_payments_one_active_attempt'",
+                String.class);
+    }
 
-            String firstOutcome = first.get(20, TimeUnit.SECONDS);
-            String secondOutcome = second.get(20, TimeUnit.SECONDS);
-            List<String> outcomes = List.of(firstOutcome, secondOutcome);
-            assertEquals(1, outcomes.stream().filter("SUCCESS"::equals).count(),
-                    "exactly one insert must win, got " + outcomes);
-            assertEquals(1, outcomes.stream().filter("uk_payments_one_active_attempt"::equals).count(),
-                    "the loser must be rejected by the active-attempt index, got " + outcomes);
-            assertEquals(1, jdbcTemplate.queryForObject("""
-                    select count(*) from payments
-                    where job_assignment_id = ? and status in ('INITIATED', 'VERIFY_PENDING', 'IN_REVIEW')
-                    """, Integer.class, assignmentId));
-        } finally {
-            jdbcTemplate.execute("drop trigger if exists delay_payment_attempt_insert on payments");
-            jdbcTemplate.execute("drop function if exists delay_payment_attempt_insert()");
-            cleanUp(jobId, assignmentId);
+    private static Set<PaymentAttemptStatus> statusesNamedIn(String indexDefinition) {
+        Set<PaymentAttemptStatus> named = EnumSet.noneOf(PaymentAttemptStatus.class);
+        for (PaymentAttemptStatus candidate : PaymentAttemptStatus.values()) {
+            if (Pattern.compile("'" + candidate.name() + "'").matcher(indexDefinition).find()) {
+                named.add(candidate);
+            }
         }
+        return named;
+    }
+
+    private void seedStuckInitiation(UUID paymentId, UUID assignmentId) {
+        jdbcTemplate.update("""
+                insert into payments (id, created_at, is_deleted, job_assignment_id, conversation_id,
+                                      status, currency, verification_attempts)
+                values (?, now() - interval '1 hour', false, ?, ?, 'INITIATED', 'TRY', 0)
+                """, paymentId, assignmentId, UUID.randomUUID().toString());
+    }
+
+    private String statusOf(UUID paymentId) {
+        return jdbcTemplate.queryForObject(
+                "select status from payments where id = ?", String.class, paymentId);
+    }
+
+    private String tokenOf(UUID paymentId) {
+        return jdbcTemplate.queryForObject(
+                "select provider_token from payments where id = ?", String.class, paymentId);
+    }
+
+    private String failureReasonOf(UUID paymentId) {
+        return jdbcTemplate.queryForObject(
+                "select failure_reason from payments where id = ?", String.class, paymentId);
+    }
+
+    private List<UUID> idsReturnedByTheRunbookQuery() {
+        return jdbcTemplate.queryForList(abandonedQueueQueryFromTheRunbook(), UUID.class);
+    }
+
+    private static String abandonedQueueQueryFromTheRunbook() {
+        String runbook;
+        try {
+            runbook = Files.readString(Path.of("docs/runbooks/payments.md"), StandardCharsets.UTF_8);
+        } catch (java.io.IOException unreadable) {
+            throw new IllegalStateException("docs/runbooks/payments.md okunamadi", unreadable);
+        }
+        Matcher blocks = Pattern.compile("```sql\\n(.*?)```", Pattern.DOTALL).matcher(runbook);
+        List<String> matching = new ArrayList<>();
+        while (blocks.find()) {
+            String block = blocks.group(1);
+            if (block.contains("{payment.initiation.abandoned}")) {
+                matching.add(block);
+            }
+        }
+        assertEquals(1, matching.size(),
+                "Runbook, supurulen satirlarin kuyrugunu tam olarak bir SQL blogunda tarif etmeli, "
+                        + "bulunan: " + matching.size());
+        return matching.getFirst().replace("select id, job_assignment_id, conversation_id, created_at",
+                "select id");
     }
 
     private static String constraintName(Throwable exception) {

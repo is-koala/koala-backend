@@ -5,6 +5,7 @@ import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.CancellationService;
 import com.exskylab.koala.business.abstracts.DisputeService;
+import com.exskylab.koala.business.abstracts.PaymentService;
 import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.CancellationMessages;
@@ -47,13 +48,15 @@ public class CancellationManager implements CancellationService {
     private final PayoutService payoutService;
     private final DisputeService disputeService;
     private final ActivityNotificationService activityNotificationService;
+    private final PaymentService paymentService;
 
     public CancellationManager(CancellationDao cancellationDao, JobAssignmentService jobAssignmentService,
                                UserService userService, SecurityService securityService,
                                AssignmentParticipants participants, CancellationPolicy policy,
                                PayoutService payoutService,
                                DisputeService disputeService,
-                               ActivityNotificationService activityNotificationService) {
+                               ActivityNotificationService activityNotificationService,
+                               PaymentService paymentService) {
         this.cancellationDao = cancellationDao;
         this.jobAssignmentService = jobAssignmentService;
         this.userService = userService;
@@ -63,6 +66,7 @@ public class CancellationManager implements CancellationService {
         this.payoutService = payoutService;
         this.disputeService = disputeService;
         this.activityNotificationService = activityNotificationService;
+        this.paymentService = paymentService;
     }
 
     @Override
@@ -157,6 +161,12 @@ public class CancellationManager implements CancellationService {
         }
 
         if (cancellationDao.existsByJobAssignmentId(jobAssignmentId)) {
+            return false;
+        }
+
+        if (paymentService.hasPendingAttemptForAssignment(jobAssignmentId)) {
+            log.warn("Assignment {} was not expired: an unresolved payment attempt is still open.",
+                    jobAssignmentId);
             return false;
         }
 

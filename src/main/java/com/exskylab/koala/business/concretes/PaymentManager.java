@@ -42,9 +42,7 @@ public class PaymentManager implements PaymentService {
 
     private static final String CURRENCY = "TRY";
     private static final Integer VERIFIED_BY_THREE_D_SECURE = 1;
-    private static final List<PaymentAttemptStatus> PENDING_STATUSES =
-            List.of(PaymentAttemptStatus.INITIATED, PaymentAttemptStatus.VERIFY_PENDING,
-                    PaymentAttemptStatus.IN_REVIEW);
+    private static final List<PaymentAttemptStatus> PENDING_STATUSES = PaymentAttemptStatus.ACTIVE;
 
     private final PaymentDao paymentDao;
     private final IyzicoPaymentService iyzicoPaymentService;
@@ -217,6 +215,11 @@ public class PaymentManager implements PaymentService {
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean abandonStuckInitiation(UUID paymentId) {
+        UUID assignmentId = paymentDao.findJobAssignmentIdById(paymentId).orElse(null);
+        if (assignmentId == null) {
+            return false;
+        }
+        lockAssignment(assignmentId);
         Payment payment = paymentDao.findWithDetailsById(paymentId).orElse(null);
         if (payment == null
                 || payment.getStatus() != PaymentAttemptStatus.INITIATED
@@ -225,9 +228,7 @@ public class PaymentManager implements PaymentService {
             return false;
         }
         payment.setStatus(PaymentAttemptStatus.VERIFY_PENDING);
-        payment.setFailureReason(PaymentMessages.VERIFICATION_PENDING);
-        payment.setNextVerificationAt(null);
-        payment.setCompletedAt(null);
+        payment.setFailureReason(PaymentMessages.INITIATION_ABANDONED);
         paymentDao.save(payment);
         paymentMetrics.initiationAbandoned();
         log.warn("Payment {} never reached the provider and now waits for manual reconciliation, conversationId={}",

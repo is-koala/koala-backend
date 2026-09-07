@@ -45,7 +45,8 @@ class CancellationPreviewTest {
         manager = new CancellationManager(cancellationDao, jobAssignmentService, mock(UserService.class),
                 securityService, new AssignmentParticipants(mock(CompanyContactService.class)),
                 new CancellationPolicy(new CancellationProperties(), passthroughSettings()),
-                mock(PayoutService.class), disputeService, mock(ActivityNotificationService.class));
+                mock(PayoutService.class), disputeService, mock(ActivityNotificationService.class),
+                mock(com.exskylab.koala.business.abstracts.PaymentService.class));
     }
 
     private static LocalDateTime startsInHours(long hours) {
