@@ -128,7 +128,7 @@ public class UsersController {
 
 
     @Operation(summary = "Profili güncelle",
-            description = "Yalnızca gönderilen alanlar değişir. E-posta ve telefon değişikliği doğrulama gerektirir; doğrulama tamamlanana kadar yeni değer uygulanmaz ve yanıttaki pendingVerifications alanına düşer.")
+            description = "Yalnızca gönderilen alanlar değişir. E-posta ve telefon değişikliği doğrulama gerektirir; doğrulama tamamlanana kadar yeni değer uygulanmaz ve yanıttaki pendingVerifications alanına düşer. Her giriş kodun son kullanma anını expiresAt ile taşır.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Profil güncellendi"),
             @ApiResponse(responseCode = "400", description = "Alan doğrulaması başarısız",
