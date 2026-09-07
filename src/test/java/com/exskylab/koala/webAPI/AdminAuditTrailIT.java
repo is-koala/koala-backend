@@ -1,7 +1,6 @@
 package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
-import com.exskylab.koala.support.StaffTokenIssuer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -49,19 +48,12 @@ class AdminAuditTrailIT extends AbstractStaffIntegrationTest {
         jdbcTemplate.update("delete from app_settings where setting_key = ?", LATE_FEE_KEY);
     }
 
-    private UUID staffMember(String subject) {
-        UUID id = UUID.randomUUID();
-        jdbcTemplate.update("""
-                insert into staff_members (id, keycloak_subject, email, display_name, is_active, created_at)
-                values (?, ?, ?, ?, true, now())
-                """, id, subject, "audit-" + subject + "@iskoala.com", "Denetim Denemesi");
-        return id;
+    private UUID staffMember(String... roles) {
+        return createStaffMember("audit-" + UUID.randomUUID() + "@iskoala.com", "Denetim Denemesi", roles);
     }
 
     private String tokenFor(String role) {
-        String subject = UUID.randomUUID().toString();
-        staffMember(subject);
-        return StaffTokenIssuer.tokenFor(subject, List.of(role));
+        return staffAccessToken(staffMember(role));
     }
 
     private List<Map<String, Object>> rows() {
@@ -81,9 +73,8 @@ class AdminAuditTrailIT extends AbstractStaffIntegrationTest {
 
     @Test
     void anAllowedChangeIsWrittenWithItsActorPermissionAndRecord() throws Exception {
-        String subject = UUID.randomUUID().toString();
-        UUID staffId = staffMember(subject);
-        String token = StaffTokenIssuer.tokenFor(subject, List.of("OWNER"));
+        UUID staffId = staffMember("OWNER");
+        String token = staffAccessToken(staffId);
 
         mockMvc.perform(put("/admin/settings/" + LATE_FEE_KEY)
                         .header("Authorization", "Bearer " + token)
@@ -252,15 +243,15 @@ class AdminAuditTrailIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
-    void theMarketplaceBridgeAdminIsAuditedToo() throws Exception {
+    void theClosedMarketplaceBridgeIsRefusedAndTheRefusalIsAudited() throws Exception {
         mockMvc.perform(get("/admin/users").param("query", "biri@iskoala.com")
                         .with(org.springframework.security.test.web.servlet.request
                                 .SecurityMockMvcRequestPostProcessors.user("admin").roles("ADMIN")))
-                .andExpect(status().isOk());
+                .andExpect(status().isForbidden());
 
         Map<String, Object> row = onlyRow();
 
-        assertEquals(Boolean.TRUE, row.get("allowed"));
+        assertEquals(Boolean.FALSE, row.get("allowed"));
         assertEquals("admin", row.get("actor_display_name"));
     }
 
@@ -399,9 +390,8 @@ class AdminAuditTrailIT extends AbstractStaffIntegrationTest {
 
     @Test
     void theActorFilterFindsWhatOnePersonDid() throws Exception {
-        String subject = UUID.randomUUID().toString();
-        UUID staffId = staffMember(subject);
-        String support = StaffTokenIssuer.tokenFor(subject, List.of("SUPPORT_AGENT"));
+        UUID staffId = staffMember("SUPPORT_AGENT");
+        String support = staffAccessToken(staffId);
         String auditor = tokenFor("AUDITOR");
 
         mockMvc.perform(get("/admin/users").param("query", "biri@iskoala.com")

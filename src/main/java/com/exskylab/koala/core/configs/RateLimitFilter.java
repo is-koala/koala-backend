@@ -52,7 +52,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
             "/auth/refresh-token",
             "/auth/forgot-password",
             "/auth/reset-password",
-            "/users/me/identity-verification");
+            "/users/me/identity-verification",
+            "/admin/auth/login",
+            "/admin/auth/refresh",
+            "/admin/auth/password");
 
     private static final List<PathPattern> UPLOAD_PATHS = List.of(
             PARSER.parse("/images"),

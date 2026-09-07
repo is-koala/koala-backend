@@ -4,7 +4,8 @@ import com.exskylab.koala.core.constants.SystemUser;
 import com.exskylab.koala.dataAccess.UserDao;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.entities.User;
-import com.exskylab.koala.support.AbstractIntegrationTest;
+import com.exskylab.koala.support.AbstractStaffIntegrationTest;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,8 +23,11 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -32,7 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @AutoConfigureMockMvc
 @Transactional
-class UserRoleGrantIT extends AbstractIntegrationTest {
+class UserRoleGrantIT extends AbstractStaffIntegrationTest {
 
     private static final String PASSWORD = "GecerliParola1";
 
@@ -57,7 +61,19 @@ class UserRoleGrantIT extends AbstractIntegrationTest {
     @BeforeEach
     void signInAsAdmin() throws Exception {
         admin = saveUser("role-grant-admin@koala.test", Role.ROLE_USER, Role.ROLE_ADMIN);
-        adminToken = login(admin.getEmail());
+        adminToken = staffTokenFor("role-grant-" + UUID.randomUUID() + "@iskoala.com",
+                "Rol Yöneticisi", "OWNER");
+
+        jdbcTemplate.update("delete from authorities where role = 'ROLE_ADMIN' "
+                + "and user_id <> ? and user_id <> ?", admin.getId(), SystemUser.ID);
+    }
+
+    @AfterEach
+    void removeTestStaff() {
+        jdbcTemplate.update("delete from admin_audit_entries");
+        jdbcTemplate.update("delete from staff_member_roles where staff_member_id in "
+                + "(select id from staff_members where email like 'role-grant-%@iskoala.com')");
+        jdbcTemplate.update("delete from staff_members where email like 'role-grant-%@iskoala.com'");
     }
 
     @Test
@@ -81,13 +97,14 @@ class UserRoleGrantIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void grantingARoleRecordsWhoGrantedItAndWhen() throws Exception {
+    void grantingARoleRecordsWhenButNotWhoOnTheStaffPath() throws Exception {
         User target = saveUser("role-grant-target@koala.test", Role.ROLE_USER);
 
         grant(target.getId(), "ROLE_ADMIN").andExpect(status().isOk());
 
         assertNotNull(grantedAt(target.getId(), "ROLE_ADMIN"), "granted_at bos kaldi.");
-        assertEquals(admin.getId(), grantedBy(target.getId(), "ROLE_ADMIN"));
+        assertNull(grantedBy(target.getId(), "ROLE_ADMIN"),
+                "authorities.granted_by_id users'a yabanci anahtar tasiyor; personelin orada satiri yok (ADR-0014)");
 
         mockMvc.perform(get("/admin/users/" + target.getId() + "/roles")
                         .header("Authorization", "Bearer " + adminToken))
@@ -95,7 +112,7 @@ class UserRoleGrantIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.length()").value(2))
                 .andExpect(jsonPath("$.data[?(@.role == 'ROLE_ADMIN')].grantedAt").exists())
                 .andExpect(jsonPath("$.data[?(@.role == 'ROLE_ADMIN')].grantedById")
-                        .value(admin.getId().toString()));
+                        .value(everyItem(nullValue())));
     }
 
     @Test
@@ -122,7 +139,7 @@ class UserRoleGrantIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void anAdminCannotTakeAwayTheirOwnAdminRole() throws Exception {
+    void theLastMarketplaceAdminCannotBeRevokedNowThatTheActorIsStaff() throws Exception {
         mockMvc.perform(delete("/admin/users/" + admin.getId() + "/roles/ROLE_ADMIN")
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isConflict());

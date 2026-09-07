@@ -125,11 +125,16 @@ app:
 
 koala:
   staff:
-    issuer-uri: ${STAFF_ISSUER_URI:}
-    jwk-set-uri: ${STAFF_JWK_SET_URI:}
-    audience: ${STAFF_AUDIENCE:koala-api}
+    auth:
+      access-token-validity: ${STAFF_ACCESS_TOKEN_VALIDITY:15m}
+      refresh-token-validity: ${STAFF_REFRESH_TOKEN_VALIDITY:12h}
+      max-failed-attempts: ${STAFF_MAX_FAILED_ATTEMPTS:5}
+      lock-duration: ${STAFF_LOCK_DURATION:15m}
+    bootstrap:
+      owner-email: ${BOOTSTRAP_OWNER_EMAIL:}
+      owner-password: ${BOOTSTRAP_OWNER_PASSWORD:}
     bridge:
-      open: ${STAFF_MARKETPLACE_BRIDGE_OPEN:true}
+      open: ${STAFF_MARKETPLACE_BRIDGE_OPEN:false}
 
 payments:
   return-base-url: ${PAYMENTS_RETURN_BASE_URL:koala-staging://}

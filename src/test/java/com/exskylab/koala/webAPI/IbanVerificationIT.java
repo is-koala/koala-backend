@@ -4,7 +4,6 @@ import com.exskylab.koala.core.producers.user.UserProducerService;
 import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
-import com.exskylab.koala.support.StaffTokenIssuer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,7 +17,6 @@ import org.springframework.test.web.servlet.MvcResult;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -77,12 +75,7 @@ class IbanVerificationIT extends AbstractStaffIntegrationTest {
     }
 
     private String staffToken(String... roles) {
-        String subject = UUID.randomUUID().toString();
-        jdbcTemplate.update("""
-                insert into staff_members (id, keycloak_subject, email, display_name, is_active, created_at)
-                values (?, ?, ?, ?, true, now())
-                """, UUID.randomUUID(), subject, "iban-verification-" + subject + "@iskoala.com", "Finans");
-        return StaffTokenIssuer.tokenFor(subject, List.of(roles));
+        return staffTokenFor("iban-verification-" + UUID.randomUUID() + "@iskoala.com", "Finans", roles);
     }
 
     private UUID addAccount(String iban) throws Exception {

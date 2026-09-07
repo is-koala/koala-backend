@@ -20,6 +20,8 @@ import java.util.Set;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.hamcrest.Matchers.hasItem;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @AutoConfigureMockMvc
@@ -52,14 +54,26 @@ class AuthoritiesLoginRegressionIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void anAdminStillLogsInAndStillPassesTheRoleCheck() throws Exception {
+    void anAdminStillLogsInAndStillCarriesTheRole() throws Exception {
         String email = "authorities-admin@koala.test";
         saveUser(email, Role.ROLE_USER, Role.ROLE_ADMIN);
 
         String token = login(email);
 
+        mockMvc.perform(get("/users/me").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.roles", hasItem("ROLE_ADMIN")));
+    }
+
+    @Test
+    void theMarketplaceAdminRoleNoLongerOpensTheAdminSurface() throws Exception {
+        String email = "authorities-admin-bridge@koala.test";
+        saveUser(email, Role.ROLE_USER, Role.ROLE_ADMIN);
+
+        String token = login(email);
+
         mockMvc.perform(get("/admin/settings").header("Authorization", "Bearer " + token))
-                .andExpect(status().isOk());
+                .andExpect(status().isForbidden());
     }
 
     private void saveUser(String email, Role... roles) {

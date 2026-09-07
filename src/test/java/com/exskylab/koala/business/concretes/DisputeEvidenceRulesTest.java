@@ -24,7 +24,6 @@ import com.exskylab.koala.entities.DisputeStatus;
 import com.exskylab.koala.entities.Job;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.User;
-import com.exskylab.koala.support.StaffBridges;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -89,7 +88,7 @@ class DisputeEvidenceRulesTest {
         disputeManager = new DisputeManager(disputeDao, disputeEvidenceDao, storageService,
                 new UploadValidator(uploadProperties), uploadProperties, jobAssignmentService, userService,
                 securityService, participants,
-                new StaffPayoutManager(mock(PayoutService.class), StaffBridges.open()),
+                new StaffPayoutManager(mock(PayoutService.class)),
                 mock(ActivityNotificationService.class), new PageableSanitizer());
 
         when(storageService.uploadFile(any(), any(), any(), eq(FolderType.DISPUTE_EVIDENCE))).thenReturn(STORED_KEY);

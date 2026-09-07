@@ -23,6 +23,10 @@ public class JwtService {
     private static final Set<String> STOMP_AUDIENCES = Set.of(STOMP_AUDIENCE);
     private static final Duration REALTIME_CREDENTIAL_TTL = Duration.ofSeconds(90);
 
+    public static final String STAFF_ACCESS_AUDIENCE = "koala-staff";
+    public static final String STAFF_REFRESH_AUDIENCE = "koala-staff-refresh";
+    private static final String STAFF_TOKEN_VERSION_CLAIM = "stv";
+
     @Value("${jwt.secret}")
     private String SECRET;
 
@@ -163,6 +167,54 @@ public class JwtService {
         }
         requireAccessAudience(claims);
         return UUID.fromString(claims.getId());
+    }
+
+    public String generateStaffToken(UUID staffId, int tokenVersion, String audience, Duration validity) {
+        Instant issuedAt = Instant.now();
+
+        return Jwts.builder()
+                .subject(staffId.toString())
+                .id(UUID.randomUUID().toString())
+                .audience().add(audience)
+                .and()
+                .claim(STAFF_TOKEN_VERSION_CLAIM, tokenVersion)
+                .issuedAt(Date.from(issuedAt))
+                .expiration(Date.from(issuedAt.plus(validity)))
+                .issuer("iskoala.com")
+                .signWith(getSignKey(), Jwts.SIG.HS256)
+                .compact();
+    }
+
+    public StaffJwtIdentity extractStaffIdentity(String token, String audience) {
+        Claims claims = extractAllClaims(token);
+        Set<String> declared = claims.getAudience();
+
+        if (declared == null || !declared.equals(Set.of(audience))) {
+            throw new UnsupportedJwtException("Token audience is not valid for staff authentication");
+        }
+
+        Integer version = claims.get(STAFF_TOKEN_VERSION_CLAIM, Integer.class);
+        if (version == null) {
+            throw new UnsupportedJwtException("Staff token carries no version claim");
+        }
+
+        return new StaffJwtIdentity(UUID.fromString(claims.getSubject()), version);
+    }
+
+    public boolean looksLikeAStaffToken(String token) {
+        try {
+            Set<String> declared = extractAllClaims(token).getAudience();
+            return declared != null
+                    && (declared.equals(Set.of(STAFF_ACCESS_AUDIENCE))
+                    || declared.equals(Set.of(STAFF_REFRESH_AUDIENCE)));
+        } catch (ExpiredJwtException expired) {
+            Set<String> declared = expired.getClaims().getAudience();
+            return declared != null
+                    && (declared.equals(Set.of(STAFF_ACCESS_AUDIENCE))
+                    || declared.equals(Set.of(STAFF_REFRESH_AUDIENCE)));
+        } catch (RuntimeException exception) {
+            return false;
+        }
     }
 
     public UUID extractUserId(String token) {

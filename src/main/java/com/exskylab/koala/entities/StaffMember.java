@@ -29,11 +29,23 @@ public class StaffMember {
     @Column(name = "id")
     private UUID id;
 
-    @Column(name = "keycloak_subject", nullable = false, unique = true, length = 64)
-    private String keycloakSubject;
-
-    @Column(name = "email", nullable = false)
+    @Column(name = "email", nullable = false, unique = true)
     private String email;
+
+    @Column(name = "password_hash", nullable = false, length = 100)
+    private String passwordHash;
+
+    @Column(name = "must_change_password", nullable = false)
+    private boolean mustChangePassword = false;
+
+    @Column(name = "failed_login_attempts", nullable = false)
+    private int failedLoginAttempts = 0;
+
+    @Column(name = "locked_until")
+    private Instant lockedUntil;
+
+    @Column(name = "token_version", nullable = false)
+    private int tokenVersion = 0;
 
     @Column(name = "display_name", length = 160)
     private String displayName;

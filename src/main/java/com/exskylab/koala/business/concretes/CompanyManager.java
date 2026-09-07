@@ -355,7 +355,7 @@ public class CompanyManager implements CompanyService {
     }
 
     private String actorLabel(StaffPrincipal actor) {
-        return actor == null ? "bridge admin " + securityService.getAuthenticatedUserId() : "staff " + actor.subject();
+        return actor == null ? "bridge admin " + securityService.getAuthenticatedUserId() : "staff " + actor.staffId();
     }
 
     private Company decide(Company company, CompanyApprovalStatus status, String note) {

@@ -69,7 +69,9 @@ class ApiDocumentationTest {
     @Test
     void theDocumentedAuthorisationMatchesTheSecurityConfiguration() throws IOException {
         String security = Files.readString(
-                Paths.get("src/main/java/com/exskylab/koala/core/configs/SecurityConfig.java"));
+                Paths.get("src/main/java/com/exskylab/koala/core/configs/SecurityConfig.java"))
+                + Files.readString(
+                Paths.get("src/main/java/com/exskylab/koala/core/configs/StaffSecurityConfig.java"));
 
         List<String> wrong = new ArrayList<>();
 
@@ -91,7 +93,7 @@ class ApiDocumentationTest {
                     boolean actuallyPublic = isPermitAll(security, verb, path);
 
                     if (documentedAsPublic != actuallyPublic) {
-                        wrong.add("%s:%d %s %s dokumanda %s, SecurityConfig'te %s"
+                        wrong.add("%s:%d %s %s dokumanda %s, guvenlik zincirinde %s"
                                 .formatted(file.getFileName(), i + 1, verb, path,
                                         documentedAsPublic ? "acik" : "korumali",
                                         actuallyPublic ? "acik" : "korumali"));

@@ -1,7 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.support.FallbackSettings;
-import com.exskylab.koala.support.StaffBridges;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.BadgeService;
 import com.exskylab.koala.business.abstracts.CompanyContactService;
@@ -81,7 +80,7 @@ class AssignmentOperationsAuthorizationTest {
                         new com.exskylab.koala.core.properties.UploadProperties()),
                 new com.exskylab.koala.core.properties.UploadProperties(),
                 jobAssignmentService, userService,
-                securityService, participants, new StaffPayoutManager(payoutService, StaffBridges.open()),
+                securityService, participants, new StaffPayoutManager(payoutService),
                 mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class),
                 new com.exskylab.koala.core.helpers.PageableSanitizer());
         timesheetManager = new TimesheetManager(workSessionDao, jobAssignmentService, securityService, participants,
@@ -261,7 +260,8 @@ class AssignmentOperationsAuthorizationTest {
         Dispute dispute = openDispute(a);
         when(securityService.getAuthenticatedUser()).thenReturn(user());
 
-        disputeManager.resolveDispute(null, dispute.getId(), DisputeResolution.RELEASE_TO_WORKER, "işçi haklı");
+        disputeManager.resolveDispute(financeTrustLead(), dispute.getId(),
+                DisputeResolution.RELEASE_TO_WORKER, "işçi haklı");
 
         assertEquals(DisputeStatus.RESOLVED, dispute.getStatus());
         verify(payoutService).releaseToWorker(a.getId());
@@ -288,8 +288,19 @@ class AssignmentOperationsAuthorizationTest {
         when(securityService.getAuthenticatedUser()).thenReturn(user());
 
         assertThrows(ConflictException.class,
-                () -> disputeManager.resolveDispute(null, dispute.getId(), DisputeResolution.REFUND_EMPLOYER, "yine"));
+                () -> disputeManager.resolveDispute(financeTrustLead(), dispute.getId(),
+                        DisputeResolution.REFUND_EMPLOYER, "yine"));
         verify(payoutService, never()).refundEmployer(any(), any(), any());
+    }
+
+    private static com.exskylab.koala.core.security.StaffPrincipal financeTrustLead() {
+        return new com.exskylab.koala.core.security.StaffPrincipal(
+                java.util.UUID.randomUUID(), "trust@iskoala.com", "Güven Lideri",
+                java.util.Set.of("TRUST_LEAD"),
+                java.util.Set.of(com.exskylab.koala.entities.StaffPermission.DISPUTE_RESOLVE,
+                        com.exskylab.koala.entities.StaffPermission.PAYOUT_RELEASE,
+                        com.exskylab.koala.entities.StaffPermission.PAYMENT_REFUND),
+                false);
     }
 
     private Dispute openDispute(JobAssignment a) {

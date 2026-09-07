@@ -23,6 +23,7 @@ public enum StaffPermission {
     PAYOUT_RELEASE("payout.release", true, PermissionSensitivity.FINANCIAL),
     PAYMENT_REFUND("payment.refund", true, PermissionSensitivity.FINANCIAL),
     BANK_ACCOUNT_VERIFY("bank.account.verify", true, PermissionSensitivity.FINANCIAL),
+    STAFF_READ("staff.read", false, PermissionSensitivity.PERSONAL_DATA),
     STAFF_MANAGE("staff.manage", true, PermissionSensitivity.PERSONAL_DATA),
     ROLE_MANAGE("role.manage", true, PermissionSensitivity.NORMAL),
     AUDIT_READ("audit.read", false, PermissionSensitivity.PERSONAL_DATA);

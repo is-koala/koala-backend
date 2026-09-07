@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NoStartupDataSeedingTest {
 
-    private static final Set<String> ALLOWED_RUNNERS = Set.of("AdminBootstrapRunner.java");
+    private static final Set<String> ALLOWED_RUNNERS = Set.of("AdminBootstrapRunner.java", "StaffBootstrapRunner.java");
 
     @Test
     void productionCodeHasNoStartupRunner() throws IOException {
@@ -28,15 +28,15 @@ class NoStartupDataSeedingTest {
     }
 
     @Test
-    void theAdminBootstrapRunnerIsStillTheOnlyExemption() throws IOException {
+    void theBootstrapRunnersAreStillTheOnlyExemptions() throws IOException {
         List<String> allowed = startupRunners().stream()
                 .map(path -> path.getFileName().toString())
                 .filter(ALLOWED_RUNNERS::contains)
                 .sorted()
                 .toList();
 
-        assertEquals(List.of("AdminBootstrapRunner.java"), allowed,
-                "Muafiyet listesi artik gecerli degil, guncellenmeli (CLAUDE.md §2f3).");
+        assertEquals(List.of("AdminBootstrapRunner.java", "StaffBootstrapRunner.java"), allowed,
+                "Muafiyet listesi artik gecerli degil, guncellenmeli (CLAUDE.md §2f3, §2au).");
     }
 
     private static List<Path> startupRunners() throws IOException {

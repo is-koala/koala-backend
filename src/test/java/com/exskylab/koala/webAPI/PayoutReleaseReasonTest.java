@@ -30,8 +30,8 @@ class PayoutReleaseReasonTest {
 
     private final UUID assignmentId = UUID.randomUUID();
 
-    private final StaffPrincipal officer = new StaffPrincipal(UUID.randomUUID(), "sub", "finans@iskoala.com",
-            "Finans Yetkilisi", Set.of("FINANCE_OFFICER"), Set.of(StaffPermission.PAYOUT_RELEASE));
+    private final StaffPrincipal officer = new StaffPrincipal(UUID.randomUUID(), "finans@iskoala.com",
+            "Finans Yetkilisi", Set.of("FINANCE_OFFICER"), Set.of(StaffPermission.PAYOUT_RELEASE), false);
 
     @BeforeEach
     void setUp() {
