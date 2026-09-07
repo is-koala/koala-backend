@@ -11,7 +11,6 @@ import com.exskylab.koala.core.constants.SystemUser;
 import com.exskylab.koala.core.constants.UserMessages;
 import com.exskylab.koala.core.dtos.address.request.AddressWriteDto;
 import com.exskylab.koala.core.dtos.address.response.AddressDto;
-import com.exskylab.koala.core.dtos.user.request.UpdateUserDto;
 import com.exskylab.koala.core.dtos.user.request.ChangePasswordDto;
 import com.exskylab.koala.core.dtos.user.request.UpdateProfileDto;
 import com.exskylab.koala.core.dtos.user.request.VerifyIdentityDto;
