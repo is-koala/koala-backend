@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.dtos.staff.request;
 
+import com.exskylab.koala.core.customValidations.ValidPassword;
 import com.exskylab.koala.core.constants.StaffMessages;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -18,6 +19,6 @@ public class ChangeStaffPasswordDto {
     private String currentPassword;
 
     @NotBlank(message = StaffMessages.PASSWORD_REQUIRED)
-    @Size(min = 12, max = 128, message = StaffMessages.PASSWORD_TOO_SHORT)
+    @ValidPassword
     private String newPassword;
 }

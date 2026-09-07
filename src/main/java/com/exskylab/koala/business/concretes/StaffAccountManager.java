@@ -96,7 +96,7 @@ public class StaffAccountManager implements StaffAccountService {
         if (member == null) {
             passwordEncoder.matches(rawPassword, ABSENT_ACCOUNT_HASH);
             log.warn("Personel girişi reddedildi, kayıt yok: {}", LogMasks.email(email));
-            throw new UnauthorizedException(StaffMessages.LOGIN_FAILED);
+            throw new UnauthorizedException(StaffMessages.RECORD_NOT_FOUND);
         }
 
         Instant now = Instant.now();
