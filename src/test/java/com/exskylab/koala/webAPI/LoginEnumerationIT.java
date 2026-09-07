@@ -24,6 +24,8 @@ import java.util.Set;
 import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 @AutoConfigureMockMvc
@@ -72,6 +74,15 @@ class LoginEnumerationIT extends AbstractIntegrationTest {
     void anUnregisteredEmailLooksExactlyLikeARegisteredOneWithAWrongPassword() throws Exception {
         assertEquals(envelope(attempt(REGISTERED, WRONG_PASSWORD)), envelope(attempt(UNREGISTERED, WRONG_PASSWORD)),
                 "Kayıtsız e-posta ile yanlış parola ayırt edilebiliyor, giriş ucu kayıtlı adresleri sızdırıyor");
+    }
+
+    @Test
+    void bothBranchesAnswerTheStatusAndCodeTheIssueAsksFor() throws Exception {
+        for (String email : new String[]{REGISTERED, UNREGISTERED}) {
+            attempt(email, WRONG_PASSWORD)
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.errorCode").value("AUTH_EMAIL_OR_PASSWORD_MISMATCH"));
+        }
     }
 
     @Test

@@ -1718,6 +1718,14 @@ Kazanç sadece temizlik değil: DTO'da yakalanan hata **400 + alan adı + mesaj*
 | `PUT /users/me/password` | `ChangePasswordDto.newPassword`, `confirmNewPassword` |
 | (bugün hiçbir uca bağlı değil) | `CreateUserDto.password` |
 
+**Dördü aynı kuralı taşıyor ama üçü davranışla, biri yalnız kaynak taramasıyla korunuyor.**
+`PasswordPolicyTest` DTO'yu gerçekten doğrulatarak üç ucu sınıyor; `CreateUserDto`'nun bir ucu
+olmadığı için davranışla sınanamıyor ve tek koruması `PasswordPolicyRulesTest`'in metin taraması.
+Ölçüldü: `CreateUserDto`'dan `@ValidPassword` kaldırıldığında `PasswordPolicyTest` **yeşil kalıyor**,
+yalnız tarama kırmızıya dönüyor. Sınır burada yazılı çünkü "dört uç korunuyor" demek, korunduğu
+sanılan bir alan bırakmak olurdu (#88). `CreateUserDto` bir uca bağlanırsa davranış testi de eklenmeli;
+ölü çıkarsa alan tümüyle düşmeli.
+
 **Kural:** en az **12 karakter** (kod noktası), en fazla **72 bayt** (UTF-8), boşluktan ibaret olamaz,
 **karakter sınıfı zorunluluğu yok**.
 
