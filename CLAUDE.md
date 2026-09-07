@@ -291,6 +291,35 @@ ilan **herkese açık** bir kaynak (`GET /jobs/{jobId}` `permitAll`), yani orada
 `CvManager.assertCanDownload`, `AvailabilityManager`, `JobAlertManager`, `SessionManager`, `PaymentManager`,
 `GalleryManager`, `CompanyContactInvitationManager` ve `JobApplicationManager` taramada **zaten doğru** çıktı.
 
+**Giriş ucu de aynı kusurun bir örneğiydi ve aynı kuralla kapatıldı (is-koala/koala-backend#42).**
+`AuthManager.login` doğrudan `userService.getByEmail` çağırıyordu: kayıtlı olmayan adres **404
+`USER_NOT_FOUND_BY_EMAIL`**, kayıtlı adres yanlış parolayla **401 `AUTH_EMAIL_OR_PASSWORD_MISMATCH`**
+dönüyordu. Saldırgan hangi adreslerin kayıtlı olduğunu adres adres öğrenebiliyordu. Artık iki dal da tek
+`UnauthorizedException(AuthMessages.EMAIL_OR_PASSWORD_MISMATCH)` — durum, `errorCode`, `message`,
+`errorCategory` ortak. Gizleme deseni `requestPasswordReset` ile aynı: `ResourceNotFoundException`
+yakalanır, ayrım `log.warn` ile sunucuda kalır.
+
+**Süre de yanıtın parçası, bu yüzden hesap yokken de parola doğrulanıyor.** Kullanıcı bulunamadığında
+doğrudan dönseydi istek ölçülebilir biçimde erken biterdi ve aynı bilgi zamanlama üzerinden sızardı —
+yukarıdaki üçüncü boşluğun ("yanıtın exception dışı kanalları") canlı hâli. `passwordEncoder.matches`
+hesap yokken de çağrılıyor; karşılaştırılan hash `AuthManager` kurulurken
+`passwordEncoder.encode(UUID.randomUUID().toString())` ile üretiliyor.
+
+**Sahte hash bilerek sabit bir dize değil.** Gömülü bir bcrypt sabiti, kodlayıcı yarın Argon2'ye
+çevrildiğinde `matches`'ı işi yapmadan anında `false` döndürürdü: doğru kod, sonradan gelen bir
+mekanizmayla sessizce geçersiz — #77'nin ve #67'nin tekrar eden dersi. Enjekte edilen kodlayıcıdan
+türetmek bu ihtimali yapısal olarak kapatıyor.
+
+**Başarısız deneme artık hesap yokken de kaydediliyor.** `login_attempts.user_id` zaten nullable;
+satır `email_attempted`, IP ve `User-Agent` taşıyor, `failure_reason` iki dalı sunucuda ayırt ediyor
+(`No account for email` / `Invalid email or password`). Bu tablo hiçbir uçtan istemciye dönmüyor;
+tek okuyucusu hesap silmede `PostgresAccountAnonymizer`.
+
+**İki koruma var.** `LoginEnumerationIT` yanıtı sabitliyor — `ExistenceConcealmentIT` deseniyle iki
+gövde, `timeStamp` ve `requestId` düşüldükten sonra birebir aynı olmak zorunda — ve deneme kaydının
+yazıldığını doğruluyor. `LoginConcealmentTest` parola doğrulamasının hesap yokken de çalıştığını ve
+sahte hash'in kodlayıcıdan geldiğini sabitliyor; sabite dönülürse kırmızıya döner.
+
 ## 2e. Para
 
 **Para her yerde `BigDecimal`, ölçek 2.** `Job.salary` ve `JobAssignment` üzerindeki tüm tutarlar `NUMERIC(19,2)`. `double`/`Float` ile para tutmak yasak — `Float` 50.000 TL üzerinde kuruş garantisi vermiyordu.
@@ -1675,6 +1704,70 @@ Kazanç sadece temizlik değil: DTO'da yakalanan hata **400 + alan adı + mesaj*
 **Manager'da kalanlar bilinçli:** çakışan müsaitlik aralığı (koleksiyon içi ilişki), tekrar eden kayıt, durum geçişi — bunlar girdi şekli değil, iş kuralı. Kaynağın var olup olmadığı da manager'da kalır (`ResourceNotFoundException`).
 
 `RequestValidationTest` bu kuralların DTO seviyesinde çalıştığını ve mesajların çözümlenebilir anahtar olduğunu doğruluyor.
+
+## 2ah2. Parola kuralı — tek tanım, uzunluk öncelikli
+
+**Kural tek yerde: `core/customValidations/ValidPassword` + `PasswordPolicyValidator`, sayılar
+`core/constants/PasswordPolicy`.** Parola belirleyen **her** alan yalnız bu anotasyonu taşır; kendi `@Size`,
+`@Pattern`, `@NotBlank`'ini yazmaz. Anotasyon null ve boşluğu da reddettiği için ikinci bir kısıt gerekmiyor.
+
+| Uç | Alan |
+|---|---|
+| `POST /auth/complete-registration` | `AuthCompleteRegistrationDto.password` |
+| `POST /auth/reset-password` | `ResetPasswordDto.newPassword` |
+| `PUT /users/me/password` | `ChangePasswordDto.newPassword`, `confirmNewPassword` |
+| (bugün hiçbir uca bağlı değil) | `CreateUserDto.password` |
+
+**Dördü aynı kuralı taşıyor ama üçü davranışla, biri yalnız kaynak taramasıyla korunuyor.**
+`PasswordPolicyTest` DTO'yu gerçekten doğrulatarak üç ucu sınıyor; `CreateUserDto`'nun bir ucu
+olmadığı için davranışla sınanamıyor ve tek koruması `PasswordPolicyRulesTest`'in metin taraması.
+Ölçüldü: `CreateUserDto`'dan `@ValidPassword` kaldırıldığında `PasswordPolicyTest` **yeşil kalıyor**,
+yalnız tarama kırmızıya dönüyor. Sınır burada yazılı çünkü "dört uç korunuyor" demek, korunduğu
+sanılan bir alan bırakmak olurdu (#88). `CreateUserDto` bir uca bağlanırsa davranış testi de eklenmeli;
+ölü çıkarsa alan tümüyle düşmeli.
+
+**Kural:** en az **12 karakter** (kod noktası), en fazla **72 bayt** (UTF-8), boşluktan ibaret olamaz,
+**karakter sınıfı zorunluluğu yok**.
+
+**Neden uzunluk öncelikli.** NIST SP 800-63B zorunlu karmaşıklık kurallarını önermiyor: kullanıcıyı
+tahmin edilebilir dönüşümlere itiyorlar. Deponun kendi kuralı bunun canlı örneğiydi —
+`^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$` sekiz karakterlik `Parola12`'yi kabul ederken rakamsız kırk karakterlik
+bir parolayı reddediyordu. Karmaşıklık kuralı düştü, taban yükseldi.
+
+**Neden 12.** 800-63B'de 8 **SHALL** tabanı, 15 ise **SHOULD** tavsiyesi. 12, tabanın belirgin biçimde
+üstünde ama tavsiyenin altında; sapma bilinçli, çünkü parola belirleme huninin son adımı (kayıt tamamlama)
+ve 15 orada ölçülebilir kayıp demek. Karar burada yazılı olsun ki bir dahaki sefere unutulmuş değil,
+**verilmiş** bir karar olarak tartışılsın.
+
+**Neden üst sınır var ve neden bayt.** `PasswordEncoderConfig` `BCryptPasswordEncoder` kuruyor; Spring
+Security'nin `BCrypt`'i 72 baytı aşan parolada `IllegalArgumentException("password cannot be more than 72
+bytes")` atıyor. `reset-password` ucunda üst sınır **hiç yoktu**: uzun bir parola kütüphanenin İngilizce iç
+mesajını taşıyan bir 400'e dönüşüyordu. Sınır artık DTO'da ve bcrypt bayt saydığı için bayt cinsinden —
+Türkçe harfler 2 bayt, yani 72 karakter Türkçe parola sınırı zaten aşıyor.
+
+**Bu sayı kodlayıcıya bağlı, bağı bir test tutuyor.** Kodlayıcı bir gün Argon2 olursa 72 anlamını yitirir;
+`PasswordPolicyTest.theRuleIsTwelveCharactersAndSeventyTwoBytesUntilSomeoneDecidesOtherwise` iki sayıyı da
+sabitliyor, biri değişirse kırmızıya dönüp bu başlığa geri yolluyor. Katalog mesajının aynı sayıları
+yazdığını da ayrı bir test doğruluyor — mesaj "en az 8 karakter" derken kural 12 olamaz.
+
+**Giriş ve `currentPassword` bilerek kapsam dışı.** Onlar kullanıcının **zaten sahip olduğu** parolayı
+taşıyor; politikayı oraya uygulamak eski kuralla kaydolmuş herkesi kapıda bırakırdı.
+`PasswordPolicyRulesTest` bu iki alanı muafiyet listesinde tutuyor ve liste bayatlarsa kırmızıya dönüyor.
+
+**Asıl koruma yazılı kural değil, tarama.** `PasswordPolicyRulesTest` `core/dtos` altındaki her parola
+alanını buluyor ve (a) `@ValidPassword` taşıdığını, (b) kendi `@Size`/`@Pattern`'ini **yazmadığını**
+doğruluyor. Kuralın bugün olmaması kadar, yarın üç uçta üç farklı kural olması da kusur —
+is-koala/koala-backend#43 açıldığında zaten öyleydi: kayıt tamamlama yalnız `@NotNull`, parola değiştirme
+`@Size(min=8)`, parola sıfırlama `@Size(min=8)` + karmaşıklık.
+
+**Katalogdan altı anahtar düştü** (`user.new.password.min.length`, `user.new.password.not.blank`,
+`user.confirm.new.password.not.blank`, `user.password.strong`, `user.password.notBlank`,
+`user.password.size`) — hepsi eski kuralı anlatıyordu ve duran bir anahtar sonradan yeniden çağrılabilir.
+Yerlerine tek anahtar geldi: `user.password.policy`.
+
+**İstemci sözleşmesi değişti.** Taban 8'den 12'ye çıktı, karmaşıklık kuralı kalktı; `koala-web` ve
+`koala-mobile` form doğrulamaları buna göre güncellenmeli. Var olan parolalar yeniden doğrulanmıyor, yalnız
+yeni belirlenenler kurala tabi.
 
 ## 2ai. Gerçek zamanlı katmanın güvenliği
 
