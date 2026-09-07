@@ -113,3 +113,7 @@ _Avoid_: Tarayıcı türü, User-Agent oturumu
 **Anonimleştirilmiş Hesap**:
 Kimlik, iletişim, profil, konum, kimlik bilgisi ve kullanıcı üretimi serbest metni geri döndürülemez biçimde temizlenmiş; yalnız finansal ve yasal kayıtların referans bütünlüğü için kimliksiz bir kabuk olarak tutulan hesap.
 _Avoid_: Devre dışı hesap, silme talebi
+
+**Sahipsiz Giriş Denemesi**:
+Hiçbir hesaba bağlanamayan giriş denemesi kaydı; `login_attempts` satırında `user_id` boştur ve satır yalnızca giriş formuna yazılan adresi taşır. Adresin sahibi hiç kaydolmamış olabilir. Kodda tek ad `unattributed` (`unattributedDays`, `deleteUnattributedBefore`, `purgeExpiredUnattributed`, `idx_login_attempts_unattributed_*`), Türkçe belgede tek ad "sahipsiz". Karşıtı **Hesaba Bağlı Giriş Denemesi** (`attributed`).
+_Avoid_: Ownerless, sahipsiz kayıt, anonim giriş denemesi

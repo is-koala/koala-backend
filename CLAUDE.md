@@ -314,7 +314,8 @@ türetmek bu ihtimali yapısal olarak kapatıyor.
 **Başarısız deneme artık hesap yokken de kaydediliyor.** `login_attempts.user_id` zaten nullable;
 satır `email_attempted`, IP ve `User-Agent` taşıyor, `failure_reason` iki dalı sunucuda ayırt ediyor
 (`No account for email` / `Invalid email or password`). Bu tablo hiçbir uçtan istemciye dönmüyor;
-tek okuyucusu hesap silmede `PostgresAccountAnonymizer`.
+iki okuyucusu var: hesap silmede `PostgresAccountAnonymizer` ve saklama işi `LoginAttemptManager`
+(§2aw). Bu satırların süresiz saklanmaması da §2aw'nin konusu.
 
 **İki koruma var.** `LoginEnumerationIT` yanıtı sabitliyor — `ExistenceConcealmentIT` deseniyle iki
 gövde, `timeStamp` ve `requestId` düşüldükten sonra birebir aynı olmak zorunda — ve deneme kaydının
@@ -2515,6 +2516,176 @@ Detay yabancı anahtarı `ON DELETE CASCADE`: çekirdek gidince detay da gider. 
 
 ---
 
+## 2aw. `login_attempts` saklama politikası — iki pencere, iki gerekçe
+
+`login_attempts` süresiz büyüyordu. Tabloyu temizleyen hiçbir şey yoktu ve PR #119'dan sonra (§2d2)
+`AuthManager.login` hesap bulunmadığında da satır yazıyor: `user = null`, `email_attempted` giriş formuna
+yazılan adres. Varlık gizlemesi için doğru bir karardı, ama saklama tarafıyla birleşince sonucu şuydu —
+**hiçbir hesaba ait olmayan bir e-posta adresi, sahibi Koala'yı hiç duymamış olsa bile, süresiz saklanıyordu.**
+Aynı doğru-karar-sonradan-geçersizleşiyor deseninin (§2d2, §2k2, #77) bir örneği daha.
+
+**İki pencere var ve süreleri bilerek farklı:**
+
+| Satır | Ölçüt | Süre | Anahtar |
+|---|---|---|---|
+| Hesaba bağlı | `user_id is not null` | **365 gün** | `login-attempt.retention.attributed-days` |
+| Sahipsiz | `user_id is null` | **30 gün** | `login-attempt.retention.unattributed-days` |
+
+**365 gün — güvenlik olayı incelemesinin ufku, denetim izinin değil.** Admin denetim izi 24 ay (§2av) çünkü
+orada yasal ispat yükümlülüğü var; giriş denemesi bir yükümlülük kaydı değil, bir teşhis kaydı. Bir hesabın
+"geçen yıl da aynı IP'den denenmişti" sorusuna cevap verebilecek kadar uzun, kişisel veriyi gereksiz yere
+biriktirmeyecek kadar kısa. Sayı ürün/hukuk kararıdır ve `LOGIN_ATTEMPT_RETENTION_ATTRIBUTED_DAYS` ile
+deploy'suz değişir.
+
+**30 gün — çünkü bu satırların veri sahibi Koala kullanıcısı değil.** Sahipsiz satır tanımı gereği hiçbir
+hesaba ait değil: adresin sahibi hiç kaydolmamış olabilir, hatta adresi yazan kişi de o adresin sahibi
+olmayabilir. Meşru kullanımı dar — kimlik bilgisi püskürtme kampanyalarının incelenmesi, ki bu günler-haftalar
+ufkunda bir iştir. Uzun tutmanın bedeli ise net: tablo bir **adres hasadı yüzeyi** hâline geliyor ve dahası
+`failure_reason` iki dalı ayırt ediyor (`No account for email` / `Invalid email or password`). Yani #119'un
+API yüzeyinde kapattığı sayım kehanetinin cevabı **tablonun içinde** duruyor. Kısa pencere o kehanetin
+ömrünü sınırlıyor; #119'un ikinci yarısı budur.
+
+**Sıra tersine çevrilemez: sahipsiz pencere hesaba bağlı pencereden uzun olamaz — ve bu artık açılışta
+zorlanıyor.** Bir süre bu cümle yalnız bir iddiaydı: `LoginAttemptRetentionProperties` düz setter'lardan
+ibaretti, ne `@Validated` ne `@Min` ne `@PostConstruct` taşıyordu, değerler ise
+`LOGIN_ATTEMPT_RETENTION_*_DAYS` ile dışarıdan geliyordu. `unattributed=400, attributed=30` verildiğinde
+200 günlük **sahipsiz** satır hayatta kalıyor, hesabın **kendi geçmişi** siliniyordu — ve paket baştan sona
+yeşil kalıyordu. `attributed-days=0` bugünün satırlarını süpürüyordu; **negatif bir değer**
+`Instant.now().minus(-n)` ile kesimi geleceğe taşıyıp **tabloyu boşaltıyordu**.
+
+Sınıf artık komşularının kalıbını kullanıyor (`IyzicoProperties`, `AddressSearchProperties`,
+`AuthLinkProperties` — bu sınıf eklenmeden önce altı properties sınıfı açılışta doğruluyordu): `@Validated`, iki alanda `@Min(1)`,
+ve sıra kuralı için bir `@AssertTrue`. Yanlış yapılandırılmış bir ortamda uygulama **hiç açılmıyor**;
+çalışma anında sessizce sapmıyor. `LoginAttemptRetentionConfigurationTest` üç kuralın üçünü de ayrı ayrı
+tutuyor — `@Validated` düşerse dört test, `@AssertTrue` düşerse yalnız iki sıra testi, `@Min` düşerse yalnız
+sıfır ve negatif testleri kırmızıya dönüyor (üçü de ölçüldü). Alt sınır ve sıra kuralı birbirinin yerine
+geçmiyor: sıfır testi bilerek **iki** pencereyi birden sıfırlıyor, yoksa sıra kuralı onu yanlış sebeple
+yakalar ve `@Min`'in kaldırıldığını göremezdik.
+
+**Kesim hesabı properties'in üstünde, manager'da değil.** `cutoff(retentionProperties.getUnattributedDays())`
+imrendiği verinin (*Feature Envy*) üstüne, `Duration` ile (*Primitive Obsession*) taşındı:
+`retentionProperties.unattributedCutoff(Instant.now())`. Bağlanan anahtarlar `int ...Days` olarak kaldı —
+`LOGIN_ATTEMPT_RETENTION_*_DAYS` yayımlanmış bir yapılandırma sözleşmesi ve `Duration`'a çevirmek onu
+kırardı; `AccountDeletionProperties`'in `Duration`'ı yeni bir anahtar olduğu için o kısıtı taşımıyordu.
+
+**Kesim anı çalışma zamanında hesaplanıyor, satıra damgalanmıyor — §2av'nin tersi, ve fark bilinçli.** Denetim
+izinde `retain_until` bir kolon, çünkü orada yasal süreyi geriye dönük **kısaltmak** yanlış olurdu. Burada yön
+ters: bunlar bir yükümlülük değil bir gizlilik borcu, yani süreyi düşürmek geçmiş satırlara da işlemeli.
+Damgalanmış kolon ayrıca migration + backfill isterdi ve asıl sorunu — bugün zaten birikmiş satırları —
+çözmezdi.
+
+**Sorgu native SQL, JPQL değil. Sebebi ölçüldü.** `LoginAttempt` `@SQLDelete` + `@SQLRestriction` taşıyor (§8)
+ve Hibernate `@SQLRestriction`'ı **bulk JPQL delete'e de uyguluyor**: `delete from LoginAttempt la where ...`
+cümlesine `is_deleted = false` ekleniyor, yani **soft delete edilmiş bir satır saklama işini hiçbir zaman
+dolduramıyor** ve adresi süresiz taşımaya devam ediyor. Kusur ilk yazımda gerçekten oluştu ve
+`anAlreadySoftDeletedRowIsPurgedAsWell` onu kırmızıya döndürdü. Kural §2av'deki denetim tabloları kararının
+aynısı, yalnız bu tablo `BaseEntity`'yi bırakamıyor: **saklama işi fiziksel siler**, ve `@SQLRestriction`'ı
+atlamanın tek yolu native sorgu.
+
+**Yaş `coalesce(time_stamp, created_at)` ile ölçülüyor.** `time_stamp` nullable ve değeri Java alan
+başlatıcısından geliyor; JPA dışından yazılmış bir satırda boş kalabilir ve `time_stamp < :cutoff` o satırı
+**hiç seçmezdi** — sessizce süresiz kalan bir satır. `created_at` `NOT NULL`, yani geri düşüş her zaman bir
+değer veriyor.
+
+**Zamanlayıcı `AdminAuditRetentionScheduler`'ın birebir eşi** (§2av): günde bir, önce sahipsiz sonra bağlı
+pencere, hata koşuyu düşürmez yalnız loglanır, `login-attempt.retention.enabled=false` ile tümüyle susturulur
+(testlerde kapalı). Tek örnek varsayıyor (§7, Faz 11D) ama silme idempotent olduğu için ikinci örnek zarar
+vermez. Manager yalnız kendi DAO'suna uzanıyor (§2ae).
+
+**Üç kısmi indeks eklendi** (`2026/09/07-03`): iki purge dalı için `coalesce(time_stamp, created_at)` üzerinde
+birer ifade indeksi, bir de anonimleştirmenin adres araması için `lower(email_attempted)` — üçü de
+`user_id` durumuna göre kısmi, çünkü her sorgu zaten o dalın içinde çalışıyor.
+
+**Terminoloji tek ad: kodda `unattributed`, Türkçe belgede `sahipsiz`.** Bir süre üç ad dolaşıyordu —
+Java'da `unattributed`, indeks adında ve zamanlayıcının log satırında `ownerless`, belgede `sahipsiz`.
+`ownerless` tekilleştirildi: log satırı ve iki indeks adı (`idx_login_attempts_unattributed_age`,
+`idx_login_attempts_unattributed_email`) `unattributed`'a çevrildi. Changelog henüz `main`'e inmediği için
+indeks adları aynı changeSet içinde düzeltildi; uygulanmış bir changeSet olsaydı checksum yüzünden
+dokunulamazdı (§2m'deki `27-10` kararının aynısı). İngilizce kod adı ile Türkçe belge adının ayrı olması
+deponun her yerindeki düzen (İlan/job, Başvuru/application); eşleme `CONTEXT.md`'ye yazıldı ve `ownerless`
+orada _Avoid_ olarak duruyor.
+
+**Anonimleştirme tarafındaki boşluk da kapandı.** `PostgresAccountAnonymizer.revokeCredentials`
+`login_attempts` satırlarını yalnız `where user_id = ?` ile temizliyordu; hesap silinen kullanıcının adresini
+taşıyan **`user_id`'siz** satırlara hiç dokunmuyordu. Cümle artık o satırları da kapsıyor:
+
+```
+or (user_id is null and email_attempted is not null
+    and lower(email_attempted) = (select lower(email) from users where id = ?))
+```
+
+**Karşılaştırma `lower()` ile, çünkü e-posta hiçbir yerde küçük harfe normalize edilmiyor** — `users.email`
+kullanıcının yazdığı gibi duruyor, giriş formuna yazılan adres de öyle. **Kuralın iki yarısı var ve bir süre
+yalnız biri testle bağlıydı:** `theAddressIsMatchedWithoutRegardToCase` `email_attempted`'ı zaten küçük harfle
+yazıp yalnız `users.email` tarafını karıştırıyordu, yani `lower(email_attempted)` → `email_attempted`
+mutasyonuyla **dört testin dördü de yeşil kalıyordu**. Bağlanmamış yarı pratikte baskın olan yöndü:
+kullanıcı forma `Ali@Example.com` yazıyor. `theAddressTypedIntoTheFormInAnotherCaseIsMatchedToo` o yönü
+bağlıyor — `email_attempted` karışık harfli, `users.email` küçük harfli — ve aynı mutasyonla kırmızıya
+döndüğü ölçüldü (eski test o mutasyonda hâlâ yeşil kalıyor, yani ikisi ayrı şeyleri tutuyor). Yeni bir
+mekanizma kurulmadı: ADR-0012
+veritabanı satırları için **yerinde anonimleştirme** diyor ve mevcut cümle zaten `email_attempted`,
+`failure_reason`, `ip_address`, `device_name` alanlarını null'lıyor; kapsam genişledi, davranış aynı kaldı.
+`PersonalMediaDeletionOutbox` bu yola karışmıyor — outbox yalnızca transaction dışına düşen nesne deposu
+silmeleri için var, burada iş tek bir `UPDATE` ve zaten aynı transaction'da.
+
+**Sıra şart: bu cümle `scrubProfile`'dan önce koşmak zorunda.** `revokeCredentials` `users.email`'i alt
+sorguyla okuyor, `scrubProfile` ise onu `deleted+<id>@anonymous.invalid` ile eziyor. `anonymize` içindeki adım
+sırası (`revokeCredentials` → `scrubProfile`) bugün doğru; ters çevrilirse eşleşme sessizce hiçbir satır
+bulmaz.
+
+**İki mekanizmanın sınırı yazılı olsun — biri diğerinin kapatamadığını kapatıyor.** Anonimleştirme yalnız
+**o anda var olan** satırları temizliyor. Kullanıcı hesabını sildikten sonra biri eski adresle giriş
+denerse, o denemenin `user_id`'si null olur ve **anonimleştirme çoktan koşmuştur**; yeni satır adresi yeniden
+taşır. Onu kapatan şey saklama işi, ve sahipsiz pencerenin 30 günde tutulmasının ikinci gerekçesi tam olarak
+budur. Ters yön de doğru: saklama işi tek başına, hesabını silen kullanıcının son bir yıllık giriş geçmişini
+tabloda bırakırdı. İkisi birlikte gerekiyor.
+
+**§2d2 düzeltildi, uzaktan not düşülmedi.** O bölüm bu tablo için "tek okuyucusu hesap silmede
+`PostgresAccountAnonymizer`" diyordu; ikinci okuyucu saklama işi ve cümle artık **§2d2'nin kendi içinde**
+düzeltilmiş durumda. Bir süre düzeltme yalnız burada, uzaktan yazılıydı — bayat cümleyi yerinde bırakıp
+başka bir bölümden düzeltmek, iki gerçeklik üretmenin belgedeki hâliydi. Cümlenin asıl iddiası (tablo hiçbir
+uçtan istemciye dönmüyor) baştan beri geçerliydi ve öyle kaldı.
+
+**Ve daha rahatsız edici bir gerçek: bu tabloyu bugün hiçbir iş kuralı okumuyor.** `LoginAttemptDao` bu
+değişiklikten önce tek bir sorgu metodu taşımıyordu; `AuthManager` yalnız yazıyor. §2j'nin kaba kuvvet
+kapıları başka yerlerde duruyor — `AUTH` kovası bellekteki `RateLimiter`'da, personel hesap kilidi
+`staff_members.failed_login_attempts` kolonunda. Yani `login_attempts` bugün **adli bir iz**, canlı bir
+savunma değil. 365 gün bu gerçeğe göre seçildi; tablo bir gün gerçekten kilit kararı besleyecekse süre o
+kararın penceresine göre yeniden değerlendirilmeli.
+
+**Testler.** `LoginAttemptRetentionIT` yedi kuralı gerçek Postgres üzerinde sabitliyor: 31 günlük sahipsiz
+satır düşer 29 günlük kalır, 200 günlük bağlı satır iki süpürmeden de sağ çıkar, 366 günlük bağlı satır düşer
+364 günlük kalır, sahipsiz süpürme 400 günlük bağlı satıra hiç dokunmaz, silme fiziksel olur (soft delete
+işaretlenen satır adresi tutmaya devam ederdi), `is_deleted = true` satır da düşer,
+`time_stamp` boş olan satır `created_at`'e düşerek yakalanır.
+
+`LoginAttemptRetentionSchedulerTest` **üç** kural: her koşuda iki pencere de uygulanır, bayrak kapalıyken
+hiçbir şey silinmez, patlayan koşu zamanlayıcıdan kaçmaz. **İki testi kaldırıldı ve sebebi yazılı olsun.**
+`theOwnerlessWindowIsMuchShorterThanTheAttributedOne` `assertEquals(30,…)` + `assertEquals(365,…)` yazdıktan
+sonra `assertTrue(30 < 365)` diyordu: ilk ikisi geçtiyse üçüncüsü **hiçbir zaman kırılamaz** — ölçtüğü
+sabitten kurulmuş bir beklenti, yani değişmezi tuttuğu sanılan ama tutmayan bir test. Gerçek doğrulama
+yukarıda geldiği için beklenti anlamlı yerine, `LoginAttemptRetentionConfigurationTest`'e taşındı.
+`theJobIsOnUnlessSomebodyTurnsItOff` de yalnız Java alan başlatıcısını ölçüyordu; yaml kablolamasını
+doğrulayan hiçbir test yoktu, çünkü `src/test/resources/application.properties` işi kapatıyor ve entegrasyon
+context'i hiçbir zaman açık hâli görmüyor.
+
+`LoginAttemptRetentionConfigurationTest` on kural — `ApplicationContextRunner` ile
+(`AddressSearchConfigurationTest` deseni): varsayılanlar açılır ve 30/365'tir, sahipsiz pencere bağlıdan uzunsa
+**uygulama açılmaz**, eşit pencereler geçerlidir, sıfır ve negatif pencere açılışı düşürür, negatif pencerenin
+kesimi gerçekten geleceğe taşıyacağı ölçülür, kesim verilen andan pencerenin çıkarılmasıdır. Son üçü
+**kablolamayı** bağlıyor: `application.yaml` `YamlPropertySourceLoader` ile yüklenip binder'a veriliyor ve
+`enabled=true`, `attributed-days=365`, `unattributed-days=30`, cron `0 50 3 * * *` sabitleniyor; belgelenen
+üç `LOGIN_ATTEMPT_RETENTION_*` ortam değişkeninin alanlara ulaştığı ölçülüyor; ve sıra kuralının ortam
+değişkenlerinden gelen değerlerde de zorlandığı görülüyor. Yaml'ı `ConfigDataApplicationContextInitializer`
+ile yüklemek belirsiz olurdu — test `application.properties`'i de sınıf yolunda buluyor ve hangisinin
+kazandığı Boot sürümüne bağlı; yaml'ı açıkça yükleyip `addFirst` ile öne koymak deterministik.
+
+`AccountAnonymizationLoginAttemptIT` **beş** kural: `user_id`'siz ama aynı adresi taşıyan satır da anonimleşir,
+hesabın adresi karışık harfliyken eşleşir, **giriş formuna karışık harfle yazılan adres de eşleşir**, başka bir
+adresi taşıyan satıra dokunulmaz, gerekçe/IP/cihaz adı da temizlenir.
+
+---
+
 ## 3. Testler
 
 `src/test/resources/application.properties` testlerin ayağa kalkması için gereken minimum değerleri sağlar. Buradan bir satır silmeden önce neye yaradığını bil:
@@ -2830,6 +3001,7 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 - `PendingRegistration` — **bilerek hard delete.** Kaydını hiç tamamlamamış birinin e-postasını süresiz saklamak koruma değil, gereksiz veri tutma. Kayıt akışı zaten sil-ve-yeniden-oluştur mantığıyla çalışıyor.
 - `CompanyContact` ve `JobCategory` — `BaseEntity` alt sınıfı değiller, denetim kolonları yok. `CompanyContact` bir üyelik kaydı ve silinmesi geçmiş kaybı demek; ileride `BaseEntity`'ye taşınmalı.
 - `AdminAuditEntry` ve `AdminAuditEntryDetail` — **bilerek hard delete.** Saklama işinin işi zaten fiziksel silmek; soft delete edilen bir denetim satırı süresini hiç doldurmazdı (§2av).
+- `LoginAttempt` — **yarı istisna, ve ayrımı karıştırma.** Entity `@SQLDelete` + `@SQLRestriction` taşımaya devam ediyor: `loginAttemptDao.deleteById(...)` hâlâ soft delete ve satır tabloda kalıyor. **Ama saklama işi fiziksel siliyor** — `LoginAttemptDao.deleteUnattributedBefore` / `deleteAttributedBefore` native SQL, çünkü Hibernate `@SQLRestriction`'ı bulk JPQL delete'e de uyguluyor ve soft delete edilmiş bir satır saklama süresini hiçbir zaman dolduramazdı; adresi süresiz taşımaya devam ederdi. Gerekçesi denetim tablolarınınkiyle aynı, farkı bu tablonun `BaseEntity`'yi bırakamaması. Tam anlatım §2aw'de. Bu yüzden `SoftDeleteBehaviourIT`'in soft delete örneği artık `login_attempts` değil `universities`: aynı tabloyu hem "fiziksel olarak silinmemeliydi" örneği hem "saklama işi fiziksel siler" örneği olarak kullanmak iki belgeyi çelişkiye sokuyordu.
 - `EmailVerification`, `PhoneVerification`, `IdentityVerification` tek tabloyu (`user_verifications`) paylaşıyor; `@SQLDelete` kök sınıf `UserVerification` üzerinde, alt sınıflarda ayrıca yok. Aynı durum `Media` hiyerarşisi için de geçerli.
 
 **Benzersizlik kısmi indekslerle çözüldü.** `uk_users_email_active` ve `uk_bank_accounts_iban_active` yalnızca `is_deleted = false` satırları kapsıyor — hesabını silen kullanıcı aynı e-postayla yeniden kaydolabiliyor.

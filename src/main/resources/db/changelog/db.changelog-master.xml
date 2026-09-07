@@ -77,4 +77,5 @@
     <include file="db/changelog/2026/09/06-86-iys-delivery-state.xml"/>
     <include file="db/changelog/2026/09/07-01-dispute-evidence.xml"/>
     <include file="db/changelog/2026/09/07-02-staff-login.xml"/>
+    <include file="db/changelog/2026/09/07-03-login-attempt-retention.xml"/>
 </databaseChangeLog>
