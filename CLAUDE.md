@@ -291,6 +291,35 @@ ilan **herkese açık** bir kaynak (`GET /jobs/{jobId}` `permitAll`), yani orada
 `CvManager.assertCanDownload`, `AvailabilityManager`, `JobAlertManager`, `SessionManager`, `PaymentManager`,
 `GalleryManager`, `CompanyContactInvitationManager` ve `JobApplicationManager` taramada **zaten doğru** çıktı.
 
+**Giriş ucu de aynı kusurun bir örneğiydi ve aynı kuralla kapatıldı (is-koala/koala-backend#42).**
+`AuthManager.login` doğrudan `userService.getByEmail` çağırıyordu: kayıtlı olmayan adres **404
+`USER_NOT_FOUND_BY_EMAIL`**, kayıtlı adres yanlış parolayla **401 `AUTH_EMAIL_OR_PASSWORD_MISMATCH`**
+dönüyordu. Saldırgan hangi adreslerin kayıtlı olduğunu adres adres öğrenebiliyordu. Artık iki dal da tek
+`UnauthorizedException(AuthMessages.EMAIL_OR_PASSWORD_MISMATCH)` — durum, `errorCode`, `message`,
+`errorCategory` ortak. Gizleme deseni `requestPasswordReset` ile aynı: `ResourceNotFoundException`
+yakalanır, ayrım `log.warn` ile sunucuda kalır.
+
+**Süre de yanıtın parçası, bu yüzden hesap yokken de parola doğrulanıyor.** Kullanıcı bulunamadığında
+doğrudan dönseydi istek ölçülebilir biçimde erken biterdi ve aynı bilgi zamanlama üzerinden sızardı —
+yukarıdaki üçüncü boşluğun ("yanıtın exception dışı kanalları") canlı hâli. `passwordEncoder.matches`
+hesap yokken de çağrılıyor; karşılaştırılan hash `AuthManager` kurulurken
+`passwordEncoder.encode(UUID.randomUUID().toString())` ile üretiliyor.
+
+**Sahte hash bilerek sabit bir dize değil.** Gömülü bir bcrypt sabiti, kodlayıcı yarın Argon2'ye
+çevrildiğinde `matches`'ı işi yapmadan anında `false` döndürürdü: doğru kod, sonradan gelen bir
+mekanizmayla sessizce geçersiz — #77'nin ve #67'nin tekrar eden dersi. Enjekte edilen kodlayıcıdan
+türetmek bu ihtimali yapısal olarak kapatıyor.
+
+**Başarısız deneme artık hesap yokken de kaydediliyor.** `login_attempts.user_id` zaten nullable;
+satır `email_attempted`, IP ve `User-Agent` taşıyor, `failure_reason` iki dalı sunucuda ayırt ediyor
+(`No account for email` / `Invalid email or password`). Bu tablo hiçbir uçtan istemciye dönmüyor;
+tek okuyucusu hesap silmede `PostgresAccountAnonymizer`.
+
+**İki koruma var.** `LoginEnumerationIT` yanıtı sabitliyor — `ExistenceConcealmentIT` deseniyle iki
+gövde, `timeStamp` ve `requestId` düşüldükten sonra birebir aynı olmak zorunda — ve deneme kaydının
+yazıldığını doğruluyor. `LoginConcealmentTest` parola doğrulamasının hesap yokken de çalıştığını ve
+sahte hash'in kodlayıcıdan geldiğini sabitliyor; sabite dönülürse kırmızıya döner.
+
 ## 2e. Para
 
 **Para her yerde `BigDecimal`, ölçek 2.** `Job.salary` ve `JobAssignment` üzerindeki tüm tutarlar `NUMERIC(19,2)`. `double`/`Float` ile para tutmak yasak — `Float` 50.000 TL üzerinde kuruş garantisi vermiyordu.
