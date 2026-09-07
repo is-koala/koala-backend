@@ -97,6 +97,20 @@ class AccountAnonymizationLoginAttemptIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void theAddressTypedIntoTheFormInAnotherCaseIsMatchedToo() {
+        String local = "FormCase-" + UUID.randomUUID();
+        UUID userId = seedUser(local.toLowerCase(Locale.ROOT) + "@example.test");
+        UUID requestId = seedRequest(userId);
+        UUID unattributed = seedAttempt(null, local + "@Example.Test", "No account for email");
+
+        new TransactionTemplate(transactionManager).executeWithoutResult(
+                status -> accountAnonymizer.anonymize(userId, requestId));
+
+        assertNull(emailOn(unattributed),
+                "Giriş formuna karışık harfle yazılan adres, hesabın küçük harfli adresiyle eşleşmeliydi.");
+    }
+
+    @Test
     void anotherPersonsAttemptIsLeftAlone() {
         String email = "sahibi-" + UUID.randomUUID() + "@example.test";
         String other = "baskasi-" + UUID.randomUUID() + "@example.test";
