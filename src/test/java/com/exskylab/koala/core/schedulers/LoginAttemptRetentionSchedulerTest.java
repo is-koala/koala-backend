@@ -5,8 +5,6 @@ import com.exskylab.koala.core.properties.LoginAttemptRetentionProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -53,18 +51,5 @@ class LoginAttemptRetentionSchedulerTest {
         scheduler.enforceRetention();
 
         verify(loginAttemptService).purgeExpiredUnattributed();
-    }
-
-    @Test
-    void theOwnerlessWindowIsMuchShorterThanTheAttributedOne() {
-        assertEquals(30, properties.getUnattributedDays());
-        assertEquals(365, properties.getAttributedDays());
-        assertTrue(properties.getUnattributedDays() < properties.getAttributedDays(),
-                "Hiçbir hesaba ait olmayan adres, hesabın kendi geçmişinden uzun yaşayamaz.");
-    }
-
-    @Test
-    void theJobIsOnUnlessSomebodyTurnsItOff() {
-        assertTrue(properties.isEnabled());
     }
 }

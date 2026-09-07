@@ -9,7 +9,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 
 @Service
 @Slf4j
@@ -35,7 +34,7 @@ public class LoginAttemptManager implements LoginAttemptService {
     @Transactional
     public int purgeExpiredUnattributed() {
         int purged = loginAttemptDao.deleteUnattributedBefore(
-                cutoff(retentionProperties.getUnattributedDays()));
+                retentionProperties.unattributedCutoff(Instant.now()));
         if (purged > 0) {
             log.info("Login attempts belonging to no account past their retention window removed: {}", purged);
         }
@@ -46,14 +45,10 @@ public class LoginAttemptManager implements LoginAttemptService {
     @Transactional
     public int purgeExpiredAttributed() {
         int purged = loginAttemptDao.deleteAttributedBefore(
-                cutoff(retentionProperties.getAttributedDays()));
+                retentionProperties.attributedCutoff(Instant.now()));
         if (purged > 0) {
             log.info("Login attempts tied to an account past their retention window removed: {}", purged);
         }
         return purged;
-    }
-
-    private static Instant cutoff(int days) {
-        return Instant.now().minus(days, ChronoUnit.DAYS);
     }
 }
