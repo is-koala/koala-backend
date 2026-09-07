@@ -1,5 +1,6 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.core.constants.PasswordPolicy;
 import com.exskylab.koala.core.producers.notification.NotificationProducerService;
 import com.exskylab.koala.core.producers.notification.EmailTaskDto;
 import com.exskylab.koala.core.security.PasswordResetTokenGenerator;
@@ -212,7 +213,12 @@ class PasswordResetIT extends AbstractIntegrationTest {
                 .andExpect(status().isOk());
     }
 
+    private static String validPassword() {
+        return "YeniParola".repeat(1 + PasswordPolicy.MIN_LENGTH / "YeniParola".length())
+                .substring(0, Math.max(PasswordPolicy.MIN_LENGTH, 10));
+    }
+
     private String resetBody(String token) {
-        return "{\"resetToken\":\"" + token + "\",\"newPassword\":\"YeniParola1\"}";
+        return "{\"resetToken\":\"" + token + "\",\"newPassword\":\"" + validPassword() + "\"}";
     }
 }

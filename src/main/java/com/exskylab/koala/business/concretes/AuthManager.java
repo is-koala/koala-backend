@@ -46,6 +46,7 @@ public class AuthManager implements AuthService {
     private final LegalService legalService;
     private final PasswordResetTokenService passwordResetTokenService;
     private final ApplicationEventPublisher eventPublisher;
+    private final String absentAccountPasswordHash;
 
     public AuthManager(UserService userService,
                        PendingRegistrationService pendingRegistrationService,
@@ -75,6 +76,7 @@ public class AuthManager implements AuthService {
         this.legalService = legalService;
         this.passwordResetTokenService = passwordResetTokenService;
         this.eventPublisher = eventPublisher;
+        this.absentAccountPasswordHash = passwordEncoder.encode(UUID.randomUUID().toString());
     }
 
     @Override
@@ -202,14 +204,22 @@ public class AuthManager implements AuthService {
         client.requireWebDeviceId();
         log.info("Login attempt for {}", LogMasks.email(authLoginDto.getEmail()));
 
-        var user = userService.getByEmail(authLoginDto.getEmail());
+        User user;
+        try {
+            user = userService.getByEmail(authLoginDto.getEmail());
+        } catch (ResourceNotFoundException exception) {
+            log.warn("Concealed as bad credentials: no account for {}", LogMasks.email(authLoginDto.getEmail()));
+            user = null;
+        }
 
-        //no need to check if user exists, because it is already checked in UserService.getByEmail() if its not then it will throw exception
-        if (!passwordEncoder.matches(authLoginDto.getPassword(), user.getPassword())){
+        boolean passwordMatches = passwordEncoder.matches(authLoginDto.getPassword(),
+                user == null ? absentAccountPasswordHash : user.getPassword());
+
+        if (user == null || !passwordMatches){
             LoginAttempt loginAttempt = new LoginAttempt();
             loginAttempt.setEmailAttempted(authLoginDto.getEmail());
             loginAttempt.setSuccess(false);
-            loginAttempt.setFailureReason("Invalid email or password");
+            loginAttempt.setFailureReason(user == null ? "No account for email" : "Invalid email or password");
             loginAttempt.setIpAddress(client.ipAddress());
             loginAttempt.setDeviceName(client.userAgent());
             loginAttempt.setUser(user);
