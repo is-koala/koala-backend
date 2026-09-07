@@ -118,6 +118,30 @@ class CompanyJobListingIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void aCompanyThatDoesNotExistIsNotFoundJustLikeOnTheSiblingEndpoint() throws Exception {
+        UUID unknownCompanyId = UUID.randomUUID();
+
+        mockMvc.perform(get("/companies/{companyId}/jobs", unknownCompanyId)
+                        .with(user(principal(secondContactId))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("COMPANY_NOT_FOUND"));
+
+        mockMvc.perform(get("/companies/{companyId}", unknownCompanyId)
+                        .with(user(principal(secondContactId))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("COMPANY_NOT_FOUND"));
+    }
+
+    @Test
+    void aPageSizeAboveTheCeilingIsCappedAtOneHundred() throws Exception {
+        mockMvc.perform(get("/companies/{companyId}/jobs", companyId)
+                        .param("size", "5000")
+                        .with(user(principal(secondContactId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.size").value(100));
+    }
+
+    @Test
     void aSortFieldOutsideTheWhitelistIsRejected() throws Exception {
         mockMvc.perform(get("/companies/{companyId}/jobs", companyId)
                         .param("sort", "creator,desc")
@@ -137,6 +161,15 @@ class CompanyJobListingIT extends AbstractIntegrationTest {
         jdbc.update("update jobs set address_public = true where id = ?", jobId);
 
         listCompanyJobsAs(secondContactId)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].addressPrecision").value("EXACT"))
+                .andExpect(jsonPath("$.data.content[0].latitude").value(40.987654))
+                .andExpect(jsonPath("$.data.content[0].longitude").value(29.034567));
+    }
+
+    @Test
+    void theContactWhoOpenedTheJobReceivesTheExactAddressOverHttp() throws Exception {
+        listCompanyJobsAs(firstContactId)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content[0].addressPrecision").value("EXACT"))
                 .andExpect(jsonPath("$.data.content[0].latitude").value(40.987654))

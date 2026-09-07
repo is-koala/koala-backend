@@ -12,8 +12,8 @@ import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
+import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ValidationException;
-import com.exskylab.koala.core.helpers.JobAddressVisibility;
 import com.exskylab.koala.core.helpers.MessageResolver;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.mappers.JobMapper;
@@ -43,8 +43,10 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -55,7 +57,9 @@ class CompanyJobListingRulesTest {
 
     private JobDao jobDao;
     private SecurityService securityService;
+    private CompanyService companyService;
     private CompanyContactService companyContactService;
+    private JobAssignmentDao jobAssignmentDao;
     private JobMapper jobMapper;
     private JobManager jobManager;
 
@@ -68,17 +72,19 @@ class CompanyJobListingRulesTest {
     void setUp() {
         jobDao = mock(JobDao.class);
         securityService = mock(SecurityService.class);
+        companyService = mock(CompanyService.class);
         companyContactService = mock(CompanyContactService.class);
+        jobAssignmentDao = mock(JobAssignmentDao.class);
         jobMapper = mock(JobMapper.class);
 
         jobManager = new JobManager(jobDao, securityService, mock(JobCategoryService.class),
-                mock(AddressService.class), mock(CompanyService.class), jobMapper, new PageableSanitizer(),
+                mock(AddressService.class), companyService, jobMapper, new PageableSanitizer(),
                 companyContactService, mock(JobAlertService.class), mock(GalleryService.class),
-                mock(CompanyFollowService.class), mock(JobApplicationDao.class), mock(JobAssignmentDao.class),
+                mock(CompanyFollowService.class), mock(JobApplicationDao.class), jobAssignmentDao,
                 mock(NotificationService.class), mock(MessageResolver.class), new JobSearchProperties(),
                 new PricingManager(FallbackSettings.commissionCalculator()));
 
-        when(jobMapper.toJobSummaryDto(any(Job.class))).thenAnswer(invocation -> mapped(invocation.getArgument(0)));
+        when(jobMapper.toJobSummaryDto(any(Job.class))).thenAnswer(invocation -> unprotected(invocation.getArgument(0)));
     }
 
     @Test
@@ -98,11 +104,24 @@ class CompanyJobListingRulesTest {
     }
 
     @Test
-    void aUserWhoIsNotAContactOfTheCompanyIsForbidden() {
+    void aCompanyThatDoesNotExistIsNotFound() {
+        when(securityService.getAuthenticatedUserId()).thenReturn(strangerId);
+        when(companyService.getCompanyById(companyId))
+                .thenThrow(new ResourceNotFoundException("{company.not.found}"));
+
+        ResourceNotFoundException thrown = assertThrows(ResourceNotFoundException.class,
+                () -> jobManager.getJobsOfCompany(companyId, PageRequest.of(0, 20)));
+
+        assertEquals(HttpStatus.NOT_FOUND, thrown.getHttpStatus());
+        assertEquals("COMPANY_NOT_FOUND", thrown.getErrorCode());
+        verify(companyContactService, never()).isUserAContactOfCompany(any(), any());
+        verify(jobDao, never()).findAllByCompanyId(any(), any());
+    }
+
+    @Test
+    void aUserWhoIsNotAContactOfAnExistingCompanyIsForbidden() {
         when(securityService.getAuthenticatedUserId()).thenReturn(strangerId);
         when(companyContactService.isUserAContactOfCompany(companyId, strangerId)).thenReturn(false);
-        when(jobDao.findAllByCompanyId(eq(companyId), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(companyJob(false))));
 
         ForbiddenException thrown = assertThrows(ForbiddenException.class,
                 () -> jobManager.getJobsOfCompany(companyId, PageRequest.of(0, 20)));
@@ -115,8 +134,6 @@ class CompanyJobListingRulesTest {
     @Test
     void aSortFieldOutsideTheWhitelistIsRejected() {
         viewerIsAContact(secondContactId);
-        when(jobDao.findAllByCompanyId(eq(companyId), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(companyJob(false))));
 
         ValidationException thrown = assertThrows(ValidationException.class,
                 () -> jobManager.getJobsOfCompany(companyId, PageRequest.of(0, 20, Sort.by("creator"))));
@@ -140,6 +157,19 @@ class CompanyJobListingRulesTest {
     }
 
     @Test
+    void aPageSizeAboveTheCeilingIsCappedBeforeTheQuery() {
+        viewerIsAContact(secondContactId);
+        when(jobDao.findAllByCompanyId(eq(companyId), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        jobManager.getJobsOfCompany(companyId, PageRequest.of(0, 5000));
+
+        ArgumentCaptor<Pageable> asked = ArgumentCaptor.forClass(Pageable.class);
+        verify(jobDao).findAllByCompanyId(eq(companyId), asked.capture());
+        assertEquals(100, asked.getValue().getPageSize());
+    }
+
+    @Test
     void theSameJobIsExactForTheContactWhoOpenedItAndApproximateForTheOther() {
         Job job = companyJob(false);
         when(jobDao.findAllByCompanyId(eq(companyId), any(Pageable.class)))
@@ -156,8 +186,10 @@ class CompanyJobListingRulesTest {
         JobSummaryDto forTheOtherContact = firstListedJob();
 
         assertEquals(AddressPrecision.APPROXIMATE, forTheOtherContact.getAddressPrecision());
-        assertEquals(40.99, forTheOtherContact.getLatitude());
-        assertEquals(29.03, forTheOtherContact.getLongitude());
+        assertNull(forTheOtherContact.getLatitude(),
+                "Yaklasik dalda koordinati mapper yazar, protect ona dokunmamali");
+        assertNull(forTheOtherContact.getLongitude(),
+                "Yaklasik dalda koordinati mapper yazar, protect ona dokunmamali");
     }
 
     @Test
@@ -166,6 +198,22 @@ class CompanyJobListingRulesTest {
         viewerIsAContact(secondContactId);
         when(jobDao.findAllByCompanyId(eq(companyId), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(job)));
+
+        JobSummaryDto summary = firstListedJob();
+
+        assertEquals(AddressPrecision.EXACT, summary.getAddressPrecision());
+        assertEquals(40.987654, summary.getLatitude());
+        assertEquals(29.034567, summary.getLongitude());
+    }
+
+    @Test
+    void aContactAssignedToTheJobSeesTheExactAddressHereToo() {
+        Job job = companyJob(false);
+        viewerIsAContact(secondContactId);
+        when(jobDao.findAllByCompanyId(eq(companyId), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(job)));
+        when(jobAssignmentDao.findVisibleAddressJobIds(anyCollection(), eq(secondContactId), anyCollection()))
+                .thenReturn(List.of(job.getId()));
 
         JobSummaryDto summary = firstListedJob();
 
@@ -205,12 +253,9 @@ class CompanyJobListingRulesTest {
         return job;
     }
 
-    private static JobSummaryDto mapped(Job job) {
+    private static JobSummaryDto unprotected(Job job) {
         JobSummaryDto summary = new JobSummaryDto();
         summary.setId(job.getId());
-        summary.setAddressPrecision(AddressPrecision.APPROXIMATE);
-        summary.setLatitude(JobAddressVisibility.approximateCoordinate(job.getAddress().getLatitude()));
-        summary.setLongitude(JobAddressVisibility.approximateCoordinate(job.getAddress().getLongitude()));
         return summary;
     }
 }

@@ -110,6 +110,15 @@ class JobAddressVisibilityIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void theOwnerReceivesExactCoordinatesInTheirOwnJobListing() throws Exception {
+        mockMvc.perform(get("/users/me/jobs").with(user(principal(ownerId, "owner@example.com"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].addressPrecision").value("EXACT"))
+                .andExpect(jsonPath("$.data.content[0].latitude").value(40.987654))
+                .andExpect(jsonPath("$.data.content[0].longitude").value(29.034567));
+    }
+
+    @Test
     void anUnrelatedUserReceivesOnlyTheApproximateAddress() throws Exception {
         mockMvc.perform(get("/jobs/{jobId}", jobId).with(user(principal(otherId, "other@example.com"))))
                 .andExpect(status().isOk())

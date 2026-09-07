@@ -161,15 +161,15 @@ public class CompaniesController {
 
     @Operation(summary = "Şirketin ilanları",
             description = "Şirketin bütün ilanlarını, hangi yetkilinin açtığından bağımsız olarak listeler; "
-                    + "yalnızca kendi açtıklarınız için GET /users/me/jobs kullanılır. "
-                    + "Yalnızca şirketin yetkilisi listeleyebilir. Sayfalıdır; sıralama yalnızca createdAt, "
-                    + "salary, startDateTime ve title alanlarına izin verir. Tam adres yalnız ilanı açan "
-                    + "yetkiliye ve adresi herkese açılmış ilanlarda döner, diğer yetkililere yaklaşık konum gider.")
+                    + "kendi açtıklarınız için GET /users/me/jobs kullanılır. Şirketin yetkilisi olmak şarttır, "
+                    + "sıralama createdAt/salary/startDateTime/title ile sınırlıdır, adres ADR-0003'e tabidir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "İlanlar listelendi"),
             @ApiResponse(responseCode = "400", description = "Sıralama alanı desteklenmiyor",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "403", description = "Şirketin yetkilisi değilsiniz",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "Şirket bulunamadı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @GetMapping("/{companyId}/jobs")
