@@ -1705,6 +1705,62 @@ Kazanç sadece temizlik değil: DTO'da yakalanan hata **400 + alan adı + mesaj*
 
 `RequestValidationTest` bu kuralların DTO seviyesinde çalıştığını ve mesajların çözümlenebilir anahtar olduğunu doğruluyor.
 
+## 2ah2. Parola kuralı — tek tanım, uzunluk öncelikli
+
+**Kural tek yerde: `core/customValidations/ValidPassword` + `PasswordPolicyValidator`, sayılar
+`core/constants/PasswordPolicy`.** Parola belirleyen **her** alan yalnız bu anotasyonu taşır; kendi `@Size`,
+`@Pattern`, `@NotBlank`'ini yazmaz. Anotasyon null ve boşluğu da reddettiği için ikinci bir kısıt gerekmiyor.
+
+| Uç | Alan |
+|---|---|
+| `POST /auth/complete-registration` | `AuthCompleteRegistrationDto.password` |
+| `POST /auth/reset-password` | `ResetPasswordDto.newPassword` |
+| `PUT /users/me/password` | `ChangePasswordDto.newPassword`, `confirmNewPassword` |
+| (bugün hiçbir uca bağlı değil) | `CreateUserDto.password` |
+
+**Kural:** en az **12 karakter** (kod noktası), en fazla **72 bayt** (UTF-8), boşluktan ibaret olamaz,
+**karakter sınıfı zorunluluğu yok**.
+
+**Neden uzunluk öncelikli.** NIST SP 800-63B zorunlu karmaşıklık kurallarını önermiyor: kullanıcıyı
+tahmin edilebilir dönüşümlere itiyorlar. Deponun kendi kuralı bunun canlı örneğiydi —
+`^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$` sekiz karakterlik `Parola12`'yi kabul ederken rakamsız kırk karakterlik
+bir parolayı reddediyordu. Karmaşıklık kuralı düştü, taban yükseldi.
+
+**Neden 12.** 800-63B'de 8 **SHALL** tabanı, 15 ise **SHOULD** tavsiyesi. 12, tabanın belirgin biçimde
+üstünde ama tavsiyenin altında; sapma bilinçli, çünkü parola belirleme huninin son adımı (kayıt tamamlama)
+ve 15 orada ölçülebilir kayıp demek. Karar burada yazılı olsun ki bir dahaki sefere unutulmuş değil,
+**verilmiş** bir karar olarak tartışılsın.
+
+**Neden üst sınır var ve neden bayt.** `PasswordEncoderConfig` `BCryptPasswordEncoder` kuruyor; Spring
+Security'nin `BCrypt`'i 72 baytı aşan parolada `IllegalArgumentException("password cannot be more than 72
+bytes")` atıyor. `reset-password` ucunda üst sınır **hiç yoktu**: uzun bir parola kütüphanenin İngilizce iç
+mesajını taşıyan bir 400'e dönüşüyordu. Sınır artık DTO'da ve bcrypt bayt saydığı için bayt cinsinden —
+Türkçe harfler 2 bayt, yani 72 karakter Türkçe parola sınırı zaten aşıyor.
+
+**Bu sayı kodlayıcıya bağlı, bağı bir test tutuyor.** Kodlayıcı bir gün Argon2 olursa 72 anlamını yitirir;
+`PasswordPolicyTest.theRuleIsTwelveCharactersAndSeventyTwoBytesUntilSomeoneDecidesOtherwise` iki sayıyı da
+sabitliyor, biri değişirse kırmızıya dönüp bu başlığa geri yolluyor. Katalog mesajının aynı sayıları
+yazdığını da ayrı bir test doğruluyor — mesaj "en az 8 karakter" derken kural 12 olamaz.
+
+**Giriş ve `currentPassword` bilerek kapsam dışı.** Onlar kullanıcının **zaten sahip olduğu** parolayı
+taşıyor; politikayı oraya uygulamak eski kuralla kaydolmuş herkesi kapıda bırakırdı.
+`PasswordPolicyRulesTest` bu iki alanı muafiyet listesinde tutuyor ve liste bayatlarsa kırmızıya dönüyor.
+
+**Asıl koruma yazılı kural değil, tarama.** `PasswordPolicyRulesTest` `core/dtos` altındaki her parola
+alanını buluyor ve (a) `@ValidPassword` taşıdığını, (b) kendi `@Size`/`@Pattern`'ini **yazmadığını**
+doğruluyor. Kuralın bugün olmaması kadar, yarın üç uçta üç farklı kural olması da kusur —
+is-koala/koala-backend#43 açıldığında zaten öyleydi: kayıt tamamlama yalnız `@NotNull`, parola değiştirme
+`@Size(min=8)`, parola sıfırlama `@Size(min=8)` + karmaşıklık.
+
+**Katalogdan altı anahtar düştü** (`user.new.password.min.length`, `user.new.password.not.blank`,
+`user.confirm.new.password.not.blank`, `user.password.strong`, `user.password.notBlank`,
+`user.password.size`) — hepsi eski kuralı anlatıyordu ve duran bir anahtar sonradan yeniden çağrılabilir.
+Yerlerine tek anahtar geldi: `user.password.policy`.
+
+**İstemci sözleşmesi değişti.** Taban 8'den 12'ye çıktı, karmaşıklık kuralı kalktı; `koala-web` ve
+`koala-mobile` form doğrulamaları buna göre güncellenmeli. Var olan parolalar yeniden doğrulanmıyor, yalnız
+yeni belirlenenler kurala tabi.
+
 ## 2ai. Gerçek zamanlı katmanın güvenliği
 
 `CONNECT` karesi baştan beri doğrulanıyordu, ama **`SUBSCRIBE` doğrulanmıyordu.** Giriş yapmış herhangi biri `/topic/conversations/{herhangi-bir-id}`'ye abone olup başkalarının mesajlarını okuyabilirdi. Kapatıldı:

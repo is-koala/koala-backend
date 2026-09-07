@@ -1,10 +1,9 @@
 package com.exskylab.koala.core.dtos.user.request;
 
+import com.exskylab.koala.core.customValidations.ValidPassword;
 import com.exskylab.koala.entities.Gender;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -32,9 +31,7 @@ public class CreateUserDto {
 
     private String tcIdentityNumber;
 
-    @NotBlank(message = "{user.password.notBlank}")
-    @Size(min = 8, message = "{user.password.size}")
-    @Pattern(regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).+$", message = "{user.password.strong}")
+    @ValidPassword
     private String password;
 
     private LocalDate birthDate;

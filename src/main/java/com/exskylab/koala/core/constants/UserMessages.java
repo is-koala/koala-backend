@@ -19,10 +19,8 @@ public class UserMessages {
     public static final String IDENTITY_VERIFIED_CANNOT_CHANGE_GENDER = "{user.identity.verified.cannot.change.gender}";
     public static final String USER_UPDATED_SUCCESSFULLY = "{user.updated.successfully}";
     public static final String CURRENT_PASSWORD_NOT_BLANK = "{user.current.password.not.blank}";
-    public static final String NEW_PASSWORD_NOT_BLANK = "{user.new.password.not.blank}";
-    public static final String CONFIRM_NEW_PASSWORD_NOT_BLANK = "{user.confirm.new.password.not.blank}";
+    public static final String PASSWORD_POLICY = "{user.password.policy}";
     public static final String PASSWORDS_DO_NOT_MATCH = "{user.passwords.do.not.match}";
-    public static final String NEW_PASSWORD_MIN_LENGTH = "{user.new.password.min.length}";
     public static final String CURRENT_PASSWORD_INCORRECT = "{user.current.password.incorrect}";
     public static final String NEW_PASSWORD_CANNOT_BE_SAME_AS_CURRENT_PASSWORD = "{user.new.password.cannot.be.same.as.current.password}";
     public static final String USER_PASSWORD_UPDATED_SUCCESSFULLY = "{user.password.updated.successfully}";

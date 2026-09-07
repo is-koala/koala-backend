@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.dtos.auth.request;
 
+import com.exskylab.koala.core.customValidations.ValidPassword;
 import com.exskylab.koala.core.constants.AuthMessages;
 import com.exskylab.koala.core.dtos.legal.request.ConsentDecisionDto;
 import jakarta.validation.Valid;
@@ -25,7 +26,7 @@ public class AuthCompleteRegistrationDto {
     @NotNull(message =AuthMessages.REGISTRATION_TOKEN_NOT_NULL)
     private String setPasswordToken;
 
-    @NotNull(message = AuthMessages.PASSWORD_NOT_NULL)
+    @ValidPassword
     private String password;
 
 }

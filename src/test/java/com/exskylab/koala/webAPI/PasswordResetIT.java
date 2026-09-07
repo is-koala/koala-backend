@@ -213,6 +213,6 @@ class PasswordResetIT extends AbstractIntegrationTest {
     }
 
     private String resetBody(String token) {
-        return "{\"resetToken\":\"" + token + "\",\"newPassword\":\"YeniParola1\"}";
+        return "{\"resetToken\":\"" + token + "\",\"newPassword\":\"YeniParola12\"}";
     }
 }
