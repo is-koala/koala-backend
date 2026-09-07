@@ -79,7 +79,7 @@ Faz 15'te yüzey baştan geçirildi. Bunlar **kural**, `ApiConventionTest` bunla
 | `/company-contact-invitations/{id}` | `/contact-invitations/{id}` |
 | `GET /notifications/track/{id}.png` | `GET /notification-tracking/{id}.png` |
 
-**Yeniden adlandırılan 16 DTO** (JSON alan adları değişmedi, yalnızca sınıf adları): `JobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto` → `PaymentSessionDto`, `...StatusPatchResponseDto` → `JobAssignmentDto`, `...StatusPatchRequestDto` → `AnswerAssignmentDto`, `JobApplicationsApplicationIdPatchResponseDto` → `JobApplicationDetailDto`, `...PatchRequestDto` → `AnswerApplicationDto`, `JobsJobIdApplicationsPostResponseDto` → `JobApplicationDto`, `...GetResponseDto` → `JobApplicantDto`, `...PostRequestDto` → `CreateJobApplicationDto`, `CompaniesCompanyIdJobsPostRequestDto` → `CreateCompanyJobDto`, `...PostResponseDto` → `CompanyJobDto`, `UsersMeJobsPostRequestDto` → `CreateIndividualJobDto`, `...PostResponseDto` → `IndividualJobDto`, `UsersMeIdentityVerificationRequestDto` → `VerifyIdentityDto`, `UserMeChangePasswordPutRequestDto` → `ChangePasswordDto`, `UserMePatchRequestDto` → `UpdateProfileDto`, `CompanyContactWithoutCompanyDto` → `CompanyContactDto`. `CreateUserDto`/`UpdateUserDto` `user/request` altına taşındı.
+**Yeniden adlandırılan 16 DTO** (JSON alan adları değişmedi, yalnızca sınıf adları): `JobAssignmentsAssignmentIdPaymentSessionInitiatePostResponseDto` → `PaymentSessionDto`, `...StatusPatchResponseDto` → `JobAssignmentDto`, `...StatusPatchRequestDto` → `AnswerAssignmentDto`, `JobApplicationsApplicationIdPatchResponseDto` → `JobApplicationDetailDto`, `...PatchRequestDto` → `AnswerApplicationDto`, `JobsJobIdApplicationsPostResponseDto` → `JobApplicationDto`, `...GetResponseDto` → `JobApplicantDto`, `...PostRequestDto` → `CreateJobApplicationDto`, `CompaniesCompanyIdJobsPostRequestDto` → `CreateCompanyJobDto`, `...PostResponseDto` → `CompanyJobDto`, `UsersMeJobsPostRequestDto` → `CreateIndividualJobDto`, `...PostResponseDto` → `IndividualJobDto`, `UsersMeIdentityVerificationRequestDto` → `VerifyIdentityDto`, `UserMeChangePasswordPutRequestDto` → `ChangePasswordDto`, `UserMePatchRequestDto` → `UpdateProfileDto`, `CompanyContactWithoutCompanyDto` → `CompanyContactDto`. `CreateUserDto`/`UpdateUserDto` `user/request` altına taşındı, sonra ölü çıkıp silindi (§2ah2).
 
 **Mimari kararlar backend'de.** Frontend önerileri dinlenir ama yüzeyin son hâline burası karar verir; istemci buna uyar.
 
@@ -1717,15 +1717,45 @@ Kazanç sadece temizlik değil: DTO'da yakalanan hata **400 + alan adı + mesaj*
 | `POST /auth/complete-registration` | `AuthCompleteRegistrationDto.password` |
 | `POST /auth/reset-password` | `ResetPasswordDto.newPassword` |
 | `PUT /users/me/password` | `ChangePasswordDto.newPassword`, `confirmNewPassword` |
-| (bugün hiçbir uca bağlı değil) | `CreateUserDto.password` |
 
-**Dördü aynı kuralı taşıyor ama üçü davranışla, biri yalnız kaynak taramasıyla korunuyor.**
-`PasswordPolicyTest` DTO'yu gerçekten doğrulatarak üç ucu sınıyor; `CreateUserDto`'nun bir ucu
-olmadığı için davranışla sınanamıyor ve tek koruması `PasswordPolicyRulesTest`'in metin taraması.
-Ölçüldü: `CreateUserDto`'dan `@ValidPassword` kaldırıldığında `PasswordPolicyTest` **yeşil kalıyor**,
-yalnız tarama kırmızıya dönüyor. Sınır burada yazılı çünkü "dört uç korunuyor" demek, korunduğu
-sanılan bir alan bırakmak olurdu (#88). `CreateUserDto` bir uca bağlanırsa davranış testi de eklenmeli;
-ölü çıkarsa alan tümüyle düşmeli.
+**Dördü de davranışla korunuyor.** `PasswordPolicyTest` DTO'yu gerçekten doğrulatarak üç ucu sınıyor;
+`PasswordPolicyRulesTest`'in metin taraması ayrıca `core/dtos` altındaki her parola alanını buluyor.
+Eskiden tabloda beşinci bir alan vardı — hiçbir uca bağlı olmayan `CreateUserDto.password` — ve tek
+koruması taramaydı; sınır burada yazılıydı çünkü "her uç korunuyor" demek, korunduğu sanılan bir alan
+bırakmak olurdu (#88). O sınır artık yok: bu başlığın kendi kuralı ("ölü çıkarsa alan tümüyle düşmeli")
+işletildi ve sınıf silindi.
+
+**`CreateUserDto` ve `UpdateUserDto` silindi — gerekçe.** İkisinin de koddan çağıranı yoktu. "Referans
+yok" tek başına gerekçe sayılmadı; bu varsayım depoda iki kez ters tepti (`USER_NOT_ASSOCIATED_WITH_INVITATION`
+silindikten iki gün sonra davet kabul akışında gerekti; `sortableJobFields` "üretimde kullanılmıyor"
+diye silindi, oysa testin her arayüz sıralama seçeneğini sunucunun izin verdiği alanlara bağlayan
+**sözleşme çıpasıydı**). Bu yüzden silmeden önce dört yere bakıldı: açık issue'lar (hiçbiri anmıyor —
+personel yönetimi tarafı dahil), `docs/` altındaki planlar ve ADR'ler (anmıyor), bir testin çıpa olarak
+kullanıp kullanmadığı (aşağıda), ve DTO'nun kendi durumu.
+
+**Belirleyici olan sonuncusuydu: `CreateUserDto` yalnız kullanılmıyordu, kullanılamazdı.** `gender` alanı
+`Gender` enum'u ve üzerinde `@NotBlank` duruyordu; `@NotBlank` yalnız `CharSequence` doğrular. Bu DTO bir
+uca bağlansaydı ilk istekte `UnexpectedTypeException` ile 500 dönerdi. Yani uykuda bekleyen hazır bir
+sözleşme değil, hiç koşmamış bir taslaktı — çıpa olabilecek bir şey değil. Mesaj anahtarları da bunu
+söylüyordu: `user.firstName.notBlank` camelCase, oysa kataloğun geri kalanı `user.first.name.cannot.be.blank`
+düzeninde; terk edilmiş bir adlandırmadan kalma. Kullanıcı yaratma zaten iki adımlı kayıtta
+(`AuthStartRegistrationDto` → `AuthCompleteRegistrationDto`), personel yaratma `CreateStaffMemberDto`'da —
+ADR-0014'ün "personel oluşturma" maddesini karşılayan uç bu. `UpdateUserDto` ise gövdesi tümüyle boş bir
+sınıftı; `UserService` ve `UserManager` onu yalnız `import` ediyordu, hiçbir imzada geçmiyordu. Boş bir
+sınıf hiçbir sözleşmeyi sabitleyemez; o iki import da düştü.
+
+**Tarama daraltılmadı.** `PasswordPolicyRulesTest.theScanReachesEveryKnownPasswordField` beklenti
+listesinden yalnız `CreateUserDto.java#password` satırı çıktı; taramanın kendisi — `core/dtos` kökü ve alan
+deseni — aynı kaldı. Listeden bir isim çıkarmak ile taramanın kapsamını daraltmak farklı şeyler, ve
+kapsam da daralmadı: `user/request` hâlâ `ChangePasswordDto`'nun üç alanıyla, `auth/request` üç DTO'yla,
+`staff/request` muafiyet listesiyle temsil ediliyor; dört alan adı biçimi (`password`, `newPassword`,
+`currentPassword`, `confirmNewPassword`) hâlâ beklentide.
+
+**Dört anahtar üç katalogdan da düştü** (`user.firstName.notBlank`, `user.lastName.notBlank`,
+`user.email.notBlank`, `user.gender.notBlank`) — duran bir anahtar sonradan yeniden çağrılabilir.
+**`user.email.invalid` düşmedi:** silinen DTO'daki beş anahtardan tek başkasınca da çağrılanı oydu —
+`AuthMessages.INVALID_EMAIL` onu taşıyor, `AuthLoginDto`, `AuthStartRegistrationDto` ve `ForgotPasswordDto`
+kullanıyor. Anahtarlar tek tek denetlenmeseydi çalışan üç uç sessizce ham anahtar döndürürdü.
 
 **Kural:** en az **12 karakter** (kod noktası), en fazla **72 bayt** (UTF-8), boşluktan ibaret olamaz,
 **karakter sınıfı zorunluluğu yok**.

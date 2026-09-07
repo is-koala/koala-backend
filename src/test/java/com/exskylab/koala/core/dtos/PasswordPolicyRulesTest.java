@@ -98,8 +98,7 @@ class PasswordPolicyRulesTest {
                 "ResetPasswordDto.java#newPassword",
                 "ChangePasswordDto.java#currentPassword",
                 "ChangePasswordDto.java#newPassword",
-                "ChangePasswordDto.java#confirmNewPassword",
-                "CreateUserDto.java#password");
+                "ChangePasswordDto.java#confirmNewPassword");
 
         List<String> missed = expected.stream().filter(id -> !found.contains(id)).toList();
 
