@@ -24,23 +24,23 @@ class PaymentStateMachineTest {
 
     @Test
     void onlyAConfirmedAssignmentAwaitingCollectionCanStartAPayment() {
-        assertTrue(stateMachine.canInitiate(
+        assertTrue(stateMachine.acceptsPayment(
                 assignment(AssignmentStatus.CONFIRMED, PaymentStatus.PENDING_COLLECTION)));
-        assertTrue(stateMachine.canInitiate(
+        assertTrue(stateMachine.acceptsPayment(
                 assignment(AssignmentStatus.CONFIRMED, PaymentStatus.FAILED)));
     }
 
     @Test
     void anUnconfirmedAssignmentCannotStartAPayment() {
-        assertFalse(stateMachine.canInitiate(
+        assertFalse(stateMachine.acceptsPayment(
                 assignment(AssignmentStatus.PENDING_CONFIRMATION, PaymentStatus.PENDING_COLLECTION)));
-        assertFalse(stateMachine.canInitiate(
+        assertFalse(stateMachine.acceptsPayment(
                 assignment(AssignmentStatus.REJECTED, PaymentStatus.PENDING_COLLECTION)));
     }
 
     @Test
     void anAlreadyPaidAssignmentCannotBeChargedAgain() {
-        assertFalse(stateMachine.canInitiate(
+        assertFalse(stateMachine.acceptsPayment(
                 assignment(AssignmentStatus.CONFIRMED, PaymentStatus.HELD_IN_ESCROW)));
         assertFalse(stateMachine.canTransition(PaymentStatus.HELD_IN_ESCROW, PaymentStatus.HELD_IN_ESCROW));
     }

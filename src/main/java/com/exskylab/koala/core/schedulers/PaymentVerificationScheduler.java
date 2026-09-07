@@ -6,7 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
 import java.util.UUID;
 
 @Component
@@ -23,13 +22,27 @@ public class PaymentVerificationScheduler {
     }
 
     @Scheduled(cron = "${iyzico.payment-verification.cron:30 */5 * * * *}")
-    public void runDueVerifications() {
+    public void sweepAbandonedInitiations() {
         if (!properties.isEnabled()) {
             return;
         }
 
-        List<UUID> due = paymentService.findDueVerificationAttemptIds();
-        for (UUID paymentId : due) {
+        for (UUID paymentId : paymentService.findStuckInitiationIds()) {
+            try {
+                paymentService.abandonStuckInitiation(paymentId);
+            } catch (Exception exception) {
+                log.error("Payment {} stuck initiation could not be closed", paymentId, exception);
+            }
+        }
+    }
+
+    @Scheduled(cron = "${iyzico.payment-verification.cron:30 */5 * * * *}")
+    public void reconcileDueAttempts() {
+        if (!properties.isEnabled()) {
+            return;
+        }
+
+        for (UUID paymentId : paymentService.findDueVerificationAttemptIds()) {
             try {
                 paymentService.reconcileAttempt(paymentId);
             } catch (Exception exception) {

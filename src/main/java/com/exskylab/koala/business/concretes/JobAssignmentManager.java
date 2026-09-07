@@ -202,7 +202,7 @@ public class JobAssignmentManager implements JobAssignmentService {
         log.info("Job assignment with id {} found", assignmentId);
 
 
-        if (!paymentStateMachine.canInitiate(assignment)){
+        if (!paymentStateMachine.acceptsPayment(assignment)){
             log.warn("Assignment with ID: {} is not in a state to initiate payment. Status: {}, PaymentStatus: {}", assignment.getId(), assignment.getStatus(), assignment.getPaymentStatus());
             throw new ConflictException(JobAssignmentMessages.ASSIGNMENT_NOT_READY_FOR_PAYMENT);
         }

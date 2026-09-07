@@ -25,6 +25,10 @@ public interface PaymentService {
 
     boolean reconcileAttempt(UUID paymentId);
 
+    List<UUID> findStuckInitiationIds();
+
+    boolean abandonStuckInitiation(UUID paymentId);
+
     List<Payment> getAttemptsForAssignment(UUID jobAssignmentId);
 
     Payment getSettledPaymentFor(UUID jobAssignmentId);

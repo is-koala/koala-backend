@@ -16,5 +16,6 @@ public class PaymentMessages {
     public static final String ATTEMPT_IN_PROGRESS = "{payment.attempt.in.progress}";
     public static final String VERIFICATION_PENDING = "{payment.verification.pending}";
     public static final String INITIATION_FAILED = "{payment.initiation.failed}";
+    public static final String INITIATION_ABANDONED = "{payment.initiation.abandoned}";
     public static final String PROVIDER_RESPONSE_INVALID = "{payment.provider.response.invalid}";
 }

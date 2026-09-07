@@ -42,9 +42,7 @@ public class PaymentManager implements PaymentService {
 
     private static final String CURRENCY = "TRY";
     private static final Integer VERIFIED_BY_THREE_D_SECURE = 1;
-    private static final List<PaymentAttemptStatus> PENDING_STATUSES =
-            List.of(PaymentAttemptStatus.INITIATED, PaymentAttemptStatus.VERIFY_PENDING,
-                    PaymentAttemptStatus.IN_REVIEW);
+    private static final List<PaymentAttemptStatus> PENDING_STATUSES = PaymentAttemptStatus.ACTIVE;
 
     private final PaymentDao paymentDao;
     private final IyzicoPaymentService iyzicoPaymentService;
@@ -74,7 +72,7 @@ public class PaymentManager implements PaymentService {
     public Payment startAttempt(JobAssignment jobAssignment, CommissionCalculator.Breakdown breakdown) {
         JobAssignment lockedAssignment = jobAssignmentDao.findByIdForUpdate(jobAssignment.getId())
                 .orElseThrow(() -> new ResourceNotFoundException(JobAssignmentMessages.NOT_FOUND));
-        if (!stateMachine.canInitiate(lockedAssignment)) {
+        if (!stateMachine.acceptsPayment(lockedAssignment)) {
             throw new ConflictException(JobAssignmentMessages.ASSIGNMENT_NOT_READY_FOR_PAYMENT);
         }
         if (hasPendingAttemptForAssignment(lockedAssignment.getId())) {
@@ -208,6 +206,41 @@ public class PaymentManager implements PaymentService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<UUID> findStuckInitiationIds() {
+        return paymentDao.findStuckInitiationIds(PaymentAttemptStatus.INITIATED, initiationCutoff(),
+                PageRequest.of(0, verificationProperties.getBatchSize()));
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean abandonStuckInitiation(UUID paymentId) {
+        UUID assignmentId = paymentDao.findJobAssignmentIdById(paymentId).orElse(null);
+        if (assignmentId == null) {
+            return false;
+        }
+        lockAssignment(assignmentId);
+        Payment payment = paymentDao.findWithDetailsById(paymentId).orElse(null);
+        if (payment == null
+                || payment.getStatus() != PaymentAttemptStatus.INITIATED
+                || payment.getProviderToken() != null
+                || payment.getCreatedAt().isAfter(initiationCutoff())) {
+            return false;
+        }
+        payment.setStatus(PaymentAttemptStatus.VERIFY_PENDING);
+        payment.setFailureReason(PaymentMessages.INITIATION_ABANDONED);
+        paymentDao.save(payment);
+        paymentMetrics.initiationAbandoned();
+        log.warn("Payment {} never reached the provider and now waits for manual reconciliation, conversationId={}",
+                payment.getId(), payment.getConversationId());
+        return true;
+    }
+
+    private Instant initiationCutoff() {
+        return Instant.now().minus(verificationProperties.getInitiationDeadline());
+    }
+
+    @Override
     @Transactional
     public boolean reconcileAttempt(UUID paymentId) {
         UUID assignmentId = paymentDao.findJobAssignmentIdById(paymentId).orElse(null);
@@ -295,7 +328,7 @@ public class PaymentManager implements PaymentService {
             return deferVerification(payment);
         }
 
-        if (!stateMachine.canInitiate(payment.getJobAssignment())) {
+        if (!stateMachine.acceptsPayment(payment.getJobAssignment())) {
             log.error("Payment {} requires manual review because assignment {} is no longer collectible.",
                     payment.getId(), payment.getJobAssignment().getId());
             return requireManualReview(payment);

@@ -11,6 +11,11 @@ groups:
         for: 1m
         labels: { severity: critical, owner: payments }
         annotations: { summary: "Ödeme başlatma veya callback entegrasyonu hata verdi" }
+      - alert: KoalaPaymentInitiationAbandoned
+        expr: sum(increase(koala_payment_operations_total{operation="initiation",outcome="abandoned"}[15m])) > 0
+        for: 1m
+        labels: { severity: critical, owner: payments }
+        annotations: { summary: "Sağlayıcıya ulaşmamış bir ödeme denemesi süpürüldü; atama bloke, elle mutabakat gerekiyor (docs/runbooks/payments.md)" }
       - alert: KoalaPaymentFailureSpike
         expr: sum(rate(koala_payment_operations_total{operation="callback",outcome=~"declined|fraud_rejected"}[10m])) > 0.05
         for: 5m

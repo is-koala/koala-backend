@@ -138,9 +138,54 @@ indeks aynı atamada ikinci checkout'u engeller. Token varsa
 otomatik tavan dolmuştur. Satırı `FAILED` yapıp kullanıcıya yeniden denetme:
 panelde `conversation_id` ile ödeme sonucunu bul ve bölüm 4'e göre uzlaştır.
 
-Initialize yanıtı alınamadıysa token yoktur ve retrieve çalışamaz; bu durumda
-`VERIFY_PENDING` doğrudan manuel panel araması bekler. Panelde işlem yokluğu
-kanıtlanmadan yeni checkout açılmaz.
+`verification_attempts=0` ve `next_verification_at is null` bir `VERIFY_PENDING`
+satır tavanı doldurmuş değildir — hiç retrieve edilmemiştir. `failure_reason`
+hangisi olduğunu söyler ve iki olay veritabanında bu tek kolonla ayrılır:
+
+| `failure_reason` | Ne oldu | Sağlayıcı tarafında |
+| --- | --- | --- |
+| `{payment.verification.pending}` | initialize çağrıldı, yanıtı okuyamadık (`markInitiationUncertain`) | checkout açılmış **olabilir**, tahsilat mümkün |
+| `{payment.initiation.abandoned}` | süreç sağlayıcıya hiç gitmeden öldü (`abandonStuckInitiation`) | token yok, çoğu kez hiçbir kayıt yok |
+
+İkisi de `provider_token is null` taşır; ayrım **yalnız** `failure_reason`'dadır.
+`verification_attempts` sayacı sağlayıcıya yapılan retrieve denemelerini sayar,
+bu yüzden süpürme onu artırmaz — süpürülen satır için yapılmış bir deneme yoktur
+ve `1` yazmak olmayan bir sağlayıcı çağrısını raporlardı.
+
+**Sağlayıcıya hiç ulaşmamış deneme.** `startAttempt` satırı sağlayıcı
+çağrılarından önce commit edilir. Süreç o commit ile token yazımı arasında
+ölürse (deploy, OOM) geriye `INITIATED` + `provider_token is null` +
+`next_verification_at is null` bir satır kalır; aktif deneme indeksi yüzünden o
+atamada ödeme bloke olur. `PaymentVerificationScheduler` bu satırları 15 dakika
+(`iyzico.payment-verification.initiation-deadline`) sonra `VERIFY_PENDING` +
+`{payment.initiation.abandoned}` yapar ve
+`koala.payment.operations{operation=initiation,outcome=abandoned}` sayacını
+artırır. **Bu sayaç `KoalaPaymentInitiationAbandoned` alarmını ateşler; olayın
+sana ulaşma yolu odur, log değil.** Satır **bilerek** terminal yapılmaz:
+initialize'ın hiç çağrılmadığı ile çağrılıp sonucun okunamadığı ayırt edilemez.
+
+Süpürme satırı `INITIATED`'dan çıkarır, yani ona ulaşan **hiçbir otomatik yol
+kalmaz**: `findDueVerificationIds` `next_verification_at`'i dolu satırları arar
+ve süpürülen satırda o alan boştur. Bu bilinçli — retrieve edilecek token yoktur,
+scheduler'a bırakmak sonsuza kadar boşa dönen bir işten ibaret olurdu. Kuyruğun
+sahibi bu sorgudur; alarm geldiğinde bunu koştur:
+
+```sql
+select id, job_assignment_id, conversation_id, created_at
+from payments
+where is_deleted = false
+  and status = 'VERIFY_PENDING'
+  and failure_reason = '{payment.initiation.abandoned}'
+  and provider_token is null
+order by created_at;
+```
+
+Her satırı `conversation_id` ile panelde ara; işlem yoksa `FAILED` yap, varsa
+panelden elle iade et. Panelde işlem yokluğu kanıtlanmadan yeni checkout açılmaz.
+Satır kapatılana kadar `UnpaidAssignmentExpiryScheduler` o atamayı **iptal
+etmez** — açık denemesi olan atama işveren suçuyla ve sıfır iadeyle iptal
+edilemez (§2k). Yani bu kuyruk temizlenmezse atama iş başlangıcını geçip asılı
+kalır; alarmın kritik olmasının sebebi budur.
 
 **Migration öncesi submerchant snapshot'ı olmayan deneme.** Migration 84 eski
 token'lı denemeleri scheduler'a açtı, fakat o satırların checkout anındaki
