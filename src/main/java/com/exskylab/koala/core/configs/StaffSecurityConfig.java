@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.configs;
 
+import com.exskylab.koala.core.security.StaffAuthenticationToken;
 import com.exskylab.koala.business.abstracts.StaffAuditService;
 import com.exskylab.koala.core.security.SessionAuthFilter;
 import com.exskylab.koala.core.security.StaffAuditFilter;
@@ -52,8 +53,8 @@ public class StaffSecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/admin/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/admin/auth/refresh").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/admin/auth/logout").authenticated()
-                        .requestMatchers(HttpMethod.POST, "/admin/auth/password").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/admin/auth/logout").hasAuthority(StaffAuthenticationToken.STAFF_AUTHORITY)
+                        .requestMatchers(HttpMethod.POST, "/admin/auth/password").hasAuthority(StaffAuthenticationToken.STAFF_AUTHORITY)
                         .anyRequest().access(staffPermissionAuthorizationManager))
 
                 .sessionManagement(session ->

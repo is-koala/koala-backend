@@ -101,7 +101,7 @@ public class StaffAccountManager implements StaffAccountService {
 
         Instant now = Instant.now();
 
-        if (member.getLockedUntil() != null && member.getLockedUntil().isAfter(now)) {
+        if (isLocked(member, now)) {
             passwordEncoder.matches(rawPassword, ABSENT_ACCOUNT_HASH);
             log.warn("Personel girişi reddedildi, hesap kilitli: {} kilit={}",
                     LogMasks.email(member.getEmail()), member.getLockedUntil());
@@ -139,7 +139,8 @@ public class StaffAccountManager implements StaffAccountService {
 
         StaffMember member = staffMemberDao.findById(identity.staffId()).orElse(null);
 
-        if (member == null || !member.isActive() || member.getTokenVersion() != identity.tokenVersion()) {
+        if (member == null || !member.isActive() || isLocked(member, Instant.now())
+                || member.getTokenVersion() != identity.tokenVersion()) {
             throw new UnauthorizedException(StaffMessages.SESSION_ENDED);
         }
 
@@ -464,6 +465,11 @@ public class StaffAccountManager implements StaffAccountService {
     private static String displayNameOf(StaffMember member) {
         String name = member.getDisplayName();
         return name == null || name.isBlank() ? member.getEmail() : name;
+    }
+
+
+    private static boolean isLocked(StaffMember member, Instant now) {
+        return member.getLockedUntil() != null && member.getLockedUntil().isAfter(now);
     }
 
 }

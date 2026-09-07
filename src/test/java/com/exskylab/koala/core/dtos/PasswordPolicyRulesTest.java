@@ -21,7 +21,7 @@ class PasswordPolicyRulesTest {
     private static final Path DTOS = Path.of("src", "main", "java", "com", "exskylab", "koala", "core", "dtos");
 
     private static final Pattern FIELD =
-            Pattern.compile("private\\s+String\\s+(\\w*[Pp]assword)\\s*$");
+            Pattern.compile("private\\s+(?!boolean\\s|Boolean\\s)\\S+\\s+(\\w*[Pp]assword)\\s*$");
 
     private static final Set<String> PASSWORDS_THE_USER_ALREADY_HAS = Set.of(
             "AuthLoginDto.java#password",
