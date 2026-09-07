@@ -15,6 +15,7 @@ public class PaymentMetrics {
         register("initiation", "succeeded");
         register("initiation", "provider_error");
         register("initiation", "persistence_error");
+        register("initiation", "abandoned");
         register("callback", "succeeded");
         register("callback", "already_succeeded");
         register("callback", "unknown_token");
@@ -36,6 +37,10 @@ public class PaymentMetrics {
 
     public void initiationPersistenceError() {
         record("initiation", "persistence_error");
+    }
+
+    public void initiationAbandoned() {
+        record("initiation", "abandoned");
     }
 
     public void callbackSucceeded() {

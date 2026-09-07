@@ -37,6 +37,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -242,6 +243,75 @@ class PaymentMonitoringTest {
         paymentManager.completeFromCallback(TOKEN);
 
         assertEquals(1.0, counter("callback", "three_ds_verification_failed"));
+    }
+
+    @Test
+    void anInitiationAbandonedBeforeTheProviderCallIsSweptIntoManualReconciliation() {
+        verificationProperties.setInitiationDeadline(Duration.ofMinutes(15));
+        Payment stuck = stuckInitiation(Duration.ofMinutes(30));
+
+        assertTrue(paymentManager.abandonStuckInitiation(stuck.getId()));
+
+        assertEquals(PaymentAttemptStatus.VERIFY_PENDING, stuck.getStatus());
+        assertEquals("{payment.verification.pending}", stuck.getFailureReason());
+        assertNull(stuck.getNextVerificationAt());
+        assertEquals(1.0, counter("initiation", "abandoned"));
+    }
+
+    @Test
+    void anInitiationStillInsideTheCheckoutWindowIsLeftAlone() {
+        verificationProperties.setInitiationDeadline(Duration.ofMinutes(15));
+        Payment fresh = stuckInitiation(Duration.ofMinutes(1));
+
+        assertFalse(paymentManager.abandonStuckInitiation(fresh.getId()));
+
+        assertEquals(PaymentAttemptStatus.INITIATED, fresh.getStatus());
+        assertEquals(0.0, counter("initiation", "abandoned"));
+    }
+
+    @Test
+    void anInitiationThatReachedTheProviderIsNeverSwept() {
+        verificationProperties.setInitiationDeadline(Duration.ofMinutes(15));
+        Payment tokenized = stuckInitiation(Duration.ofMinutes(30));
+        tokenized.setProviderToken(TOKEN);
+
+        assertFalse(paymentManager.abandonStuckInitiation(tokenized.getId()));
+
+        assertEquals(PaymentAttemptStatus.INITIATED, tokenized.getStatus());
+        assertEquals(0.0, counter("initiation", "abandoned"));
+    }
+
+    @Test
+    void theSweepScansOnlyTokenlessInitiationsOlderThanTheConfiguredDeadline() {
+        verificationProperties.setInitiationDeadline(Duration.ofMinutes(90));
+        when(paymentDao.findStuckInitiationIds(any(), any(), any())).thenReturn(List.of());
+
+        paymentManager.findStuckInitiationIds();
+
+        ArgumentCaptor<PaymentAttemptStatus> status = ArgumentCaptor.forClass(PaymentAttemptStatus.class);
+        ArgumentCaptor<Instant> cutoff = ArgumentCaptor.forClass(Instant.class);
+        verify(paymentDao).findStuckInitiationIds(status.capture(), cutoff.capture(), any());
+        assertEquals(PaymentAttemptStatus.INITIATED, status.getValue());
+        Instant ninetyMinutesAgo = Instant.now().minus(Duration.ofMinutes(90));
+        assertTrue(Duration.between(cutoff.getValue(), ninetyMinutesAgo).abs()
+                        .compareTo(Duration.ofMinutes(1)) < 0,
+                "cutoff must follow the configured deadline, was " + cutoff.getValue());
+    }
+
+    @Test
+    void theCheckoutWindowDefaultsToFifteenMinutes() {
+        assertEquals(Duration.ofMinutes(15), new PaymentVerificationProperties().getInitiationDeadline());
+    }
+
+    private Payment stuckInitiation(Duration age) {
+        Payment payment = new Payment();
+        payment.setId(UUID.randomUUID());
+        payment.setConversationId(UUID.randomUUID().toString());
+        payment.setStatus(PaymentAttemptStatus.INITIATED);
+        payment.setProviderToken(null);
+        payment.setCreatedAt(Instant.now().minus(age));
+        when(paymentDao.findWithDetailsById(payment.getId())).thenReturn(Optional.of(payment));
+        return payment;
     }
 
     private double counter(String operation, String outcome) {

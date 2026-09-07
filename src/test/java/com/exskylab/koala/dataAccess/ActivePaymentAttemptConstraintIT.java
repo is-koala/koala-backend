@@ -5,13 +5,17 @@ import com.exskylab.koala.business.abstracts.PaymentService;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
 import com.exskylab.koala.entities.JobAssignment;
+import com.exskylab.koala.entities.Payment;
+import com.exskylab.koala.entities.PaymentAttemptStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -31,6 +35,9 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
 
     @Autowired
     private JobAssignmentDao jobAssignmentDao;
+
+    @Autowired
+    private PaymentDao paymentDao;
 
     @Autowired
     private PlatformTransactionManager transactionManager;
@@ -196,6 +203,181 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
             jdbcTemplate.update("delete from job_assignments where id = ?", assignmentId);
             jdbcTemplate.update("delete from jobs where id = ?", jobId);
         }
+    }
+
+    @Test
+    void anAbandonedInitiationBlocksPaymentUntilTheSweepMakesItVisible() {
+        UUID jobId = UUID.randomUUID();
+        UUID assignmentId = UUID.randomUUID();
+        UUID paymentId = UUID.randomUUID();
+        seedAssignment(jobId, assignmentId);
+        jdbcTemplate.update("""
+                insert into payments (id, created_at, is_deleted, job_assignment_id, conversation_id,
+                                      status, currency, verification_attempts)
+                values (?, now() - interval '1 hour', false, ?, ?, 'INITIATED', 'TRY', 0)
+                """, paymentId, assignmentId, UUID.randomUUID().toString());
+
+        try {
+            CommissionCalculator.Breakdown breakdown = breakdown();
+            JobAssignment assignment = new JobAssignment();
+            assignment.setId(assignmentId);
+            assignment.setPricingVersion("2026-09-v1");
+            assignment.setCurrency("TRY");
+
+            ConflictException blocked = assertThrows(ConflictException.class,
+                    () -> paymentService.startAttempt(assignment, breakdown));
+            assertEquals("PAYMENT_ATTEMPT_IN_PROGRESS", blocked.getErrorCode());
+
+            assertEquals(List.of(paymentId), paymentService.findStuckInitiationIds());
+            assertTrue(paymentService.abandonStuckInitiation(paymentId));
+
+            assertEquals("VERIFY_PENDING", jdbcTemplate.queryForObject(
+                    "select status from payments where id = ?", String.class, paymentId));
+            assertEquals("{payment.verification.pending}", jdbcTemplate.queryForObject(
+                    "select failure_reason from payments where id = ?", String.class, paymentId));
+            assertNull(jdbcTemplate.queryForObject(
+                    "select next_verification_at from payments where id = ?", Instant.class, paymentId));
+
+            ConflictException stillBlocked = assertThrows(ConflictException.class,
+                    () -> paymentService.startAttempt(assignment, breakdown));
+            assertEquals("PAYMENT_ATTEMPT_IN_PROGRESS", stillBlocked.getErrorCode());
+        } finally {
+            cleanUp(jobId, assignmentId);
+        }
+    }
+
+    @Test
+    void aFailedAttemptDoesNotBlockTheEmployerFromTryingAgain() {
+        UUID jobId = UUID.randomUUID();
+        UUID assignmentId = UUID.randomUUID();
+        seedAssignment(jobId, assignmentId);
+        jdbcTemplate.update("""
+                insert into payments (id, created_at, is_deleted, job_assignment_id, conversation_id,
+                                      status, currency, verification_attempts)
+                values (?, now(), false, ?, ?, 'FAILED', 'TRY', 0)
+                """, UUID.randomUUID(), assignmentId, UUID.randomUUID().toString());
+
+        try {
+            JobAssignment assignment = new JobAssignment();
+            assignment.setId(assignmentId);
+            assignment.setPricingVersion("2026-09-v1");
+            assignment.setCurrency("TRY");
+
+            var retry = paymentService.startAttempt(assignment, breakdown());
+
+            assertEquals(PaymentAttemptStatus.INITIATED, retry.getStatus());
+            assertEquals(1, jdbcTemplate.queryForObject("""
+                    select count(*) from payments
+                    where job_assignment_id = ? and status in ('INITIATED', 'VERIFY_PENDING', 'IN_REVIEW')
+                    """, Integer.class, assignmentId));
+            assertEquals(2, jdbcTemplate.queryForObject(
+                    "select count(*) from payments where job_assignment_id = ?", Integer.class, assignmentId));
+        } finally {
+            cleanUp(jobId, assignmentId);
+        }
+    }
+
+    @Test
+    void theIndexRejectsASecondActiveRowWhenTwoInsertsSkipTheAssignmentLock() throws Exception {
+        UUID jobId = UUID.randomUUID();
+        UUID assignmentId = UUID.randomUUID();
+        seedAssignment(jobId, assignmentId);
+        jdbcTemplate.execute("""
+                create or replace function delay_payment_attempt_insert() returns trigger as $$
+                begin
+                    perform pg_sleep(0.5);
+                    return new;
+                end;
+                $$ language plpgsql
+                """);
+        jdbcTemplate.execute("""
+                create trigger delay_payment_attempt_insert
+                before insert on payments for each row execute function delay_payment_attempt_insert()
+                """);
+
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            CountDownLatch start = new CountDownLatch(1);
+            TransactionTemplate transactions = new TransactionTemplate(transactionManager);
+            java.util.concurrent.Callable<String> insert = () -> {
+                start.await();
+                try {
+                    transactions.execute(status -> {
+                        JobAssignment reference = jobAssignmentDao.getReferenceById(assignmentId);
+                        Payment payment = new Payment();
+                        payment.setJobAssignment(reference);
+                        payment.setConversationId(UUID.randomUUID().toString());
+                        payment.setStatus(PaymentAttemptStatus.INITIATED);
+                        payment.setCurrency("TRY");
+                        return paymentDao.saveAndFlush(payment);
+                    });
+                    return "SUCCESS";
+                } catch (DataIntegrityViolationException violation) {
+                    return constraintName(violation);
+                }
+            };
+
+            var first = executor.submit(insert);
+            var second = executor.submit(insert);
+            start.countDown();
+
+            String firstOutcome = first.get(20, TimeUnit.SECONDS);
+            String secondOutcome = second.get(20, TimeUnit.SECONDS);
+            List<String> outcomes = List.of(firstOutcome, secondOutcome);
+            assertEquals(1, outcomes.stream().filter("SUCCESS"::equals).count(),
+                    "exactly one insert must win, got " + outcomes);
+            assertEquals(1, outcomes.stream().filter("uk_payments_one_active_attempt"::equals).count(),
+                    "the loser must be rejected by the active-attempt index, got " + outcomes);
+            assertEquals(1, jdbcTemplate.queryForObject("""
+                    select count(*) from payments
+                    where job_assignment_id = ? and status in ('INITIATED', 'VERIFY_PENDING', 'IN_REVIEW')
+                    """, Integer.class, assignmentId));
+        } finally {
+            jdbcTemplate.execute("drop trigger if exists delay_payment_attempt_insert on payments");
+            jdbcTemplate.execute("drop function if exists delay_payment_attempt_insert()");
+            cleanUp(jobId, assignmentId);
+        }
+    }
+
+    private static String constraintName(Throwable exception) {
+        Throwable current = exception;
+        while (current != null) {
+            if (current instanceof org.hibernate.exception.ConstraintViolationException violation) {
+                return violation.getConstraintName();
+            }
+            current = current.getCause();
+        }
+        return "no-constraint";
+    }
+
+    private static CommissionCalculator.Breakdown breakdown() {
+        return new CommissionCalculator.Breakdown(
+                new BigDecimal("1000.00"), new BigDecimal("75.00"),
+                new BigDecimal("1075.00"), new BigDecimal("0.0750"));
+    }
+
+    private void seedAssignment(UUID jobId, UUID assignmentId) {
+        jdbcTemplate.update("""
+                insert into jobs (id, created_at, is_deleted, title, status, employer_type,
+                                  experience_required, insurance_required, min_age, max_age,
+                                  start_date_time, end_date_time)
+                values (?, now(), false, 'Payment lock', 'OPEN', 'INDIVIDUAL',
+                        false, false, 18, 65, now() + interval '1 day', now() + interval '2 days')
+                """, jobId);
+        jdbcTemplate.update("""
+                insert into job_assignments
+                    (id, created_at, is_deleted, job_id, worker_id, status, payment_status,
+                     pricing_version, currency,
+                     worker_payout, commission_rate, commission_amount, total_charged, work_hours)
+                values (?, now(), false, ?, '00000000-0000-0000-0000-000000000001',
+                        'CONFIRMED', 'PENDING_COLLECTION', '2026-09-v1', 'TRY',
+                        1000.00, 0.0750, 75.00, 1075.00, 0)
+                """, assignmentId, jobId);
+    }
+
+    private void cleanUp(UUID jobId, UUID assignmentId) {
+        jdbcTemplate.update("delete from payments where job_assignment_id = ?", assignmentId);
+        jdbcTemplate.update("delete from job_assignments where id = ?", assignmentId);
+        jdbcTemplate.update("delete from jobs where id = ?", jobId);
     }
 
     private static void await(CountDownLatch latch) {

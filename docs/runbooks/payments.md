@@ -138,6 +138,27 @@ indeks aynı atamada ikinci checkout'u engeller. Token varsa
 otomatik tavan dolmuştur. Satırı `FAILED` yapıp kullanıcıya yeniden denetme:
 panelde `conversation_id` ile ödeme sonucunu bul ve bölüm 4'e göre uzlaştır.
 
+**Sağlayıcıya hiç ulaşmamış deneme.** `startAttempt` satırı sağlayıcı
+çağrılarından önce commit edilir. Süreç o commit ile token yazımı arasında
+ölürse (deploy, OOM) geriye `INITIATED` + `provider_token is null` +
+`next_verification_at is null` bir satır kalır; aktif deneme indeksi yüzünden o
+atamada ödeme bloke olur. `PaymentVerificationScheduler` bu satırları 15 dakika
+(`iyzico.payment-verification.initiation-deadline`) sonra `VERIFY_PENDING`
+yapar ve `koala.payment.operations{operation=initiation,outcome=abandoned}`
+sayacını artırır. Satır **bilerek** terminal yapılmaz: initialize'ın hiç
+çağrılmadığı ile çağrılıp sonucun okunamadığı ayırt edilemez. Süpürülen satırı
+`conversation_id` ile panelde ara; işlem yoksa `FAILED` yap, varsa panelden elle
+iade et. Bekleyenleri bul:
+
+```sql
+select id, conversation_id, created_at
+from payments
+where is_deleted = false
+  and status = 'INITIATED'
+  and provider_token is null
+  and created_at < now() - interval '15 minutes';
+```
+
 Initialize yanıtı alınamadıysa token yoktur ve retrieve çalışamaz; bu durumda
 `VERIFY_PENDING` doğrudan manuel panel araması bekler. Panelde işlem yokluğu
 kanıtlanmadan yeni checkout açılmaz.

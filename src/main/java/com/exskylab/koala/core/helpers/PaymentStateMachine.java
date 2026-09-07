@@ -19,7 +19,7 @@ public class PaymentStateMachine {
             PaymentStatus.RELEASED_TO_WORKER, Set.of(),
             PaymentStatus.REFUNDED, Set.of());
 
-    public boolean canInitiate(JobAssignment assignment) {
+    public boolean acceptsPayment(JobAssignment assignment) {
         return assignment.getStatus() == AssignmentStatus.CONFIRMED
                 && (assignment.getPaymentStatus() == PaymentStatus.PENDING_COLLECTION
                     || assignment.getPaymentStatus() == PaymentStatus.FAILED);

@@ -12,6 +12,7 @@ public class PaymentVerificationProperties {
     private boolean enabled = true;
     private int maxAttempts = 8;
     private Duration initialReconciliationDelay = Duration.ofMinutes(35);
+    private Duration initiationDeadline = Duration.ofMinutes(15);
     private Duration initialBackoff = Duration.ofMinutes(1);
     private Duration maxBackoff = Duration.ofHours(6);
     private int batchSize = 50;
@@ -28,6 +29,10 @@ public class PaymentVerificationProperties {
     public void setInitialBackoff(Duration initialBackoff) { this.initialBackoff = initialBackoff; }
     public Duration getMaxBackoff() { return maxBackoff; }
     public void setMaxBackoff(Duration maxBackoff) { this.maxBackoff = maxBackoff; }
+    public Duration getInitiationDeadline() { return initiationDeadline; }
+    public void setInitiationDeadline(Duration initiationDeadline) {
+        this.initiationDeadline = initiationDeadline;
+    }
     public int getBatchSize() { return batchSize; }
     public void setBatchSize(int batchSize) { this.batchSize = batchSize; }
 }

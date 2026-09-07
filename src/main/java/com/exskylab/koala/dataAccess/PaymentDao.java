@@ -45,6 +45,16 @@ public interface PaymentDao extends JpaRepository<Payment, UUID> {
     List<UUID> findDueVerificationIds(@Param("statuses") List<PaymentAttemptStatus> statuses,
                                       @Param("now") Instant now, Pageable pageable);
 
+    @Query("""
+            select p.id from Payment p
+            where p.status = :status
+              and p.providerToken is null
+              and p.createdAt <= :cutoff
+            order by p.createdAt asc
+            """)
+    List<UUID> findStuckInitiationIds(@Param("status") PaymentAttemptStatus status,
+                                      @Param("cutoff") Instant cutoff, Pageable pageable);
+
     @EntityGraph(attributePaths = {"jobAssignment", "jobAssignment.worker", "jobAssignment.job"})
     Optional<Payment> findByConversationId(String conversationId);
 

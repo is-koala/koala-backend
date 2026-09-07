@@ -28,6 +28,14 @@ public class PaymentVerificationScheduler {
             return;
         }
 
+        for (UUID paymentId : paymentService.findStuckInitiationIds()) {
+            try {
+                paymentService.abandonStuckInitiation(paymentId);
+            } catch (Exception exception) {
+                log.error("Payment {} stuck initiation could not be closed", paymentId, exception);
+            }
+        }
+
         List<UUID> due = paymentService.findDueVerificationAttemptIds();
         for (UUID paymentId : due) {
             try {
