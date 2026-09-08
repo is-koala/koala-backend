@@ -118,6 +118,16 @@ class StaffAdministrationIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
+    void theStaffListIsServedWhenNoSearchTermIsGiven() throws Exception {
+        String token = ownerToken();
+        createStaffMember(email(), "Arama Yapılmayan", "SUPPORT_AGENT");
+
+        mockMvc.perform(get("/admin/staff").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content").isArray());
+    }
+
+    @Test
     void grantingAndRevokingARoleIsWrittenToTheAuditTrail() throws Exception {
         String token = ownerToken();
         UUID target = createStaffMember(email(), "Rolsüz");
