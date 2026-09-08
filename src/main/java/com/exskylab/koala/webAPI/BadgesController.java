@@ -82,6 +82,15 @@ public class BadgesController {
                 BadgeMessages.LISTED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Rozet oluştur",
+            description = "Kod, ad, açıklama, sıra, kural tipi ve eşikleriyle yeni bir rozet tanımlar. Kod benzersizdir ve sonradan değiştirilemez. Mevcut bir kural tipini kullanan rozet deploy gerektirmez; görsel ayrı uçtan yüklenir.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Rozet oluşturuldu"),
+            @ApiResponse(responseCode = "400", description = "Kural için gereken eşik eksik ya da kod biçimi geçersiz",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "Bu kod zaten kullanılıyor",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
     @RequiresPermission(value = StaffPermission.BADGE_MANAGE, action = "badge.create")
     @PostMapping("/admin/badges")
     public ResponseEntity<SuccessDataResult<BadgeAdminDto>> createBadge(

@@ -21,9 +21,21 @@ class ApiDocumentationTest {
     private static final Pattern MAPPING =
             Pattern.compile("@(Get|Post|Put|Patch|Delete)Mapping");
 
-    private static final int ANNOTATION_WINDOW = 14;
-
     private record Endpoint(String file, int line, String mapping) {
+    }
+
+    private static String annotationBlockOf(List<String> lines, int mapping) {
+        int start = mapping;
+
+        while (start > 0) {
+            String previous = lines.get(start - 1).trim();
+            if (previous.equals("}") || MAPPING.matcher(previous).find()) {
+                break;
+            }
+            start--;
+        }
+
+        return String.join("\n", lines.subList(start, mapping));
     }
 
     private static List<Endpoint> undocumented(String required) throws IOException {
@@ -38,7 +50,7 @@ class ApiDocumentationTest {
                         continue;
                     }
 
-                    String window = String.join("\n", lines.subList(Math.max(0, i - ANNOTATION_WINDOW), i));
+                    String window = annotationBlockOf(lines, i);
                     if (!window.contains(required)) {
                         found.add(new Endpoint(file.getFileName().toString(), i + 1, lines.get(i).trim()));
                     }
@@ -87,7 +99,7 @@ class ApiDocumentationTest {
 
                     String path = base + pathOf(lines.get(i));
                     String verb = verbOf(lines.get(i));
-                    String window = String.join("\n", lines.subList(Math.max(0, i - ANNOTATION_WINDOW), i));
+                    String window = annotationBlockOf(lines, i);
 
                     boolean documentedAsPublic = window.contains("@SecurityRequirements");
                     boolean actuallyPublic = isPermitAll(security, verb, path);

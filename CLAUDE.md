@@ -2002,6 +2002,25 @@ Sıkıştırma yalnızca Swagger için değil: `application/json` de kapsamda, y
 
 **Üç yapısal test koruyor.** `ApiDocumentationTest`: her ucun `@Operation`'ı ve `@ApiResponse`'u var, her controller'da `@Tag` var, ve **dokümandaki yetki bilgisi `SecurityConfig` ile birebir uyuşuyor** — bir uç `@SecurityRequirements` taşıyorsa `permitAll()` olmalı, taşımıyorsa olmamalı. `OpenApiDocumentIT` gerçek context'te `/v3/api-docs`'u çekip belgenin kurulduğunu, bearer şemasının tanımlı olduğunu, korumalı ucun 401/403 belgelediğini ve açık ucun token istemiyor göründüğünü doğruluyor.
 
+### Anotasyon penceresi satır sayısıyla değil yapıyla sınırlanıyor
+
+**Taramanın penceresi `@*Mapping` satırından geriye **sabit 14 satır** bakıyordu ve önceki ucun sınırında durmuyordu. Tek bir sayı iki yönde birden yanlış cevap veriyordu ve ikisi de ölçüldü:**
+
+- **Sahte yeşil.** `@Operation`'ı **hiç olmayan** bir uç, 14 satır yukarıdaki komşusunun anotasyonlarını kendi penceresinde görüp geçiyordu. Kuramsal değil: bugünkü 212 mapping'in **70'inin** hemen altına belgesiz bir uç eklemek eski kodda dört testi de yeşil bırakıyordu (ölçüldü). Test "her uç belgelenmiş" diyordu ama bunu garanti etmiyordu.
+- **Sahte kırmızı.** Anotasyon bloğu uzadığında (`@ApiResponse` eklenince oluyor) `@Operation` pencerenin **dışına** itiliyor ve belgeli bir uç belgesiz sanılıyordu. #124'te tam bu yaşandı ve sonucu daha kötü: ajan pencereyi düzeltmek yerine **açıklamayı kısaltmak** zorunda kaldı — yani ölçüm aracı kendi kusuruna göre kodu şekillendirdi. Bugün beş anotasyon bloğu 14 satırlık pencerenin sınırına dayanmış durumda.
+
+**Pencereyi büyütmek çözüm değil, birinci kusuru büyütür.** İki yön aynı sayının iki ucu; hangi sayı seçilirse seçilsin biri bozuk kalır.
+
+**Sınır artık yapısal: `annotationBlockOf` eşleşen mapping'den geriye tarıyor ve önceki metodun gövde sonuna (`}`) ya da önceki `@*Mapping`'e ulaşınca duruyor.** Aradaki bölge o ucun kendi anotasyon bloğudur; aranan anotasyon orada yoksa uç belgesizdir.
+
+**Hangi sınırın işi yaptığı varsayılmadı, kaynaktan ölçüldü: 212 mapping'in 212'si geriye tararken önce bir `}` satırına çarpıyor, `@*Mapping` hiçbirinde ilk sınır değil.** Yani yükü taşıyan kural kapanan süslü parantez; dosyanın başına ulaşan tek bir mapping bile yok. Önceki mapping kontrolü yine de duruyor, çünkü gövdesi olmayan bir handler yazıldığı gün (`;` ile biten bir bildirim) parantez kuralı önceki ucun anotasyonlarına taşar ve sahte yeşil deliği sessizce geri açılırdı — kapatılmak istenen kusurun ta kendisi. İkinci kural bedava ve bugün hiç ateşlenmiyor.
+
+**İndentasyona bakılmıyor, ve bu da ölçüme dayanıyor:** `UsersController`'daki `@GetMapping("/me")` üç boşlukla girintili, diğer 211'i dörtle. Girintiyi sınır ölçütü yapan bir kural o ucu ilk günden yanlış okurdu. Kural bu yüzden `trim()` sonrası satırın tam olarak `}` olmasına bakıyor; anotasyon blokları `})` ya da `)` ile kapandığı için onlarla karışmıyor.
+
+**Düzeltmenin ilk işi bir uç ortaya çıkarmak oldu:** `POST /admin/badges` (`BadgesController.createBadge`) ne `@Operation` ne `@ApiResponses` taşıyordu ve komşusu `allBadges`'in anotasyonları tam 14 satır yukarıda olduğu için pencereden geçiyordu. Belgelendi (201/400/409). Taramanın kalan 211 ucunda başka eksik çıkmadı ve yetki testi de tek bir sahte kırmızı üretmedi — yani daralan pencere var olan hiçbir belgeyi görünmez yapmadı.
+
+**Bu düzeltme kendi kırmızısını iki yönde de gösterdi (#72'nin dersi: kırmızıya dönebildiği gösterilmemiş koruma doğrulanmamıştır).** Belgesiz bir uç enjekte edildiğinde eski kod yeşil kalıyor, yeni kod suçluyu adıyla yazıyor; 14 satırı aşan bir `@ApiResponse` bloğu eklendiğinde eski kod belgeli ucu belgesiz sanıp kırmızıya dönüyor, yeni kod yeşil kalıyor.
+
 **`CompanyContactsController` silindi** — hiçbir uç taşımayan, yalnızca bir servis enjekte eden ölü sınıftı.
 
 ## 2ao2. Kontenjan — kapı kondu, gerekçe para
