@@ -2,6 +2,7 @@ package com.exskylab.koala.core.configs;
 
 import com.exskylab.koala.core.constants.AuthMessages;
 import com.exskylab.koala.core.exceptions.TooManyRequestsException;
+import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.helpers.ClientIpResolver;
 import com.exskylab.koala.core.helpers.RateLimiter;
 import com.exskylab.koala.core.properties.RateLimitProperties;
@@ -114,6 +115,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
         if (prepared.tooLarge()) {
             response.setStatus(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
+            exceptionResolver.resolveException(request, response, null,
+                    ValidationException.requestBodyTooLarge("{request.body.too.large}"));
             return;
         }
 

@@ -38,6 +38,8 @@ class ErrorCodeTest {
         assertEquals(HttpStatus.CONFLICT, new ConflictException("{a.b}").getHttpStatus());
         assertEquals(HttpStatus.UNAUTHORIZED, new UnauthorizedException("{a.b}").getHttpStatus());
         assertEquals(HttpStatus.BAD_REQUEST, new ValidationException("{a.b}").getHttpStatus());
+        assertEquals(HttpStatus.PAYLOAD_TOO_LARGE,
+                ValidationException.requestBodyTooLarge("{request.body.too.large}").getHttpStatus());
         assertEquals(HttpStatus.BAD_GATEWAY, new ExternalServiceException("{a.b}").getHttpStatus());
         assertEquals(HttpStatus.TOO_MANY_REQUESTS, new TooManyRequestsException("{a.b}").getHttpStatus());
     }

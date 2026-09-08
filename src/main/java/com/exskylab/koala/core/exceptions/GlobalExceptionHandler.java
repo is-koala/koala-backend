@@ -66,7 +66,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ValidationException.class)
     public ResponseEntity<Result> handleValidationException(ValidationException ex) {
-        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), ex.getErrorCode(), ErrorCategory.VALIDATION_FAILED, null);
+        return build(ex.getHttpStatus(), ex.getMessage(), ex.getErrorCode(), categoryOf(ex.getHttpStatus()), null);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
@@ -152,6 +152,7 @@ public class GlobalExceptionHandler {
             case UNAUTHORIZED -> ErrorCategory.AUTHENTICATION_REQUIRED;
             case CONFLICT -> ErrorCategory.DATA_CONFLICT;
             case BAD_REQUEST -> ErrorCategory.VALIDATION_FAILED;
+            case PAYLOAD_TOO_LARGE -> ErrorCategory.REQUEST_MALFORMED;
             case TOO_MANY_REQUESTS -> ErrorCategory.RATE_LIMITED;
             case BAD_GATEWAY, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT -> ErrorCategory.UPSTREAM_FAILED;
             default -> ErrorCategory.UNEXPECTED;
