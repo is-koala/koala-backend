@@ -31,7 +31,8 @@ public interface PayoutDao extends JpaRepository<Payout, UUID> {
     @Query("select p from Payout p where p.id = :id")
     Optional<Payout> findByIdForUpdate(@Param("id") UUID id);
 
-    @Query("select count(p) from Payout p where p.status in :statuses and p.createdAt < :threshold")
-    long countAwaitingSettlementSince(@Param("statuses") List<PayoutStatus> statuses,
-                                      @Param("threshold") Instant threshold);
+    @Query("select p.id from Payout p where p.status in :statuses and p.settlementReference is null "
+            + "and p.processingAt < :threshold order by p.processingAt")
+    List<UUID> findIdsAwaitingSettlementSince(@Param("statuses") List<PayoutStatus> statuses,
+                                              @Param("threshold") Instant threshold);
 }

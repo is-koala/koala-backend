@@ -16,6 +16,8 @@ public class PayoutSettlementProperties {
 
     private Duration overdueAfter = Duration.ofDays(3);
 
+    private Duration stalledAfter = Duration.ofDays(10);
+
     public boolean isOverdueMonitoringEnabled() {
         return overdueMonitoringEnabled;
     }
@@ -32,8 +34,21 @@ public class PayoutSettlementProperties {
         this.overdueAfter = overdueAfter;
     }
 
+    public Duration getStalledAfter() {
+        return stalledAfter;
+    }
+
+    public void setStalledAfter(Duration stalledAfter) {
+        this.stalledAfter = stalledAfter;
+    }
+
     @AssertTrue(message = "payout.settlement.overdue-after pozitif bir sure olmali")
     public boolean isOverdueAfterPositive() {
         return overdueAfter != null && !overdueAfter.isNegative() && !overdueAfter.isZero();
+    }
+
+    @AssertTrue(message = "payout.settlement.stalled-after payout.settlement.overdue-after degerinden buyuk olmali")
+    public boolean isStalledAfterBeyondOverdueAfter() {
+        return stalledAfter != null && overdueAfter != null && stalledAfter.compareTo(overdueAfter) > 0;
     }
 }

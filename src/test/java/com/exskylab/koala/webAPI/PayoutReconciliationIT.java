@@ -68,8 +68,9 @@ class PayoutReconciliationIT extends AbstractStaffIntegrationTest {
                 """, assignmentId, jobId, worker);
         jdbcTemplate.update("""
                 insert into payouts (id, created_at, is_deleted, job_assignment_id, worker_id,
-                                     amount, currency, status, provider_reference)
-                values (?, now() - interval '2 days', false, ?, ?, 1000.00, 'TRY', 'PROCESSING', ?)
+                                     amount, currency, status, provider_reference, processing_at)
+                values (?, now() - interval '2 days', false, ?, ?, 1000.00, 'TRY', 'PROCESSING', ?,
+                        now() - interval '2 days')
                 """, payoutId, assignmentId, worker, PROVIDER_REFERENCE);
     }
 

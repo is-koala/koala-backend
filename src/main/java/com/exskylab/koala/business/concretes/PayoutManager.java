@@ -11,6 +11,7 @@ import com.exskylab.koala.core.constants.PayoutMessages;
 import com.exskylab.koala.core.dtos.payout.request.ConfirmPayoutSettlementDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.monitoring.PaymentMetrics;
+import com.exskylab.koala.core.helpers.ConstraintViolations;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
 import com.exskylab.koala.dataAccess.DisputeDao;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
@@ -20,7 +21,8 @@ import com.exskylab.koala.entities.*;
 import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.business.abstracts.PaymentService;
 import com.exskylab.koala.business.abstracts.ActivityNotificationService;
-import org.hibernate.exception.ConstraintViolationException;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,8 +30,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -48,13 +52,14 @@ public class PayoutManager implements PayoutService {
     private final SettlementService settlementService;
     private final ActivityNotificationService activityNotificationService;
     private final PaymentMetrics paymentMetrics;
+    private final Validator validator;
 
     public PayoutManager(PayoutDao payoutDao, RefundDao refundDao, PaymentService paymentService,
                          JobAssignmentDao jobAssignmentDao, BankAccountService bankAccountService,
                          DisputeDao disputeDao, PaymentStateMachine stateMachine,
                          SettlementService settlementService,
                          ActivityNotificationService activityNotificationService,
-                         PaymentMetrics paymentMetrics) {
+                         PaymentMetrics paymentMetrics, Validator validator) {
         this.payoutDao = payoutDao;
         this.refundDao = refundDao;
         this.paymentService = paymentService;
@@ -65,6 +70,7 @@ public class PayoutManager implements PayoutService {
         this.settlementService = settlementService;
         this.activityNotificationService = activityNotificationService;
         this.paymentMetrics = paymentMetrics;
+        this.validator = validator;
     }
 
     @Override
@@ -162,6 +168,8 @@ public class PayoutManager implements PayoutService {
     @Override
     @Transactional
     public Payout confirmSettlement(UUID payoutId, ConfirmPayoutSettlementDto evidence) {
+        rejectMalformedEvidence(evidence);
+
         Payout payout = payoutDao.findByIdForUpdate(payoutId)
                 .orElseThrow(() -> new ResourceNotFoundException(PayoutMessages.NOT_FOUND));
 
@@ -205,7 +213,7 @@ public class PayoutManager implements PayoutService {
         try {
             settled = payoutDao.saveAndFlush(payout);
         } catch (DataIntegrityViolationException violation) {
-            if (hasConstraint(violation, "uk_payouts_settlement_reference")) {
+            if (ConstraintViolations.named(violation, "uk_payouts_settlement_reference")) {
                 throw new ConflictException(PayoutMessages.SETTLEMENT_REFERENCE_TAKEN);
             }
             throw violation;
@@ -219,8 +227,8 @@ public class PayoutManager implements PayoutService {
 
     @Override
     @Transactional(readOnly = true)
-    public long countPayoutsAwaitingSettlementLongerThan(Duration age) {
-        return payoutDao.countAwaitingSettlementSince(
+    public List<UUID> findPayoutsAwaitingSettlementLongerThan(Duration age) {
+        return payoutDao.findIdsAwaitingSettlementSince(
                 PayoutStatus.AWAITING_SETTLEMENT, Instant.now().minus(age));
     }
 
@@ -228,6 +236,18 @@ public class PayoutManager implements PayoutService {
     @Transactional(readOnly = true)
     public List<Payout> getPayoutsForWorker(UUID workerId) {
         return payoutDao.findAllByWorkerIdOrderByCreatedAtDesc(workerId);
+    }
+
+    private void rejectMalformedEvidence(ConfirmPayoutSettlementDto evidence) {
+        Set<ConstraintViolation<ConfirmPayoutSettlementDto>> violations = validator.validate(evidence);
+        violations.stream()
+                .sorted(Comparator.comparing(violation -> violation.getPropertyPath().toString()))
+                .findFirst()
+                .ifPresent(violation -> {
+                    log.warn("Payout settlement evidence refused before the row was locked: field {} is not usable.",
+                            violation.getPropertyPath());
+                    throw new ValidationException(violation.getMessageTemplate());
+                });
     }
 
     private String firstMismatch(Payout payout, ConfirmPayoutSettlementDto evidence) {
@@ -244,17 +264,6 @@ public class PayoutManager implements PayoutService {
             return "settledAt";
         }
         return null;
-    }
-
-    private boolean hasConstraint(Throwable exception, String constraintName) {
-        Throwable current = exception;
-        while (current != null) {
-            if (current instanceof ConstraintViolationException violation) {
-                return constraintName.equals(violation.getConstraintName());
-            }
-            current = current.getCause();
-        }
-        return false;
     }
 
     private Payment settledPayment(UUID jobAssignmentId) {

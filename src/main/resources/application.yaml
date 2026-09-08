@@ -231,6 +231,7 @@ payout:
   settlement:
     overdue-monitoring-enabled: ${PAYOUT_SETTLEMENT_OVERDUE_MONITORING_ENABLED:true}
     overdue-after: ${PAYOUT_SETTLEMENT_OVERDUE_AFTER:3d}
+    stalled-after: ${PAYOUT_SETTLEMENT_STALLED_AFTER:10d}
     overdue-cron: ${PAYOUT_SETTLEMENT_OVERDUE_CRON:0 20 * * * *}
 
 audit:

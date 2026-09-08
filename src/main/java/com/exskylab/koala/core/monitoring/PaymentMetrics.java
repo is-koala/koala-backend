@@ -11,14 +11,19 @@ public class PaymentMetrics {
 
     private static final String METRIC_NAME = "koala.payment.operations";
     private static final String OVERDUE_GAUGE_NAME = "koala.payout.settlement.overdue";
+    private static final String STALLED_GAUGE_NAME = "koala.payout.settlement.stalled";
 
     private final MeterRegistry meterRegistry;
     private final AtomicInteger payoutsAwaitingSettlement = new AtomicInteger();
+    private final AtomicInteger payoutsStalledInSettlement = new AtomicInteger();
 
     public PaymentMetrics(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
         Gauge.builder(OVERDUE_GAUGE_NAME, payoutsAwaitingSettlement, AtomicInteger::doubleValue)
                 .description("Payouts still waiting for bank settlement evidence past the reconciliation deadline")
+                .register(meterRegistry);
+        Gauge.builder(STALLED_GAUGE_NAME, payoutsStalledInSettlement, AtomicInteger::doubleValue)
+                .description("Payouts whose first reconciliation escalation did not close them either")
                 .register(meterRegistry);
         register("initiation", "succeeded");
         register("initiation", "provider_error");
@@ -52,6 +57,10 @@ public class PaymentMetrics {
 
     public void payoutsAwaitingSettlement(int overdue) {
         payoutsAwaitingSettlement.set(overdue);
+    }
+
+    public void payoutsStalledInSettlement(int stalled) {
+        payoutsStalledInSettlement.set(stalled);
     }
 
     public void initiationSucceeded() {

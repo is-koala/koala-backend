@@ -57,7 +57,8 @@ class PayoutReleaseTest {
                 bankAccountService, disputeDao, new PaymentStateMachine(), settlementService,
                 mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class),
                 new com.exskylab.koala.core.monitoring.PaymentMetrics(
-                        new io.micrometer.core.instrument.simple.SimpleMeterRegistry()));
+                        new io.micrometer.core.instrument.simple.SimpleMeterRegistry()),
+                jakarta.validation.Validation.buildDefaultValidatorFactory().getValidator());
 
         when(payoutDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(refundDao.save(any())).thenAnswer(i -> i.getArgument(0));

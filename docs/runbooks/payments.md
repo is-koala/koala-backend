@@ -394,20 +394,36 @@ yapılmaz, çünkü "eşleşmeyen kanıt" ile "transfer olmadı" aynı şey değ
    geldiğinde koşulacak sorgu.**
 
    ```sql
-   select id, job_assignment_id, provider_reference, amount, currency, created_at
+   select id, job_assignment_id, provider_reference, amount, currency, processing_at
    from payouts
    where is_deleted = false
      and status = 'PROCESSING'
      and settlement_reference is null
-     and created_at < now() - interval '3 days'
-   order by created_at;
+     and processing_at < now() - interval '3 days'
+   order by processing_at;
    ```
+
+   **Saat `processing_at`, `created_at` değil.** `created_at` hakedişin `PENDING`
+   olarak açıldığı andır; `APPROVE` görevi outbox'ta 8 deneme ve 6 saat tavanla
+   gecikebilir ve adım 1 operatöre kuyruğu dondurmasını söyler. O yüzden
+   `created_at` üzerinden sayılan bir satır "3 gündür banka kanıtı bekliyor"
+   diye sayfalanırken `PROCESSING`'e bir dakika önce girmiş olabilir. Beklemeyi
+   başlatan an sağlayıcının talimatı kabul ettiği andır (`SettlementManager`
+   `markPayoutProcessing` sırasında damgalar) ve satır o damga olmadan
+   `PROCESSING` olamaz (`chk_payouts_processing_requires_clock`).
 
    Eşik `payout.settlement.overdue-after` ile aynıdır (varsayılan 3 gün);
    `PayoutSettlementOverdueScheduler` saatte bir bu sayıyı
    `koala_payout_settlement_overdue` göstergesine yazar. Sorgu boş dönerken
    alarm açıksa gösterge bayattır — zamanlayıcının koştuğunu doğrula
    (`payout.settlement.overdue-monitoring-enabled`).
+
+   **İkinci kademe.** Aynı sorgunun `payout.settlement.stalled-after`'dan
+   (varsayılan 10 gün) eski satırları ayrıca `koala_payout_settlement_stalled`
+   göstergesine yazılır ve `KoalaPayoutSettlementStalled` alarmını ateşler. Bu
+   kademeye düşen satırda ilk yükseltme sonuç vermemiştir: Iyzico kaydını yeniden
+   aç, finans sorumlusuna devret ve issue aç. Kademe ayrı bir sorgu değildir —
+   yukarıdaki listede `processing_at` sütununa bakarak ayırt edilir.
 
    Bu satırları **hiçbir otomatik yol kapatmaz.** Sağlayıcı talimatını kabul
    etmiştir (`settlement_tasks` `SUCCEEDED`), yeniden denenecek bir çağrı

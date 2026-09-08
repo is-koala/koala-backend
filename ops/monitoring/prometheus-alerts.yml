@@ -21,6 +21,11 @@ groups:
         for: 15m
         labels: { severity: critical, owner: payments }
         annotations: { summary: "Bir hakediş banka mutabakatı kanıtı gelmeden PROCESSING'de bekliyor; hiçbir otomatik yol kapatmaz (docs/runbooks/payments.md §4)" }
+      - alert: KoalaPayoutSettlementStalled
+        expr: max(koala_payout_settlement_stalled) > 0
+        for: 15m
+        labels: { severity: critical, owner: payments }
+        annotations: { summary: "Bir hakedis ilk yukseltmeden sonra da mutabakat edilemedi; saglayici kaydi kapanmamis demektir (docs/runbooks/payments.md §4)" }
       - alert: KoalaPayoutSettlementEvidenceMismatch
         expr: sum(increase(koala_payment_operations_total{operation="payout_settlement",outcome="evidence_mismatch"}[15m])) > 0
         for: 1m

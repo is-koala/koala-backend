@@ -17,12 +17,14 @@ import com.exskylab.koala.dataAccess.RefundDao;
 import com.exskylab.koala.entities.Payout;
 import com.exskylab.koala.entities.PayoutStatus;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import jakarta.validation.Validation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -58,7 +60,8 @@ class PayoutSettlementReconciliationTest {
         payoutManager = new PayoutManager(payoutDao, mock(RefundDao.class), mock(PaymentService.class),
                 mock(JobAssignmentDao.class), mock(BankAccountService.class), mock(DisputeDao.class),
                 new PaymentStateMachine(), mock(SettlementService.class),
-                mock(ActivityNotificationService.class), new PaymentMetrics(registry));
+                mock(ActivityNotificationService.class), new PaymentMetrics(registry),
+                Validation.buildDefaultValidatorFactory().getValidator());
 
         when(payoutDao.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
@@ -246,15 +249,72 @@ class PayoutSettlementReconciliationTest {
     }
 
     @Test
-    void theOverdueCountAsksOnlyForTheStatusesJavaTreatsAsAwaitingSettlement() {
-        when(payoutDao.countAwaitingSettlementSince(any(), any())).thenReturn(4L);
+    void theOverdueQueryAsksOnlyForTheStatusesJavaTreatsAsAwaitingSettlement() {
+        List<UUID> stuck = List.of(payoutId);
+        when(payoutDao.findIdsAwaitingSettlementSince(any(), any())).thenReturn(stuck);
 
-        assertEquals(4L, payoutManager.countPayoutsAwaitingSettlementLongerThan(
+        assertEquals(stuck, payoutManager.findPayoutsAwaitingSettlementLongerThan(
                 java.time.Duration.ofDays(3)));
 
-        verify(payoutDao).countAwaitingSettlementSince(
+        verify(payoutDao).findIdsAwaitingSettlementSince(
                 org.mockito.ArgumentMatchers.eq(PayoutStatus.AWAITING_SETTLEMENT),
                 org.mockito.ArgumentMatchers.any(Instant.class));
         assertNotNull(PayoutStatus.AWAITING_SETTLEMENT);
+    }
+
+    @Test
+    void aCallerThatNeverPassedThroughHttpStillCannotBackdateTheFutureOntoCompletedAt() {
+        Payout payout = payout(PayoutStatus.PROCESSING);
+        ConfirmPayoutSettlementDto notYetHappened = evidence();
+        notYetHappened.setSettledAt(Instant.now().plus(1, ChronoUnit.DAYS));
+
+        ValidationException refused = assertThrows(ValidationException.class,
+                () -> payoutManager.confirmSettlement(payoutId, notYetHappened));
+
+        assertEquals("PAYOUT_SETTLED_AT_REQUIRED", refused.getErrorCode(),
+                "Kural yalnizca controller'daki @Valid ile isliyorsa, tasarlandigi soylenen otomatik ayak "
+                        + "gelecek tarihli bir transferi completed_at'e yazdirir.");
+        assertEquals(PayoutStatus.PROCESSING, payout.getStatus());
+        assertNull(payout.getCompletedAt());
+        verify(payoutDao, never()).saveAndFlush(any());
+        verify(payoutDao, never()).findByIdForUpdate(any());
+    }
+
+    @Test
+    void aCallerThatNeverPassedThroughHttpGetsAValidationExceptionInsteadOfANullPointer() {
+        payout(PayoutStatus.PROCESSING);
+
+        assertEquals("PAYOUT_SETTLEMENT_REFERENCE_REQUIRED", assertThrows(ValidationException.class,
+                () -> payoutManager.confirmSettlement(payoutId,
+                        new ConfirmPayoutSettlementDto(null, PROVIDER_REFERENCE,
+                                new BigDecimal("1000.00"), "TRY", settledAt))).getErrorCode());
+        assertEquals("PAYOUT_PROVIDER_REFERENCE_REQUIRED", assertThrows(ValidationException.class,
+                () -> payoutManager.confirmSettlement(payoutId,
+                        new ConfirmPayoutSettlementDto(STATEMENT_LINE, null,
+                                new BigDecimal("1000.00"), "TRY", settledAt))).getErrorCode());
+        assertEquals("PAYOUT_SETTLED_AMOUNT_REQUIRED", assertThrows(ValidationException.class,
+                () -> payoutManager.confirmSettlement(payoutId,
+                        new ConfirmPayoutSettlementDto(STATEMENT_LINE, PROVIDER_REFERENCE,
+                                null, "TRY", settledAt))).getErrorCode());
+        assertEquals("PAYOUT_SETTLED_CURRENCY_REQUIRED", assertThrows(ValidationException.class,
+                () -> payoutManager.confirmSettlement(payoutId,
+                        new ConfirmPayoutSettlementDto(STATEMENT_LINE, PROVIDER_REFERENCE,
+                                new BigDecimal("1000.00"), null, settledAt))).getErrorCode());
+        assertEquals("PAYOUT_SETTLED_AT_REQUIRED", assertThrows(ValidationException.class,
+                () -> payoutManager.confirmSettlement(payoutId,
+                        new ConfirmPayoutSettlementDto(STATEMENT_LINE, PROVIDER_REFERENCE,
+                                new BigDecimal("1000.00"), "TRY", null))).getErrorCode());
+
+        verify(payoutDao, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void aCallerThatNeverPassedThroughHttpCannotReportSubKurusMoney() {
+        payout(PayoutStatus.PROCESSING);
+        ConfirmPayoutSettlementDto tooPrecise = evidence();
+        tooPrecise.setAmount(new BigDecimal("1000.005"));
+
+        assertEquals("PAYOUT_SETTLED_AMOUNT_REQUIRED", assertThrows(ValidationException.class,
+                () -> payoutManager.confirmSettlement(payoutId, tooPrecise)).getErrorCode());
     }
 }

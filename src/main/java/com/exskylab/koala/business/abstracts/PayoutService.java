@@ -6,6 +6,7 @@ import com.exskylab.koala.entities.Payout;
 import com.exskylab.koala.entities.Refund;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
@@ -19,5 +20,5 @@ public interface PayoutService {
 
     List<Payout> getPayoutsForWorker(UUID workerId);
 
-    long countPayoutsAwaitingSettlementLongerThan(java.time.Duration age);
+    List<UUID> findPayoutsAwaitingSettlementLongerThan(Duration age);
 }

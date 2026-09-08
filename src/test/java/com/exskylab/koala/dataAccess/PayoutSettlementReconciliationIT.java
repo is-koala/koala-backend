@@ -7,6 +7,7 @@ import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.entities.Payout;
 import com.exskylab.koala.entities.PayoutStatus;
 import com.exskylab.koala.support.AbstractIntegrationTest;
+import com.exskylab.koala.support.OverlappingWrites;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,16 +24,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.BrokenBarrierException;
-import java.util.concurrent.CyclicBarrier;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -76,13 +71,49 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void theIndexGuardsExactlyTheStatusSetJavaTreatsAsAwaitingSettlement() {
-        Set<PayoutStatus> guardedBySql = statusesNamedIn(awaitingSettlementIndexDefinition());
+    void everyPlaceThatNamesTheAwaitingSettlementSetNamesTheSameSet() {
+        Set<PayoutStatus> java = EnumSet.copyOf(PayoutStatus.AWAITING_SETTLEMENT);
+        Set<PayoutStatus> index = statusesNamedIn(awaitingSettlementIndexDefinition());
+        Set<PayoutStatus> runbook = statusesNamedIn(runbookSettlementQueueBlock());
+        Set<PayoutStatus> processingClockCheck = statusesNamedIn(
+                constraintDefinition("chk_payouts_processing_requires_clock"));
 
-        assertEquals(EnumSet.copyOf(PayoutStatus.AWAITING_SETTLEMENT), guardedBySql,
+        assertEquals(java, index,
                 "PayoutStatus.AWAITING_SETTLEMENT ile idx_payouts_awaiting_settlement ayni kumeyi tutmali; "
                         + "Java'ya eklenip indekse eklenmeyen bir durum mutabakat kuyrugundan sessizce dusardi. "
-                        + "Java=" + PayoutStatus.AWAITING_SETTLEMENT + " SQL=" + guardedBySql);
+                        + "Java=" + java + " indeks=" + index);
+        assertEquals(java, runbook,
+                "docs/runbooks/payments.md 4. bolum 7. adimdaki sorgu ayni kumeyi tutmali; ayrisirsa gosterge "
+                        + "yeni satirlari sayar, alarm yanar ve operatorun kosacagi sorgu bos doner. "
+                        + "Java=" + java + " runbook=" + runbook);
+        assertEquals(java, processingClockCheck,
+                "chk_payouts_processing_requires_clock ayni kumeyi tutmali; tutmazsa beklemeyi baslatan damgasi "
+                        + "olmayan bir durum kuyruga gorunmez girer. Java=" + java
+                        + " kisit=" + processingClockCheck);
+    }
+
+    @Test
+    void theEvidenceCheckNamesOnlyTheStatusThatCarriesAStatementLine() {
+        assertEquals(EnumSet.of(PayoutStatus.COMPLETED),
+                statusesNamedIn(constraintDefinition("chk_payouts_completed_requires_evidence")),
+                "Kanit kapisi yalnizca COMPLETED'i baglamali; baska bir durum eklenirse kanitsiz "
+                        + "terminal satir yazilabilir hale gelir.");
+    }
+
+    @Test
+    void aPayoutCannotEnterProcessingWithoutTheClockThatStartsTheWait() {
+        UUID payoutId = UUID.randomUUID();
+        UUID jobId = UUID.randomUUID();
+        UUID assignmentId = UUID.randomUUID();
+        seedAssignment(jobId, assignmentId);
+
+        assertThrows(DataIntegrityViolationException.class, () -> jdbcTemplate.update("""
+                        insert into payouts (id, created_at, is_deleted, job_assignment_id, worker_id,
+                                             amount, currency, status, provider_reference)
+                        values (?, now(), false, ?, ?, 1000.00, 'TRY', 'PROCESSING', ?)
+                        """, payoutId, assignmentId, WORKER, PROVIDER_REFERENCE),
+                "processing_at damgasi olmadan PROCESSING yazilabiliyorsa gecikme saati eksik baslar ve "
+                        + "satir kuyruga hic girmez.");
     }
 
     @Test
@@ -176,24 +207,38 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
         UUID first = seedPayout("PROCESSING", releasedAt, PROVIDER_REFERENCE);
         UUID second = seedPayout("PROCESSING", releasedAt, PROVIDER_REFERENCE);
         raceSettledAt = Instant.now().minus(1, ChronoUnit.HOURS);
-        raceBarrier = new CyclicBarrier(2);
+        OverlappingWrites overlap = new OverlappingWrites();
 
-        try (var executor = Executors.newFixedThreadPool(2)) {
-            var one = executor.submit(() -> settleWith(first));
-            var two = executor.submit(() -> settleWith(second));
+        List<String> outcomes = overlap.outcomesOf(
+                () -> settleThroughTheService(first, overlap),
+                () -> settleThroughTheService(second, overlap));
 
-            List<String> outcomes = List.of(one.get(30, TimeUnit.SECONDS), two.get(30, TimeUnit.SECONDS));
+        assertEquals(1, outcomes.stream().filter("SUCCESS"::equals).count(),
+                "Tek bir ekstre satiri tek bir hakedisi tamamlamali, sonuclar: " + outcomes);
+        assertEquals(1, outcomes.stream().filter("PAYOUT_SETTLEMENT_REFERENCE_TAKEN"::equals).count(),
+                "Kaybeden yazmayi indeks reddediyor, ama kullanicinin gordugu cevabi confirmSettlement'in "
+                        + "eslemesi uretir; o esleme kosmazsa 500 doner. Sonuclar: " + outcomes);
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "select count(*) from payouts where settlement_reference = 'TRF-RACE'", Integer.class));
+    }
 
-            assertTrue(raceBarrierFailures.isEmpty(),
-                    "Iki yazma ayni anda acik transaction icinde olmaliydi; ortusmediyse test 'indeks unique mi' "
-                            + "seviyesine dusmus olur: " + raceBarrierFailures);
-            assertEquals(1, outcomes.stream().filter("SUCCESS"::equals).count(),
-                    "Tek bir ekstre satiri tek bir hakedisi tamamlamali, sonuclar: " + outcomes);
-            assertEquals(1, outcomes.stream().filter("uk_payouts_settlement_reference"::equals).count(),
-                    "Kaybeden yazma settlement reference indeksi tarafindan reddedilmeli, sonuclar: " + outcomes);
-            assertEquals(1, jdbcTemplate.queryForObject(
-                    "select count(*) from payouts where settlement_reference = 'TRF-RACE'", Integer.class));
-        }
+    @Test
+    void aSoftDeletedPayoutDoesNotReleaseItsStatementLineForASecondPayout() {
+        Instant releasedAt = Instant.now().minus(2, ChronoUnit.DAYS);
+        UUID retired = seedPayout("PROCESSING", releasedAt, PROVIDER_REFERENCE);
+        UUID second = seedPayout("PROCESSING", releasedAt, PROVIDER_REFERENCE);
+
+        payoutService.confirmSettlement(retired, evidence("TRF-SOFT", Instant.now().minus(1, ChronoUnit.HOURS)));
+        jdbcTemplate.update("update payouts set is_deleted = true, deleted_at = now() where id = ?", retired);
+
+        ConflictException taken = assertThrows(ConflictException.class,
+                () -> payoutService.confirmSettlement(second,
+                        evidence("TRF-SOFT", Instant.now().minus(1, ChronoUnit.HOURS))));
+
+        assertEquals("PAYOUT_SETTLEMENT_REFERENCE_TAKEN", taken.getErrorCode(),
+                "Ayni banka gonderim satiri iki hakedisi kapatamaz; soft delete parayi geri getirmez, "
+                        + "sadece satiri gizler.");
+        assertEquals("PROCESSING", statusOf(second));
     }
 
     @Test
@@ -216,48 +261,63 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void theOverdueGaugeCountsTheSameRowsAsTheRunbookQueue() {
+    void theOverdueGaugeSelectsTheSameRowsAsTheRunbookQueue() {
         UUID overdue = seedPayout("PROCESSING", Instant.now().minus(10, ChronoUnit.DAYS), PROVIDER_REFERENCE);
+        UUID alsoOverdue = seedPayout("PROCESSING", Instant.now().minus(4, ChronoUnit.DAYS), PROVIDER_REFERENCE);
         seedPayout("PROCESSING", Instant.now(), PROVIDER_REFERENCE);
+        UUID reconciled = seedPayout("PROCESSING", Instant.now().minus(9, ChronoUnit.DAYS), PROVIDER_REFERENCE);
+        payoutService.confirmSettlement(reconciled,
+                evidence("TRF-GAUGE", Instant.now().minus(8, ChronoUnit.DAYS)));
+        UUID carryingAStatementLine = seedPayout("PROCESSING", Instant.now().minus(9, ChronoUnit.DAYS),
+                PROVIDER_REFERENCE);
+        jdbcTemplate.update("update payouts set settlement_reference = 'TRF-GAUGE-STUCK' where id = ?",
+                carryingAStatementLine);
 
-        long counted = payoutService.countPayoutsAwaitingSettlementLongerThan(Duration.ofDays(3));
-        List<UUID> queue = idsReturnedByTheRunbookQuery();
+        Set<UUID> gauged = Set.copyOf(payoutService.findPayoutsAwaitingSettlementLongerThan(Duration.ofDays(3)));
+        Set<UUID> queue = Set.copyOf(idsReturnedByTheRunbookQuery());
 
-        assertEquals(queue.size(), counted,
-                "Alarmin saydigi kume ile runbook sorgusunun dondurdugu kume ayrisirsa alarm gelir ama "
-                        + "operatorun kosacagi sorgu bos doner. Sayilan=" + counted + " kuyruk=" + queue);
-        assertTrue(queue.contains(overdue));
+        assertEquals(queue, gauged,
+                "Alarmin saydigi kume ile runbook sorgusunun dondurdugu kume ayni satirlar olmali; iki sorgu "
+                        + "farkli satirlari ayni sayida dondurse de alarm gelir ve operatorun kosacagi sorgu "
+                        + "baska bir sey gosterir. Gosterge=" + gauged + " kuyruk=" + queue);
+        assertTrue(gauged.containsAll(List.of(overdue, alsoOverdue)));
+        assertFalse(gauged.contains(reconciled),
+                "Mutabakat edilmis satir gostergede kalmamali.");
+        assertFalse(gauged.contains(carryingAStatementLine),
+                "Ekstre satirini tasiyan bir PROCESSING satiri bugun confirmSettlement uzerinden olusmuyor, ama "
+                        + "gosterge sorgusu runbook sorgusuyla ayni sozlesmeyi tasimali: settlement_reference is "
+                        + "null iki tarafta da yazili olmali, yoksa ikinci bir yazma yolu geldigi gun ayrisirlar.");
     }
 
-    private String settleWith(UUID payoutId) {
+    @Test
+    void theSecondTierSelectsOnlyTheRowsTheFirstEscalationDidNotClose() {
+        UUID stalled = seedPayout("PROCESSING", Instant.now().minus(20, ChronoUnit.DAYS), PROVIDER_REFERENCE);
+        UUID onlyOverdue = seedPayout("PROCESSING", Instant.now().minus(4, ChronoUnit.DAYS), PROVIDER_REFERENCE);
+
+        List<UUID> firstTier = payoutService.findPayoutsAwaitingSettlementLongerThan(Duration.ofDays(3));
+        List<UUID> secondTier = payoutService.findPayoutsAwaitingSettlementLongerThan(Duration.ofDays(10));
+
+        assertTrue(firstTier.containsAll(List.of(stalled, onlyOverdue)));
+        assertTrue(secondTier.contains(stalled));
+        assertFalse(secondTier.contains(onlyOverdue),
+                "Ikinci kademe ilk kademeyle ayni satirlari gosterirse yukseltme bir sey soylemiyor demektir.");
+    }
+
+    private String settleThroughTheService(UUID payoutId, OverlappingWrites overlap) {
         TransactionTemplate transactions = new TransactionTemplate(transactionManager);
         try {
             transactions.execute(status -> {
-                Payout payout = payoutDao.findById(payoutId).orElseThrow();
-                payout.setStatus(PayoutStatus.COMPLETED);
-                payout.setSettlementReference("TRF-RACE");
-                payout.setCompletedAt(raceSettledAt);
-                awaitRaceBarrier();
-                return payoutDao.saveAndFlush(payout);
+                payoutDao.findByIdForUpdate(payoutId).orElseThrow();
+                overlap.meet();
+                return payoutService.confirmSettlement(payoutId, evidence("TRF-RACE", raceSettledAt));
             });
             return "SUCCESS";
-        } catch (DataIntegrityViolationException violation) {
-            return constraintName(violation);
+        } catch (ConflictException conflict) {
+            return conflict.getErrorCode();
         }
     }
 
     private volatile Instant raceSettledAt;
-    private volatile CyclicBarrier raceBarrier;
-    private final List<String> raceBarrierFailures = Collections.synchronizedList(new ArrayList<>());
-
-    private void awaitRaceBarrier() {
-        try {
-            raceBarrier.await(15, TimeUnit.SECONDS);
-        } catch (InterruptedException | BrokenBarrierException | TimeoutException waiting) {
-            raceBarrierFailures.add(waiting.getClass().getSimpleName());
-            throw new IllegalStateException("the two settlements never overlapped", waiting);
-        }
-    }
 
     private ConfirmPayoutSettlementDto evidence(String statementLine, Instant settledAt) {
         return new ConfirmPayoutSettlementDto(statementLine, PROVIDER_REFERENCE,
@@ -272,6 +332,12 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
         return jdbcTemplate.queryForObject(
                 "select indexdef from pg_indexes where indexname = 'idx_payouts_awaiting_settlement'",
                 String.class);
+    }
+
+    private String constraintDefinition(String constraintName) {
+        return jdbcTemplate.queryForObject(
+                "select pg_get_constraintdef(oid) from pg_constraint where conname = ?",
+                String.class, constraintName);
     }
 
     private static Set<PayoutStatus> statusesNamedIn(String indexDefinition) {
@@ -289,6 +355,12 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
     }
 
     private static String settlementQueueQueryFromTheRunbook() {
+        return runbookSettlementQueueBlock().replace(
+                "select id, job_assignment_id, provider_reference, amount, currency, processing_at",
+                "select id");
+    }
+
+    private static String runbookSettlementQueueBlock() {
         String runbook;
         try {
             runbook = Files.readString(Path.of("docs/runbooks/payments.md"), StandardCharsets.UTF_8);
@@ -306,26 +378,27 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
         assertEquals(1, matching.size(),
                 "Runbook, mutabakat bekleyen hakedislerin kuyrugunu tam olarak bir SQL blogunda tarif etmeli, "
                         + "bulunan: " + matching.size());
-        return matching.getFirst().replace(
-                "select id, job_assignment_id, provider_reference, amount, currency, created_at", "select id");
+        return matching.getFirst();
     }
 
-    private static String constraintName(Throwable exception) {
-        Throwable current = exception;
-        while (current != null) {
-            if (current instanceof org.hibernate.exception.ConstraintViolationException violation) {
-                return violation.getConstraintName();
-            }
-            current = current.getCause();
-        }
-        return "no-constraint";
-    }
-
-    private UUID seedPayout(String status, Instant createdAt, String providerReference) {
+    private UUID seedPayout(String status, Instant processingAt, String providerReference) {
         UUID jobId = UUID.randomUUID();
         UUID assignmentId = UUID.randomUUID();
         UUID payoutId = UUID.randomUUID();
+        seedAssignment(jobId, assignmentId);
 
+        jdbcTemplate.update("""
+                insert into payouts (id, created_at, is_deleted, job_assignment_id, worker_id,
+                                     amount, currency, status, provider_reference, processing_at)
+                values (?, ?, false, ?, ?, 1000.00, 'TRY', ?::varchar, ?, ?)
+                """, payoutId, java.sql.Timestamp.from(processingAt), assignmentId, WORKER, status,
+                providerReference,
+                "PROCESSING".equals(status) ? java.sql.Timestamp.from(processingAt) : null);
+
+        return payoutId;
+    }
+
+    private void seedAssignment(UUID jobId, UUID assignmentId) {
         jdbcTemplate.update("""
                 insert into jobs (id, created_at, is_deleted, title, status, employer_type,
                                   experience_required, insurance_required, min_age, max_age,
@@ -341,15 +414,8 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
                 values (?, now(), false, ?, ?, 'COMPLETED', 'RELEASED_TO_WORKER', '2026-09-v1', 'TRY',
                         1000.00, 0.0750, 75.00, 1075.00, 0)
                 """, assignmentId, jobId, WORKER);
-        jdbcTemplate.update("""
-                insert into payouts (id, created_at, is_deleted, job_assignment_id, worker_id,
-                                     amount, currency, status, provider_reference)
-                values (?, ?, false, ?, ?, 1000.00, 'TRY', ?::varchar, ?)
-                """, payoutId, java.sql.Timestamp.from(createdAt), assignmentId, WORKER, status,
-                providerReference);
 
         jobs.add(jobId);
         assignments.add(assignmentId);
-        return payoutId;
     }
 }

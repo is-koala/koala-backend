@@ -71,9 +71,20 @@ class PayoutSettlementConfigurationTest {
             assertTrue(properties.isOverdueMonitoringEnabled(),
                     "application.yaml izlemeyi acik getiriyor; testlerdeki kapali bayrak bir test ayari.");
             assertEquals(Duration.ofDays(3), properties.getOverdueAfter());
+            assertEquals(Duration.ofDays(10), properties.getStalledAfter());
             assertEquals("0 20 * * * *",
                     context.getEnvironment().getProperty("payout.settlement.overdue-cron"));
         });
+    }
+
+    @Test
+    void aSecondTierThatIsNotBeyondTheFirstFailsStartup() {
+        contextRunner.withPropertyValues("payout.settlement.stalled-after=3d")
+                .run(context -> assertNotNull(context.getStartupFailure(),
+                        "Ilk kademeyle ayni esik ikinci bir alarmi hicbir sey soylemeden atesler."));
+        contextRunner.withPropertyValues("payout.settlement.stalled-after=1d")
+                .run(context -> assertNotNull(context.getStartupFailure(),
+                        "Ilk kademeden once yanan bir yukseltme kademesi sirayi tersine cevirirdi."));
     }
 
     @Test
@@ -91,12 +102,29 @@ class PayoutSettlementConfigurationTest {
 
     @Test
     void theRunbookQueueUsesTheSameThresholdAsTheAlarm() throws IOException {
-        Duration shipped = new PayoutSettlementProperties().getOverdueAfter();
+        PayoutSettlementProperties shipped = new PayoutSettlementProperties();
         String runbook = Files.readString(Path.of("docs/runbooks/payments.md"), StandardCharsets.UTF_8);
 
-        assertTrue(runbook.contains("interval '" + shipped.toDays() + " days'"),
+        assertTrue(runbook.contains("interval '" + shipped.getOverdueAfter().toDays() + " days'"),
                 "Runbook kuyrugu payout.settlement.overdue-after ile ayni esigi kullanmali; ayrisirsa "
-                        + "alarm gelir ama operatorun kosacagi sorgu bos doner. Varsayilan=" + shipped);
+                        + "alarm gelir ama operatorun kosacagi sorgu bos doner. Varsayilan="
+                        + shipped.getOverdueAfter());
+        assertTrue(runbook.contains("varsayılan " + shipped.getStalledAfter().toDays() + " gün"),
+                "Ikinci kademenin esigi de runbook'ta yazili olmali; operator hangi satirin yukseltildigini "
+                        + "aksi halde bilemez. Varsayilan=" + shipped.getStalledAfter());
+    }
+
+    @Test
+    void theRunbookQueueMeasuresTheWaitFromTheProviderAcceptanceNotTheRelease() throws IOException {
+        String runbook = Files.readString(Path.of("docs/runbooks/payments.md"), StandardCharsets.UTF_8);
+        String queue = runbook.substring(runbook.indexOf("select id, job_assignment_id, provider_reference"));
+        queue = queue.substring(0, queue.indexOf("```"));
+
+        assertTrue(queue.contains("processing_at <"),
+                "Bekleyis PROCESSING'e gecisle baslar; created_at uzerinden sayan bir sorgu outbox'ta "
+                        + "bekleyen bir satiri gunlerce beklemis gibi gosterir: " + queue);
+        assertFalse(queue.contains("created_at"),
+                "created_at hakedisin acildigi andir, banka kanitini beklemeye basladigi an degil: " + queue);
     }
 
     @Configuration(proxyBeanMethods = false)

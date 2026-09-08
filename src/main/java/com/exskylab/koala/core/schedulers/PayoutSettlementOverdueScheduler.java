@@ -28,13 +28,18 @@ public class PayoutSettlementOverdueScheduler {
             return;
         }
 
-        long overdue = payoutService.countPayoutsAwaitingSettlementLongerThan(properties.getOverdueAfter());
-        paymentMetrics.payoutsAwaitingSettlement((int) Math.min(overdue, Integer.MAX_VALUE));
+        int overdue = payoutService.findPayoutsAwaitingSettlementLongerThan(
+                properties.getOverdueAfter()).size();
+        int stalled = payoutService.findPayoutsAwaitingSettlementLongerThan(
+                properties.getStalledAfter()).size();
+        paymentMetrics.payoutsAwaitingSettlement(overdue);
+        paymentMetrics.payoutsStalledInSettlement(stalled);
 
         if (overdue > 0) {
-            log.warn("{} payouts have been waiting for bank settlement evidence longer than {}; "
+            log.warn("{} payouts have been waiting for bank settlement evidence longer than {}, "
+                            + "{} of them longer than {}; "
                             + "run the reconciliation queue in docs/runbooks/payments.md",
-                    overdue, properties.getOverdueAfter());
+                    overdue, properties.getOverdueAfter(), stalled, properties.getStalledAfter());
         }
     }
 }

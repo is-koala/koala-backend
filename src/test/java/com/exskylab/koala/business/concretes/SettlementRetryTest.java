@@ -200,6 +200,9 @@ class SettlementRetryTest {
         assertEquals(SettlementTaskStatus.SUCCEEDED, task.getStatus());
         assertNotNull(task.getCompletedAt());
         assertEquals(PayoutStatus.PROCESSING, payout.getStatus());
+        assertNotNull(payout.getProcessingAt(),
+                "Mutabakat bekleyisini baslatan an burasi; damgalanmazsa gecikme saati created_at'e duser "
+                + "ve APPROVE gorevi outbox'ta bekleyen bir satir bir dakikalikken 3 gunluk sayilir.");
     }
 
     @Test
