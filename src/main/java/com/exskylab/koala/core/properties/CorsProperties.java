@@ -23,6 +23,7 @@ public class CorsProperties {
         this.allowedOrigins = allowedOrigins == null ? List.of() : allowedOrigins.stream()
                 .filter(value -> value != null && !value.isBlank())
                 .map(String::trim)
+                .map(CorsProperties::trimTrailingSlash)
                 .toList();
     }
 
@@ -30,6 +31,10 @@ public class CorsProperties {
             + "a query, a fragment, user info or a missing scheme is rejected at startup")
     public boolean isEveryAllowedOriginAnExactOrigin() {
         return allowedOrigins.stream().allMatch(CorsProperties::isExactOrigin);
+    }
+
+    private static String trimTrailingSlash(String value) {
+        return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
     }
 
     private static boolean isExactOrigin(String value) {
