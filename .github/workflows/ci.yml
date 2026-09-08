@@ -75,9 +75,16 @@ jobs:
           context: .
           # Dağıtım hedefi amd64 (Hetzner x86_64); runner ise ARM64 bir Pi.
           # Platform verilmediğinde imaj runner'ın mimarisinde basılıyordu ve
-          # hedefte "no matching manifest" ile hiç açılmazdı. arm64 de basılıyor
-          # ki imaj Pi'de ve Apple Silicon'da doğrudan koşabilsin.
-          platforms: linux/amd64,linux/arm64
+          # hedefte "no matching manifest" ile hiç açılmazdı.
+          #
+          # TEK platform, bilinçli: iki platform basıldığında ortaya bir OCI
+          # indeksi çıkıyor ve GHCR o indeksin alt manifest'lerini servis
+          # etmedi — Dokploy `latest`i çözebildi ama içindeki
+          # sha256:2aada4...'ı 404 aldı ve imajı hiç çekemedi. Tek platformda
+          # indeks hiç oluşmuyor, etiket doğrudan tek manifest'i gösteriyor.
+          # ARM bir sunucuya geçilirse buraya linux/arm64 yazılır; ikisi
+          # birden gerekiyorsa önce o çözülmeli.
+          platforms: linux/amd64
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
