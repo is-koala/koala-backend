@@ -54,6 +54,11 @@ jobs:
             echo "VERSION=main-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           fi
 
+      # Çalışma katmanındaki iki kabuk komutu hedef mimaride koşuyor; runner ARM64,
+      # hedef amd64 olduğu için emülasyon gerekiyor. Maven derlemesi bunun dışında.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -68,6 +73,11 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          # Dağıtım hedefi amd64 (Hetzner x86_64); runner ise ARM64 bir Pi.
+          # Platform verilmediğinde imaj runner'ın mimarisinde basılıyordu ve
+          # hedefte "no matching manifest" ile hiç açılmazdı. arm64 de basılıyor
+          # ki imaj Pi'de ve Apple Silicon'da doğrudan koşabilsin.
+          platforms: linux/amd64,linux/arm64
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
