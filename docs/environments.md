@@ -32,6 +32,34 @@ doğrulanıyor: staging canlı Iyzico ortamına, production sandbox'a bağlanama
 eşleşmeyen yapılandırmada uygulama hiç açılmaz. Kural ve operasyon adımları
 `docs/runbooks/payments.md` içinde.
 
+## Production zorunlulukları
+
+Aşağıdaki değerlerin hiçbiri sır değildir; `docs/secrets-inventory.md`'nin
+disiplini burada da geçerli — **parola, anahtar ve token değeri bu tabloya
+girmez**, yalnızca adı geçer ve değeri Dokploy secret store'da yaşar.
+
+| Değişken | Production'da beklenen | Sapmada ne olur |
+| --- | --- | --- |
+| `SERVICE_ENVIRONMENT` | `production` | tanınmayan ad açılışı **durdurur** |
+| `CORS_ALLOWED_ORIGINS` | **boş** (ADR-0011) | dolu ise `WARN`; tam origin olmayan değer açılışı **durdurur** |
+| `APP_TRUSTED_PROXIES` | yalnız BFF/ingress IP veya CIDR | boş ise `WARN`; her istemciyi kapsayan değer açılışı **durdurur** |
+| `SPRINGDOC_ENABLED` | `false` | açık ise `WARN` |
+| `SERVICE_VERSION` | tek tanım, dağıtılan `v*` etiketiyle aynı | boş ise `WARN` |
+
+`app.deployment` bu tablonun kapısıdır ve `SERVICE_ENVIRONMENT`'ı okuyan
+**üçüncü** bağlama noktasıdır; diğer ikisi ECS log alanı ve `iyzico.deployment`.
+Kontrol yalnız `production`'da çalışır, `local` ve `staging`'de hiç ateşlenmez.
+
+Açılışta bir `INFO` satırı dört değerin **etkin** hâlini yazar
+(`PRODUCTION_CONFIG_DRIFT baseline: …`), her sapma ayrıca bir `WARN` satırı
+üretir. Aynı değişkenin Dokploy'da iki kez tanımlanması süreç içinden
+görülemez — ortam değişkeninde son tanım kazanır ve uygulamaya tek değer
+ulaşır; `baseline` satırındaki `version=` alanı hangi tanımın kazandığını
+söyler, Dokploy'daki satırlarla karşılaştırılır.
+
+Kuralları `ProductionConfigurationGuardTest` iki yönde de sabitliyor; hangisinin
+durdurup hangisinin uyardığı ve gerekçesi `CLAUDE.md` §2ax'te.
+
 ## STOMP handshake origin'leri
 
 ADR-0011 gereği REST CORS allowlist'i boştur ve web origin'i oraya **eklenmez**;
