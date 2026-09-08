@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-08-02-payout-processing-clock" author="koala">
+        <addColumn tableName="payouts">
+            <column name="processing_at" type="TIMESTAMPTZ"/>
+        </addColumn>
+        <sql>
+            UPDATE payouts
+            SET processing_at = created_at
+            WHERE status = 'PROCESSING' AND processing_at IS NULL;
+
+            ALTER TABLE payouts ADD CONSTRAINT chk_payouts_processing_requires_clock
+                CHECK (status &lt;&gt; 'PROCESSING' OR processing_at IS NOT NULL);
+
+            DROP INDEX IF EXISTS idx_payouts_awaiting_settlement;
+
+            CREATE INDEX idx_payouts_awaiting_settlement
+                ON payouts (processing_at)
+                WHERE is_deleted = false AND settlement_reference IS NULL AND status IN ('PROCESSING');
+        </sql>
+        <rollback>
+            <sql>
+                DROP INDEX IF EXISTS idx_payouts_awaiting_settlement;
+
+                CREATE INDEX idx_payouts_awaiting_settlement
+                    ON payouts (created_at)
+                    WHERE is_deleted = false AND status IN ('PROCESSING');
+
+                ALTER TABLE payouts DROP CONSTRAINT IF EXISTS chk_payouts_processing_requires_clock;
+            </sql>
+            <dropColumn tableName="payouts" columnName="processing_at"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-08-02-payout-settlement-reference-survives-soft-delete" author="koala">
+        <sql>
+            DROP INDEX IF EXISTS uk_payouts_settlement_reference;
+
+            CREATE UNIQUE INDEX uk_payouts_settlement_reference
+                ON payouts (settlement_reference)
+                WHERE settlement_reference IS NOT NULL;
+        </sql>
+        <rollback>
+            <sql>
+                DROP INDEX IF EXISTS uk_payouts_settlement_reference;
+
+                CREATE UNIQUE INDEX uk_payouts_settlement_reference
+                    ON payouts (settlement_reference)
+                    WHERE settlement_reference IS NOT NULL AND is_deleted = false;
+            </sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -70,19 +71,50 @@ class OperationalRunbookContractTest {
 
     @Test
     void theAbandonedInitiationTheSweepRecordsIsActuallyCoveredByAnAlert() throws Exception {
+        assertOutcomeIsWatchedByAnAlert(PaymentMetrics::initiationAbandoned, "initiation", "abandoned");
+        assertTrue(alertRules().contains("KoalaPaymentInitiationAbandoned"));
+    }
+
+    @Test
+    void theEvidenceMismatchOutcomeTheReconciliationRecordsIsCoveredByAnAlert() throws Exception {
+        assertOutcomeIsWatchedByAnAlert(PaymentMetrics::payoutSettlementEvidenceMismatch,
+                "payout_settlement", "evidence_mismatch");
+        assertTrue(alertRules().contains("KoalaPayoutSettlementEvidenceMismatch"));
+    }
+
+    @Test
+    void thePayoutStuckWaitingForBankEvidenceIsActuallyCoveredByAnAlert() throws Exception {
+        assertGaugeIsWatchedByAnAlert(metrics -> metrics.payoutsAwaitingSettlement(3),
+                "koala.payout.settlement.overdue");
+        assertGaugeIsWatchedByAnAlert(metrics -> metrics.payoutsStalledInSettlement(1),
+                "koala.payout.settlement.stalled");
+
+        String alerts = alertRules();
+        assertTrue(alerts.contains("KoalaPayoutSettlementOverdue"));
+        assertTrue(alerts.contains("KoalaPayoutSettlementStalled"));
+
+        String responses = Files.readString(Path.of("docs/runbooks/alerts.md"));
+        assertTrue(responses.contains("KoalaPayoutSettlementOverdue"),
+                "Alarmin ilk mudahalesi alerts.md'de yazili olmali.");
+        assertTrue(responses.contains("KoalaPayoutSettlementStalled"),
+                "Ikinci kademe ilkinden farkli bir ilk mudahale istiyor; yoksa yeni alarm yalnizca gurultu.");
+    }
+
+    private static void assertOutcomeIsWatchedByAnAlert(Consumer<PaymentMetrics> record,
+                                                        String operation, String outcome) throws Exception {
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
-        new PaymentMetrics(registry).initiationAbandoned();
+        record.accept(new PaymentMetrics(registry));
 
         Meter recorded = registry.getMeters().stream()
                 .filter(meter -> meter.getId().getName().equals("koala.payment.operations"))
-                .filter(meter -> "abandoned".equals(meter.getId().getTag("outcome")))
+                .filter(meter -> operation.equals(meter.getId().getTag("operation")))
+                .filter(meter -> outcome.equals(meter.getId().getTag("outcome")))
                 .findFirst()
-                .orElseThrow(() -> new AssertionError("Supurme bir sayac yazmali."));
+                .orElseThrow(() -> new AssertionError(
+                        operation + "/" + outcome + " bir sayac yazmali; yoksa alarm izleyecek bir sey bulamaz."));
 
         String series = recorded.getId().getName().replace('.', '_') + "_total";
-        String operation = recorded.getId().getTag("operation");
-        String outcome = recorded.getId().getTag("outcome");
-        String alerts = Files.readString(Path.of("ops/monitoring/prometheus-alerts.yml"));
+        String alerts = alertRules();
 
         List<String> matching = alerts.lines()
                 .filter(line -> line.contains(series))
@@ -93,9 +125,31 @@ class OperationalRunbookContractTest {
                 .toList();
 
         assertFalse(matching.isEmpty(),
-                "Supurme " + series + "{operation=" + operation + ",outcome=" + outcome + "} yaziyor ama "
-                        + "hicbir alarm kurali bu seriyi izlemiyor; olay kimseye ulasmaz. Kurallar: " + alerts);
-        assertTrue(alerts.contains("KoalaPaymentInitiationAbandoned"));
+                series + "{operation=" + operation + ",outcome=" + outcome + "} yaziliyor ama hicbir alarm "
+                        + "kurali bu seriyi izlemiyor; olay kimseye ulasmaz. Kurallar: " + alerts);
+    }
+
+    private static void assertGaugeIsWatchedByAnAlert(Consumer<PaymentMetrics> publish,
+                                                      String gaugeName) throws Exception {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        publish.accept(new PaymentMetrics(registry));
+
+        Meter recorded = registry.getMeters().stream()
+                .filter(meter -> meter.getId().getName().equals(gaugeName))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(
+                        gaugeName + " bir metrige yazilmali; yoksa alarm izleyecek bir sey bulamaz."));
+
+        String series = recorded.getId().getName().replace('.', '_');
+        String alerts = alertRules();
+
+        assertTrue(alerts.lines().anyMatch(line -> line.contains(series)),
+                "Zamanlayici " + series + " yaziyor ama hicbir alarm kurali bu seriyi izlemiyor; "
+                        + "PROCESSING'de takilan hakedis kimseye ulasmaz. Kurallar: " + alerts);
+    }
+
+    private static String alertRules() throws Exception {
+        return Files.readString(Path.of("ops/monitoring/prometheus-alerts.yml"));
     }
 
     @Test

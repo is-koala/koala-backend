@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-08-01-payout-settlement-evidence" author="koala">
+        <addColumn tableName="payouts">
+            <column name="settlement_reference" type="VARCHAR(128)"/>
+        </addColumn>
+        <sql>
+            CREATE UNIQUE INDEX uk_payouts_settlement_reference
+                ON payouts (settlement_reference)
+                WHERE settlement_reference IS NOT NULL AND is_deleted = false;
+
+            CREATE INDEX idx_payouts_awaiting_settlement
+                ON payouts (created_at)
+                WHERE is_deleted = false AND status IN ('PROCESSING');
+
+            ALTER TABLE payouts ADD CONSTRAINT chk_payouts_completed_requires_evidence
+                CHECK (status &lt;&gt; 'COMPLETED'
+                       OR (settlement_reference IS NOT NULL
+                           AND provider_reference IS NOT NULL
+                           AND completed_at IS NOT NULL));
+        </sql>
+        <rollback>
+            <sql>
+                ALTER TABLE payouts DROP CONSTRAINT IF EXISTS chk_payouts_completed_requires_evidence;
+                DROP INDEX IF EXISTS idx_payouts_awaiting_settlement;
+                DROP INDEX IF EXISTS uk_payouts_settlement_reference;
+            </sql>
+            <dropColumn tableName="payouts" columnName="settlement_reference"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-08-01-payout-reconcile-permission" author="koala">
+        <sql>
+            INSERT INTO staff_role_permissions (id, staff_role_id, permission_code, created_at)
+            SELECT gen_random_uuid(), role.id, 'payout.reconcile', now()
+            FROM staff_roles role
+            WHERE role.code = 'FINANCE_OFFICER'
+            ON CONFLICT ON CONSTRAINT uk_staff_role_permissions_role_code DO NOTHING;
+        </sql>
+        <rollback>
+            <sql>
+                DELETE FROM staff_role_permissions
+                WHERE permission_code = 'payout.reconcile';
+            </sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

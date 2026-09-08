@@ -227,6 +227,13 @@ assignment:
     zone-id: ${ASSIGNMENT_UNPAID_EXPIRY_ZONE_ID:Europe/Istanbul}
     cron: ${ASSIGNMENT_UNPAID_EXPIRY_CRON:0 45 * * * *}
 
+payout:
+  settlement:
+    overdue-monitoring-enabled: ${PAYOUT_SETTLEMENT_OVERDUE_MONITORING_ENABLED:true}
+    overdue-after: ${PAYOUT_SETTLEMENT_OVERDUE_AFTER:3d}
+    stalled-after: ${PAYOUT_SETTLEMENT_STALLED_AFTER:10d}
+    overdue-cron: ${PAYOUT_SETTLEMENT_OVERDUE_CRON:0 20 * * * *}
+
 audit:
   retention:
     enabled: ${AUDIT_RETENTION_ENABLED:true}

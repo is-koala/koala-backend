@@ -1,6 +1,7 @@
 package com.exskylab.koala.dataAccess;
 
 import com.exskylab.koala.support.AbstractIntegrationTest;
+import com.exskylab.koala.support.OverlappingWrites;
 import com.exskylab.koala.business.abstracts.PaymentService;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
@@ -24,9 +25,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -375,9 +374,8 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
         seedAssignment(jobId, assignmentId);
         widenTheInsertWindow();
 
-        try (var executor = Executors.newFixedThreadPool(2)) {
-            CyclicBarrier bothInsideTheirTransaction = new CyclicBarrier(2);
-            List<String> barrierFailures = java.util.Collections.synchronizedList(new ArrayList<>());
+        try {
+            OverlappingWrites overlap = new OverlappingWrites();
             TransactionTemplate transactions = new TransactionTemplate(transactionManager);
             java.util.concurrent.Callable<String> insert = () -> {
                 try {
@@ -388,29 +386,17 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
                         payment.setConversationId(UUID.randomUUID().toString());
                         payment.setStatus(PaymentAttemptStatus.INITIATED);
                         payment.setCurrency("TRY");
-                        try {
-                            bothInsideTheirTransaction.await(15, TimeUnit.SECONDS);
-                        } catch (InterruptedException | BrokenBarrierException | TimeoutException waiting) {
-                            barrierFailures.add(waiting.getClass().getSimpleName());
-                            throw new IllegalStateException("the two inserts never overlapped", waiting);
-                        }
+                        overlap.meet();
                         return paymentDao.saveAndFlush(payment);
                     });
                     return "SUCCESS";
                 } catch (DataIntegrityViolationException violation) {
-                    return constraintName(violation);
+                    return OverlappingWrites.constraintNameOf(violation);
                 }
             };
 
-            var first = executor.submit(insert);
-            var second = executor.submit(insert);
+            List<String> outcomes = overlap.outcomesOf(insert, insert);
 
-            String firstOutcome = first.get(30, TimeUnit.SECONDS);
-            String secondOutcome = second.get(30, TimeUnit.SECONDS);
-            List<String> outcomes = List.of(firstOutcome, secondOutcome);
-            assertTrue(barrierFailures.isEmpty(),
-                    "Iki insert ayni anda acik transaction icinde olmaliydi; biri digerini beklemeden bitmis, "
-                            + "yani test 'indeks unique mi' seviyesine dusmus: " + barrierFailures);
             assertEquals(1, outcomes.stream().filter("SUCCESS"::equals).count(),
                     "exactly one insert must win, got " + outcomes);
             assertEquals(1, outcomes.stream().filter("uk_payments_one_active_attempt"::equals).count(),
@@ -508,17 +494,6 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
                         + "bulunan: " + matching.size());
         return matching.getFirst().replace("select id, job_assignment_id, conversation_id, created_at",
                 "select id");
-    }
-
-    private static String constraintName(Throwable exception) {
-        Throwable current = exception;
-        while (current != null) {
-            if (current instanceof org.hibernate.exception.ConstraintViolationException violation) {
-                return violation.getConstraintName();
-            }
-            current = current.getCause();
-        }
-        return "no-constraint";
     }
 
     private static CommissionCalculator.Breakdown breakdown() {

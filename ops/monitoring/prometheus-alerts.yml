@@ -16,6 +16,21 @@ groups:
         for: 1m
         labels: { severity: critical, owner: payments }
         annotations: { summary: "Sağlayıcıya ulaşmamış bir ödeme denemesi süpürüldü; atama bloke, elle mutabakat gerekiyor (docs/runbooks/payments.md)" }
+      - alert: KoalaPayoutSettlementOverdue
+        expr: max(koala_payout_settlement_overdue) > 0
+        for: 15m
+        labels: { severity: critical, owner: payments }
+        annotations: { summary: "Bir hakediş banka mutabakatı kanıtı gelmeden PROCESSING'de bekliyor; hiçbir otomatik yol kapatmaz (docs/runbooks/payments.md §4)" }
+      - alert: KoalaPayoutSettlementStalled
+        expr: max(koala_payout_settlement_stalled) > 0
+        for: 15m
+        labels: { severity: critical, owner: payments }
+        annotations: { summary: "Bir hakedis ilk yukseltmeden sonra da mutabakat edilemedi; saglayici kaydi kapanmamis demektir (docs/runbooks/payments.md §4)" }
+      - alert: KoalaPayoutSettlementEvidenceMismatch
+        expr: sum(increase(koala_payment_operations_total{operation="payout_settlement",outcome="evidence_mismatch"}[15m])) > 0
+        for: 1m
+        labels: { severity: warning, owner: payments }
+        annotations: { summary: "Bildirilen mutabakat kanıtı payout kaydıyla eşleşmedi; hakediş PROCESSING kaldı (docs/runbooks/payments.md §4)" }
       - alert: KoalaPaymentFailureSpike
         expr: sum(rate(koala_payment_operations_total{operation="callback",outcome=~"declined|fraud_rejected"}[10m])) > 0.05
         for: 5m

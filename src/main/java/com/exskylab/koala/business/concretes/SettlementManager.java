@@ -191,6 +191,7 @@ public class SettlementManager implements SettlementService {
         payoutDao.findByJobAssignmentId(task.getJobAssignment().getId()).ifPresent(payout -> {
             payout.setStatus(PayoutStatus.PROCESSING);
             payout.setProviderReference(task.getProviderReference());
+            payout.setProcessingAt(Instant.now());
             payoutDao.save(payout);
         });
     }

@@ -3,6 +3,7 @@ package com.exskylab.koala.business.concretes;
 import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.business.abstracts.StaffPayoutService;
 import com.exskylab.koala.core.constants.StaffMessages;
+import com.exskylab.koala.core.dtos.payout.request.ConfirmPayoutSettlementDto;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.entities.Payout;
@@ -34,6 +35,13 @@ public class StaffPayoutManager implements StaffPayoutService {
     public Refund refundEmployer(StaffPrincipal actor, UUID jobAssignmentId, BigDecimal amount, String reason) {
         requirePermission(actor, StaffPermission.PAYMENT_REFUND, jobAssignmentId, amount, reason);
         return payoutService.refundEmployer(jobAssignmentId, amount, reason);
+    }
+
+    @Override
+    public Payout confirmSettlement(StaffPrincipal actor, UUID payoutId, ConfirmPayoutSettlementDto evidence) {
+        requirePermission(actor, StaffPermission.PAYOUT_RECONCILE, payoutId, evidence.getAmount(),
+                evidence.getSettlementReference());
+        return payoutService.confirmSettlement(payoutId, evidence);
     }
 
     @Override

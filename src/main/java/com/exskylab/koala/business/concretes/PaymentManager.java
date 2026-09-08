@@ -10,6 +10,7 @@ import com.exskylab.koala.core.exceptions.ExternalServiceException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
+import com.exskylab.koala.core.helpers.ConstraintViolations;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
 import com.exskylab.koala.core.monitoring.PaymentMetrics;
 import com.exskylab.koala.core.properties.PaymentVerificationProperties;
@@ -28,7 +29,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
-import org.hibernate.exception.ConstraintViolationException;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -114,18 +114,7 @@ public class PaymentManager implements PaymentService {
     }
 
     private boolean isActiveAttemptConstraint(Throwable exception) {
-        return hasConstraint(exception, "uk_payments_one_active_attempt");
-    }
-
-    private boolean hasConstraint(Throwable exception, String constraintName) {
-        Throwable current = exception;
-        while (current != null) {
-            if (current instanceof ConstraintViolationException violation) {
-                return constraintName.equals(violation.getConstraintName());
-            }
-            current = current.getCause();
-        }
-        return false;
+        return ConstraintViolations.named(exception, "uk_payments_one_active_attempt");
     }
 
     @Override
@@ -143,7 +132,7 @@ public class PaymentManager implements PaymentService {
         try {
             paymentDao.saveAndFlush(payment);
         } catch (DataIntegrityViolationException exception) {
-            if (hasConstraint(exception, "uk_payments_provider_token")) {
+            if (ConstraintViolations.named(exception, "uk_payments_provider_token")) {
                 throw new ExternalServiceException(PaymentMessages.PROVIDER_RESPONSE_INVALID);
             }
             throw exception;

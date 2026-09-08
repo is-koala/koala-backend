@@ -15,6 +15,7 @@ import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.StaffPayoutService;
 import com.exskylab.koala.core.constants.PayoutMessages;
+import com.exskylab.koala.core.dtos.payout.request.ConfirmPayoutSettlementDto;
 import com.exskylab.koala.core.dtos.payout.request.RefundRequestDto;
 import com.exskylab.koala.core.dtos.payout.request.ReleaseRequestDto;
 import com.exskylab.koala.core.dtos.payout.response.PayoutDto;
@@ -81,6 +82,29 @@ public class PayoutsController {
 
         return ResponseEntity.status(HttpStatus.OK).body(new SuccessDataResult<>(
                 payout, PayoutMessages.RELEASED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "Banka mutabakatıyla hakedişi tamamlanmış işaretle",
+            description = "Ekstredeki gönderim satırının referansı, sağlayıcı işlem kimliği, tutarı, para birimi ve gerçekleşme anı bildirilir. Dördü de payout kaydıyla eşleşmeden durum ilerlemez; eşleşmezse kayıt PROCESSING kalır, FAILED yapılmaz. Aynı ekstre satırı iki kez bildirilirse tek finansal sonuç oluşur.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Hakediş tamamlandı olarak işaretlendi"),
+            @ApiResponse(responseCode = "400", description = "Bildirilen kanıt payout kaydıyla eşleşmiyor",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "Hakediş bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "Hakediş mutabakat beklemiyor, sağlayıcı referansı yok ya da ekstre satırı başka bir hakedişe işlenmiş",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(value = StaffPermission.PAYOUT_RECONCILE, action = "payout.reconcile")
+    @PostMapping("/admin/payouts/{payoutId}/reconcile")
+    public ResponseEntity<SuccessDataResult<PayoutDto>> reconcile(@PathVariable UUID payoutId,
+                                                                  @RequestBody @Valid ConfirmPayoutSettlementDto request,
+                                                                  @AuthenticationPrincipal StaffPrincipal actor) {
+        PayoutDto payout = payoutMapper.toPayoutDto(
+                staffPayoutService.confirmSettlement(actor, payoutId, request));
+
+        return ResponseEntity.status(HttpStatus.OK).body(new SuccessDataResult<>(
+                payout, PayoutMessages.RECONCILED, HttpStatus.OK));
     }
 
     @Operation(summary = "İşverene iade et",

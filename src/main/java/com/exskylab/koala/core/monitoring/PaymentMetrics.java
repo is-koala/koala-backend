@@ -1,17 +1,30 @@
 package com.exskylab.koala.core.monitoring;
 
+import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Component;
+
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Component
 public class PaymentMetrics {
 
     private static final String METRIC_NAME = "koala.payment.operations";
+    private static final String OVERDUE_GAUGE_NAME = "koala.payout.settlement.overdue";
+    private static final String STALLED_GAUGE_NAME = "koala.payout.settlement.stalled";
 
     private final MeterRegistry meterRegistry;
+    private final AtomicInteger payoutsAwaitingSettlement = new AtomicInteger();
+    private final AtomicInteger payoutsStalledInSettlement = new AtomicInteger();
 
     public PaymentMetrics(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
+        Gauge.builder(OVERDUE_GAUGE_NAME, payoutsAwaitingSettlement, AtomicInteger::doubleValue)
+                .description("Payouts still waiting for bank settlement evidence past the reconciliation deadline")
+                .register(meterRegistry);
+        Gauge.builder(STALLED_GAUGE_NAME, payoutsStalledInSettlement, AtomicInteger::doubleValue)
+                .description("Payouts whose first reconciliation escalation did not close them either")
+                .register(meterRegistry);
         register("initiation", "succeeded");
         register("initiation", "provider_error");
         register("initiation", "persistence_error");
@@ -25,6 +38,29 @@ public class PaymentMetrics {
         register("callback", "fraud_rejected");
         register("callback", "in_review");
         register("callback", "amount_mismatch");
+        register("payout_settlement", "settled");
+        register("payout_settlement", "already_settled");
+        register("payout_settlement", "evidence_mismatch");
+    }
+
+    public void payoutSettled() {
+        record("payout_settlement", "settled");
+    }
+
+    public void payoutAlreadySettled() {
+        record("payout_settlement", "already_settled");
+    }
+
+    public void payoutSettlementEvidenceMismatch() {
+        record("payout_settlement", "evidence_mismatch");
+    }
+
+    public void payoutsAwaitingSettlement(int overdue) {
+        payoutsAwaitingSettlement.set(overdue);
+    }
+
+    public void payoutsStalledInSettlement(int stalled) {
+        payoutsStalledInSettlement.set(stalled);
     }
 
     public void initiationSucceeded() {
