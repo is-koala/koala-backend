@@ -18,8 +18,8 @@ public interface StaffMemberDao extends JpaRepository<StaffMember, UUID> {
 
     boolean existsByEmailIgnoreCase(String email);
 
-    @Query("select m from StaffMember m where :query is null "
-            + "or lower(m.email) like lower(concat('%', :query, '%')) "
-            + "or lower(m.displayName) like lower(concat('%', :query, '%'))")
+    @Query("select m from StaffMember m where cast(:query as String) is null "
+            + "or lower(m.email) like lower(concat('%', cast(:query as String), '%')) "
+            + "or lower(m.displayName) like lower(concat('%', cast(:query as String), '%'))")
     Page<StaffMember> search(@Param("query") String query, Pageable pageable);
 }
