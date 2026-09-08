@@ -85,6 +85,15 @@ jobs:
           # ARM bir sunucuya geçilirse buraya linux/arm64 yazılır; ikisi
           # birden gerekiyorsa önce o çözülmeli.
           platforms: linux/amd64
+          # Attestation kapalı, bilinçli: build-push-action@v6 provenance'ı
+          # varsayılan olarak üretiyor ve attestation ayrı bir manifest olarak
+          # indeksin içine giriyor. Yani tek platformda bile indeks oluşmak
+          # zorunda kalıyor — indeksin taşıması gereken iki şey var. GHCR o
+          # indeksin alt manifest'lerini servis etmedi ve Dokploy imajı hiç
+          # çekemedi. Kapatınca tek platformda düz manifest basılıyor: etiket
+          # doğrudan imajı gösteriyor, çözülecek ikinci katman kalmıyor.
+          provenance: false
+          sbom: false
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
