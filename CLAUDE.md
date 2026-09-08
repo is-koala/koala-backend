@@ -2669,10 +2669,19 @@ bugün böyle kenarlar var, yani bu canlı veride tetiklenirdi. Sıra üyelik yo
 sonra idempotanlık erken dönüşü, sonra guard. Yan kazanç: no-op bir çağrı artık ata ve üyelik taramasını hiç
 çalıştırmıyor.
 
+**İki yazma yolu aynı transaction advisory kilidi altında serileşir.** Salt mevcut grafiği ve üyelikleri okuyup
+sonra yazmak `READ COMMITTED` altında yeterli değildi: bir rolün grafiğine finans dalı eklenirken aynı rol trust
+üyeliği olan bir personele eşzamanlı verilebilirdi ve iki transaction birbirini görmeden ayrı ayrı geçebilirdi.
+`StaffMemberRoleDao.lockSeparationOfDutiesWrites` hem `includeRole` hem `grantRole` girişinde aynı
+`staff-separation-of-duties` anahtarını `pg_advisory_xact_lock` ile alır; personel/rol yönetimi düşük frekanslı
+olduğu için tek global anahtar, parça kilitlerin yanlış sırada alınmasından doğacak deadlock riskine tercih edildi.
+Kilit commit/rollback ile bırakılır ve guard sonraki transaction'ın tamamlanmış yazımını görerek yeniden hesaplanır.
+
 **Aggregate sınırı bir muafiyetle geçiliyor ve gerekçesi bean döngüsü.** Üyelik yansıması için
-`StaffAuthorizationManager` `StaffMemberRoleDao`'ya **salt okuma** olarak uzanıyor; `StaffAccountService` üzerinden
-gitmek `StaffAccountManager → StaffAuthorizationService` bağının ters yönü olurdu ve §1 `@Lazy` ile gizlemeyi
-yasaklıyor. `AggregateBoundaryTest.EXEMPTIONS` listesinde gerekçesiyle yazılı — §2ae'nin kendi öngördüğü yol — ve
+`StaffAuthorizationManager` `StaffMemberRoleDao`'ya etkilenen üyelikleri okumak ve iki yazma yolunun ortak
+transaction kilidini almak için uzanıyor; `StaffAccountService` üzerinden gitmek
+`StaffAccountManager → StaffAuthorizationService` bağının ters yönü olurdu ve §1 `@Lazy` ile gizlemeyi yasaklıyor.
+`AggregateBoundaryTest.EXEMPTIONS` listesinde gerekçesiyle yazılı — §2ae'nin kendi öngördüğü yol — ve
 `everyExemptionIsStillNeeded` liste bayatlarsa kırmızıya dönüyor.
 
 ### Dal tanımı asimetrik ve bu bir kapsam daralması riski
@@ -3309,14 +3318,17 @@ Birim testlerde `CommissionCalculator` artık `FallbackSettings.commissionCalcul
 tanımını artık `StaffSeparationOfDuties`'ten okuyor; dokuzuncu testi **seed'deki her rolün** trust dalına, finans
 dalına ya da bilinçli olarak hiçbirine atandığını iki yönlü doğruluyor — sınıflandırılmamış bir rol seed'e
 eklendiğinde de, çalışma zamanı tanımı listeyle ayrıştığında da kırmızıya dönüyor.
-`StaffSeparationOfDutiesIT` **çalışma zamanını** ölçüyor, gerçek HTTP ve gerçek Postgres üzerinden on iki kural:
+`StaffSeparationOfDutiesIT` **çalışma zamanını** ölçüyor, gerçek HTTP ve gerçek Postgres üzerinden on üç kural:
 trust dalını kapsayan bir role finans dalı eklenemez ve kenar yazılmaz, finans dalına bir ara rol üzerinden
 geçişli ulaşan kapsama da reddedilir, **kenarın ebeveyni temiz olsa da atası iki dalı kapsayacaksa kenar
 reddedilir**, **rol grafiği tek başına temiz kalsa da o kenar bir personeli iki dala ulaştıracaksa reddedilir**,
 zaten var olan bir kenarın yeniden POST edilmesi **200** döner, **kuraldan önce yazılmış aykırı bir kenarın
 yeniden POST edilmesi de 200 döner** (idempotanlık), aynı daldaki iki rol birleşmeye devam eder, **`OWNER` her iki
 dalı kapsamaya devam eder**, trust rolü taşıyan personele finans rolü verilemez ve üyelik yazılmaz, ters sırada da
-verilemez, tek dal içindeki ikinci rol verilebilir, **`OWNER` üyeliği verilebilir**.
+verilemez, tek dal içindeki ikinci rol verilebilir, **`OWNER` üyeliği verilebilir**. On üçüncü kural aynı role bir
+finans kapsaması eklenirken o rolü trust üyeliği olan personele veren iki gerçek HTTP transaction'ını aynı anda
+başlatır; ikisinin ortak advisory kilitte beklediğini, kilit bırakılınca yalnız birinin 200 diğerinin 409 aldığını
+ve ne rol kapanışının ne personelin iki dala birden ulaşmadığını doğrular.
 
 **Mutasyon kanıtı beş ayrı katmanda alındı** — saf yardımcıyı bozmak, onu kullanan bağlantının korunduğunu
 kanıtlamaz. Her turda **yalnız** beklenen testler düştü: ata kümesi bugünkü hâline (`Set.of(parent.getId())`)

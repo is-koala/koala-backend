@@ -27,6 +27,10 @@ public interface StaffMemberRoleDao extends JpaRepository<StaffMemberRole, Staff
 
     boolean existsByMemberIdAndRoleId(UUID memberId, UUID roleId);
 
+    @Query(value = "select pg_advisory_xact_lock(hashtextextended('staff-separation-of-duties', 0))",
+            nativeQuery = true)
+    void lockSeparationOfDutiesWrites();
+
     @Modifying
     @Query("delete from StaffMemberRole r where r.member.id = :memberId and r.role.id = :roleId")
     int deleteMembership(@Param("memberId") UUID memberId, @Param("roleId") UUID roleId);

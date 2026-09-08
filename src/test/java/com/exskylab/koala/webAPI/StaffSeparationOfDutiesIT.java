@@ -2,6 +2,7 @@ package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.core.helpers.StaffSeparationOfDuties;
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,8 +12,19 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -31,6 +43,9 @@ class StaffSeparationOfDutiesIT extends AbstractStaffIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private DataSource dataSource;
 
     @AfterEach
     void restoreTheSeededGraph() {
@@ -276,5 +291,84 @@ class StaffSeparationOfDutiesIT extends AbstractStaffIntegrationTest {
 
         assertEquals(List.of("OWNER"), roleCodesOf(target),
                 "OWNER istisnası olmadan OWNER üyeliği hiç verilemezdi");
+    }
+
+    @Test
+    void concurrentGraphAndMembershipWritesCannotTogetherSpanTheBranches() throws Exception {
+        UUID carrier = testRole("TEST_SOD_CONCURRENT");
+        UUID target = staff("MODERATOR");
+        String token = ownerToken();
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        HikariDataSource pool = (HikariDataSource) dataSource;
+        try (Connection blocker = DriverManager.getConnection(
+                pool.getJdbcUrl(), pool.getUsername(), pool.getPassword());
+             ExecutorService requests = Executors.newFixedThreadPool(2)) {
+            execute(blocker, "select pg_advisory_lock(hashtextextended('staff-separation-of-duties', 0))");
+            Future<Integer> include = requests.submit(() -> {
+                ready.countDown();
+                start.await();
+                return include(carrier, roleId("FINANCE_OFFICER"), token)
+                        .andReturn().getResponse().getStatus();
+            });
+            Future<Integer> grant = requests.submit(() -> {
+                ready.countDown();
+                start.await();
+                return grant(target, "TEST_SOD_CONCURRENT", token)
+                        .andReturn().getResponse().getStatus();
+            });
+
+            assertTrue(ready.await(5, TimeUnit.SECONDS), "İki istek de başlamalı");
+            start.countDown();
+            try {
+                awaitBothRequestsOnTheSeparationLock(blocker, include, grant);
+            } finally {
+                execute(blocker, "select pg_advisory_unlock(hashtextextended('staff-separation-of-duties', 0))");
+            }
+
+            List<Integer> statuses = List.of(
+                    include.get(10, TimeUnit.SECONDS),
+                    grant.get(10, TimeUnit.SECONDS)).stream().sorted().toList();
+            assertEquals(List.of(200, 409), statuses,
+                    "Eşzamanlı yazımlardan yalnızca biri görev ayrılığı değişmezini geçebilmeli");
+        }
+
+        assertFalse(StaffSeparationOfDuties.spansBothBranches(closureCodesOf(carrier)));
+        assertFalse(StaffSeparationOfDuties.spansBothBranches(reachedCodesOf(target)));
+    }
+
+    private static void awaitBothRequestsOnTheSeparationLock(
+            Connection blocker, Future<Integer> include, Future<Integer> grant)
+            throws InterruptedException, SQLException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (System.nanoTime() < deadline) {
+            assertFalse(include.isDone() || grant.isDone(),
+                    "Her iki yazma yolu da ortak transaction kilidini almadan ilerlememeli");
+            int waiting = queryForInt(blocker, """
+                    select count(*) from pg_stat_activity
+                    where wait_event = 'advisory'
+                      and query like '%pg_advisory_xact_lock%'
+                    """);
+            if (waiting >= 2) {
+                return;
+            }
+            Thread.sleep(20);
+        }
+        throw new AssertionError("İki yazma yolu ortak advisory kilitte beklemedi");
+    }
+
+    private static void execute(Connection connection, String sql) throws SQLException {
+        try (Statement statement = connection.createStatement()) {
+            statement.execute(sql);
+        }
+    }
+
+    private static int queryForInt(Connection connection, String sql) throws SQLException {
+        try (Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery(sql)) {
+            result.next();
+            return result.getInt(1);
+        }
     }
 }

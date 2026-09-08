@@ -392,6 +392,7 @@ public class StaffAuthorizationManager implements StaffAuthorizationService {
     @Override
     @Transactional
     public void includeRole(StaffPrincipal actor, UUID roleId, UUID includedRoleId) {
+        staffMemberRoleDao.lockSeparationOfDutiesWrites();
         Set<StaffPermission> held = heldByActor(actor);
 
         StaffRole parent = roleById(roleId);
