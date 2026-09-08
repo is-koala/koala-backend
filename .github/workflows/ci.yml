@@ -54,6 +54,11 @@ jobs:
             echo "VERSION=main-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           fi
 
+      # Çalışma katmanındaki iki kabuk komutu hedef mimaride koşuyor; runner ARM64,
+      # hedef amd64 olduğu için emülasyon gerekiyor. Maven derlemesi bunun dışında.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -68,6 +73,27 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          # Dağıtım hedefi amd64 (Hetzner x86_64); runner ise ARM64 bir Pi.
+          # Platform verilmediğinde imaj runner'ın mimarisinde basılıyordu ve
+          # hedefte "no matching manifest" ile hiç açılmazdı.
+          #
+          # TEK platform, bilinçli: iki platform basıldığında ortaya bir OCI
+          # indeksi çıkıyor ve GHCR o indeksin alt manifest'lerini servis
+          # etmedi — Dokploy `latest`i çözebildi ama içindeki
+          # sha256:2aada4...'ı 404 aldı ve imajı hiç çekemedi. Tek platformda
+          # indeks hiç oluşmuyor, etiket doğrudan tek manifest'i gösteriyor.
+          # ARM bir sunucuya geçilirse buraya linux/arm64 yazılır; ikisi
+          # birden gerekiyorsa önce o çözülmeli.
+          platforms: linux/amd64
+          # Attestation kapalı, bilinçli: build-push-action@v6 provenance'ı
+          # varsayılan olarak üretiyor ve attestation ayrı bir manifest olarak
+          # indeksin içine giriyor. Yani tek platformda bile indeks oluşmak
+          # zorunda kalıyor — indeksin taşıması gereken iki şey var. GHCR o
+          # indeksin alt manifest'lerini servis etmedi ve Dokploy imajı hiç
+          # çekemedi. Kapatınca tek platformda düz manifest basılıyor: etiket
+          # doğrudan imajı gösteriyor, çözülecek ikinci katman kalmıyor.
+          provenance: false
+          sbom: false
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
