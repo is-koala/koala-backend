@@ -313,10 +313,21 @@ Bizim tarafımızdaki üç kaynak: `payments` (ne tahsil ettik),
 `settlement_tasks` (sağlayıcıdan ne istedik), `payouts` / `refunds` (sonucu
 kullanıcıya nasıl gösteriyoruz).
 
-**Önce şunu bil:** `PayoutStatus.COMPLETED` hiçbir yerde set edilmez (§2y).
-`PROCESSING`, Iyzico'nun `approve` talimatını kabul ettiği anlamına gelir —
-paranın işçinin banka hesabına geçtiği anlamına **gelmez**. O bilgi yalnızca
-hesap ekstresinde vardır. Mutabakatın var olma sebebi budur.
+**Önce şunu bil:** `PROCESSING`, Iyzico'nun `approve` talimatını kabul ettiği
+anlamına gelir — paranın işçinin banka hesabına geçtiği anlamına **gelmez**. O
+bilgi yalnızca hesap ekstresinde/sağlayıcı gönderim raporunda vardır.
+Mutabakatın var olma sebebi budur.
+
+`PayoutStatus.COMPLETED`'a giden **tek** yol bu ekstre satırının bildirilmesidir:
+`POST /admin/payouts/{payoutId}/reconcile` (izin `payout.reconcile`, seed'de
+`FINANCE_OFFICER`). Ekstre satırının referansı, sağlayıcı işlem kimliği, tutarı,
+para birimi ve gerçekleşme anı bildirilir; dördü de payout kaydıyla eşleşmeden
+durum ilerlemez. Veritabanı da aynı şeyi ayrıca garanti ediyor:
+`chk_payouts_completed_requires_evidence` kısıtı `settlement_reference`,
+`provider_reference` ve `completed_at` dolu olmadan `COMPLETED` satır yazdırmaz,
+`uk_payouts_settlement_reference` ise aynı ekstre satırının iki hakedişe
+işlenmesini engeller. Kanıt eşleşmezse hakediş **`PROCESSING` kalır** — `FAILED`
+yapılmaz, çünkü "eşleşmeyen kanıt" ile "transfer olmadı" aynı şey değildir.
 
 ### Yordam
 
@@ -356,8 +367,53 @@ hesap ekstresinde vardır. Mutabakatın var olma sebebi budur.
    | `APPROVE` görevi `PENDING`, ekstrede transfer yok | Henüz sırası gelmemiş olabilir; geri çekilme tavanı 6 saat | `next_attempt_at` gelecekteyse fark değil. Bekle. |
    | `APPROVE` görevi `SUCCEEDED`, ekstrede transfer yok | Talimat kabul edildi, transfer görünmüyor | `provider_reference` ile Iyzico'ya kayıt aç. |
    | Görev `FAILED` | Zamanlayıcı 8 denemede pes etti ve durdu | `last_error` oku. `payouts`/`refunds` satırı da `FAILED` işaretlenmiştir (§2y). Elle telafi + issue. |
+   | `payouts` satırı `PROCESSING`, ekstrede transfer **var** | Talimat kabul edildi, para gitti, biz hâlâ bekliyoruz | Adım 6'daki `reconcile` çağrısını yap; `GET /users/me/payouts` aynı anda `COMPLETED` + `completedAt` göstermeye başlar. |
+   | `payouts` satırı `PROCESSING`, ekstrede transfer **yok** | Sağlayıcı talimatı aldı ama göndermedi ya da gecikti | Adım 7'deki kuyruk sorgusu bunu listeler. `provider_reference` ile Iyzico'ya kayıt aç; hakedişi elle `COMPLETED` **yapma**. |
 
-6. **Kuyruk sağlığı.**
+6. **Ekstre satırını hakedişe işle.** Eşleşen her satır için:
+
+   ```
+   POST /admin/payouts/{payoutId}/reconcile
+   { "settlementReference": "<ekstre satırı referansı>",
+     "providerReference":   "<payouts.provider_reference ile aynı olmalı>",
+     "amount":              "<ekstredeki tutar>",
+     "currency":            "TRY",
+     "settledAt":           "<transferin gerçekleştiği an, ISO-8601>" }
+   ```
+
+   Çağrı idempotenttir: aynı `settlementReference` ikinci kez bildirilirse kayıt
+   değişmez ve `completedAt` yeniden damgalanmaz. Farklı bir referansla
+   tamamlanmış bir hakedişe ikinci satır işlenmek istenirse 409 alırsın —
+   bu bir çakışmadır, sessizce geçilmez, yükselt.
+
+   400 (`PAYOUT_SETTLEMENT_EVIDENCE_MISMATCH`) alırsan **durum değişmemiştir**.
+   Log satırı hangi alanın uymadığını yazar (`providerReference`, `amount`,
+   `currency`, `settledAt`); ekstre satırını yanlış hakedişe bakıyor olabilirsin.
+
+7. **Mutabakatı bekleyen hakedişler — `KoalaPayoutSettlementOverdue` alarmı
+   geldiğinde koşulacak sorgu.**
+
+   ```sql
+   select id, job_assignment_id, provider_reference, amount, currency, created_at
+   from payouts
+   where is_deleted = false
+     and status = 'PROCESSING'
+     and settlement_reference is null
+     and created_at < now() - interval '3 days'
+   order by created_at;
+   ```
+
+   Eşik `payout.settlement.overdue-after` ile aynıdır (varsayılan 3 gün);
+   `PayoutSettlementOverdueScheduler` saatte bir bu sayıyı
+   `koala_payout_settlement_overdue` göstergesine yazar. Sorgu boş dönerken
+   alarm açıksa gösterge bayattır — zamanlayıcının koştuğunu doğrula
+   (`payout.settlement.overdue-monitoring-enabled`).
+
+   Bu satırları **hiçbir otomatik yol kapatmaz.** Sağlayıcı talimatını kabul
+   etmiştir (`settlement_tasks` `SUCCEEDED`), yeniden denenecek bir çağrı
+   yoktur; kaydı ilerleten tek şey ekstre satırıdır. Bu yüzden alarm kritik.
+
+8. **Kuyruk sağlığı.**
 
    ```sql
    select status, operation, count(*), min(next_attempt_at)
@@ -372,7 +428,7 @@ hesap ekstresinde vardır. Mutabakatın var olma sebebi budur.
 
    `FAILED` satırlar elle incelenmek üzere tabloda bırakılır, silinmez.
 
-7. **Zamanlayıcı çalışıyor mu.** `SettlementRetryScheduler.runDueSettlements`
+9. **Zamanlayıcı çalışıyor mu.** `SettlementRetryScheduler.runDueSettlements`
    varsayılan olarak beş dakikada bir koşar (`IYZICO_SETTLEMENT_CRON`) ve
    **yalnız işlenecek görev varsa** log yazar:
    `Settlement retry run finished: X of Y tasks succeeded.` Yani log sessizliği
@@ -384,7 +440,7 @@ hesap ekstresinde vardır. Mutabakatın var olma sebebi budur.
    where status = 'PENDING' and next_attempt_at < now();
    ```
 
-8. **Kapanış.** Her mutabakat koşusu şunu kaydeder: incelenen gün, eşleşen
+10. **Kapanış.** Her mutabakat koşusu şunu kaydeder: incelenen gün, eşleşen
    kayıt sayısı, sınıflanan farklar, elle yapılan telafiler ve ilgili
    `conversation_id` değerleri. Kanıt olmadan kapatma.
 

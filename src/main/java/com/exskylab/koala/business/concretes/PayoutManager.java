@@ -8,7 +8,9 @@ import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.business.abstracts.SettlementService;
 import com.exskylab.koala.core.constants.DisputeMessages;
 import com.exskylab.koala.core.constants.PayoutMessages;
+import com.exskylab.koala.core.dtos.payout.request.ConfirmPayoutSettlementDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
+import com.exskylab.koala.core.monitoring.PaymentMetrics;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
 import com.exskylab.koala.dataAccess.DisputeDao;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
@@ -18,12 +20,16 @@ import com.exskylab.koala.entities.*;
 import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.business.abstracts.PaymentService;
 import com.exskylab.koala.business.abstracts.ActivityNotificationService;
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 @Service
@@ -41,12 +47,14 @@ public class PayoutManager implements PayoutService {
     private final PaymentStateMachine stateMachine;
     private final SettlementService settlementService;
     private final ActivityNotificationService activityNotificationService;
+    private final PaymentMetrics paymentMetrics;
 
     public PayoutManager(PayoutDao payoutDao, RefundDao refundDao, PaymentService paymentService,
                          JobAssignmentDao jobAssignmentDao, BankAccountService bankAccountService,
                          DisputeDao disputeDao, PaymentStateMachine stateMachine,
                          SettlementService settlementService,
-                         ActivityNotificationService activityNotificationService) {
+                         ActivityNotificationService activityNotificationService,
+                         PaymentMetrics paymentMetrics) {
         this.payoutDao = payoutDao;
         this.refundDao = refundDao;
         this.paymentService = paymentService;
@@ -56,6 +64,7 @@ public class PayoutManager implements PayoutService {
         this.stateMachine = stateMachine;
         this.settlementService = settlementService;
         this.activityNotificationService = activityNotificationService;
+        this.paymentMetrics = paymentMetrics;
     }
 
     @Override
@@ -151,9 +160,101 @@ public class PayoutManager implements PayoutService {
     }
 
     @Override
+    @Transactional
+    public Payout confirmSettlement(UUID payoutId, ConfirmPayoutSettlementDto evidence) {
+        Payout payout = payoutDao.findByIdForUpdate(payoutId)
+                .orElseThrow(() -> new ResourceNotFoundException(PayoutMessages.NOT_FOUND));
+
+        String reported = evidence.getSettlementReference().trim();
+
+        if (payout.getStatus() == PayoutStatus.COMPLETED) {
+            if (reported.equals(payout.getSettlementReference())) {
+                paymentMetrics.payoutAlreadySettled();
+                log.info("Payout {} is already settled by statement line {}, request ignored.",
+                        payoutId, reported);
+                return payout;
+            }
+            throw new ConflictException(PayoutMessages.SETTLEMENT_REFERENCE_CONFLICT);
+        }
+
+        if (!PayoutStatus.AWAITING_SETTLEMENT.contains(payout.getStatus())) {
+            log.warn("Payout {} cannot be settled from status {}.", payoutId, payout.getStatus());
+            throw new ConflictException(PayoutMessages.NOT_AWAITING_SETTLEMENT);
+        }
+
+        if (payout.getProviderReference() == null || payout.getProviderReference().isBlank()) {
+            log.error("Payout {} carries no provider reference; there is nothing to match a statement line "
+                    + "against and the row must be escalated instead of settled.", payoutId);
+            throw new ConflictException(PayoutMessages.NO_PROVIDER_REFERENCE);
+        }
+
+        String mismatch = firstMismatch(payout, evidence);
+        if (mismatch != null) {
+            paymentMetrics.payoutSettlementEvidenceMismatch();
+            log.error("Payout {} settlement evidence rejected on field {}; the payout stays {}.",
+                    payoutId, mismatch, payout.getStatus());
+            throw new ValidationException(PayoutMessages.SETTLEMENT_EVIDENCE_MISMATCH);
+        }
+
+        payout.setStatus(PayoutStatus.COMPLETED);
+        payout.setSettlementReference(reported);
+        payout.setCompletedAt(evidence.getSettledAt());
+        payout.setFailureReason(null);
+
+        Payout settled;
+        try {
+            settled = payoutDao.saveAndFlush(payout);
+        } catch (DataIntegrityViolationException violation) {
+            if (hasConstraint(violation, "uk_payouts_settlement_reference")) {
+                throw new ConflictException(PayoutMessages.SETTLEMENT_REFERENCE_TAKEN);
+            }
+            throw violation;
+        }
+
+        paymentMetrics.payoutSettled();
+        log.info("Payout {} settled at {} against statement line {}",
+                settled.getId(), settled.getCompletedAt(), reported);
+        return settled;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countPayoutsAwaitingSettlementLongerThan(Duration age) {
+        return payoutDao.countAwaitingSettlementSince(
+                PayoutStatus.AWAITING_SETTLEMENT, Instant.now().minus(age));
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<Payout> getPayoutsForWorker(UUID workerId) {
         return payoutDao.findAllByWorkerIdOrderByCreatedAtDesc(workerId);
+    }
+
+    private String firstMismatch(Payout payout, ConfirmPayoutSettlementDto evidence) {
+        if (!payout.getProviderReference().equals(evidence.getProviderReference().trim())) {
+            return "providerReference";
+        }
+        if (payout.getAmount() == null || payout.getAmount().compareTo(evidence.getAmount()) != 0) {
+            return "amount";
+        }
+        if (!payout.getCurrency().equals(evidence.getCurrency().trim().toUpperCase(Locale.ROOT))) {
+            return "currency";
+        }
+        if (payout.getCreatedAt() != null && evidence.getSettledAt().isBefore(payout.getCreatedAt())) {
+            return "settledAt";
+        }
+        return null;
+    }
+
+    private boolean hasConstraint(Throwable exception, String constraintName) {
+        Throwable current = exception;
+        while (current != null) {
+            if (current instanceof ConstraintViolationException violation) {
+                return constraintName.equals(violation.getConstraintName());
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private Payment settledPayment(UUID jobAssignmentId) {

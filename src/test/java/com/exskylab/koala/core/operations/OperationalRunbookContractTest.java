@@ -99,6 +99,61 @@ class OperationalRunbookContractTest {
     }
 
     @Test
+    void thePayoutStuckWaitingForBankEvidenceIsActuallyCoveredByAnAlert() throws Exception {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        new PaymentMetrics(registry).payoutsAwaitingSettlement(3);
+
+        Meter recorded = registry.getMeters().stream()
+                .filter(meter -> meter.getId().getName().startsWith("koala.payout.settlement"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(
+                        "Vadesi gecmis payout sayisi bir metrige yazilmali; yoksa alarm izleyecek bir sey bulamaz."));
+
+        String series = recorded.getId().getName().replace('.', '_');
+        String alerts = Files.readString(Path.of("ops/monitoring/prometheus-alerts.yml"));
+
+        assertTrue(alerts.lines().anyMatch(line -> line.contains(series)),
+                "Zamanlayici " + series + " yaziyor ama hicbir alarm kurali bu seriyi izlemiyor; "
+                        + "PROCESSING'de takilan hakedis kimseye ulasmaz. Kurallar: " + alerts);
+        assertTrue(alerts.contains("KoalaPayoutSettlementOverdue"));
+        assertTrue(alerts.contains("KoalaPayoutSettlementEvidenceMismatch"));
+
+        String responses = Files.readString(Path.of("docs/runbooks/alerts.md"));
+        assertTrue(responses.contains("KoalaPayoutSettlementOverdue"),
+                "Alarmin ilk mudahalesi alerts.md'de yazili olmali.");
+    }
+
+    @Test
+    void theEvidenceMismatchOutcomeTheReconciliationRecordsIsCoveredByAnAlert() throws Exception {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        new PaymentMetrics(registry).payoutSettlementEvidenceMismatch();
+
+        Meter recorded = registry.getMeters().stream()
+                .filter(meter -> meter.getId().getName().equals("koala.payment.operations"))
+                .filter(meter -> "payout_settlement".equals(meter.getId().getTag("operation")))
+                .filter(meter -> "evidence_mismatch".equals(meter.getId().getTag("outcome")))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Eslesmeyen kanit bir sayac yazmali."));
+
+        String series = recorded.getId().getName().replace('.', '_') + "_total";
+        String operation = recorded.getId().getTag("operation");
+        String outcome = recorded.getId().getTag("outcome");
+        String alerts = Files.readString(Path.of("ops/monitoring/prometheus-alerts.yml"));
+
+        List<String> matching = alerts.lines()
+                .filter(line -> line.contains(series))
+                .filter(line -> line.contains("operation=\"" + operation + "\"")
+                        || line.contains("operation=~\"" + operation + "\""))
+                .filter(line -> line.contains("outcome=\"" + outcome + "\"")
+                        || line.contains("outcome=~\"" + outcome + "\""))
+                .toList();
+
+        assertFalse(matching.isEmpty(),
+                "Mutabakat " + series + "{operation=" + operation + ",outcome=" + outcome + "} yaziyor ama "
+                        + "hicbir alarm kurali bu seriyi izlemiyor. Kurallar: " + alerts);
+    }
+
+    @Test
     void operationalArtifactsCoverRestoreAlertsAndEnvironmentSpecificGoogleKeys() throws Exception {
         String restore = Files.readString(Path.of("docs/runbooks/restore.md"));
         String alerts = Files.readString(Path.of("ops/monitoring/prometheus-alerts.yml"));

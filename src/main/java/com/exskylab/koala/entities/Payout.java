@@ -59,6 +59,9 @@ public class Payout extends BaseEntity {
     @Column(name = "failure_reason", length = 512)
     private String failureReason;
 
+    @Column(name = "settlement_reference", length = 128)
+    private String settlementReference;
+
     @Column(name = "completed_at")
     private Instant completedAt;
 }

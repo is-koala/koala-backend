@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.abstracts;
 
+import com.exskylab.koala.core.dtos.payout.request.ConfirmPayoutSettlementDto;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.Payout;
 import com.exskylab.koala.entities.Refund;
@@ -14,5 +15,9 @@ public interface PayoutService {
 
     Refund refundEmployer(UUID jobAssignmentId, BigDecimal amount, String reason);
 
+    Payout confirmSettlement(UUID payoutId, ConfirmPayoutSettlementDto evidence);
+
     List<Payout> getPayoutsForWorker(UUID workerId);
+
+    long countPayoutsAwaitingSettlementLongerThan(java.time.Duration age);
 }

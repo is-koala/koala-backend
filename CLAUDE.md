@@ -1557,7 +1557,7 @@ Artık `PayoutManager` sağlayıcıyı hiç çağırmıyor; `SettlementService.e
 
 İade tarafındaki ayrı `PROCESSING` commit'i kullanıcı sözleşmesindeki “talep edildi → işleniyor → iade edildi” ayrımını gerçekten gözlenebilir kılar. Uygulama provider çağrısı sırasında kapanırsa refund `PROCESSING`, settlement görevi `PENDING` kalabilir; kalıcı görev aynı çağrıyı retry eder, tavan dolarsa `FAILED` ile kapanır.
 
-**`PayoutStatus.COMPLETED` bilerek kullanılmıyor.** Sağlayıcı `approve` çağrısı yalnızca talimatın kabul edildiğini söyler; paranın işçinin banka hesabına geçtiğini söyleyen bir geri bildirim yok. O geçiş Iyzico ödeme raporuyla mutabakat gerektiriyor, Faz 11B'nin kalan parçası.
+**`PayoutStatus.COMPLETED`'a giden tek yol banka mutabakatıdır (§2y3).** Sağlayıcı `approve` çağrısı yalnızca talimatın kabul edildiğini söyler; paranın işçinin banka hesabına geçtiğini söylemez. `PROCESSING` bu yüzden terminal değil, **kanıt bekleyen** bir durumdur.
 
 **Bu entegrasyon hâlâ sandbox'ta uçtan uca doğrulanmadı** (protokol denetimi §2x'te yapıldı, dört blocker düzeltildi). `iyzico.settlementEnabled=false` iken hiç kuyruğa girilmez, `iyzico.settlement-retry.enabled=false` iken kuyruk işlenmez — ikisi de prod'a kademeli geçiş için.
 
@@ -1602,6 +1602,57 @@ zaman parayı korumaktan yana.
 `IyzicoProperties.baseUrl` alanının Java varsayılanı da sandbox; yapılandırma
 tümüyle kaybolsa bile canlıya düşülmez. Kuralı `IyzicoEnvironmentSplitTest`
 on iki kuralla sabitliyor. Operasyon tarafı `docs/runbooks/payments.md`'de.
+
+## 2y3. Payout mutabakatı — `PROCESSING`'i `COMPLETED` yapan kanıt
+
+**Sorun kovada değil kanıttaydı.** `SettlementManager` başarılı `APPROVE` görevinde payout'u `PROCESSING` yapıyordu ve orada bırakıyordu: `COMPLETED` yazan **hiçbir üretim yolu yoktu** (#101). Sonuç iki taraflıydı — işçi kazanç ekranında hiçbir hakedişi "tamamlandı" göremiyordu, ve `PROCESSING`'de takılan bir satırı kurtaran hiçbir mekanizma yoktu: yeniden denenecek bir sağlayıcı çağrısı yok (talimat zaten kabul edilmiş), o satırı seçen bir zamanlayıcı yok, runbook sorgusu yok, alarm yok. #128'deki takılı `INITIATED` denemesinin ödeme çıkışındaki birebir eşi.
+
+### Kanıt nereden geliyor — üç aday, bugün fiilen bir tanesi var
+
+Issue üç kaynak öneriyordu ve seçim depodaki gerçeğe göre yapıldı:
+
+| Aday | Bugünkü durumu |
+|---|---|
+| Iyzico gönderim/rapor sorgulama ucu | **Yok.** `IyzicoEndpoints` yedi yol taşıyor (submerchant, CF initialize/retrieve, item approve/disapprove, refund, cancel); gönderim raporu yok. §2x denetimi dokümana karşı satır satır yapıldı, böyle bir uç eklenmedi. |
+| Webhook | **Yok.** §2x'in kendi ifadesi: "Webhook tüketicisi hâlâ yok." |
+| Kontrollü operasyon içe aktarımı | **Var.** Ekstre/rapor zaten insan eliyle okunuyor — runbook §4 bunu yordam olarak yazıyor. |
+
+**Seçilen: personel onaylı ekstre satırı.** Gerekçe §2k2'nin IBAN sahipliği doğrulamasında verdiği gerekçenin aynısı ve o karar bu depoda zaten uygulanmış durumda: elimizde olduğu **doğrulanmamış** bir sağlayıcı yeteneğinin üzerine adapter yazmak, para yolunda çalıştığı hiç görülmemiş bir kod bırakmak olurdu. Iyzico sandbox anahtarları hâlâ yok (§0), ödeme akışı uçtan uca hiç denenmedi; uydurulmuş bir rapor ucu, `COMPLETED`'ı gerçek kanıta değil **varsayıma** bağlardı. Rapor ucu ya da webhook geldiğinde `PayoutService.confirmSettlement` imzası onu zaten kaldırıyor — tüketici aynı metodu çağırır, kural tek yerde kalır.
+
+### Kanıtın dört bileşeni ve kapının yeri
+
+`POST /admin/payouts/{payoutId}/reconcile` ekstre satırından dört şey ister: `settlementReference` (satırın kendi kimliği), `providerReference`, `amount`, `currency`, `settledAt`. `PayoutManager.confirmSettlement` payout satırını kilitler ve **hepsini mevcut snapshot'la karşılaştırır**; `providerReference` payout'a `markPayoutProcessing` sırasında Iyzico'nun `approve` yanıtından yazılmış olan korelasyon anahtarıdır. Tutar `BigDecimal.compareTo` ile (§2e), para birimi `Locale.ROOT` büyütmesiyle (§2ag) karşılaştırılıyor; `settledAt` payout kaydından **önce** olamaz — talimattan önce gerçekleşmiş bir transfer o talimatın transferi değildir.
+
+**Uyuşmazlık terminal değil.** Eşleşmeyen kanıt `FAILED` yazmaz: "kanıt uymadı" ile "transfer olmadı" ayrı şeylerdir ve ikincisini yalnızca ekstrenin yokluğu söyler. Satır `PROCESSING` kalır, `koala_payment_operations_total{operation="payout_settlement",outcome="evidence_mismatch"}` artar ve log **hangi alanın** uymadığını yazar. Yön §2k'nin "tahsilat ihtimali dışlanamadıkça terminal yapma" kuralıyla aynı, sadece paranın diğer ucunda.
+
+**Sağlayıcı referansı olmayan payout mutabakat edilemez, bilinçli olarak.** `dispatch` null dönerse payout `provider_reference`'sız kalır; karşılaştırılacak korelasyon anahtarı olmadan "bu ekstre satırı bu hakedişin" iddiası kanıtsızdır. 409 dönüyor ve satır kuyrukta kalıp yükseltiliyor — kanıtsız `COMPLETED` yazmaktansa görünür biçimde asılı kalması tercih edildi.
+
+**İzin ayrı: `payout.reconcile` (`FINANCIAL`, mutating), seed'de yalnız `FINANCE_OFFICER`.** `payout.release` parayı emanetten **çıkarmayı** adlandırıyor, bu eylem ise ekstreyi okuyup gerçekleşmiş bir transferi kaydetmek — §2k2'deki `bank.account.verify` kararının aynısı, aynı gerekçeyle. Görev ayrılığı da bunu istiyor: talimatı veren ile "para gitti" diyen aynı izin olmamalı. Uç `/admin/**` altında olduğu için denetim kaydına giriyor (§2av).
+
+### Garantiler veritabanında, uygulamada değil
+
+Üç invariant'ın hiçbiri Java'ya emanet edilmedi:
+
+- **`chk_payouts_completed_requires_evidence`** — `status = 'COMPLETED'` bir satır `settlement_reference`, `provider_reference` ve `completed_at` olmadan yazılamaz. Kabul maddesinin ("gerçek kanıt gelmeden `COMPLETED` olmaz") doğrudan karşılığı ve yarın eklenecek ikinci bir yazma yolunu da bağlar — §2k2'de `BankAccount.setIban`'ı entity'ye koyma gerekçesinin aynısı, bir seviye aşağıda.
+- **`uk_payouts_settlement_reference`** — bir ekstre satırı en fazla bir hakedişi tamamlar. Toplu bir gönderim satırı çıkarsa operatör 409 alır ve yükseltir; yanılma yönü sessiz çift tamamlamaya değil, görünür çakışmaya doğru.
+- **`idx_payouts_awaiting_settlement`** — kısmi indeks, kuyruk sorgusunun taradığı küme. Aynı zamanda kümenin SQL tarafındaki tanımı: `PayoutStatus.AWAITING_SETTLEMENT` ile **eşitliği** `PayoutSettlementReconciliationIT` ölçüyor (`contains` değil). #128'in dersi: küme iki yerde bilinirse ayrışır ve ayrışma para yolunda sessiz kalır.
+
+**İdempotentlik iki katmanlı.** Aynı `settlementReference` ikinci kez bildirilirse kayıt okunur ve **değiştirilmeden** döner — `completedAt` yeniden damgalanmaz, sayaç `already_settled` artar. Farklı bir referans zaten tamamlanmış bir hakedişe işlenmek istenirse 409; bu idempotentlik değil çakışmadır ve sessizce geçilmemeli. Uygulama kontrolü hızlı hata içindir, **doğruluğun kaynağı yine indekstir**: iki eşzamanlı transaction aynı referansı iki ayrı hakedişe yazmaya çalıştığında kaybedeni veritabanı reddediyor ve testi bunu `CyclicBarrier` ile örtüştürerek ölçüyor (§3'teki #128 dersi: kilit yarışı sıraya sokuyorsa test yalancı yeşildir).
+
+### Takılı satırı ne kurtarıyor
+
+**Hiçbir otomatik yol — ve bu bilinçli.** Sağlayıcı talimatı kabul etmiş durumda; yeniden denenecek çağrı yok, `settlement_tasks` görevi `SUCCEEDED`. Kaydı ilerleten tek şey ekstre satırıdır. Görünürlük bu yüzden #128'deki iki somut yolla kuruluyor ve **ikisi de testle bağlı**:
+
+1. **Alarm.** `PayoutSettlementOverdueScheduler` saatte bir `payout.settlement.overdue-after`'dan (varsayılan 3 gün) eski `PROCESSING` satırları sayıp `koala_payout_settlement_overdue` göstergesine yazıyor; `KoalaPayoutSettlementOverdue` bunu izliyor. `OperationalRunbookContractTest` gösterge adını **kayıt defterinden okuyup** alarm dosyasında o seriyi arıyor, yani metrik adı değişirse ya da kural silinirse test kırmızıya döner.
+2. **Runbook kuyruğu.** `docs/runbooks/payments.md` §4 adım 7'deki SQL. `PayoutSettlementReconciliationIT` bu sorguyu **belgeden okuyup gerçek Postgres'te koşuyor**: vadesi geçmiş satırı döndürdüğünü, taze `PROCESSING` satırı ile mutabakat edilmiş satırı **döndürmediğini** iddia ediyor.
+
+Sayaç yerine gösterge (`Gauge`) seçildi: soru "kaç kez oldu" değil, "**şu anda** kaç satır asılı". Her koşuda artan bir sayaç aynı satırı defalarca sayardı ve alarm satır kapandıktan sonra da yanardı.
+
+### Kapsam dışı, açıkça
+
+- **Otomatik yeniden deneme/geri çekilme bu ayakta yok.** Otomatikleştirilen ayak sağlayıcı talimatıdır ve onun retry/backoff'u §2y'deki outbox'ta zaten var (8 deneme, üstel, 6 saat tavan). Ekstre satırı bir insan girdisi; "yeniden deneme" düzeltilmiş kanıtla ikinci çağrıdır. Rapor ucu ya da webhook geldiği gün otomatik ayak `confirmSettlement`'ın üstüne oturur ve geri çekilme oraya yazılır.
+- **Mutabakat bekleyen hakedişleri listeleyen bir personel ucu yok.** #128'de aynı karar aynı gerekçeyle verildi: görünürlük alarm + runbook sorgusuyla kuruluyor, yeni bir okuma yüzeyi icat edilmiyor.
+- **Sandbox'ta uçtan uca doğrulanmadı.** Kural, sahte kanıtlara ve gerçek Postgres'e karşı sabitlendi; gerçek bir Iyzico gönderim raporuyla teyit prod öncesi şart (§7, Faz 7C).
 
 ## 2z. Gerçek zamanlı katman
 
