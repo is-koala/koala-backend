@@ -2616,15 +2616,101 @@ tanımı değiştiğinde changelog ile çalışma zamanının ayrışmasını da
 kuralın **ne olduğu** okunurken kaynak koddan çıkmalı.
 
 **İstisna "atanan" kümede aranıyor, "ulaşılan" kümede değil, ve fark bir deliği kapatıyor.** Kapsamada atanan küme
-`{parent}`, üyelikte personelin **doğrudan** rolleri. Ulaşılan kümeye bakılsaydı `X ← OWNER` yazımı — X'e her şeyi,
-yani iki dalı birden veren kapsama — kapanışında `OWNER` göründüğü için muaf sayılırdı; oysa X, `OWNER` olmadan
-owner-eşdeğeri bir rol hâline gelirdi ve kuralın yasakladığı şey tam olarak budur. Bugün o yazım reddediliyor.
+denetlenen **tek bir rol**, üyelikte personelin **doğrudan** rolleri. Ulaşılan kümeye bakılsaydı `X ← OWNER` yazımı
+— X'e her şeyi, yani iki dalı birden veren kapsama — kapanışında `OWNER` göründüğü için muaf sayılırdı; oysa X,
+`OWNER` olmadan owner-eşdeğeri bir rol hâline gelirdi ve kuralın yasakladığı şey tam olarak budur. Bugün o yazım
+reddediliyor.
 
-**İki yolda da kontrol yazımdan önce ve idempotanlığı bozmuyor.** Kapsamada guard döngü kontrolünün hemen yanında
-ve kapanış `closureOf(parent) ∪ closureOf(child)` ile **kenar eklenmiş gibi** hesaplanıyor, yani finans dalına bir
-ara rol üzerinden geçişli ulaşan yazım da kesiliyor. Üyelikte guard `existsByMemberIdAndRoleId` erken dönüşünden
-**sonra**: zaten var olan bir üyeliğin yeniden verilmesi bir yazım değil, ve önceden kalmış aykırı bir satır
-yüzünden no-op çağrının patlaması istenmedi.
+**İki kümeyi ayıran şey tip, sıra değil: `StaffBranchReach`.** Kural bir süre iki konumsal `Collection<String>`
+alıyordu (`requireBranchesStaySeparate(assigned, reached)`); iki argüman yer değiştirse kod **derlenir** ve — bir
+üstteki paragrafın anlattığı — `X ← OWNER` deliği sessizce açılırdı, çünkü `OWNER` o zaman ulaşılan kümede aranırdı.
+Kritik olduğu bir paragrafla savunulan bir ayrımı derleyicinin koruyamaması kabul edilmedi. Değer nesnesi iki adımda
+kuruluyor (`StaffBranchReach.assignedRole(kod).reaching(ulaşılanlar)`), yani her iki küme çağrı yerinde adıyla
+anılıyor ve kurala tek argüman gidiyor.
+
+### Kural kapanışa yukarı da bakıyor
+
+**Kapanış bir süre yalnız kenarın ebeveyninden aşağıya bakıyordu ve değişmez tam o uçtan kırılabiliyordu.** Guard
+`closureOf(parent) ∪ closureOf(child)` ile kuruluyordu, yani kontrol edilen küme `{parent}`'tan ibaretti;
+**ebeveynin ataları hiç sorulmuyordu**. Ölçüldü: `A → MODERATOR` ve `A → C` yasal biçimde kurulduktan sonra
+`C → FINANCE_OFFICER` isteği **200** dönüyordu ve `closure(A)` hem trust hem finans dalını kapsar hâle geliyordu.
+Bu, bu deponun izlediği kusur sınıfının kendi içinde tekrarıydı: kural yerinde, kapsamı sessizce dar.
+
+**Doğru kural şu ve uygulanan bu: `P → C` kenarı eklenirken `P`'ye ulaşabilen her rol — yani `ataları(P) ∪ {P}` —
+artık `closure(C)`'ye de ulaşır; bu kümedeki `OWNER` olmayan her `A` için `closure(A) ∪ closure(C)` iki dalı birden
+kapsamamalı.** Yani `closure(A) ∪ closure(C)` kenarın eklenmiş hâlindeki `closure(A)`'nın ta kendisi.
+
+**Aynı kök nedenin bir de üyelik yansıması vardı ve o da kapandı.** Personelin taşıdığı **boş** bir role sonradan
+finans dalı asılınca personel iki dala birden ulaşıyor ve hiçbir yeniden doğrulama yapılmıyordu — üyelik kuralı
+yalnız üyelik **verilirken** koşuyordu, grafiğin sonradan değişmesi onu hiç ilgilendirmiyordu. Kenar eklenirken artık
+o kenardan etkilenen personeller de doğrulanıyor. **Etkilenen küme sınırlı ve tam olarak yukarıdakiyle aynı:**
+`ataları(P) ∪ {P}` kümesindeki rollerden herhangi birini taşıyan personeller — çünkü `P`'ye ulaşan tek yol o roller.
+
+**Yukarı yürüyen sorgu aşağı yürüyenin simetriği:** `staffRoleIncludeDao.findAllWithRolesByChildRoleIdIn`,
+`findAllWithRolesByParentRoleIdIn`'in aynası. İkisi de seviye seviye yürüyor, yani sorgu sayısı grafiğin
+**derinliğine** bağlı, düğüm sayısına değil.
+
+**Bu bir yazma yolu, o yüzden döngü içinde sorgu atılmıyor.** Ata kümesi bir kez yukarı yürüyerek, o kümenin altındaki
+komşuluk haritası bir kez aşağı yürüyerek çıkarılıyor; her ata için kapanış o haritada **bellekte** hesaplanıyor
+(`reachedFrom`), rol kodları tek bir `findAllById` ile alınıyor. Üyelik yansımasında da aynı şey: etkilenen
+personeller tek sorguda, onların bütün rolleri ikinci bir sorguda, o rollerin altındaki grafik yine tek bir aşağı
+yürüyüşle geliyor — personel başına `resolve(...)` çağrılmıyor.
+
+**`closureOf(child)` bir kez hesaplanıyor.** Kısa bir süre aynı çağrı `includeRole` içinde **üç kez** yapılıyordu
+(döngü kontrolü, guard, izin kontrolü) ve her biri seviye başına bir sorgu atıyordu. Bugün metodun başında bir kez
+hesaplanıp üç yerde de o kullanılıyor.
+
+**İki yolda da kontrol yazımdan önce ama idempotanlık erken dönüşünden sonra, ve iki yol artık aynı sırada.**
+Üyelikte guard baştan beri `existsByMemberIdAndRoleId` erken dönüşünden **sonraydı**: zaten var olan bir üyeliğin
+yeniden verilmesi bir yazım değil, ve önceden kalmış aykırı bir satır yüzünden no-op çağrının patlaması istenmedi.
+Kapsamada ise guard erken dönüşten **önce** koşuyordu ve `StaffRolesController` "İdempotenttir" diye belgelediği
+hâlde zaten var olan aykırı bir kenar yeniden POST edildiğinde **409** dönüyordu — issue'nun tarifine göre üretimde
+bugün böyle kenarlar var, yani bu canlı veride tetiklenirdi. Sıra üyelik yoluyla eşitlendi: önce yetki kontrolü,
+sonra idempotanlık erken dönüşü, sonra guard. Yan kazanç: no-op bir çağrı artık ata ve üyelik taramasını hiç
+çalıştırmıyor.
+
+**Aggregate sınırı bir muafiyetle geçiliyor ve gerekçesi bean döngüsü.** Üyelik yansıması için
+`StaffAuthorizationManager` `StaffMemberRoleDao`'ya **salt okuma** olarak uzanıyor; `StaffAccountService` üzerinden
+gitmek `StaffAccountManager → StaffAuthorizationService` bağının ters yönü olurdu ve §1 `@Lazy` ile gizlemeyi
+yasaklıyor. `AggregateBoundaryTest.EXEMPTIONS` listesinde gerekçesiyle yazılı — §2ae'nin kendi öngördüğü yol — ve
+`everyExemptionIsStillNeeded` liste bayatlarsa kırmızıya dönüyor.
+
+### Dal tanımı asimetrik ve bu bir kapsam daralması riski
+
+`isFinanceBranch` bir **önek** kontrolü (`FINANCE_`), `isTrustBranch` ise **kapalı bir liste**
+(`MODERATOR`/`DISPUTE_HANDLER`/`TRUST_LEAD`). Ölçüldü: `isFinanceBranch("FINANCE_ANYTHING_NEW")` **true**,
+`isTrustBranch("FRAUD_REVIEWER")` **false**. Yani seed'e eklenecek yeni bir finans rolü kurala kendiliğinden girer,
+yeni bir trust rolü **sessizce dışarıda kalır** — bu deponun izlediği kusur sınıfının aynısı, üstelik önceki hâlde
+`StaffRoleGraphSeedTest` yalnız "en az bir trust, en az bir finans rolü tanınıyor" diyordu: tamlık değil boş-olmama
+kontrolü.
+
+**İki dalı simetrik hâle getirmek (ikisi de önek ya da ikisi de liste) reddedildi.** Trust dalını öneke çevirmek
+(`TRUST_`) seed'deki üç rolün de yeniden adlandırılmasını, yani changelog'a dokunmayı ve token/panel tarafında rol
+kodu değiştirmeyi gerektirirdi; finans dalını kapalı listeye çevirmek ise bugün **çalışan** bir korumayı — yeni bir
+`FINANCE_*` rolünün otomatik kapsanmasını — kaldırırdı. İkisi de kuralın kapsamını daraltma riskini ortadan
+kaldırmıyor, yalnız yerini değiştiriyor.
+
+**Seçilen: kapalı liste korunuyor, ama seed'deki her rolün bilinçli olarak sınıflandırıldığı testle zorlanıyor.**
+`StaffRoleGraphSeedTest.everySeededRoleIsDeliberatelyPlacedInABranchOrOutsideBoth` changelog'daki `staff_roles`
+satırlarını okuyor ve testte yazılı sınıflandırma listesiyle **iki yönlü** karşılaştırıyor: seed'de olup listede
+olmayan rol kırmızı, listede olup seed'de olmayan rol kırmızı, ve her rolün çalışma zamanı sınıflandırması
+(`isTrustBranch`/`isFinanceBranch`/`isOwnerExemption`) listedekiyle **aynı** olmak zorunda. Bugün seed'de on rol var:
+üçü trust (`MODERATOR`, `DISPUTE_HANDLER`, `TRUST_LEAD`), ikisi finans (`FINANCE_ANALYST`, `FINANCE_OFFICER`), biri
+`OWNER`, dördü bilinçli olarak hiçbir dalda (`CATALOG_EDITOR`, `SUPPORT_AGENT`, `AUDITOR`, `COMPANY_APPROVER`).
+
+Bu seçenek daha güçlü çünkü sınıflandırma kararını **insana bırakıp unutulmasını imkânsız kılıyor**: seed'e
+sınıflandırılmamış bir rol eklendiği gün test kırmızıya dönüyor ve ekleyen kişi rolün hangi dala ait olduğuna —
+ya da bilinçli olarak hiçbirine ait olmadığına — karar vermek zorunda kalıyor. Simetri tek başına bunu yapmazdı:
+`FRAUD_REVIEWER` iki dal da önek olsaydı yine sessizce dışarıda kalırdı. Depoda "belgeyi/seed'i okuyan test" kalıbı
+zaten var (`ProductionConfigurationContractTest`, `StaffRoleGraphSeedTest`'in kendisi).
+
+**`TRUST_LEAD` listede kalıyor ve ADR güncellendi.** Kod dalı `MODERATOR`/`DISPUTE_HANDLER`/`TRUST_LEAD` diye
+tanımlıyordu, [ADR-0014](docs/adr/0014-keep-staff-identity-in-koala.md):61 ve issue ise yalnız ilk ikisini sayıyordu.
+Davranışsal olarak `TRUST_LEAD`'i saymak büyük ölçüde artıklı — kapanış zaten `TRUST_LEAD → MODERATOR + DISPUTE_HANDLER`
+kenarlarını izliyor — ama **yazılı kuralı genişletiyordu ve ADR metniyle ayrışıyordu**. Listeden çıkarmak yerine ADR'ye
+kapsamı netleştiren bir ek satır yazıldı: `TRUST_LEAD` grafikte o iki rolün kapsayanı, yani kuralın koruduğu ayrımın
+trust tarafında; sınıflandırma listesi de artık her seed rolünü adlandırdığı için onu adsız bırakmak yeni bir boşluk
+açardı. Karar değişmedi, kapsamı yazıldı — ADR sessizce çelişkide bırakılmadı.
 
 **Anahtar `{staff.separation.of.duties.violated}`, yani `errorCode` `STAFF_SEPARATION_OF_DUTIES_VIOLATED` (409).**
 İki yol da aynı kodu döndürüyor — istemcinin ayırt etmesi gereken iki hâl değil, tek kural. `ConflictException`
@@ -3220,19 +3306,27 @@ Birim testlerde `CommissionCalculator` artık `FallbackSettings.commissionCalcul
 **Rol→izin yüzeyi testleri (§2au).** `StaffRoleAdministrationIT` on beş kural sabitliyor — gerçek HTTP ve gerçek Postgres üzerinden: liste her rolü kendi izinleri ve doğrudan kapsamalarıyla döndürür, detay `TRUST_LEAD → MODERATOR + DISPUTE_HANDLER → SUPPORT_AGENT` zincirini geçişli çözer, panelden verilen izin bir sonraki okumada görünür, geri alınan izin kaybolur, döngü yaratan kapsama **409** ile reddedilir, kaldırılan kapsama artık izin taşımaz, **aktör kendi ulaştığı rolden `role.manage`'i alamaz** (grafikte başka sahip kalsa bile) ama ulaşmadığı bir rolden alabilir, `role.manage` taşımayan personel **yedi ucun hepsinden 403** alır, sahip olmadığı izni role ekleyemez ve satır hiç açılmaz, izin kataloğu her kodu `mutating`/`sensitivity` ile verir. Son dördü denetim izini sabitliyor: verilen ve geri alınan iznin kodu, eklenen ve kaldırılan kenarın rol kodu denetim satırının önce/sonra değerlerinde görünür — ikisi de yalnız yolda geçtiği için başka hiçbir yerde yazmıyordu. `StaffAuthorizationIT` servis katmanındaki aynı kuralları `UUID` anahtarıyla korumaya devam ediyor.
 
 **Görev ayrılığı testleri (§2au §Görev ayrılığı).** `StaffRoleGraphSeedTest` seed'i tutmaya devam ediyor ve dal
-tanımını artık `StaffSeparationOfDuties`'ten okuyor; dokuzuncu testi çalışma zamanı tanımının seed'deki rol
-kodlarını gerçekten tanıdığını doğruluyor — tanımadığı gün kural sessizce hiçbir şeye uygulanmaz olurdu.
-`StaffSeparationOfDutiesIT` **çalışma zamanını** ölçüyor, gerçek HTTP ve gerçek Postgres üzerinden sekiz kural:
+tanımını artık `StaffSeparationOfDuties`'ten okuyor; dokuzuncu testi **seed'deki her rolün** trust dalına, finans
+dalına ya da bilinçli olarak hiçbirine atandığını iki yönlü doğruluyor — sınıflandırılmamış bir rol seed'e
+eklendiğinde de, çalışma zamanı tanımı listeyle ayrıştığında da kırmızıya dönüyor.
+`StaffSeparationOfDutiesIT` **çalışma zamanını** ölçüyor, gerçek HTTP ve gerçek Postgres üzerinden on iki kural:
 trust dalını kapsayan bir role finans dalı eklenemez ve kenar yazılmaz, finans dalına bir ara rol üzerinden
-geçişli ulaşan kapsama da reddedilir, aynı daldaki iki rol birleşmeye devam eder, **`OWNER` her iki dalı
-kapsamaya devam eder**, trust rolü taşıyan personele finans rolü verilemez ve üyelik yazılmaz, ters sırada da
+geçişli ulaşan kapsama da reddedilir, **kenarın ebeveyni temiz olsa da atası iki dalı kapsayacaksa kenar
+reddedilir**, **rol grafiği tek başına temiz kalsa da o kenar bir personeli iki dala ulaştıracaksa reddedilir**,
+zaten var olan bir kenarın yeniden POST edilmesi **200** döner, **kuraldan önce yazılmış aykırı bir kenarın
+yeniden POST edilmesi de 200 döner** (idempotanlık), aynı daldaki iki rol birleşmeye devam eder, **`OWNER` her iki
+dalı kapsamaya devam eder**, trust rolü taşıyan personele finans rolü verilemez ve üyelik yazılmaz, ters sırada da
 verilemez, tek dal içindeki ikinci rol verilebilir, **`OWNER` üyeliği verilebilir**.
 
-**Mutasyon kanıtı üç ayrı katmanda alındı** — saf yardımcıyı bozmak, onu kullanan bağlantının korunduğunu
-kanıtlamaz: `includeRole`'daki guard çağrısı silindiğinde yalnız iki kapsama testi düşüyor (üyelik testleri
-yeşil kalıyor), `grantRole`'daki guard çağrısı silindiğinde yalnız iki üyelik testi düşüyor, `OWNER` istisnası
-silindiğinde yalnız iki `OWNER` testi düşüyor. Üç turda da `StaffRoleGraphSeedTest` **yeşil kaldı** — issue'nun
-teşhisinin kanıtı: seed testi çalışma zamanı deliğini hiçbir zaman göremezdi.
+**Mutasyon kanıtı beş ayrı katmanda alındı** — saf yardımcıyı bozmak, onu kullanan bağlantının korunduğunu
+kanıtlamaz. Her turda **yalnız** beklenen testler düştü: ata kümesi bugünkü hâline (`Set.of(parent.getId())`)
+indirildiğinde yalnız ata testi (200 döndü, 409 bekleniyordu), `includeRole`'daki guard çağrısı silindiğinde dört
+kapsama testi (üyelik testleri yeşil kaldı), üyelik yansıması çağrısı silindiğinde yalnız o test,
+`grantRole`'daki guard çağrısı silindiğinde yalnız iki üyelik testi, `OWNER` istisnası silindiğinde yalnız iki
+`OWNER` testi. Beş turda da `StaffRoleGraphSeedTest` **yeşil kaldı** — issue'nun teşhisinin kanıtı: seed testi
+çalışma zamanı deliğini hiçbir zaman göremezdi. Ayrıca mesaj anahtarı yalnız `messages_tr`'den silindiğinde
+`MessageCatalogTest`, seed'e sınıflandırılmamış bir rol (`FRAUD_REVIEWER`) eklendiğinde `StaffRoleGraphSeedTest`
+kırmızıya döndü.
 
 **Davet kanalı testleri (§2s3).** `CompanyInvitationDeliveryTest` beş kural: davet edilen kişinin akışına `COMPANY_CONTACT_INVITATION` hedefi ve davetin kimliğiyle bir kayıt düşer, akış kaydı yazılamazsa ne davet ne e-posta kaybolur, davet e-postasının konusu dolu, kabul ve ret makbuzlarının ikisi de kendi konusunu taşır. `CompanyInvitationDeliveryIT` iki kural — uçtan uca: davet edilen kişi `GET /users/me/notifications` yanıtındaki `targetId` ile `GET /contact-invitations/{id}` çağırıp davetine ulaşır, ve hem e-posta hem akış kaydı `notifications.subject` sütununu dolu bırakır.
 

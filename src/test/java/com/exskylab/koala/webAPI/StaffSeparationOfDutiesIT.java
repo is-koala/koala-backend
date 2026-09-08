@@ -1,5 +1,6 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.core.helpers.StaffSeparationOfDuties;
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -89,6 +91,35 @@ class StaffSeparationOfDutiesIT extends AbstractStaffIntegrationTest {
                 .header("Authorization", "Bearer " + token));
     }
 
+    private void insertInclusionWithoutTheEndpoint(UUID parentRoleId, UUID childRoleId) {
+        jdbcTemplate.update("insert into staff_role_includes (id, parent_role_id, child_role_id, created_at) "
+                + "values (?, ?, ?, now())", UUID.randomUUID(), parentRoleId, childRoleId);
+    }
+
+    private List<String> closureCodesOf(UUID roleId) {
+        return jdbcTemplate.queryForList("""
+                with recursive reachable(id) as (
+                    select cast(? as uuid)
+                    union
+                    select i.child_role_id from staff_role_includes i join reachable x on i.parent_role_id = x.id
+                )
+                select r.code from staff_roles r join reachable v on v.id = r.id order by r.code
+                """, String.class, roleId);
+    }
+
+    private List<String> reachedCodesOf(UUID staffId) {
+        return jdbcTemplate.queryForList("""
+                with recursive assigned(id) as (
+                    select staff_role_id from staff_member_roles where staff_member_id = cast(? as uuid)
+                ), reachable(id) as (
+                    select id from assigned
+                    union
+                    select i.child_role_id from staff_role_includes i join reachable x on i.parent_role_id = x.id
+                )
+                select r.code from staff_roles r join reachable v on v.id = r.id order by r.code
+                """, String.class, staffId);
+    }
+
     @Test
     void anInclusionThatWouldSpanTheTrustAndFinanceBranchesIsRefused() throws Exception {
         UUID spanning = testRole("TEST_SOD_SPANNING");
@@ -119,6 +150,68 @@ class StaffSeparationOfDutiesIT extends AbstractStaffIntegrationTest {
 
         assertEquals(List.of("MODERATOR"), includedCodesOf(spanning),
                 "Finans dalı bir ara rol üzerinden de ulaşılıyor olsa kural işlemeli");
+    }
+
+    @Test
+    void anInclusionIsRefusedWhenAnAncestorOfTheParentAlreadyReachesTheOtherBranch() throws Exception {
+        UUID top = testRole("TEST_SOD_ANCESTOR_TOP");
+        UUID mid = testRole("TEST_SOD_ANCESTOR_MID");
+        String token = ownerToken();
+
+        include(top, roleId("MODERATOR"), token).andExpect(status().isOk());
+        include(top, mid, token).andExpect(status().isOk());
+
+        include(mid, roleId("FINANCE_OFFICER"), token)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value(ERROR_CODE));
+
+        assertEquals(List.of(), includedCodesOf(mid),
+                "Kenarın ebeveyni temiz olsa da atası iki dalı birden kapsayacaksa kenar yazılmamalı");
+        assertFalse(StaffSeparationOfDuties.spansBothBranches(closureCodesOf(top)),
+                "Kural kenarın yalnız aşağısına değil, ebeveyne ulaşan her role bakmalı");
+    }
+
+    @Test
+    void anInclusionIsRefusedWhenItWouldSpanTheBranchesForStaffAlreadyCarryingTheParent() throws Exception {
+        UUID carrier = testRole("TEST_SOD_CARRIER");
+        String token = ownerToken();
+        UUID target = staff("MODERATOR");
+
+        grant(target, "TEST_SOD_CARRIER", token).andExpect(status().isOk());
+
+        include(carrier, roleId("FINANCE_OFFICER"), token)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value(ERROR_CODE));
+
+        assertEquals(List.of(), includedCodesOf(carrier),
+                "Rol grafiği tek başına temiz kalsa da üyelik iki dala birden ulaşacaksa kenar yazılmamalı");
+        assertFalse(StaffSeparationOfDuties.spansBothBranches(reachedCodesOf(target)),
+                "Personel, boşken verilen bir role sonradan asılan dal üzerinden iki dala ulaşamamalı");
+    }
+
+    @Test
+    void anInclusionThatAlreadyExistsIsAcceptedAgain() throws Exception {
+        UUID trustOnly = testRole("TEST_SOD_REPOST");
+        String token = ownerToken();
+
+        include(trustOnly, roleId("MODERATOR"), token).andExpect(status().isOk());
+        include(trustOnly, roleId("MODERATOR"), token).andExpect(status().isOk());
+
+        assertEquals(List.of("MODERATOR"), includedCodesOf(trustOnly));
+    }
+
+    @Test
+    void anInclusionRowThatPredatesTheRuleIsStillIdempotent() throws Exception {
+        UUID spanning = testRole("TEST_SOD_LEGACY");
+        String token = ownerToken();
+
+        insertInclusionWithoutTheEndpoint(spanning, roleId("MODERATOR"));
+        insertInclusionWithoutTheEndpoint(spanning, roleId("FINANCE_OFFICER"));
+
+        include(spanning, roleId("FINANCE_OFFICER"), token).andExpect(status().isOk());
+
+        assertEquals(List.of("FINANCE_OFFICER", "MODERATOR"), includedCodesOf(spanning),
+                "Kuraldan önce yazılmış aykırı bir satır no-op çağrıyı patlatmamalı");
     }
 
     @Test

@@ -11,6 +11,7 @@ import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.UnauthorizedException;
 import com.exskylab.koala.core.helpers.LogMasks;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
+import com.exskylab.koala.core.helpers.StaffBranchReach;
 import com.exskylab.koala.core.helpers.StaffSeparationOfDuties;
 import com.exskylab.koala.core.properties.StaffAuthProperties;
 import com.exskylab.koala.core.security.JwtService;
@@ -409,8 +410,9 @@ public class StaffAccountManager implements StaffAccountService {
         Set<String> assignedAfterGrant = new LinkedHashSet<>(roleCodesOf(member.getId()));
         assignedAfterGrant.add(granted.getCode());
 
-        StaffSeparationOfDuties.requireBranchesStaySeparate(assignedAfterGrant,
-                staffAuthorizationService.resolve(assignedAfterGrant).roles());
+        StaffSeparationOfDuties.requireBranchesStaySeparate(
+                StaffBranchReach.assignedRoles(assignedAfterGrant)
+                        .reaching(staffAuthorizationService.resolve(assignedAfterGrant).roles()));
     }
 
     private void requireAnAdministratorSurvives(StaffPrincipal actor, StaffMember target) {

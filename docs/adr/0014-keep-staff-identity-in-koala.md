@@ -60,6 +60,10 @@ OWNER             ← hepsi
 
 **Görev ayrılığı kuralı:** hiçbir rol hem trust dalını (`MODERATOR`/`DISPUTE_HANDLER`) hem finans dalını (`FINANCE_*`) birden kapsamamalı — `OWNER` hariç.
 
+**Trust dalı `TRUST_LEAD`'i de kapsar.** Karar değişmedi, kapsamı netleşiyor: `TRUST_LEAD` yukarıdaki grafikte `MODERATOR + DISPUTE_HANDLER` kapsayanıdır, yani kuralın koruduğu ayrımın trust tarafındadır. Davranışsal olarak eklemek büyük ölçüde artıklı — kapanış zaten o iki kenarı izliyor — ama kuralı uygulayan çalışma zamanı tanımı (`StaffSeparationOfDuties`) dalı rol koduyla sayıyor ve seed'deki her rolün bir dala ya da bilinçli olarak hiçbirine atandığı testle doğrulanıyor; adı burada yazılı olmasaydı çalışma zamanı tanımı ADR metninden geniş kalırdı.
+
+Kural yalnız seed anında değil **çalışma anında da** zorlanır: bir kenar eklenirken kenarın ebeveynine ulaşan her rol ve o rolleri taşıyan her personel için, bir üyelik verilirken personelin rol birleşimi için. Ayrıntı `CLAUDE.md` §2au §Görev ayrılığı'nda.
+
 Grafik `db/changelog/2026/09/06-20-staff-authorization.xml` ile seed'lenir ve `StaffRoleGraphSeedTest` bu kuralı testle sabitler. Rolün *ne yapabildiği* rol→izin tablosunda durur; grafik yalnız kapsamayı söyler.
 
 ## Sonuçlar

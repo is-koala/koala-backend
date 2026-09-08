@@ -17,6 +17,9 @@ public interface StaffRoleIncludeDao extends JpaRepository<StaffRoleInclude, UUI
     @EntityGraph(attributePaths = {"parentRole", "childRole"})
     List<StaffRoleInclude> findAllWithRolesByParentRoleIdIn(Collection<UUID> parentRoleIds);
 
+    @EntityGraph(attributePaths = {"parentRole", "childRole"})
+    List<StaffRoleInclude> findAllWithRolesByChildRoleIdIn(Collection<UUID> childRoleIds);
+
     boolean existsByParentRoleIdAndChildRoleId(UUID parentRoleId, UUID childRoleId);
 
     void deleteByParentRoleIdAndChildRoleId(UUID parentRoleId, UUID childRoleId);

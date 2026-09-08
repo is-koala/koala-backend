@@ -35,16 +35,15 @@ public final class StaffSeparationOfDuties {
                 && roleCodes.stream().anyMatch(StaffSeparationOfDuties::isFinanceBranch);
     }
 
-    public static void requireBranchesStaySeparate(Collection<String> assignedRoleCodes,
-                                                   Collection<String> reachedRoleCodes) {
+    public static void requireBranchesStaySeparate(StaffBranchReach reach) {
         boolean exemptBecauseOwnerIsAssigned =
-                assignedRoleCodes.stream().anyMatch(StaffSeparationOfDuties::isOwnerExemption);
+                reach.assignedRoleCodes().stream().anyMatch(StaffSeparationOfDuties::isOwnerExemption);
 
         if (exemptBecauseOwnerIsAssigned) {
             return;
         }
 
-        if (spansBothBranches(reachedRoleCodes)) {
+        if (spansBothBranches(reach.reachedRoleCodes())) {
             throw new ConflictException(StaffMessages.SEPARATION_OF_DUTIES_VIOLATED);
         }
     }

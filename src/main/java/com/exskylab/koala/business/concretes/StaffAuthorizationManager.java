@@ -5,14 +5,17 @@ import com.exskylab.koala.core.constants.StaffMessages;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
+import com.exskylab.koala.core.helpers.StaffBranchReach;
 import com.exskylab.koala.core.helpers.StaffSeparationOfDuties;
 import com.exskylab.koala.core.security.StaffAuditContext;
 import com.exskylab.koala.core.security.StaffAuthorization;
 import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.core.security.StaffRoleView;
+import com.exskylab.koala.dataAccess.StaffMemberRoleDao;
 import com.exskylab.koala.dataAccess.StaffRoleDao;
 import com.exskylab.koala.dataAccess.StaffRoleIncludeDao;
 import com.exskylab.koala.dataAccess.StaffRolePermissionDao;
+import com.exskylab.koala.entities.StaffMemberRole;
 import com.exskylab.koala.entities.StaffPermission;
 import com.exskylab.koala.entities.StaffRole;
 import com.exskylab.koala.entities.StaffRoleInclude;
@@ -22,15 +25,18 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -46,13 +52,16 @@ public class StaffAuthorizationManager implements StaffAuthorizationService {
     private final StaffRoleDao staffRoleDao;
     private final StaffRolePermissionDao staffRolePermissionDao;
     private final StaffRoleIncludeDao staffRoleIncludeDao;
+    private final StaffMemberRoleDao staffMemberRoleDao;
 
     public StaffAuthorizationManager(StaffRoleDao staffRoleDao,
                                      StaffRolePermissionDao staffRolePermissionDao,
-                                     StaffRoleIncludeDao staffRoleIncludeDao) {
+                                     StaffRoleIncludeDao staffRoleIncludeDao,
+                                     StaffMemberRoleDao staffMemberRoleDao) {
         this.staffRoleDao = staffRoleDao;
         this.staffRolePermissionDao = staffRolePermissionDao;
         this.staffRoleIncludeDao = staffRoleIncludeDao;
+        this.staffMemberRoleDao = staffMemberRoleDao;
     }
 
     @Override
@@ -191,10 +200,137 @@ public class StaffAuthorizationManager implements StaffAuthorizationService {
         return reached;
     }
 
-    private Set<String> codesOf(Set<UUID> roleIds) {
-        Set<String> codes = new LinkedHashSet<>();
-        staffRoleDao.findAllById(roleIds).forEach(role -> codes.add(role.getCode()));
+    private Set<UUID> rolesReaching(UUID roleId, Map<UUID, String> codeOf) {
+        Set<UUID> reached = new LinkedHashSet<>();
+        reached.add(roleId);
+        Set<UUID> frontier = new LinkedHashSet<>(reached);
+
+        while (!frontier.isEmpty()) {
+            Set<UUID> next = new LinkedHashSet<>();
+            for (StaffRoleInclude include : staffRoleIncludeDao.findAllWithRolesByChildRoleIdIn(frontier)) {
+                UUID ancestor = rememberCodesOf(include, codeOf).getParentRole().getId();
+                if (reached.add(ancestor)) {
+                    next.add(ancestor);
+                }
+            }
+            frontier = next;
+        }
+        return reached;
+    }
+
+    private Map<UUID, Set<UUID>> inclusionEdgesBelow(Collection<UUID> seedRoleIds, Map<UUID, String> codeOf) {
+        Map<UUID, Set<UUID>> childrenOf = new LinkedHashMap<>();
+        Set<UUID> walked = new LinkedHashSet<>(seedRoleIds);
+        Set<UUID> frontier = new LinkedHashSet<>(seedRoleIds);
+
+        while (!frontier.isEmpty()) {
+            Set<UUID> next = new LinkedHashSet<>();
+            for (StaffRoleInclude include : staffRoleIncludeDao.findAllWithRolesByParentRoleIdIn(frontier)) {
+                UUID descendant = rememberCodesOf(include, codeOf).getChildRole().getId();
+                childrenOf.computeIfAbsent(include.getParentRole().getId(), key -> new LinkedHashSet<>())
+                        .add(descendant);
+                if (walked.add(descendant)) {
+                    next.add(descendant);
+                }
+            }
+            frontier = next;
+        }
+        return childrenOf;
+    }
+
+    private static StaffRoleInclude rememberCodesOf(StaffRoleInclude include, Map<UUID, String> codeOf) {
+        codeOf.put(include.getParentRole().getId(), include.getParentRole().getCode());
+        codeOf.put(include.getChildRole().getId(), include.getChildRole().getCode());
+        return include;
+    }
+
+    private static Set<UUID> reachedFrom(UUID rootRoleId, Map<UUID, Set<UUID>> childrenOf) {
+        Set<UUID> reached = new LinkedHashSet<>();
+        reached.add(rootRoleId);
+        Deque<UUID> pending = new ArrayDeque<>(reached);
+
+        while (!pending.isEmpty()) {
+            for (UUID child : childrenOf.getOrDefault(pending.pop(), Set.of())) {
+                if (reached.add(child)) {
+                    pending.push(child);
+                }
+            }
+        }
+        return reached;
+    }
+
+    private void requireTheBranchesStaySeparateAfter(StaffRole parent, StaffRole child, Set<UUID> childClosure) {
+        Map<UUID, String> codeOf = new LinkedHashMap<>();
+        codeOf.put(parent.getId(), parent.getCode());
+        codeOf.put(child.getId(), child.getCode());
+        codeOf.putAll(roleCodesById(childClosure));
+
+        Set<UUID> rolesReachingParent = rolesReaching(parent.getId(), codeOf);
+        Map<UUID, Set<UUID>> childrenOf = inclusionEdgesBelow(rolesReachingParent, codeOf);
+        Set<String> gainedThroughChild = codesOf(childClosure, codeOf);
+
+        for (UUID role : rolesReachingParent) {
+            Set<String> reachedAfterInclusion = codesOf(reachedFrom(role, childrenOf), codeOf);
+            reachedAfterInclusion.addAll(gainedThroughChild);
+
+            StaffSeparationOfDuties.requireBranchesStaySeparate(
+                    StaffBranchReach.assignedRole(codeOf.get(role)).reaching(reachedAfterInclusion));
+        }
+
+        requireTheMembershipsStaySeparateAfter(rolesReachingParent, gainedThroughChild);
+    }
+
+    private void requireTheMembershipsStaySeparateAfter(Set<UUID> rolesReachingParent,
+                                                       Set<String> gainedThroughChild) {
+        Set<UUID> affectedMemberIds = staffMemberRoleDao.findAllByRoleIdIn(rolesReachingParent).stream()
+                .map(membership -> membership.getMember().getId())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        if (affectedMemberIds.isEmpty()) {
+            return;
+        }
+
+        Map<UUID, String> codeOf = new LinkedHashMap<>();
+        Map<UUID, Set<UUID>> assignedRolesOf = new LinkedHashMap<>();
+        for (StaffMemberRole membership : staffMemberRoleDao.findAllByMemberIdIn(affectedMemberIds)) {
+            codeOf.put(membership.getRole().getId(), membership.getRole().getCode());
+            assignedRolesOf.computeIfAbsent(membership.getMember().getId(), key -> new LinkedHashSet<>())
+                    .add(membership.getRole().getId());
+        }
+
+        Set<UUID> everyAssignedRole = assignedRolesOf.values().stream()
+                .flatMap(Set::stream)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Map<UUID, Set<UUID>> childrenOf = inclusionEdgesBelow(everyAssignedRole, codeOf);
+
+        assignedRolesOf.forEach((memberId, assignedRoles) -> {
+            Set<UUID> reached = new LinkedHashSet<>();
+            assignedRoles.forEach(roleId -> reached.addAll(reachedFrom(roleId, childrenOf)));
+
+            Set<String> reachedAfterInclusion = codesOf(reached, codeOf);
+            reachedAfterInclusion.addAll(gainedThroughChild);
+
+            StaffSeparationOfDuties.requireBranchesStaySeparate(
+                    StaffBranchReach.assignedRoles(codesOf(assignedRoles, codeOf))
+                            .reaching(reachedAfterInclusion));
+        });
+    }
+
+    private Map<UUID, String> roleCodesById(Collection<UUID> roleIds) {
+        Map<UUID, String> codes = new LinkedHashMap<>();
+        staffRoleDao.findAllById(roleIds).forEach(role -> codes.put(role.getId(), role.getCode()));
         return codes;
+    }
+
+    private static Set<String> codesOf(Collection<UUID> roleIds, Map<UUID, String> codeOf) {
+        return roleIds.stream()
+                .map(codeOf::get)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private Set<String> codesOf(Set<UUID> roleIds) {
+        return new LinkedHashSet<>(roleCodesById(roleIds).values());
     }
 
     private Set<StaffPermission> permissionsOf(Set<UUID> roleIds) {
@@ -260,21 +396,19 @@ public class StaffAuthorizationManager implements StaffAuthorizationService {
 
         StaffRole parent = roleById(roleId);
         StaffRole child = roleById(includedRoleId);
+        Set<UUID> childClosure = closureOf(Set.of(child.getId()));
 
-        if (parent.getId().equals(child.getId()) || closureOf(Set.of(child.getId())).contains(parent.getId())) {
+        if (parent.getId().equals(child.getId()) || childClosure.contains(parent.getId())) {
             throw new ConflictException(StaffMessages.ROLE_GRAPH_WOULD_CYCLE);
         }
 
-        Set<UUID> closureAfterInclusion = new LinkedHashSet<>(closureOf(Set.of(parent.getId())));
-        closureAfterInclusion.addAll(closureOf(Set.of(child.getId())));
-        StaffSeparationOfDuties.requireBranchesStaySeparate(
-                Set.of(parent.getCode()), codesOf(closureAfterInclusion));
-
-        permissionsOf(closureOf(Set.of(child.getId()))).forEach(permission -> requireGrantable(held, permission));
+        permissionsOf(childClosure).forEach(permission -> requireGrantable(held, permission));
 
         if (staffRoleIncludeDao.existsByParentRoleIdAndChildRoleId(parent.getId(), child.getId())) {
             return;
         }
+
+        requireTheBranchesStaySeparateAfter(parent, child, childClosure);
 
         String before = trailOf(parent.getId());
 
