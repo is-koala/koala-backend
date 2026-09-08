@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.security;
 
+import com.exskylab.koala.core.helpers.StaffSeparationOfDuties;
 import com.exskylab.koala.entities.StaffPermission;
 import org.junit.jupiter.api.Test;
 
@@ -30,8 +31,22 @@ class StaffRoleGraphSeedTest {
 
     private static final Pattern PAIR = Pattern.compile("\\('([A-Za-z_.]+)',\\s*'([A-Za-z_.]+)'\\)");
 
-    private static final Set<String> TRUST_BRANCH = Set.of("MODERATOR", "DISPUTE_HANDLER", "TRUST_LEAD");
-    private static final Set<String> FINANCE_BRANCH = Set.of("FINANCE_ANALYST", "FINANCE_OFFICER");
+    private static final String TRUST = "TRUST";
+    private static final String FINANCE = "FINANCE";
+    private static final String OWNER = "OWNER";
+    private static final String NEITHER = "NEITHER";
+
+    private static final Map<String, String> DELIBERATE_BRANCH_OF = Map.ofEntries(
+            Map.entry("CATALOG_EDITOR", NEITHER),
+            Map.entry("SUPPORT_AGENT", NEITHER),
+            Map.entry("AUDITOR", NEITHER),
+            Map.entry("COMPANY_APPROVER", NEITHER),
+            Map.entry("MODERATOR", TRUST),
+            Map.entry("DISPUTE_HANDLER", TRUST),
+            Map.entry("TRUST_LEAD", TRUST),
+            Map.entry("FINANCE_ANALYST", FINANCE),
+            Map.entry("FINANCE_OFFICER", FINANCE),
+            Map.entry("OWNER", OWNER));
 
     private static String block(String from, String to) throws IOException {
         String changelog = Files.readString(CHANGELOG);
@@ -164,20 +179,71 @@ class StaffRoleGraphSeedTest {
         List<String> offenders = new ArrayList<>();
 
         for (String role : edges.keySet()) {
-            if ("OWNER".equals(role)) {
+            if (StaffSeparationOfDuties.isOwnerExemption(role)) {
                 continue;
             }
             Set<String> closure = new LinkedHashSet<>(closureOf(role, edges));
             closure.add(role);
 
-            boolean trust = closure.stream().anyMatch(TRUST_BRANCH::contains);
-            boolean finance = closure.stream().anyMatch(FINANCE_BRANCH::contains);
-
-            if (trust && finance) {
+            if (StaffSeparationOfDuties.spansBothBranches(closure)) {
                 offenders.add(role + " → " + closure);
             }
         }
 
         assertTrue(offenders.isEmpty(), "Görev ayrılığı: OWNER dışında hiçbir rol her iki dalı kapsayamaz: " + offenders);
+    }
+
+    private static Set<String> seededRoleCodes() throws IOException {
+        Set<String> seededRoles = new LinkedHashSet<>();
+        Matcher role = Pattern.compile("'([A-Z_]+)',\\s+'").matcher(block("INSERT INTO staff_roles", "ON CONFLICT (code)"));
+        while (role.find()) {
+            seededRoles.add(role.group(1));
+        }
+        return seededRoles;
+    }
+
+    private static String runtimeBranchOf(String roleCode) {
+        if (StaffSeparationOfDuties.isOwnerExemption(roleCode)) {
+            return OWNER;
+        }
+        boolean trust = StaffSeparationOfDuties.isTrustBranch(roleCode);
+        boolean finance = StaffSeparationOfDuties.isFinanceBranch(roleCode);
+
+        if (trust && finance) {
+            return "TRUST+FINANCE";
+        }
+        return trust ? TRUST : finance ? FINANCE : NEITHER;
+    }
+
+    @Test
+    void everySeededRoleIsDeliberatelyPlacedInABranchOrOutsideBoth() throws IOException {
+        Set<String> seededRoles = seededRoleCodes();
+
+        List<String> unclassified = seededRoles.stream()
+                .filter(role -> !DELIBERATE_BRANCH_OF.containsKey(role))
+                .sorted()
+                .toList();
+        assertTrue(unclassified.isEmpty(),
+                "Seed'e sınıflandırılmamış rol eklendi: her rol trust/finans dalına ya da bilinçli olarak hiçbirine "
+                        + "atanmalı, yoksa görev ayrılığı kuralı ona sessizce uygulanmaz: " + unclassified);
+
+        List<String> vanished = DELIBERATE_BRANCH_OF.keySet().stream()
+                .filter(role -> !seededRoles.contains(role))
+                .sorted()
+                .toList();
+        assertTrue(vanished.isEmpty(), "Seed'den kalkmış rol hâlâ sınıflandırma listesinde: " + vanished);
+
+        List<String> drifted = seededRoles.stream()
+                .filter(role -> !DELIBERATE_BRANCH_OF.get(role).equals(runtimeBranchOf(role)))
+                .map(role -> role + " (burada " + DELIBERATE_BRANCH_OF.get(role)
+                        + ", çalışma zamanında " + runtimeBranchOf(role) + ")")
+                .sorted()
+                .toList();
+        assertTrue(drifted.isEmpty(),
+                "Çalışma zamanı dal tanımı ile burada yazılı sınıflandırma ayrıştı: " + drifted);
+
+        assertTrue(DELIBERATE_BRANCH_OF.containsValue(TRUST) && DELIBERATE_BRANCH_OF.containsValue(FINANCE)
+                        && DELIBERATE_BRANCH_OF.containsValue(OWNER),
+                "Kuralın uygulandığı bir seed bekleniyor: " + DELIBERATE_BRANCH_OF);
     }
 }

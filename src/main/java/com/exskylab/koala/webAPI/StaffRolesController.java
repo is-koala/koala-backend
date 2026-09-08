@@ -122,14 +122,18 @@ public class StaffRolesController {
     @Operation(summary = "Role başka bir rolü kapsat",
             description = "DAG'a kenar ekler: kapsayan rol, kapsanan rolün izinlerine geçişli olarak ulaşır. "
                     + "Döngü oluşturacak kapsama 409 ile reddedilir; kapsanan rolün etkili izinlerinin "
-                    + "tamamına sahip olmayan aktör de reddedilir. İdempotenttir.")
+                    + "tamamına sahip olmayan aktör de reddedilir. Görev ayrılığı gereği OWNER dışında hiçbir "
+                    + "rol hem trust hem finans dalını kapsayamaz; kural kenarın ebeveynine ulaşan her rol ve o "
+                    + "rolleri taşıyan her personel için denetlenir. İdempotenttir: zaten var olan bir kenar "
+                    + "yeniden gönderildiğinde görev ayrılığı denetlenmeden 200 döner.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Kapsama eklendi"),
             @ApiResponse(responseCode = "400", description = "Kapsanacak rol belirtilmemiş",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "404", description = "Rol bulunamadı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
-            @ApiResponse(responseCode = "409", description = "Kapsama rol grafiğinde döngü oluştururdu",
+            @ApiResponse(responseCode = "409",
+                    description = "Kapsama rol grafiğinde döngü oluştururdu ya da görev ayrılığını bozardı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @RequiresPermission(value = StaffPermission.ROLE_MANAGE, action = "staff.role.include.add")

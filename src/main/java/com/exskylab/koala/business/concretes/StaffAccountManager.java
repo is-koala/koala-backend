@@ -11,6 +11,8 @@ import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.UnauthorizedException;
 import com.exskylab.koala.core.helpers.LogMasks;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
+import com.exskylab.koala.core.helpers.StaffBranchReach;
+import com.exskylab.koala.core.helpers.StaffSeparationOfDuties;
 import com.exskylab.koala.core.properties.StaffAuthProperties;
 import com.exskylab.koala.core.security.JwtService;
 import com.exskylab.koala.core.security.StaffAuditContext;
@@ -294,6 +296,7 @@ public class StaffAccountManager implements StaffAccountService {
     @Override
     @Transactional
     public void grantRole(StaffPrincipal actor, UUID staffId, String roleCode) {
+        staffAuthorizationService.lockSeparationOfDutiesWrites();
         StaffMember member = memberById(staffId);
         StaffRole role = staffAuthorizationService.getRoleByCode(roleCode);
 
@@ -302,6 +305,8 @@ public class StaffAccountManager implements StaffAccountService {
         if (staffMemberRoleDao.existsByMemberIdAndRoleId(member.getId(), role.getId())) {
             return;
         }
+
+        requireTheBranchesStaySeparateAfter(member, role);
 
         String before = trailOf(member);
 
@@ -400,6 +405,15 @@ public class StaffAccountManager implements StaffAccountService {
         if (!held.containsAll(demanded)) {
             throw new ForbiddenException(StaffMessages.PERMISSION_NOT_GRANTABLE);
         }
+    }
+
+    private void requireTheBranchesStaySeparateAfter(StaffMember member, StaffRole granted) {
+        Set<String> assignedAfterGrant = new LinkedHashSet<>(roleCodesOf(member.getId()));
+        assignedAfterGrant.add(granted.getCode());
+
+        StaffSeparationOfDuties.requireBranchesStaySeparate(
+                StaffBranchReach.assignedRoles(assignedAfterGrant)
+                        .reaching(staffAuthorizationService.resolve(assignedAfterGrant).roles()));
     }
 
     private void requireAnAdministratorSurvives(StaffPrincipal actor, StaffMember target) {

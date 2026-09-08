@@ -7,6 +7,7 @@ public class StaffMessages {
     public static final String ROLE_NOT_FOUND = "{staff.role.not.found}";
     public static final String PERMISSION_NOT_GRANTABLE = "{staff.permission.not.grantable}";
     public static final String ROLE_GRAPH_WOULD_CYCLE = "{staff.role.graph.would.cycle}";
+    public static final String SEPARATION_OF_DUTIES_VIOLATED = "{staff.separation.of.duties.violated}";
     public static final String ROLES_LISTED = "{staff.roles.listed}";
     public static final String ROLE_RESOLVED = "{staff.role.resolved}";
     public static final String PERMISSION_REQUIRED = "{staff.permission.required}";

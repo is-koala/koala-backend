@@ -22,6 +22,9 @@ public interface StaffMemberRoleDao extends JpaRepository<StaffMemberRole, Staff
     @EntityGraph(attributePaths = {"member", "role"})
     List<StaffMemberRole> findAllByMemberIdIn(Collection<UUID> memberIds);
 
+    @EntityGraph(attributePaths = {"member", "role"})
+    List<StaffMemberRole> findAllByRoleIdIn(Collection<UUID> roleIds);
+
     boolean existsByMemberIdAndRoleId(UUID memberId, UUID roleId);
 
     @Modifying

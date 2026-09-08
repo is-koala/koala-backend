@@ -22,6 +22,8 @@ public interface StaffAuthorizationService {
 
     StaffRole getRoleByCode(String roleCode);
 
+    void lockSeparationOfDutiesWrites();
+
     void grantPermission(StaffPrincipal actor, UUID roleId, StaffPermission permission);
 
     void revokePermission(StaffPrincipal actor, UUID roleId, StaffPermission permission);
