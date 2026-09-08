@@ -1648,6 +1648,8 @@ Issue üç kaynak öneriyordu ve seçim depodaki gerçeğe göre yapıldı:
 
 Sayaç yerine gösterge (`Gauge`) seçildi: soru "kaç kez oldu" değil, "**şu anda** kaç satır asılı". Her koşuda artan bir sayaç aynı satırı defalarca sayardı ve alarm satır kapandıktan sonra da yanardı.
 
+**Eşik üç yerde aynı olmak zorunda ve ikisi testle bağlı.** `payout.settlement.overdue-after` `application.yaml` üzerinden `PAYOUT_SETTLEMENT_OVERDUE_AFTER` ile veriliyor (varsayılan 3 gün), zamanlayıcı onu okuyor ve runbook sorgusu aynı sayıyı yazıyor. `PayoutSettlementConfigurationTest` yaml'ı yükleyip anahtarın alana ulaştığını ölçüyor **ve** runbook metnindeki `interval` değerinin Java varsayılanıyla eşleştiğini doğruluyor: ayrışırlarsa alarm gelir ama operatörün koşacağı sorgu boş döner — #128'in "runbook'a yazdım ile sorgu satırı buluyor arasındaki fark" bulgusunun aynısı. `PayoutSettlementProperties` ayrıca `@Validated` + `@AssertTrue` taşıyor: sıfır ya da negatif pencere açılışı düşürüyor. §2aw'nin dersi — negatif bir pencere `Instant.now().minus(-n)` ile kesimi geleceğe taşır ve her `PROCESSING` satırını vadesi geçmiş sayardı; doğrulanmamış bir properties sınıfı bunu çalışma anında sessizce yapardı.
+
 ### Kapsam dışı, açıkça
 
 - **Otomatik yeniden deneme/geri çekilme bu ayakta yok.** Otomatikleştirilen ayak sağlayıcı talimatıdır ve onun retry/backoff'u §2y'deki outbox'ta zaten var (8 deneme, üstel, 6 saat tavan). Ekstre satırı bir insan girdisi; "yeniden deneme" düzeltilmiş kanıtla ikinci çağrıdır. Rapor ucu ya da webhook geldiği gün otomatik ayak `confirmSettlement`'ın üstüne oturur ve geri çekilme oraya yazılır.
