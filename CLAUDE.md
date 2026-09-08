@@ -3393,6 +3393,8 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 
 **Üç ayrı Dokploy servisi**, repodaki `docker-compose.yml` değil. Compose'daki `nginx-network` Dokploy'un ağı değil ve `koala-app` servisi imajı VPS'te build ediyor; CI zaten GHCR'ye basıyor. Compose yerel geliştirme için duruyor.
 
+**Compose bellek sınırları yalnızca yerel geliştirmeyi korur.** `KOALA_APP_MEM` (varsayılan `1200m`), `KOALA_DB_MEM` (`768m`) ve `KOALA_RABBITMQ_MEM` (`384m`) yerel servislerin host belleğini tüketmesini sınırlar; `RABBITMQ_MEM_WATERMARK` (`0.6`) RabbitMQ akış kontrolü eşiğidir. Bu değişkenler `.env.example` içinde belgelenir. Production bu compose dosyasını kullanmadığı için aynı sınırlar Dokploy'daki üç servise ayrıca verilmeden canlı ortam korunmuş sayılmaz.
+
 | Servis | Tip | Kaynak |
 |---|---|---|
 | `koala-db` | Database → PostgreSQL | `postgres:17` |
