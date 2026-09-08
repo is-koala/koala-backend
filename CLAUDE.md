@@ -32,6 +32,7 @@ Bu dosya projeyi konu konu anlatır: mimari, alınmış kararlar ve gerekçeleri
 8. **İlk admin ve iş kategorisi kataloğu** — taze bir veritabanında ilk yönetici `ADMIN_BOOTSTRAP_EMAIL` verilip uygulama yeniden başlatılarak doğar (§2f3); değişken ilk admin oluştuktan sonra kaldırılmalı. Kategori seed'i kaldırıldı (§2m). Prod ve taze veritabanları kategorisiz; kategori ilanın zorunlu alanı olduğu için katalog `POST /admin/job-categories` ile kurulmadan **hiç ilan açılamaz**. Mobil istemcinin ikon eşlemesi `code` üzerinden gittiği için eski kodların (`PHOTOGRAPHY`, `WAITER`, `PET_CARE`, `DESIGN`, `BARISTA`) yeniden verilmesi gerekebilir.
 9. **`BANK_VERIFICATION_COLLECTION_IBAN` verilmeden lansman yapılamaz.** İşçinin IBAN sahipliği, kendi hesabından Koala'ya yaptığı küçük transferle kanıtlanıyor (§2k2) ve o transferin gideceği hesap bu değişkenle veriliyor. Boşken doğrulama **başlatılamıyor** (`VERIFICATION_UNAVAILABLE`), doğrulanmamış IBAN ise alt üye işyeri açtırmıyor — yani **hiçbir işveren ödeme oturumu açamaz**. Kilit çift yönlü: değer girilmeden ne doğrulama başlar ne para akar. Bilinçli olarak bayrak arkasına alınmadı; bayrak, kapının sessizce kapalı kalmasının yolu olurdu.
 10. **R2'deki mevcut nesnelerin S3'e kopyalanması** (§2ab), yasal metinlerin avukattan gelmesi, ve prod'da WebSocket'in `wss://` üzerinden servis edildiğinin teyidi (§2ai).
+11. **Dokploy'da dört değer düzeltilmeli (#66).** `CORS_ALLOWED_ORIGINS` boşaltılmalı (ADR-0011), `APP_TRUSTED_PROXIES` web yayına çıkmadan önce yalnız BFF/ingress IP-CIDR'ıyla tanımlanmalı, `SPRINGDOC_ENABLED=false` yapılmalı, `SERVICE_VERSION` tekilleştirilmeli. Dördü de depodan görülemiyor; kontrol indi ve sapmayı açılış logunda görünür kılıyor (§2ax) ama **düzeltmiyor**. Beklenen değerler `docs/environments.md` §Production zorunlulukları'nda.
 
 **Açık kalan kararlar** (ayrıntı §7'de):
 - **Rozet eşikleri** yer tutucu (5 / 25 tamamlanmış iş). Yapı hazır, sayı ürün kararı.
@@ -2858,6 +2859,206 @@ kazandığı Boot sürümüne bağlı; yaml'ı açıkça yükleyip `addFirst` il
 `AccountAnonymizationLoginAttemptIT` **beş** kural: `user_id`'siz ama aynı adresi taşıyan satır da anonimleşir,
 hesabın adresi karışık harfliyken eşleşir, **giriş formuna karışık harfle yazılan adres de eşleşir**, başka bir
 adresi taşıyan satıra dokunulmaz, gerekçe/IP/cihaz adı da temizlenir.
+
+---
+
+## 2ax. Production yapılandırma kapısı — ne durdurur, ne uyarır
+
+Production ortam değişkenleri deponun kendi kararlarıyla dört yerde ayrışmıştı
+(#66) ve **hiçbiri depodan görünmüyordu**: `application.yaml:69-73` yalnız
+`health,info,metrics,prometheus,loggers` uçlarını açıyor, `/actuator/env` ve
+`/actuator/configprops` kapalı. Kapalı olmaları doğru, ama sonucu şu — canlıdaki
+hiçbir değer dışarıdan okunamıyor, sapma da görünmüyor. Dört değer Dokploy'da
+düzeltilse bile ertesi gün sessizce geri gelebilirdi.
+
+`ProductionConfigurationGuard` bu boşluğu kapatıyor: `app.deployment` production
+ise dört değerin etkin hâlini bir `INFO` satırına yazıyor, sapan her değer için
+bir `WARN` üretiyor ve iki hâlde açılışı hiç yaptırmıyor.
+
+**Üçüncü bağlama noktası açıldı: `app.deployment`.** `SERVICE_ENVIRONMENT` bu
+işten önce yalnız iki yere bağlıydı — ECS log alanı (`application.yaml:99`) ve
+`iyzico.deployment` (`:361`). Guard'ı ikincisi üzerinden okumak **güvenlik
+kontrolünü ödeme yapılandırmasına bağlamak** olurdu: `IyzicoProperties`'in
+`@AssertTrue`'su bir gün gevşetilir ya da o sınıf başka bir kaynağa taşınırsa
+CORS ve trusted-proxy kontrolü sessizce onunla birlikte kayardı. `app.deployment`
+aynı ortam değişkenini kendi enum'una bağlıyor (`DeploymentProperties.Deployment`),
+yani iki tip birbirinden bağımsız ama **tek bir ortam adından** besleniyor.
+§2y2'nin "yeni bir değişken uydurulmadı" kararı burada da geçerli: ikinci bir
+"hangi ortamdayız" değişkeni açmak ikisinin ayrışabileceği bir gelecek üretirdi.
+
+**Tanınmayan ortam adı açılışı düşürüyor, tanımsız ortam `local` sayılıyor** —
+`IyzicoProperties.setDeployment` ile birebir aynı davranış, aynı gerekçeyle:
+`SERVICE_ENVIRONMENT=prod` yazılırsa enum bağlanamaz ve uygulama açılmaz;
+bilinmeyeni "production değil" saymak production'ı sessizce denetimsiz bırakırdı.
+
+### Ayrımı yöneten tek ilke
+
+**Yanlış değerin, değerin hiç olmamasından kötü olduğu yerde açılış durur; bir
+boşluğu açık bırakmaktan ibaret olan sapmada yalnız `WARN` yazılır.**
+
+Bunun doğrudan bir sonucu var ve kasıtlı: **durduran hiçbir kural bugünkü
+production'ı kaldıramaz.** Kontrol, dört Dokploy düzeltmesi yapılmadan inebilsin
+diye böyle kuruldu. Tersi bir tasarım — "boşsa açılma", "doluysa açılma" — bir
+sonraki deploy'da canlıyı kaldırırdı; bir sapmayı görünür kılmak için yapılan iş,
+kendi ürettiği kesintiyle ödenmiş olurdu.
+
+Bu cümle iki kural için **iki ayrı biçimde** doğru, ve aradaki fark önemli:
+
+- `APP_TRUSTED_PROXIES` kuralı için doğrudan ölçülebilir — kural yalnız
+  production'da koşuyor ve bugünkü prod değerinin geçtiği, boş listenin de dolu
+  ama dar listenin de geçtiği testlerde sabit.
+- `CORS_ALLOWED_ORIGINS` **şekil** kuralı her ortamda koşuyor ve prod'un gerçek
+  değeri depodan görülemiyor, yani "bugünkü değer geçiyor" doğrudan
+  doğrulanamaz. Onun yerine daha güçlü olan şey ölçülüyor: **reddedilen her
+  şeklin bugün hiçbir tarayıcıya hizmet ediyor olamayacağı**
+  (`aRefusedShapeCannotBeServingABrowserToday`, gerçek `CorsConfiguration`
+  üzerinde). Çalışan bir değer bu kapıya takılamaz, çünkü takılan şekillerin
+  hiçbiri çalışıyor olamaz.
+
+**Sondaki `/` bu yüzden reddedilmiyor, normalize ediliyor.** Spring'in
+`CorsConfiguration.addAllowedOrigin`'i de `checkOrigin`'i de `trimTrailingSlash`
+çağırıyor: `https://iskoala.com/` listede `https://iskoala.com` olarak duruyor ve
+tarayıcının `Origin` başlığıyla **eşleşiyor** (`CorsContractTest`
+`aTrailingSlashIsTrimmedByTheFilterItselfSoSuchAnOriginStillMatches`). Yani bu
+şekil "sessizce yalan söyleyen" bir allowlist değil, **çalışan** bir allowlist —
+onu reddeden bir kural, bugün sorunsuz duran bir prod değerini bir sonraki
+deploy'da açılışta düşürürdü. `CorsProperties.setAllowedOrigins` aynı kırpmayı
+yapıyor, yani guard ile filtre aynı değeri görüyor. Sonda **iki** `/` (`//`) hâlâ
+reddediliyor: Spring bir tane kırpıyor, geriye kalan `/` hiçbir origin'le
+eşleşmiyor.
+
+| Kural | Karar | Neden |
+|---|---|---|
+| `SERVICE_ENVIRONMENT` tanınmayan bir ad | **durdurur**, her ortamda | `DeploymentProperties.Deployment` enum'una bağlanamayan değer — örneğin `prod` — açılışı düşürür. Bilinmeyeni "production değil" saymak production'ı sessizce denetimsiz bırakırdı. Tanımsız değer `local` sayılır; `IyzicoProperties.setDeployment` ile birebir aynı davranış. |
+| `CORS_ALLOWED_ORIGINS` tam origin taşımıyor | **durdurur**, her ortamda | Reddedilen her şekil, bugün **hiçbir tarayıcıya hizmet ediyor olamayacak** bir şekil — `aRefusedShapeCannotBeServingABrowserToday` bunu gerçek `CorsConfiguration` üzerinde ölçüyor. Tam `*`, `allowCredentials(true)` ile birlikte `checkOrigin`'in `validateAllowCredentials`'ında **her preflight'ta** `IllegalArgumentException` atar: yapılandırma hatası sıcak yolda 500'e döner. Alt alan joker'i (`https://*.iskoala.com`) fırlatmaz, sessizce `null` döner — `setAllowedOrigins` desen kabul etmiyor, desenler `setAllowedOriginPatterns`'a ait — yani allowlist bir alt alana izin verdiğini söyler ve hiçbir şeyle eşleşmez. Şemasız, yollu, sorgulu, fragment'li ve kullanıcı bilgili şekiller de aynı sessiz yalanı üretir. |
+| `APP_TRUSTED_PROXIES` her istemciyi kapsıyor | **durdurur**, production'da | Issue'nun kendi cümlesi: yanlış değer değerin hiç olmamasından kötü. Her çağıranı güvenilir yapan bir liste `ClientIpResolver`'a `X-Forwarded-For`'u okutur ve `RateLimitFilter`'ın anahtarı ile erişim logunun `clientIp` alanı **saldırgan tarafından belirlenir**. Kapsama **semantik** ölçülüyor: tek tek öneklere değil, girdilerin **birleşimine** bakılıyor. |
+| production + dolu `CORS_ALLOWED_ORIGINS` | uyarır | ADR-0011 sapması ve **bugünkü prod'un hâli**. Durdurmak canlıyı kaldırırdı. Zarar da sınırlı: `SameSite=Lax` cookie'ler zaten `api.iskoala.com` origin'ine gitmiyor, yani dolu allowlist BFF sınırını sözleşme olmaktan çıkarıp zorlanabilir yapmıyor — yalnız zorlanmamış bırakıyor. |
+| production + boş `APP_TRUSTED_PROXIES` | uyarır | Bugün zararsız: mobil doğrudan bağlanıyor, `getRemoteAddr()` gerçek IP. Risk web BFF yayına çıktığında doğuyor (is-koala/koala-web#2) ve o gün değer **zaten** girilmiş olacak. Bugün durdurmak, henüz var olmayan bir riske karşı gerçek bir kesinti almaktır. |
+| production + açık `SPRINGDOC_ENABLED` | uyarır | §2ao bunu "saldırgana keşif hediyesi" diye yazıyor ve kapatılması gerekiyor — ama #66 "production'da API dokümantasyonu gerekiyor mu, gerekiyorsa kimlik doğrulamalı ayrı bir yol mu" sorusunu **açık bir ürün kararı** olarak bırakıyor. Guard, sahibine ait bir kararı açılışı düşürerek kendi başına veremez. |
+| production + boş `SERVICE_VERSION` | uyarır | Yalnız ECS log alanı; güvenlik etkisi yok. |
+
+**Malformed bir `app.trusted-proxies` girdisi zaten açılışı düşürüyordu** ve
+guard onu tekrarlamıyor: `IpNetwork.parse` `IllegalArgumentException` atıyor,
+yani `ClientIpResolver` bean'i oluşturulamıyor. Guard yalnız **biçimi geçerli ama
+anlamı yıkıcı** olan değeri ekliyor.
+
+**Kapsama semantik ölçülüyor, önek uzunluğuna bakılmıyor.** Sıfır uzunluklu önek
+aramak (`0.0.0.0/0`, `::/0`) yalnızca en bilinen yazımı yakalar;
+`0.0.0.0/1,128.0.0.0/1` ikilisi bütün IPv4'ü aynı şekilde kapsar ve o kontrolden
+geçerdi — sahte bir `X-Forwarded-For` gerçekten kabul edilirdi. `IpNetwork`
+girdileri adres ailesine göre ayırıyor, her birini aralığa çeviriyor, sıralayıp
+birleştiriyor ve **bir ailenin tamamı örtülüyorsa** durduruyor. Çıplak
+`0.0.0.0` bir `/32`'dir, tek adres kapsar ve doğru şekilde geçer.
+
+**Shape kuralı `CorsProperties` üzerinde `@Validated` + `@AssertTrue` ile, yani
+`IyzicoProperties:15-17,36-39` deseninin aynısı** — tek prefix'e sığan bir kural
+için depo bu kalıbı kullanıyor. Kural `StompOriginProperties.normalize`'ın STOMP
+allowlist'ine uyguladığı biçim kuralına çok yakın — iki allowlist ayrı (ADR-0011)
+ama "tam origin" tanımı ortak — **tek fark sondaki `/`**: STOMP allowlist'i onu
+reddediyor, REST allowlist'i normalize ediyor, çünkü karşısındaki iki mekanizma
+farklı davranıyor (`OriginHandshakeInterceptor` kırpmıyor, `CorsConfiguration`
+kırpıyor). `CorsProperties.setAllowedOrigins` boş girdileri düşürüyor, yani
+`CORS_ALLOWED_ORIGINS=` hiçbir ortamda kapıya takılmıyor.
+
+**Baseline `INFO` her şeyden önce yazılıyor.** Açılışı düşüren kural en sonda
+koşuyor; sıra ters olsaydı **durduran turda baseline hiç yazılmazdı** ve operatör
+tam da açılış düştüğü anda etkin değerleri göremezdi — guard'ın bütün amacı
+görünürlükken. Sıra: baseline `INFO` → sapma `WARN`'ları → durduran kural.
+
+**Kural listesi tek yerde ve dokümanlar oradan doğrulanıyor.** Durdur/uyar
+listesi yedi ayrı yerde biliniyordu; yeni bir kural 5–7 dosyaya dokunmayı
+gerektiriyor ve dördünü unutmak sessizce geçiyordu.
+`ProductionConfigurationGuard.Rule` artık kuralların tek kataloğu (değişken adı +
+`REFUSES`/`WARNS`) ve `ProductionConfigurationContractTest` bu katalogdan
+başlayarak `docs/environments.md` §Production zorunlulukları tablosunu, bu
+bölümün karar tablosunu ve §0'ın 11. maddesini doğruluyor: eksik satır da,
+kuralı olmayan fazladan satır da kırmızıya döner. `DRIFT_MARKER` literali de
+`docs/environments.md`'den değil sabitten doğrulanıyor. Guard'ın yazdığı `WARN`
+satırları değişken adını katalogdan alıyor, ve
+`everyWarningTheGuardWritesNamesARuleTheCatalogueDeclares` kataloğa girmemiş bir
+uyarıyı yakalıyor. Desen `OperationalRunbookContractTest` ile
+`PayoutSettlementConfigurationTest`'ten alındı.
+
+**Ortam bağımlı ve prefix aşan kurallar `@AssertTrue` ile ifade edilemiyor.**
+Guard `DeploymentProperties`, `CorsProperties`, `TrustedProxyProperties`
+bean'lerini ve springdoc bayrağını Spring `Environment`'tan okuyor —
+`ConfigurationProperties` doğrulaması yalnız kendi prefix'ini görebilir, dört
+değer dört ayrı prefix'te. Guard bu yüzden bir `InitializingBean`; attığı
+`IllegalStateException` context'i düşürüyor, yani gözlenen davranış
+`@AssertTrue` ile aynı.
+
+**Değerlerin kopyası çıkarılmadı.** Guard `CorsProperties` ve
+`TrustedProxyProperties`'in **gerçek bean'lerini** — `CorsConfig` ve
+`ClientIpResolver`'ın kullandığı örnekleri — okuyor, springdoc'u da
+`application.yaml`'ın bağladığı `springdoc.api-docs.enabled` /
+`springdoc.swagger-ui.enabled` özelliklerinden. Guard'a `${CORS_ALLOWED_ORIGINS:}`
+gibi ikinci bir bağlama yazılsaydı, yaml'daki asıl bağlama değiştiği gün kontrol
+bayat bir kopyayı doğrulamaya devam ederdi.
+
+**Springdoc'un varsayılanı da kopyalanmıyor, okunuyor.** Özellik hiç
+bağlanmadığında springdoc kendini **açık** sayıyor: `SpringDocConfiguration` ve
+`SwaggerConfig` `@ConditionalOnProperty(..., matchIfMissing = true)` taşıyor.
+Guard'a elle yazılmış bir `FALSE` varsayılanı, yaml bağlaması olmayan bir
+context'te tam ters cevabı verirdi — guard "kapalı" derken springdoc açık olurdu,
+yani guard'ın önlemek için var olduğu kusurun kendisi. `springdocDefaultFor` bu
+iki sınıfın `matchIfMissing` değerini **anotasyondan** okuyor ve
+`Environment.getProperty`'ye onu varsayılan olarak veriyor. Okuma constructor'da
+yapılıyor, yani springdoc bu anotasyonu kaldırır veya özelliği yeniden
+adlandırırsa hata **her ortamda ve her testte** çıkıyor, yalnız production'da
+değil.
+
+### Görünür kılınamayan tek madde
+
+**Aynı değişkenin Dokploy'da iki kez tanımlanması süreç içinden görülemez.**
+Ortam değişkeninde son tanım kazanır ve uygulamaya **tek** değer ulaşır; ikinci
+tanımın var olduğunu söyleyecek hiçbir API yok. Guard bu yüzden `SERVICE_VERSION`
+için doğrulama değil **rapor** yazıyor: `INFO` satırındaki `version=` alanı hangi
+tanımın kazandığını söylüyor, operatör onu Dokploy ekranındaki satırlarla
+karşılaştırıyor. Doğrulanamayan bir şeyi doğruluyormuş gibi göstermektense
+ölçülebilir olanı yazmak seçildi.
+
+### Kapsam dışı — CORS ile STOMP katmanlarının sırası
+
+`CorsConfig` filtreyi `/**` için kaydediyor ve STOMP ucu `/ws` onun altında; bu
+issue yazıldığında tarayıcı handshake'i `Origin` taşıdığı için servlet
+`CorsFilter` `WebSocketConfig`'teki ayrı allowlist'e sıra gelmeden 403
+verebiliyordu. **Bugün veremiyor:** `CorsConfig.corsFilter` gerçek zamanlı uç
+için `getCorsConfiguration`'dan `null` döndürüyor ve kararı tümüyle
+`OriginHandshakeInterceptor`'a bırakıyor (§2ai), `CorsContractTest`'in
+`theRealtimeHandshakeIsNotGovernedByTheRestCorsAllowlist` kuralı bunu sabitliyor.
+Yani iki katmanın sırası çözülmüş durumda; bu değişiklik ona dokunmuyor ve
+is-koala/koala-backend#40'a not düşüldü.
+
+### Kontrolün kapsamadıkları
+
+- **Dört Dokploy değeri hâlâ insan işi.** Guard sapmayı görünür kılıyor,
+  düzeltmiyor; `WARN` satırlarını okuyan bir log alarmı da bu depoda yok.
+- **`staging` denetlenmiyor.** Kural production'a özgü; staging'in kendi
+  zorunlulukları `docs/environments.md`'de yazılı ama guard onlara bakmıyor.
+- **Guard yalnız açılışta çalışıyor.** Çalışma zamanında değişebilen tek değer
+  `app_settings` üzerinden gelenler (§2ac) ve bu dördü orada değil.
+
+### Testler
+
+`ProductionConfigurationGuardTest` yirmi yedi kural — `SecureRuntimeDefaultsTest`
+deseniyle (`ApplicationContextRunner` + `ConfigDataApplicationContextInitializer`),
+`@SpringBootTest` olmadan. Her kural iki yönlü: doğru yapılandırmada açılıyor ve
+tek bir `WARN` bile yazılmıyor, sapmış yapılandırmada durduruyor ya da uyarıyor.
+`WARN` seçilen dört kuralda satırın gerçekten yazıldığı bir `ListAppender` ile
+**ölçülüyor** — "uyarır" demek yetmez (`AccessLogTest` deseni).
+
+Kontrol yaml'ın kendi bağlamalarından sürülüyor: testler `SERVICE_ENVIRONMENT`,
+`SPRINGDOC_ENABLED`, `SERVICE_VERSION`, `CORS_ALLOWED_ORIGINS` ve
+`APP_TRUSTED_PROXIES` **ortam değişkeni adlarını** veriyor, `app.deployment` gibi
+iç anahtarları değil. Bağımsızlık da iki yönlü sabit: `SERVICE_ENVIRONMENT=production`
+guard'ı ateşliyor (context'te `IyzicoProperties` hiç yokken), `iyzico.deployment=production`
+tek başına ateşlemiyor.
+
+**Üç mutasyon üç ayrı katmanda kırmızıya döndürüldü** — saf bir yardımcıyı
+bozmak, o yardımcıyı kullanan bağlamanın korunduğunu kanıtlamaz:
+`application.yaml`'daki `app.deployment: ${SERVICE_ENVIRONMENT:local}` satırı
+sabit `local` yapıldığında on test, catch-all proxy kuralı etkisizleştirildiğinde
+üç test, `CorsProperties`'ten `@Validated` düşürüldüğünde dokuz test düşüyor.
 
 ---
 

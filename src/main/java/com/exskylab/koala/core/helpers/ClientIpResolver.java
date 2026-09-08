@@ -5,19 +5,17 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Component;
 
 import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
 
 @Component
 public final class ClientIpResolver {
 
-    private final List<Network> trustedNetworks;
+    private final List<IpNetwork> trustedNetworks;
 
     public ClientIpResolver(TrustedProxyProperties properties) {
         this.trustedNetworks = properties.getTrustedProxies().stream()
-                .filter(value -> value != null && !value.isBlank())
-                .map(Network::parse)
+                .map(IpNetwork::parse)
                 .toList();
     }
 
@@ -41,7 +39,7 @@ public final class ClientIpResolver {
     }
 
     private boolean isTrusted(String address) {
-        InetAddress parsed = parseAddress(address);
+        InetAddress parsed = IpNetwork.literalAddress(address);
         return parsed != null && trustedNetworks.stream().anyMatch(network -> network.contains(parsed));
     }
 
@@ -93,53 +91,6 @@ public final class ClientIpResolver {
                 && candidate.contains(".")) {
             candidate = candidate.substring(0, candidate.indexOf(':'));
         }
-        return parseAddress(candidate) == null ? null : candidate;
-    }
-
-    private static InetAddress parseAddress(String value) {
-        if (value == null || !value.matches("[0-9a-fA-F:.]+")) {
-            return null;
-        }
-        try {
-            return InetAddress.getByName(value);
-        } catch (UnknownHostException exception) {
-            return null;
-        }
-    }
-
-    private record Network(byte[] address, int prefixLength) {
-
-        private static Network parse(String value) {
-            String[] parts = value.trim().split("/", 2);
-            InetAddress address = parseAddress(parts[0]);
-            if (address == null) {
-                throw new IllegalArgumentException("Guvenilir proxy IP veya CIDR olmali.");
-            }
-            int bits = address.getAddress().length * 8;
-            int prefix = parts.length == 1 ? bits : Integer.parseInt(parts[1]);
-            if (prefix < 0 || prefix > bits) {
-                throw new IllegalArgumentException("Guvenilir proxy CIDR on eki gecersiz.");
-            }
-            return new Network(address.getAddress(), prefix);
-        }
-
-        private boolean contains(InetAddress candidate) {
-            byte[] other = candidate.getAddress();
-            if (other.length != address.length) {
-                return false;
-            }
-            int fullBytes = prefixLength / 8;
-            int remainingBits = prefixLength % 8;
-            for (int index = 0; index < fullBytes; index++) {
-                if (address[index] != other[index]) {
-                    return false;
-                }
-            }
-            if (remainingBits == 0) {
-                return true;
-            }
-            int mask = 0xFF << (8 - remainingBits);
-            return (address[fullBytes] & mask) == (other[fullBytes] & mask);
-        }
+        return IpNetwork.literalAddress(candidate) == null ? null : candidate;
     }
 }

@@ -116,6 +116,7 @@ admin:
     email: ${ADMIN_BOOTSTRAP_EMAIL:}
 
 app:
+  deployment: ${SERVICE_ENVIRONMENT:local}
   minimum-version: ${APP_MINIMUM_VERSION:}
   api-url: ${API_URL:http://localhost:8080}
   web-base-url: ${WEB_BASE_URL:http://localhost:3000}

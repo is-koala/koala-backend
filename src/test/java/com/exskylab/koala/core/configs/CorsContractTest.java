@@ -6,10 +6,13 @@ import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.web.cors.CorsConfiguration;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -52,5 +55,30 @@ class CorsContractTest {
 
         assertEquals(200, response.getStatus());
         verify(chain).doFilter(request, response);
+    }
+
+    @Test
+    void aTrailingSlashIsTrimmedByTheFilterItselfSoSuchAnOriginStillMatches() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowCredentials(true);
+        configuration.setAllowedOrigins(List.of("https://iskoala.com/"));
+
+        assertEquals(List.of("https://iskoala.com"), configuration.getAllowedOrigins());
+        assertEquals("https://iskoala.com", configuration.checkOrigin("https://iskoala.com"));
+    }
+
+    @Test
+    void onlyABareStarThrowsOnEveryPreflightAndAHostWildcardSilentlyMatchesNothing() {
+        CorsConfiguration star = new CorsConfiguration();
+        star.setAllowCredentials(true);
+        star.setAllowedOrigins(List.of("*"));
+
+        assertThrows(IllegalArgumentException.class, () -> star.checkOrigin("https://iskoala.com"));
+
+        CorsConfiguration hostWildcard = new CorsConfiguration();
+        hostWildcard.setAllowCredentials(true);
+        hostWildcard.setAllowedOrigins(List.of("https://*.iskoala.com"));
+
+        assertNull(hostWildcard.checkOrigin("https://app.iskoala.com"));
     }
 }

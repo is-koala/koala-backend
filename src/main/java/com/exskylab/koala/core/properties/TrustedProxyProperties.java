@@ -16,6 +16,9 @@ public class TrustedProxyProperties {
     }
 
     public void setTrustedProxies(List<String> trustedProxies) {
-        this.trustedProxies = trustedProxies == null ? List.of() : List.copyOf(trustedProxies);
+        this.trustedProxies = trustedProxies == null ? List.of() : trustedProxies.stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(String::trim)
+                .toList();
     }
 }
