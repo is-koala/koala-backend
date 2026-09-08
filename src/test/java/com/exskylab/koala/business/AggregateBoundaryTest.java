@@ -80,9 +80,9 @@ class AggregateBoundaryTest {
             new Exemption("JobCategoryManager", "JobTemplateDao",
                     "salt okuma silme kapısı; JobTemplateManager JobService üzerinden JobCategoryService'e bağlı, ters yön döngü olurdu"),
             new Exemption("StaffAuthorizationManager", "StaffMemberRoleDao",
-                    "görev ayrılığı koordinasyonu: bir kenardan etkilenen üyelikler okunuyor ve iki yazma yolu "
-                            + "aynı transaction kilidini bu DAO üzerinden alıyor; StaffAccountManager "
-                            + "StaffAuthorizationService'e bağlı olduğu için ters yön döngü olurdu"));
+                    "salt okuma görev ayrılığı kapısı: bir kenar eklenirken o kenardan etkilenen personellerin rol "
+                            + "birleşimi de doğrulanıyor; StaffAccountManager StaffAuthorizationService'e bağlı "
+                            + "olduğu için ters yön döngü olurdu"));
 
     private static Set<String> ownDaosOf(String manager) {
         Set<String> owned = OWNED_BY.get(manager);

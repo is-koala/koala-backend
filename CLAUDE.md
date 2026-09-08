@@ -2672,15 +2672,16 @@ sonra idempotanlık erken dönüşü, sonra guard. Yan kazanç: no-op bir çağr
 **İki yazma yolu aynı transaction advisory kilidi altında serileşir.** Salt mevcut grafiği ve üyelikleri okuyup
 sonra yazmak `READ COMMITTED` altında yeterli değildi: bir rolün grafiğine finans dalı eklenirken aynı rol trust
 üyeliği olan bir personele eşzamanlı verilebilirdi ve iki transaction birbirini görmeden ayrı ayrı geçebilirdi.
-`StaffMemberRoleDao.lockSeparationOfDutiesWrites` hem `includeRole` hem `grantRole` girişinde aynı
-`staff-separation-of-duties` anahtarını `pg_advisory_xact_lock` ile alır; personel/rol yönetimi düşük frekanslı
-olduğu için tek global anahtar, parça kilitlerin yanlış sırada alınmasından doğacak deadlock riskine tercih edildi.
-Kilit commit/rollback ile bırakılır ve guard sonraki transaction'ın tamamlanmış yazımını görerek yeniden hesaplanır.
+`StaffAuthorizationService.lockSeparationOfDutiesWrites` hem `includeRole` hem `grantRole` girişinde aynı
+`staff-separation-of-duties` anahtarını, authorization aggregate'inin kendi `StaffRoleDao`'su üzerinden
+`pg_advisory_xact_lock` ile alır; personel/rol yönetimi düşük frekanslı olduğu için tek global anahtar, parça
+kilitlerin yanlış sırada alınmasından doğacak deadlock riskine tercih edildi. Kilit commit/rollback ile bırakılır
+ve guard sonraki transaction'ın tamamlanmış yazımını görerek yeniden hesaplanır.
 
 **Aggregate sınırı bir muafiyetle geçiliyor ve gerekçesi bean döngüsü.** Üyelik yansıması için
-`StaffAuthorizationManager` `StaffMemberRoleDao`'ya etkilenen üyelikleri okumak ve iki yazma yolunun ortak
-transaction kilidini almak için uzanıyor; `StaffAccountService` üzerinden gitmek
-`StaffAccountManager → StaffAuthorizationService` bağının ters yönü olurdu ve §1 `@Lazy` ile gizlemeyi yasaklıyor.
+`StaffAuthorizationManager` `StaffMemberRoleDao`'ya yalnız etkilenen üyelikleri okumak için uzanıyor;
+`StaffAccountService` üzerinden gitmek `StaffAccountManager → StaffAuthorizationService` bağının ters yönü
+olurdu ve §1 `@Lazy` ile gizlemeyi yasaklıyor.
 `AggregateBoundaryTest.EXEMPTIONS` listesinde gerekçesiyle yazılı — §2ae'nin kendi öngördüğü yol — ve
 `everyExemptionIsStillNeeded` liste bayatlarsa kırmızıya dönüyor.
 

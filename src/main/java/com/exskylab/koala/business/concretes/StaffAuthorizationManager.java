@@ -23,6 +23,7 @@ import com.exskylab.koala.entities.StaffRolePermission;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayDeque;
@@ -109,6 +110,12 @@ public class StaffAuthorizationManager implements StaffAuthorizationService {
     public StaffRole getRoleByCode(String roleCode) {
         return staffRoleDao.findByCode(roleCode)
                 .orElseThrow(() -> new ResourceNotFoundException(StaffMessages.ROLE_NOT_FOUND));
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void lockSeparationOfDutiesWrites() {
+        staffRoleDao.lockSeparationOfDutiesWrites();
     }
 
     private Map<UUID, StaffRoleView> graph() {
@@ -392,7 +399,7 @@ public class StaffAuthorizationManager implements StaffAuthorizationService {
     @Override
     @Transactional
     public void includeRole(StaffPrincipal actor, UUID roleId, UUID includedRoleId) {
-        staffMemberRoleDao.lockSeparationOfDutiesWrites();
+        lockSeparationOfDutiesWrites();
         Set<StaffPermission> held = heldByActor(actor);
 
         StaffRole parent = roleById(roleId);

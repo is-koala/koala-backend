@@ -296,7 +296,7 @@ public class StaffAccountManager implements StaffAccountService {
     @Override
     @Transactional
     public void grantRole(StaffPrincipal actor, UUID staffId, String roleCode) {
-        staffMemberRoleDao.lockSeparationOfDutiesWrites();
+        staffAuthorizationService.lockSeparationOfDutiesWrites();
         StaffMember member = memberById(staffId);
         StaffRole role = staffAuthorizationService.getRoleByCode(roleCode);
 
