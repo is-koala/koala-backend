@@ -5,6 +5,7 @@ import com.exskylab.koala.core.constants.StaffMessages;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
+import com.exskylab.koala.core.helpers.StaffSeparationOfDuties;
 import com.exskylab.koala.core.security.StaffAuditContext;
 import com.exskylab.koala.core.security.StaffAuthorization;
 import com.exskylab.koala.core.security.StaffPrincipal;
@@ -69,10 +70,8 @@ public class StaffAuthorizationManager implements StaffAuthorizationService {
         }
 
         Set<UUID> closure = closureOf(seeds.stream().map(StaffRole::getId).collect(java.util.stream.Collectors.toSet()));
-        Set<String> roles = new LinkedHashSet<>();
-        staffRoleDao.findAllById(closure).forEach(role -> roles.add(role.getCode()));
 
-        return new StaffAuthorization(Set.copyOf(roles), permissionsOf(closure));
+        return new StaffAuthorization(Set.copyOf(codesOf(closure)), permissionsOf(closure));
     }
 
     @Override
@@ -192,6 +191,12 @@ public class StaffAuthorizationManager implements StaffAuthorizationService {
         return reached;
     }
 
+    private Set<String> codesOf(Set<UUID> roleIds) {
+        Set<String> codes = new LinkedHashSet<>();
+        staffRoleDao.findAllById(roleIds).forEach(role -> codes.add(role.getCode()));
+        return codes;
+    }
+
     private Set<StaffPermission> permissionsOf(Set<UUID> roleIds) {
         if (roleIds.isEmpty()) {
             return Set.of();
@@ -259,6 +264,11 @@ public class StaffAuthorizationManager implements StaffAuthorizationService {
         if (parent.getId().equals(child.getId()) || closureOf(Set.of(child.getId())).contains(parent.getId())) {
             throw new ConflictException(StaffMessages.ROLE_GRAPH_WOULD_CYCLE);
         }
+
+        Set<UUID> closureAfterInclusion = new LinkedHashSet<>(closureOf(Set.of(parent.getId())));
+        closureAfterInclusion.addAll(closureOf(Set.of(child.getId())));
+        StaffSeparationOfDuties.requireBranchesStaySeparate(
+                Set.of(parent.getCode()), codesOf(closureAfterInclusion));
 
         permissionsOf(closureOf(Set.of(child.getId()))).forEach(permission -> requireGrantable(held, permission));
 

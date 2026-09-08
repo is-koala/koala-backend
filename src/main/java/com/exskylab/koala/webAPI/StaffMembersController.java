@@ -123,12 +123,15 @@ public class StaffMembersController {
     }
 
     @Operation(summary = "Personele rol ver",
-            description = "Aktör, verdiği rolün etkili izinlerinin tamamını taşımak zorundadır. İdempotenttir.")
+            description = "Aktör, verdiği rolün etkili izinlerinin tamamını taşımak zorundadır. Görev ayrılığı "
+                    + "gereği OWNER dışında hiçbir personel hem trust hem finans dalına ulaşamaz. İdempotenttir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Rol verildi"),
             @ApiResponse(responseCode = "403", description = "Aktör rolün izinlerinin tamamını taşımıyor",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "404", description = "Personel ya da rol bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "Üyelik görev ayrılığını bozardı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @RequiresPermission(value = StaffPermission.STAFF_MANAGE, action = "staff.member.role.grant")

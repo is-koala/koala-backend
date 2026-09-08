@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.security;
 
+import com.exskylab.koala.core.helpers.StaffSeparationOfDuties;
 import com.exskylab.koala.entities.StaffPermission;
 import org.junit.jupiter.api.Test;
 
@@ -29,9 +30,6 @@ class StaffRoleGraphSeedTest {
             Path.of("src/main/resources/db/changelog/2026/09/06-21-account-deletion-staff-permission.xml");
 
     private static final Pattern PAIR = Pattern.compile("\\('([A-Za-z_.]+)',\\s*'([A-Za-z_.]+)'\\)");
-
-    private static final Set<String> TRUST_BRANCH = Set.of("MODERATOR", "DISPUTE_HANDLER", "TRUST_LEAD");
-    private static final Set<String> FINANCE_BRANCH = Set.of("FINANCE_ANALYST", "FINANCE_OFFICER");
 
     private static String block(String from, String to) throws IOException {
         String changelog = Files.readString(CHANGELOG);
@@ -164,20 +162,32 @@ class StaffRoleGraphSeedTest {
         List<String> offenders = new ArrayList<>();
 
         for (String role : edges.keySet()) {
-            if ("OWNER".equals(role)) {
+            if (StaffSeparationOfDuties.isOwnerExemption(role)) {
                 continue;
             }
             Set<String> closure = new LinkedHashSet<>(closureOf(role, edges));
             closure.add(role);
 
-            boolean trust = closure.stream().anyMatch(TRUST_BRANCH::contains);
-            boolean finance = closure.stream().anyMatch(FINANCE_BRANCH::contains);
-
-            if (trust && finance) {
+            if (StaffSeparationOfDuties.spansBothBranches(closure)) {
                 offenders.add(role + " → " + closure);
             }
         }
 
         assertTrue(offenders.isEmpty(), "Görev ayrılığı: OWNER dışında hiçbir rol her iki dalı kapsayamaz: " + offenders);
+    }
+
+    @Test
+    void theSeedRuleAndTheRuntimeRuleReadTheSameBranchDefinition() throws IOException {
+        Set<String> seededRoles = new LinkedHashSet<>();
+        Matcher role = Pattern.compile("'([A-Z_]+)',\\s+'").matcher(block("INSERT INTO staff_roles", "ON CONFLICT (code)"));
+        while (role.find()) {
+            seededRoles.add(role.group(1));
+        }
+
+        assertTrue(seededRoles.stream().anyMatch(StaffSeparationOfDuties::isTrustBranch),
+                "Kural tek yerde tanımlı olmalı; çalışma zamanı tanımı seed'deki trust dalını tanımıyor: " + seededRoles);
+        assertTrue(seededRoles.stream().anyMatch(StaffSeparationOfDuties::isFinanceBranch),
+                "Kural tek yerde tanımlı olmalı; çalışma zamanı tanımı seed'deki finans dalını tanımıyor: " + seededRoles);
+        assertTrue(seededRoles.contains(StaffSeparationOfDuties.OWNER_ROLE_CODE));
     }
 }
