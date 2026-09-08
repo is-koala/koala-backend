@@ -1,4 +1,7 @@
-FROM maven:3.9-eclipse-temurin-25 AS build
+# Maven derlemesi hedef mimaride koşmak zorunda değil: ürettiği jar mimari
+# bağımsız. BUILDPLATFORM ile derleme runner'ın kendi mimarisinde, emülasyonsuz
+# koşuyor; yalnız aşağıdaki çalışma katmanı hedef mimariyi alıyor.
+FROM --platform=$BUILDPLATFORM maven:3.9-eclipse-temurin-25 AS build
 WORKDIR /app
 
 COPY pom.xml .
