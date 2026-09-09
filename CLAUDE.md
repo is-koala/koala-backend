@@ -2252,6 +2252,10 @@ TD1 olmayan bir MRZ reddediliyor — pasaportta (TD3) zaten TCKN yok.
 
 **Varsayılan kapalı ve fail-closed.** `identity.passive-authentication.enabled=false` iken davranış §2aq'daki gibi. Açıkken `sod`+`dg1` **zorunlu**; eksikse `IDENTITY_EVIDENCE_REQUIRED`. Güven çıpası yüklenmemişse hiçbir şey doğrulanmıyor — açılışta hata loglanıyor ve her doğrulama reddediliyor. Yani "açtım ama sertifika koymayı unuttum" hâli sessizce herkesi geçirmiyor.
 
+**Active Authentication, Passive Authentication olmadan açılamaz (#154).** `identity.passive-authentication.active-authentication-required=true` verilip `identity.passive-authentication.enabled=false` bırakılırsa `IdentityVerificationProperties` doğrulaması uygulamayı açılışta düşürüyor. Böylece `IDENTITY_ACTIVE_AUTH_REQUIRED=true` değerinin çalışma anında sessizce etkisiz kalması mümkün değil; hata yalnızca iki yapılandırma anahtarını söylüyor, güven çıpası dizini gibi dağıtıma özgü değerleri taşımıyor. İki bayrağın varsayılanı da `false`; PA+AA birlikte `true` olduğunda bağlama geçerli.
+
+**Eksik güven çıpasının public sözleşmesi değişmedi, operasyonel görünürlüğü değişti.** Çalışma anındaki `IDENTITY_NO_TRUST_ANCHORS` istemciye yine 400 dönüyor; fakat `GlobalExceptionHandler` bu tek doğrulama kodunu `BackendErrorMonitor`'a iletiyor. Böylece `koala.backend.errors{code="IDENTITY_NO_TRUST_ANCHORS",type="VALIDATION_EXCEPTION"}` sayacı artıyor ve Sentry açıksa aynı hata oraya da gidiyor. Diğer 400 doğrulama hataları operasyonel alarm üretmiyor.
+
 **CSCA sertifikaları imajın içinde geliyor.** `src/main/resources/csca/` altında 12 Türkiye sertifikası duruyor (48 KB) ve classpath'ten yükleniyor. Bunlar **açık anahtar, sır değil** — repoda durmalarının sakıncası yok, üstelik hangi sürümde hangi çıpalara güvenildiği git geçmişinden okunabiliyor.
 
 Bu tercih bilinçli: dizinden okusaydı prod'da volume bağlamak ve dosyaları elle kopyalamak gerekirdi, üstelik unutulduğunda hata açılışta değil ilk doğrulamada çıkardı. `identity.passive-authentication.trust-anchor-directory` hâlâ duruyor ama artık **ek** çıpa yüklüyor, tek kaynak değil — test ortamında ya da NVİ'den ayrı bir sertifika gelirse diye.
