@@ -20,6 +20,10 @@ class SoftDeleteBehaviourIT extends AbstractIntegrationTest {
     private static final Map<String, String> HARD_DELETE_TABLE_EXEMPTIONS = Map.of(
             "account_media_deletion_outbox",
             "geçici operasyon kuyruğu; storage silme onayından sonra satır fiziksel olarak kaldırılır",
+            "sitemap_manifests",
+            "TTL'li türetilmiş snapshot; created_at denetim değil version zamanıdır ve expiry fiziksel siler",
+            "sitemap_manifest_entries",
+            "TTL'li türetilmiş projection; üst manifest fiziksel silinince satırlar cascade ile kaldırılır",
             "staff_member_roles",
             "üyelik satırı; rol geri alınınca fiziksel olarak silinir ve iz denetim kaydında kalır (§2au)");
 

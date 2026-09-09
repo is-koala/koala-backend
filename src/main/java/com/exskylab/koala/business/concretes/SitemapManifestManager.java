@@ -8,6 +8,7 @@ import com.exskylab.koala.core.dtos.sitemap.response.SitemapShardDto;
 import com.exskylab.koala.core.dtos.sitemap.response.SitemapShardMetadataDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.JobAvailability;
+import com.exskylab.koala.core.mappers.SitemapMapper;
 import com.exskylab.koala.core.monitoring.SitemapManifestMetrics;
 import com.exskylab.koala.core.properties.SitemapManifestProperties;
 import com.exskylab.koala.dataAccess.SitemapManifestDao;
@@ -33,6 +34,7 @@ public class SitemapManifestManager implements SitemapManifestService {
     private final SitemapManifestDao sitemapManifestDao;
     private final SitemapManifestProperties properties;
     private final JobAvailability jobAvailability;
+    private final SitemapMapper sitemapMapper;
     private final SitemapManifestMetrics metrics;
     private final Clock clock;
     private final TransactionTemplate readTransaction;
@@ -40,11 +42,13 @@ public class SitemapManifestManager implements SitemapManifestService {
     private final TransactionTemplate snapshotTransaction;
 
     public SitemapManifestManager(SitemapManifestDao sitemapManifestDao, SitemapManifestProperties properties,
-                                  JobAvailability jobAvailability, SitemapManifestMetrics metrics, Clock clock,
+                                  JobAvailability jobAvailability, SitemapMapper sitemapMapper,
+                                  SitemapManifestMetrics metrics, Clock clock,
                                   PlatformTransactionManager transactionManager) {
         this.sitemapManifestDao = sitemapManifestDao;
         this.properties = properties;
         this.jobAvailability = jobAvailability;
+        this.sitemapMapper = sitemapMapper;
         this.metrics = metrics;
         this.clock = clock;
         this.readTransaction = new TransactionTemplate(transactionManager);
@@ -98,7 +102,7 @@ public class SitemapManifestManager implements SitemapManifestService {
             throw exception;
         }
         metrics.shardServed();
-        return new SitemapShardDto(version, shard, found.entries());
+        return sitemapMapper.toShardDto(version, shard, found.entries());
     }
 
     private Optional<SitemapManifestDao.ManifestRecord> current(Instant now) {
@@ -123,9 +127,7 @@ public class SitemapManifestManager implements SitemapManifestService {
             if (records.size() > manifest.shardSize()) {
                 throw new IllegalStateException("Sitemap shard exceeded its declared bound");
             }
-            List<SitemapJobDto> entries = records.stream()
-                    .map(entry -> new SitemapJobDto(entry.id(), entry.updatedAt()))
-                    .toList();
+            List<SitemapJobDto> entries = sitemapMapper.toJobDtos(records);
             return Optional.of(new ShardRecord(entries));
         }));
     }
@@ -174,10 +176,9 @@ public class SitemapManifestManager implements SitemapManifestService {
         for (int shard = 0; shard < manifest.shardCount(); shard++) {
             long first = Math.multiplyExact((long) shard, manifest.shardSize());
             int count = Math.toIntExact(Math.min(manifest.shardSize(), manifest.entryCount() - first));
-            shards.add(new SitemapShardMetadataDto(shard, count));
+            shards.add(sitemapMapper.toShardMetadataDto(shard, count));
         }
-        return new SitemapManifestDto(manifest.version(), manifest.createdAt(), manifest.expiresAt(),
-                manifest.entryCount(), manifest.shardSize(), List.copyOf(shards));
+        return sitemapMapper.toManifestDto(manifest, List.copyOf(shards));
     }
 
     private record CreationResult(SitemapManifestDao.ManifestRecord manifest, boolean created) {

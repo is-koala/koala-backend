@@ -814,7 +814,11 @@ Manifest oluşturma `SitemapManifestService` seam'inin arkasında materialized s
 `sitemap_manifest_entries` tablosuna yazılır. Kapanma, yeniden açılma, süre dolumu, soft delete veya yeni
 ilan aynı version'ı değiştiremez. Entry satırının `jobs` yabancı anahtarı bilerek yoktur: ilan sonradan
 silinse bile ilan edilmiş version TTL sonuna kadar aynı union'ı vermek zorundadır. Manifest silinince entry
-satırları cascade ile gider.
+satırları cascade ile gider. Bu iki tablo denetlenen domain kaydı değil, TTL'li türetilmiş cache'tir;
+`created_at` manifest version'ının yayın anıdır, audit alanı değildir. Bu yüzden `BaseEntity` soft-delete
+kolonlarını taşımazlar: süresi dolan manifest fiziksel silinir ve bağlı projection da fiziksel cascade olur.
+Soft delete, eski snapshot'ları ve potansiyel olarak çok büyük entry kümelerini süresiz tutarak bounded-storage
+garantisini bozardı.
 
 Çok örnekli stampede iki kademede kapanır. JVM içindeki adil olmayan kısa kilit aynı instance'ın bağlantı
 yığmasını önler; PostgreSQL session advisory lock bütün instance'ları tek üreticide birleştirir. Lock,
@@ -3639,6 +3643,9 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 - `PendingRegistration` — **bilerek hard delete.** Kaydını hiç tamamlamamış birinin e-postasını süresiz saklamak koruma değil, gereksiz veri tutma. Kayıt akışı zaten sil-ve-yeniden-oluştur mantığıyla çalışıyor.
 - `CompanyContact` ve `JobCategory` — `BaseEntity` alt sınıfı değiller, denetim kolonları yok. `CompanyContact` bir üyelik kaydı ve silinmesi geçmiş kaybı demek; ileride `BaseEntity`'ye taşınmalı.
 - `AdminAuditEntry` ve `AdminAuditEntryDetail` — **bilerek hard delete.** Saklama işinin işi zaten fiziksel silmek; soft delete edilen bir denetim satırı süresini hiç doldurmazdı (§2av).
+- `sitemap_manifests` ve `sitemap_manifest_entries` — **bilerek hard delete.** Bunlar denetlenen domain kaydı
+  değil, TTL'li türetilmiş cache'tir; manifestteki `created_at` yayın/version zamanıdır. Expiry temizliği
+  manifesti fiziksel siler, entry'ler cascade olur. Soft delete bounded-storage garantisini bozardı (§2l).
 - `LoginAttempt` — **yarı istisna, ve ayrımı karıştırma.** Entity `@SQLDelete` + `@SQLRestriction` taşımaya devam ediyor: `loginAttemptDao.deleteById(...)` hâlâ soft delete ve satır tabloda kalıyor. **Ama saklama işi fiziksel siliyor** — `LoginAttemptDao.deleteUnattributedBefore` / `deleteAttributedBefore` native SQL, çünkü Hibernate `@SQLRestriction`'ı bulk JPQL delete'e de uyguluyor ve soft delete edilmiş bir satır saklama süresini hiçbir zaman dolduramazdı; adresi süresiz taşımaya devam ederdi. Gerekçesi denetim tablolarınınkiyle aynı, farkı bu tablonun `BaseEntity`'yi bırakamaması. Tam anlatım §2aw'de. Bu yüzden `SoftDeleteBehaviourIT`'in soft delete örneği artık `login_attempts` değil `universities`: aynı tabloyu hem "fiziksel olarak silinmemeliydi" örneği hem "saklama işi fiziksel siler" örneği olarak kullanmak iki belgeyi çelişkiye sokuyordu.
 - `EmailVerification`, `PhoneVerification`, `IdentityVerification` tek tabloyu (`user_verifications`) paylaşıyor; `@SQLDelete` kök sınıf `UserVerification` üzerinde, alt sınıflarda ayrıca yok. Aynı durum `Media` hiyerarşisi için de geçerli.
 

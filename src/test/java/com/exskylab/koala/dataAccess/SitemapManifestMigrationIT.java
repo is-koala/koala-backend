@@ -15,6 +15,7 @@ import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -105,6 +106,38 @@ class SitemapManifestMigrationIT extends AbstractIntegrationTest {
                   and constraint_type = 'FOREIGN KEY'
                   and constraint_name = 'fk_sitemap_manifest_entries_manifest'
                 """, Integer.class));
+    }
+
+    @Test
+    void sitemapSnapshotsArePhysicallyRemovedWithTheirEntries() {
+        applyChangeLog();
+        UUID version = UUID.randomUUID();
+
+        assertEquals(0, probe.queryForObject("""
+                select count(*)
+                from information_schema.columns
+                where table_schema = 'public'
+                  and table_name in ('sitemap_manifests', 'sitemap_manifest_entries')
+                  and column_name in ('is_deleted', 'deleted_at', 'deleted_by_id')
+                """, Integer.class));
+
+        probe.update("""
+                insert into sitemap_manifests
+                    (version, created_at, refresh_after, expires_at, entry_count, shard_size, shard_count)
+                values (?, now(), now() + interval '30 minutes', now() + interval '1 hour', 1, 1, 1)
+                """, version);
+        probe.update("""
+                insert into sitemap_manifest_entries (manifest_version, ordinal, job_id, updated_at)
+                values (?, 0, ?, null)
+                """, version, UUID.randomUUID());
+
+        probe.update("delete from sitemap_manifests where version = ?", version);
+
+        assertEquals(0, probe.queryForObject(
+                "select count(*) from sitemap_manifests where version = ?", Integer.class, version));
+        assertEquals(0, probe.queryForObject(
+                "select count(*) from sitemap_manifest_entries where manifest_version = ?",
+                Integer.class, version));
     }
 
     private void applyChangeLog() {
