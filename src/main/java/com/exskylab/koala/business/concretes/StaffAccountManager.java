@@ -209,6 +209,12 @@ public class StaffAccountManager implements StaffAccountService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public StaffMember getReference(UUID staffId) {
+        return memberById(staffId);
+    }
+
+    @Override
     @Transactional
     public void changeOwnPassword(StaffPrincipal actor, String currentPassword, String newPassword) {
         StaffMember member = memberById(actor.staffId());

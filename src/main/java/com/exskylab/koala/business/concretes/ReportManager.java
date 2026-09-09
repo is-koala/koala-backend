@@ -5,6 +5,7 @@ import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.ReportService;
 import com.exskylab.koala.business.abstracts.SecurityService;
+import com.exskylab.koala.business.abstracts.StaffAccountService;
 import com.exskylab.koala.core.constants.ReportMessages;
 import com.exskylab.koala.core.dtos.report.response.AdminReportDetailDto;
 import com.exskylab.koala.core.dtos.report.response.AdminReportDto;
@@ -50,10 +51,12 @@ public class ReportManager implements ReportService {
     private final SecurityService securityService;
     private final ImageService imageService;
     private final ReportMapper reportMapper;
+    private final StaffAccountService staffAccountService;
 
     public ReportManager(ReportDao reportDao, UserService userService, JobService jobService,
                          MessagingService messagingService, SecurityService securityService,
                          ImageService imageService, ReportMapper reportMapper,
+                         StaffAccountService staffAccountService,
                                 PageableSanitizer pageableSanitizer) {
         this.reportDao = reportDao;
         this.userService = userService;
@@ -62,6 +65,7 @@ public class ReportManager implements ReportService {
         this.securityService = securityService;
         this.imageService = imageService;
         this.reportMapper = reportMapper;
+        this.staffAccountService = staffAccountService;
             this.pageableSanitizer = pageableSanitizer;
     }
 
@@ -102,7 +106,7 @@ public class ReportManager implements ReportService {
     @Override
     @Transactional
     public AdminReportDto review(StaffPrincipal actor, UUID reportId, ReportStatus status, String note) {
-        Report report = reportDao.findById(reportId)
+        Report report = reportDao.findByIdForUpdate(reportId)
                 .orElseThrow(() -> new ResourceNotFoundException(ReportMessages.NOT_FOUND));
 
         if (report.getStatus() == ReportStatus.ACTIONED || report.getStatus() == ReportStatus.DISMISSED) {
@@ -113,6 +117,10 @@ public class ReportManager implements ReportService {
         report.setReviewNote(note);
         if (actor == null) {
             report.setReviewedBy(securityService.getAuthenticatedUser());
+            report.setReviewedByStaff(null);
+        } else {
+            report.setReviewedBy(null);
+            report.setReviewedByStaff(staffAccountService.getReference(actor.staffId()));
         }
         report.setReviewedAt(Instant.now());
 

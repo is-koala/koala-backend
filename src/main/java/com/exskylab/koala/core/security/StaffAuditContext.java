@@ -1,5 +1,7 @@
 package com.exskylab.koala.core.security;
 
+import com.exskylab.koala.entities.StaffPermission;
+
 public final class StaffAuditContext {
 
     private static final ThreadLocal<StaffAuditContext> CURRENT = new ThreadLocal<>();
@@ -39,6 +41,27 @@ public final class StaffAuditContext {
         }
         context.before = before;
         context.after = after;
+    }
+
+    public static void reclassify(StaffPermission permission, String action, boolean allowed) {
+        StaffAuditContext context = CURRENT.get();
+        if (context == null || context.pending == null) {
+            return;
+        }
+
+        StaffAuditRecord source = context.pending;
+        context.pending = new StaffAuditRecord(
+                source.actorStaffId(),
+                source.actorDisplayName(),
+                permission.getCode(),
+                action,
+                source.resourceType(),
+                source.resourceId(),
+                allowed,
+                permission.isMutating(),
+                permission.getSensitivity(),
+                source.ip(),
+                source.userAgent());
     }
 
     public StaffAuditRecord pending() {

@@ -3,6 +3,7 @@ package com.exskylab.koala.business.concretes;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.SecurityService;
+import com.exskylab.koala.business.abstracts.StaffAccountService;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.dataAccess.JobDao;
 import com.exskylab.koala.dataAccess.MessageDao;
@@ -30,6 +31,7 @@ class ReportRulesTest {
 
     private ReportDao reportDao;
     private SecurityService securityService;
+    private StaffAccountService staffAccountService;
     private ReportManager manager;
 
     private final UUID reporterId = UUID.randomUUID();
@@ -38,12 +40,14 @@ class ReportRulesTest {
     void setUp() {
         reportDao = mock(ReportDao.class);
         securityService = mock(SecurityService.class);
+        staffAccountService = mock(StaffAccountService.class);
         UserService userService = mock(UserService.class);
         JobService jobService = mock(JobService.class);
         MessagingService messagingService = mock(MessagingService.class);
 
         manager = new ReportManager(reportDao, userService, jobService, messagingService, securityService,
                 mock(ImageService.class), mock(com.exskylab.koala.core.mappers.ReportMapper.class),
+                staffAccountService,
                 new com.exskylab.koala.core.helpers.PageableSanitizer());
 
         when(reportDao.save(any())).thenAnswer(i -> i.getArgument(0));
@@ -57,6 +61,11 @@ class ReportRulesTest {
             User u = new User();
             u.setId(i.getArgument(0));
             return u;
+        });
+        when(staffAccountService.getReference(any())).thenAnswer(i -> {
+            StaffMember member = new StaffMember();
+            member.setId(i.getArgument(0));
+            return member;
         });
     }
 
@@ -80,7 +89,7 @@ class ReportRulesTest {
         Report report = new Report();
         report.setId(UUID.randomUUID());
         report.setStatus(ReportStatus.ACTIONED);
-        when(reportDao.findById(report.getId())).thenReturn(Optional.of(report));
+        when(reportDao.findByIdForUpdate(report.getId())).thenReturn(Optional.of(report));
         when(securityService.getAuthenticatedUser()).thenReturn(new User());
 
         assertThrows(ConflictException.class,
@@ -92,7 +101,7 @@ class ReportRulesTest {
         Report report = new Report();
         report.setId(UUID.randomUUID());
         report.setStatus(ReportStatus.OPEN);
-        when(reportDao.findById(report.getId())).thenReturn(Optional.of(report));
+        when(reportDao.findByIdForUpdate(report.getId())).thenReturn(Optional.of(report));
 
         User admin = new User();
         admin.setId(UUID.randomUUID());
@@ -115,6 +124,7 @@ class ReportRulesTest {
         ReportManager withGhost = new ReportManager(reportDao, userService, mock(JobService.class),
                 mock(MessagingService.class), securityService, mock(ImageService.class),
                 mock(com.exskylab.koala.core.mappers.ReportMapper.class),
+                staffAccountService,
                 new com.exskylab.koala.core.helpers.PageableSanitizer());
 
         assertThrows(ResourceNotFoundException.class,
@@ -126,7 +136,7 @@ class ReportRulesTest {
         Report report = new Report();
         report.setId(UUID.randomUUID());
         report.setStatus(ReportStatus.OPEN);
-        when(reportDao.findById(report.getId())).thenReturn(Optional.of(report));
+        when(reportDao.findByIdForUpdate(report.getId())).thenReturn(Optional.of(report));
         when(securityService.getAuthenticatedUser())
                 .thenThrow(new ResourceNotFoundException("{user.not.authenticated}"));
 
@@ -137,8 +147,9 @@ class ReportRulesTest {
 
         assertEquals(ReportStatus.ACTIONED, report.getStatus());
         assertNull(report.getReviewedBy(),
-                "Personel kimliginin pazaryeri kullanicisi yok; reviewedBy bos kalir, "
-                        + "karari kimin verdigini denetim kaydi soyler.");
+                "Personel kimliginin pazaryeri kullanicisi yok; eski kopru alani bos kalir.");
+        assertEquals(moderator.staffId(), report.getReviewedByStaff().getId(),
+                "Personel karari staff_members yabanci anahtariyla damgalanmali.");
     }
 
     @Test
@@ -146,7 +157,7 @@ class ReportRulesTest {
         Report report = new Report();
         report.setId(UUID.randomUUID());
         report.setStatus(ReportStatus.OPEN);
-        when(reportDao.findById(report.getId())).thenReturn(Optional.of(report));
+        when(reportDao.findByIdForUpdate(report.getId())).thenReturn(Optional.of(report));
 
         User admin = new User();
         admin.setId(UUID.randomUUID());

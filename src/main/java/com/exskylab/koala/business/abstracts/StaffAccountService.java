@@ -4,6 +4,7 @@ import com.exskylab.koala.core.dtos.staff.response.StaffTokenDto;
 import com.exskylab.koala.core.security.StaffBootstrapResult;
 import com.exskylab.koala.core.security.StaffMemberView;
 import com.exskylab.koala.core.security.StaffPrincipal;
+import com.exskylab.koala.entities.StaffMember;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -19,6 +20,8 @@ public interface StaffAccountService {
     void logout(StaffPrincipal actor);
 
     Optional<StaffPrincipal> principalOf(UUID staffId, int tokenVersion);
+
+    StaffMember getReference(UUID staffId);
 
     void changeOwnPassword(StaffPrincipal actor, String currentPassword, String newPassword);
 

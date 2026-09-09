@@ -5,11 +5,13 @@ import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.DisputeService;
 import com.exskylab.koala.business.abstracts.StaffPayoutService;
+import com.exskylab.koala.business.abstracts.StaffAccountService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.DisputeMessages;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.core.security.StaffPrincipal;
+import com.exskylab.koala.core.security.StaffAuditContext;
 import com.exskylab.koala.core.helpers.Checksums;
 import com.exskylab.koala.core.helpers.Concealment;
 import com.exskylab.koala.core.helpers.UploadValidator;
@@ -63,13 +65,15 @@ public class DisputeManager implements DisputeService {
     private final SecurityService securityService;
     private final AssignmentParticipants participants;
     private final StaffPayoutService staffPayoutService;
+    private final StaffAccountService staffAccountService;
     private final ActivityNotificationService activityNotificationService;
 
     public DisputeManager(DisputeDao disputeDao, DisputeEvidenceDao disputeEvidenceDao, StorageService storageService,
                           UploadValidator uploadValidator, UploadProperties uploadProperties,
                           JobAssignmentService jobAssignmentService, UserService userService,
                           SecurityService securityService, AssignmentParticipants participants,
-                          StaffPayoutService staffPayoutService, ActivityNotificationService activityNotificationService,
+                          StaffPayoutService staffPayoutService, StaffAccountService staffAccountService,
+                          ActivityNotificationService activityNotificationService,
                                 PageableSanitizer pageableSanitizer) {
         this.disputeDao = disputeDao;
         this.disputeEvidenceDao = disputeEvidenceDao;
@@ -81,6 +85,7 @@ public class DisputeManager implements DisputeService {
         this.securityService = securityService;
         this.participants = participants;
         this.staffPayoutService = staffPayoutService;
+        this.staffAccountService = staffAccountService;
         this.activityNotificationService = activityNotificationService;
             this.pageableSanitizer = pageableSanitizer;
     }
@@ -126,6 +131,9 @@ public class DisputeManager implements DisputeService {
                 .orElseThrow(() -> new ResourceNotFoundException(DisputeMessages.NOT_FOUND));
 
         if (resolution.movesMoney()) {
+            StaffPermission permission = resolution.getMoneyPermission();
+            boolean allowed = actor != null && actor.isRegistered() && actor.holds(permission);
+            StaffAuditContext.reclassify(permission, resolution.getMoneyAuditAction(), allowed);
             staffPayoutService.requirePermission(actor, resolution.getMoneyPermission(), assignmentId);
         }
 
@@ -138,6 +146,10 @@ public class DisputeManager implements DisputeService {
         dispute.setResolutionNote(note);
         if (actor == null) {
             dispute.setResolvedBy(securityService.getAuthenticatedUser());
+            dispute.setResolvedByStaff(null);
+        } else {
+            dispute.setResolvedBy(null);
+            dispute.setResolvedByStaff(staffAccountService.getReference(actor.staffId()));
         }
         dispute.setResolvedAt(Instant.now());
 

@@ -4,6 +4,7 @@ import com.exskylab.koala.business.abstracts.ActivityNotificationService;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.business.abstracts.SecurityService;
+import com.exskylab.koala.business.abstracts.StaffAccountService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
@@ -16,6 +17,7 @@ import com.exskylab.koala.entities.DisputeResolution;
 import com.exskylab.koala.entities.DisputeStatus;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.PermissionSensitivity;
+import com.exskylab.koala.entities.StaffMember;
 import com.exskylab.koala.entities.StaffPermission;
 import com.exskylab.koala.entities.User;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,6 +44,7 @@ class DisputeResolutionAuthorizationTest {
     private DisputeDao disputeDao;
     private PayoutService payoutService;
     private SecurityService securityService;
+    private StaffAccountService staffAccountService;
     private JobAssignmentService jobAssignmentService;
     private DisputeManager disputeManager;
 
@@ -55,6 +58,7 @@ class DisputeResolutionAuthorizationTest {
         disputeDao = mock(DisputeDao.class);
         payoutService = mock(PayoutService.class);
         securityService = mock(SecurityService.class);
+        staffAccountService = mock(StaffAccountService.class);
         jobAssignmentService = mock(JobAssignmentService.class);
 
         disputeManager = new DisputeManager(disputeDao, mock(com.exskylab.koala.dataAccess.DisputeEvidenceDao.class),
@@ -64,6 +68,7 @@ class DisputeResolutionAuthorizationTest {
                 new com.exskylab.koala.core.properties.UploadProperties(),
                 jobAssignmentService, mock(UserService.class),
                 securityService, mock(AssignmentParticipants.class), new StaffPayoutManager(payoutService),
+                staffAccountService,
                 mock(ActivityNotificationService.class), new PageableSanitizer());
 
         JobAssignment assignment = new JobAssignment();
@@ -80,6 +85,11 @@ class DisputeResolutionAuthorizationTest {
         when(jobAssignmentService.getDetailedByIdForUpdate(assignmentId)).thenReturn(assignment);
         when(disputeDao.save(any(Dispute.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(securityService.getAuthenticatedUser()).thenReturn(new User());
+        when(staffAccountService.getReference(any())).thenAnswer(invocation -> {
+            StaffMember member = new StaffMember();
+            member.setId(invocation.getArgument(0));
+            return member;
+        });
     }
 
     private static StaffPrincipal staff(StaffPermission... permissions) {
@@ -117,6 +127,8 @@ class DisputeResolutionAuthorizationTest {
 
         verifyNoInteractions(payoutService);
         assertEquals(DisputeStatus.RESOLVED, dispute.getStatus());
+        assertEquals(handler.staffId(), dispute.getResolvedByStaff().getId(),
+                "Personel karari staff_members yabanci anahtariyla damgalanmali.");
     }
 
     @Test

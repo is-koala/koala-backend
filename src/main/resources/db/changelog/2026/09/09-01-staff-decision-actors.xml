@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-09-01-01-staff-decision-actors" author="koala">
+        <addColumn tableName="disputes">
+            <column name="resolved_by_staff_id" type="UUID"/>
+        </addColumn>
+        <addColumn tableName="reports">
+            <column name="reviewed_by_staff_id" type="UUID"/>
+        </addColumn>
+
+        <addForeignKeyConstraint baseTableName="disputes" baseColumnNames="resolved_by_staff_id"
+                                 constraintName="fk_disputes_resolved_by_staff"
+                                 referencedTableName="staff_members" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="reports" baseColumnNames="reviewed_by_staff_id"
+                                 constraintName="fk_reports_reviewed_by_staff"
+                                 referencedTableName="staff_members" referencedColumnNames="id"/>
+
+        <createIndex tableName="disputes" indexName="ix_disputes_resolved_by_staff">
+            <column name="resolved_by_staff_id"/>
+        </createIndex>
+        <createIndex tableName="reports" indexName="ix_reports_reviewed_by_staff">
+            <column name="reviewed_by_staff_id"/>
+        </createIndex>
+
+        <rollback>
+            <dropIndex tableName="reports" indexName="ix_reports_reviewed_by_staff"/>
+            <dropIndex tableName="disputes" indexName="ix_disputes_resolved_by_staff"/>
+            <dropForeignKeyConstraint baseTableName="reports"
+                                      constraintName="fk_reports_reviewed_by_staff"/>
+            <dropForeignKeyConstraint baseTableName="disputes"
+                                      constraintName="fk_disputes_resolved_by_staff"/>
+            <dropColumn tableName="reports" columnName="reviewed_by_staff_id"/>
+            <dropColumn tableName="disputes" columnName="resolved_by_staff_id"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-09-01-03-exclusive-decision-actors" author="koala">
+        <sql>
+            ALTER TABLE disputes
+                ADD CONSTRAINT ck_disputes_single_resolution_actor
+                CHECK (resolved_by_id IS NULL OR resolved_by_staff_id IS NULL);
+            ALTER TABLE reports
+                ADD CONSTRAINT ck_reports_single_review_actor
+                CHECK (reviewed_by_id IS NULL OR reviewed_by_staff_id IS NULL);
+        </sql>
+        <rollback>
+            <sql>
+                ALTER TABLE reports DROP CONSTRAINT ck_reports_single_review_actor;
+                ALTER TABLE disputes DROP CONSTRAINT ck_disputes_single_resolution_actor;
+            </sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>
