@@ -7,7 +7,9 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.hasItems;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -56,6 +58,18 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.paths['/jobs'].get.parameters[?(@.name == 'companyId')]").isNotEmpty())
                 .andExpect(jsonPath("$.paths['/job-assignments/{assignmentId}'].get.responses.200").exists())
                 .andExpect(jsonPath("$.paths['/job-assignments/{assignmentId}'].get.responses.404").exists());
+    }
+
+    @Test
+    void jobSummariesDocumentTheirAuthoritativeRevisionTime() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.components.schemas.JobSummaryDto.properties.updatedAt.type")
+                        .value(hasItems("string", "null")))
+                .andExpect(jsonPath("$.components.schemas.JobSummaryDto.properties.updatedAt.format")
+                        .value("date-time"))
+                .andExpect(jsonPath("$.components.schemas.JobSummaryDto.properties.updatedAt.description")
+                        .value(containsString("sitemap")));
     }
 
     @Test

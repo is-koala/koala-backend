@@ -22,6 +22,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class JobAddressVisibilityIT extends AbstractIntegrationTest {
 
+    private static final String FIRST_REVISION = "2026-09-09T10:11:12Z";
+    private static final String SECOND_REVISION = "2026-09-09T10:12:13Z";
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -122,6 +125,21 @@ class JobAddressVisibilityIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void jobSearchReturnsThePersistedRevisionTimeAndItsUpdates() throws Exception {
+        setJobRevision(FIRST_REVISION);
+
+        mockMvc.perform(get("/jobs").param("query", title))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].updatedAt").value(FIRST_REVISION));
+
+        setJobRevision(SECOND_REVISION);
+
+        mockMvc.perform(get("/jobs").param("query", title))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].updatedAt").value(SECOND_REVISION));
+    }
+
+    @Test
     void theOwnerReceivesExactCoordinatesInJobSearch() throws Exception {
         mockMvc.perform(get("/jobs")
                         .param("query", title)
@@ -208,6 +226,10 @@ class JobAddressVisibilityIT extends AbstractIntegrationTest {
         jdbc.update("insert into users (id, created_at, is_deleted, email, password, is_employer, "
                         + "email_verified, phone_verified, identity_verified) "
                         + "values (?, now(), false, ?, 'test', false, true, false, false)", id, email);
+    }
+
+    private void setJobRevision(String revision) {
+        jdbc.update("update jobs set updated_at = cast(? as timestamptz) where id = ?", revision, jobId);
     }
 
     private UserPrincipal principal(UUID id, String email) {
