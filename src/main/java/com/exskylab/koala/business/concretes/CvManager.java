@@ -8,15 +8,14 @@ import com.exskylab.koala.core.constants.CvMessages;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.helpers.MediaUrlResolver;
+import com.exskylab.koala.core.helpers.StorageRollbackCleanup;
 import com.exskylab.koala.core.utilities.storage.StorageService;
 import com.exskylab.koala.dataAccess.MediaDao;
 import com.exskylab.koala.business.abstracts.JobApplicationService;
 import com.exskylab.koala.core.constants.StorageMessages;
-import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.entities.File;
 import com.exskylab.koala.entities.Media;
 import com.exskylab.koala.entities.Role;
-import com.exskylab.koala.entities.User;
 import com.exskylab.koala.entities.User;
 import com.exskylab.koala.core.helpers.UploadValidator;
 import com.exskylab.koala.business.abstracts.UserService;
@@ -85,6 +84,7 @@ public class CvManager implements CvService {
         try {
             key = storageService.uploadFile(document.getBytes(), document.getOriginalFilename(),
                     document.getContentType(), FolderType.FILE);
+            StorageRollbackCleanup.deleteOnRollback(storageService, key);
         } catch (IOException e) {
             log.error("CV upload failed for user {}", currentUser.getId(), e);
             throw new ValidationException(CvMessages.UPLOAD_FAILED);
