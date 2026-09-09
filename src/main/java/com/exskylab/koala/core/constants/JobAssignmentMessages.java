@@ -8,7 +8,6 @@ public class JobAssignmentMessages {
     public static final String ANSWER_SUCCESS = "{job.assignment.answer.success}";
     public static final String RETRIEVED = "{job.assignment.retrieved}";
     public static final String NOT_FOUND = "{job.assignment.not.found}";
-    public static final String NOT_WORKER_FOR_ASSIGNMENT = "{job.assignment.not.worker.for.assignment}";
     public static final String ALREADY_ANSWERED = "{job.assignment.already.answered}";
     public static final String PAYMENT_SESSION_INITIATED = "{job.assignment.payment.session.initiated}";
     public static final String NOT_CREATOR_OF_JOB = "{job.assignment.not.creator.of.job}";

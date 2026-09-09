@@ -154,15 +154,16 @@ public class JobAssignmentManager implements JobAssignmentService {
 
         log.info("Job assignment with id {} found", assignmentId);
 
-        if (assignment.getStatus() != AssignmentStatus.PENDING_CONFIRMATION){
-            log.warn("Assignment with ID: {} is already answered.", assignment.getId());
-            throw new ConflictException(JobAssignmentMessages.ALREADY_ANSWERED);
-        }
-
         var authenticatedUserFromContext = securityService.getAuthenticatedUser();
 
         if (!assignment.getWorker().getId().equals(authenticatedUserFromContext.getId())) {
-            throw new ForbiddenException(JobAssignmentMessages.NOT_WORKER_FOR_ASSIGNMENT);
+            throw Concealment.notFound(JobAssignmentMessages.NOT_FOUND, authenticatedUserFromContext.getId(),
+                    assignmentId, "not the worker of the assignment");
+        }
+
+        if (assignment.getStatus() != AssignmentStatus.PENDING_CONFIRMATION){
+            log.warn("Assignment with ID: {} is already answered.", assignment.getId());
+            throw new ConflictException(JobAssignmentMessages.ALREADY_ANSWERED);
         }
 
         if (Boolean.TRUE.equals(jobAssignmentsAssignmentIdStatusPatchRequestDto.getAccepted())){
