@@ -28,6 +28,8 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @AutoConfigureMockMvc
 class ExistenceConcealmentIT extends AbstractIntegrationTest {
@@ -96,9 +98,11 @@ class ExistenceConcealmentIT extends AbstractIntegrationTest {
     @AfterEach
     void tearDown() {
         jdbc.update("delete from job_templates where owner_id = ?", employerId);
-        jdbc.update("delete from conversation_participants where conversation_id = ?", conversationId);
-        jdbc.update("delete from messages where conversation_id = ?", conversationId);
-        jdbc.update("delete from conversations where id = ?", conversationId);
+        jdbc.update("delete from conversation_participants where conversation_id in "
+                + "(select id from conversations where job_id = ?)", jobId);
+        jdbc.update("delete from messages where conversation_id in (select id from conversations where job_id = ?)",
+                jobId);
+        jdbc.update("delete from conversations where job_id = ?", jobId);
         jdbc.update("delete from dispute_evidence where dispute_id = ?", disputeId);
         jdbc.update("delete from disputes where id = ?", disputeId);
         jdbc.update("delete from work_sessions where job_assignment_id = ?", assignmentId);
@@ -133,6 +137,36 @@ class ExistenceConcealmentIT extends AbstractIntegrationTest {
         assertIndistinguishable(assignmentId,
                 id -> mockMvc.perform(get("/job-assignments/{id}", id)
                         .with(user(principal(outsiderId)))));
+    }
+
+    @Test
+    void respondingToSomeoneElsesPendingAssignmentLooksExactlyLikeRespondingToOneThatDoesNotExist()
+            throws Exception {
+        jdbc.update("update job_assignments set status = 'PENDING_CONFIRMATION' where id = ?", assignmentId);
+
+        assertIndistinguishable(assignmentId, id -> respond(id, outsiderId));
+    }
+
+    @Test
+    void respondingToSomeoneElsesTerminalAssignmentLooksExactlyLikeRespondingToOneThatDoesNotExist()
+            throws Exception {
+        assertIndistinguishable(assignmentId, id -> respond(id, outsiderId));
+    }
+
+    @Test
+    void workerCanRespondToPendingAssignment() throws Exception {
+        jdbc.update("update job_assignments set status = 'PENDING_CONFIRMATION' where id = ?", assignmentId);
+
+        respond(assignmentId, workerId)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CONFIRMED"));
+    }
+
+    @Test
+    void workerStillSeesAlreadyAnsweredConflict() throws Exception {
+        respond(assignmentId, workerId)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("JOB_ASSIGNMENT_ALREADY_ANSWERED"));
     }
 
     @Test
@@ -224,6 +258,13 @@ class ExistenceConcealmentIT extends AbstractIntegrationTest {
         parsed.remove("timeStamp");
         parsed.remove("requestId");
         return parsed.toString().replace(resourceId.toString(), "{istenen-id}");
+    }
+
+    private ResultActions respond(UUID resourceId, UUID actorId) throws Exception {
+        return mockMvc.perform(post("/job-assignments/{id}/respond", resourceId)
+                .with(user(principal(actorId)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"accepted\":true}"));
     }
 
     private void insertUser(UUID id) {
