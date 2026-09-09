@@ -8,6 +8,7 @@ import com.exskylab.koala.core.constants.ImageMessages;
 import com.exskylab.koala.core.dtos.images.response.UploadImageResponseDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ValidationException;
+import com.exskylab.koala.core.helpers.StorageRollbackCleanup;
 import com.exskylab.koala.core.mappers.ImageMapper;
 import com.exskylab.koala.core.utilities.storage.StorageService;
 import com.exskylab.koala.dataAccess.ImageDao;
@@ -16,6 +17,7 @@ import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.entities.User;
 import com.exskylab.koala.core.helpers.UploadValidator;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.imageio.ImageIO;
@@ -52,6 +54,7 @@ public class ImageManager implements ImageService {
     }
 
     @Override
+    @Transactional
     public Image uploadImage(MultipartFile image) {
         log.info("Uploading image file: {}", image.getOriginalFilename());
         uploadValidator.validate(image, FolderType.IMAGE,
@@ -65,7 +68,7 @@ public class ImageManager implements ImageService {
                     image.getOriginalFilename(),
                     image.getContentType(),
                     FolderType.IMAGE);
-
+            StorageRollbackCleanup.deleteOnRollback(storageService, imageKey);
 
             Image newImage = new Image();
             newImage.setFileName(image.getOriginalFilename());
@@ -83,6 +86,7 @@ public class ImageManager implements ImageService {
     }
 
     @Override
+    @Transactional
     public UploadImageResponseDto uploadImageDto(MultipartFile image) {
         return imageMapper.toUploadImageResponseDto(uploadImage(image));
     }

@@ -22,6 +22,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class JobAddressVisibilityIT extends AbstractIntegrationTest {
 
+    private static final String FIRST_REVISION = "2026-09-09T10:11:12Z";
+    private static final String SECOND_REVISION = "2026-09-09T10:12:13Z";
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -36,6 +39,7 @@ class JobAddressVisibilityIT extends AbstractIntegrationTest {
     private final UUID districtId = UUID.randomUUID();
     private final UUID addressId = UUID.randomUUID();
     private final UUID categoryId = UUID.randomUUID();
+    private final UUID companyId = UUID.randomUUID();
     private final UUID jobId = UUID.randomUUID();
     private final String title = "Gizlilik testi " + UUID.randomUUID();
 
@@ -55,6 +59,13 @@ class JobAddressVisibilityIT extends AbstractIntegrationTest {
                         + "canonical_version, needs_review) values (?, now(), false, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, false)",
                 addressId, countryId, cityId, districtId, "Moda", "Caferağa Sokak", "12", "4",
                 40.987654, 29.034567);
+        jdbc.update("insert into companies (id, created_at, is_deleted, name, tax_number, email, address_id, approval_status) "
+                        + "values (?, now(), false, ?, ?, ?, ?, 'APPROVED')",
+                companyId, "Gizlilik Şirketi " + companyId, String.valueOf(Math.abs(companyId.hashCode())),
+                "company-" + companyId + "@example.com", addressId);
+        jdbc.update("insert into company_contacts (id, created_at, is_deleted, company_id, user_id, role) "
+                        + "values (?, now(), false, ?, ?, 'ADMIN')",
+                UUID.randomUUID(), companyId, ownerId);
         jdbc.update("insert into job_categories (id, name, code, requires_insurance) values (?, ?, ?, false)",
                 categoryId, "Test", "TEST_" + categoryId);
         jdbc.update("insert into jobs (id, created_at, is_deleted, creator_id, job_category_id, employer_type, "
@@ -70,6 +81,8 @@ class JobAddressVisibilityIT extends AbstractIntegrationTest {
         jdbc.update("delete from job_assignments where job_id = ?", jobId);
         jdbc.update("delete from jobs where id = ?", jobId);
         jdbc.update("delete from job_categories where id = ?", categoryId);
+        jdbc.update("delete from company_contacts where company_id = ?", companyId);
+        jdbc.update("delete from companies where id = ?", companyId);
         jdbc.update("delete from addresses where id = ?", addressId);
         jdbc.update("delete from districts where id = ?", districtId);
         jdbc.update("delete from cities where id = ?", cityId);
@@ -90,12 +103,40 @@ class JobAddressVisibilityIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void anonymousCompanyJobDetailDoesNotCarryTheCompanyAddress() throws Exception {
+        jdbc.update("update jobs set employer_type = 'COMPANY', company_id = ?, address_public = false where id = ?",
+                companyId, jobId);
+
+        mockMvc.perform(get("/jobs/{jobId}", jobId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.addressPrecision").value("APPROXIMATE"))
+                .andExpect(jsonPath("$.data.address.components.thoroughfare").doesNotExist())
+                .andExpect(jsonPath("$.data.company.id").value(companyId.toString()))
+                .andExpect(jsonPath("$.data.company.address").doesNotExist());
+    }
+
+    @Test
     void anonymousJobSearchDoesNotExposeExactCoordinates() throws Exception {
         mockMvc.perform(get("/jobs").param("query", title))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content[0].addressPrecision").value("APPROXIMATE"))
                 .andExpect(jsonPath("$.data.content[0].latitude").value(40.99))
                 .andExpect(jsonPath("$.data.content[0].longitude").value(29.03));
+    }
+
+    @Test
+    void jobSearchReturnsThePersistedRevisionTimeAndItsUpdates() throws Exception {
+        setJobRevision(FIRST_REVISION);
+
+        mockMvc.perform(get("/jobs").param("query", title))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].updatedAt").value(FIRST_REVISION));
+
+        setJobRevision(SECOND_REVISION);
+
+        mockMvc.perform(get("/jobs").param("query", title))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].updatedAt").value(SECOND_REVISION));
     }
 
     @Test
@@ -161,18 +202,34 @@ class JobAddressVisibilityIT extends AbstractIntegrationTest {
 
     @Test
     void aPublicCompanyAddressIsExactForAnAnonymousViewer() throws Exception {
-        jdbc.update("update jobs set address_public = true, employer_type = 'COMPANY' where id = ?", jobId);
+        jdbc.update("update jobs set address_public = true, employer_type = 'COMPANY', company_id = ? where id = ?",
+                companyId, jobId);
 
         mockMvc.perform(get("/jobs/{jobId}", jobId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.addressPrecision").value("EXACT"))
-                .andExpect(jsonPath("$.data.address.components.unitNumber").value("4"));
+                .andExpect(jsonPath("$.data.address.components.unitNumber").value("4"))
+                .andExpect(jsonPath("$.data.company.address").doesNotExist());
+    }
+
+    @Test
+    void aCompanyOfficialStillReceivesTheCompanyAddressFromTheCompanyEndpoint() throws Exception {
+        mockMvc.perform(get("/companies/{companyId}", companyId)
+                        .with(user(principal(ownerId, "owner@example.com"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.address.components.thoroughfare").value("Caferağa Sokak"))
+                .andExpect(jsonPath("$.data.address.components.buildingNumber").value("12"))
+                .andExpect(jsonPath("$.data.address.position.latitude").value(40.987654));
     }
 
     private void insertUser(UUID id, String email) {
         jdbc.update("insert into users (id, created_at, is_deleted, email, password, is_employer, "
                         + "email_verified, phone_verified, identity_verified) "
                         + "values (?, now(), false, ?, 'test', false, true, false, false)", id, email);
+    }
+
+    private void setJobRevision(String revision) {
+        jdbc.update("update jobs set updated_at = cast(? as timestamptz) where id = ?", revision, jobId);
     }
 
     private UserPrincipal principal(UUID id, String email) {

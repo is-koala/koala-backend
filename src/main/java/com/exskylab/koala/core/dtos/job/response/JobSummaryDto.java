@@ -13,6 +13,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -38,6 +39,12 @@ public class JobSummaryDto {
     private LocalDateTime startDateTime;
     private LocalDateTime endDateTime;
     private JobStatus status;
+
+    @Schema(types = {"string", "null"}, format = "date-time",
+            description = "İlanın veri tabanında son değiştiği an; sitemap ve önbellek tazeliğinin kaynağıdır. Eski kayıtlarda null olabilir.",
+            example = "2026-09-09T10:11:12Z")
+    private Instant updatedAt;
+
     private String cityName;
     private String districtName;
     private String companyName;

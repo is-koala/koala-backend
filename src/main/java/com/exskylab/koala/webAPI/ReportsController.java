@@ -49,12 +49,15 @@ public class ReportsController {
     }
 
     @Operation(summary = "Şikayet oluştur",
-            description = "Hedef kullanıcı, ilan, mesaj ya da görsel olabilir; en az biri zorunludur. Kendini şikayet etmek reddedilir.")
+            description = "Hedef kullanıcı, ilan, mesaj ya da görsel olabilir; en az biri zorunludur. "
+                    + "Mesaj hedefinde kullanıcı kalıcı gönderenden türetilir. Kendini şikayet etmek reddedilir.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Şikayet oluşturuldu"),
             @ApiResponse(responseCode = "400", description = "Hedef verilmedi ya da kendinizi şikayet edemezsiniz",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "404", description = "Hedef bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "Aynı mesaj farklı içerikle daha önce şikayet edildi",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping("/reports")

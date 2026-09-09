@@ -9,13 +9,16 @@ import com.exskylab.koala.business.abstracts.PricingService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.dtos.jobApplication.request.AnswerApplicationDto;
 import com.exskylab.koala.core.exceptions.ConflictException;
+import com.exskylab.koala.core.helpers.JobAvailability;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.mappers.JobApplicationMapper;
+import com.exskylab.koala.core.properties.JobSearchProperties;
 import com.exskylab.koala.dataAccess.JobApplicationDao;
 import com.exskylab.koala.entities.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -46,7 +49,8 @@ class JobHeadcountRulesTest {
         manager = new JobApplicationManager(jobApplicationDao, mock(JobService.class), security,
                 mock(CompanyContactService.class), jobAssignmentService, mock(JobApplicationMapper.class),
                 new PageableSanitizer(), mock(GalleryService.class), mock(ActivityNotificationService.class),
-                mock(com.exskylab.koala.business.abstracts.BankAccountService.class), pricingService);
+                mock(com.exskylab.koala.business.abstracts.BankAccountService.class), pricingService,
+                new JobAvailability(Clock.systemUTC(), new JobSearchProperties()));
     }
 
     private static User user() {

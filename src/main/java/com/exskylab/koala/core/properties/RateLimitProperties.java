@@ -18,6 +18,7 @@ public class RateLimitProperties {
     private Bucket write = new Bucket(60, Duration.ofMinutes(1));
     private Bucket addressSearch = new Bucket(60, Duration.ofMinutes(1));
     private Bucket publicBucket = new Bucket(120, Duration.ofMinutes(1));
+    private Bucket sitemap = new Bucket(30, Duration.ofMinutes(1));
     private Bucket realtimeSubscribe = new Bucket(30, Duration.ofMinutes(1));
     private Bucket realtimeMessage = new Bucket(60, Duration.ofMinutes(1));
     private Bucket realtimeCredential = new Bucket(10, Duration.ofMinutes(1));
@@ -90,6 +91,14 @@ public class RateLimitProperties {
 
     public void setPublic(Bucket publicBucket) {
         this.publicBucket = publicBucket;
+    }
+
+    public Bucket getSitemap() {
+        return sitemap;
+    }
+
+    public void setSitemap(Bucket sitemap) {
+        this.sitemap = sitemap;
     }
 
     public Bucket getRealtimeSubscribe() {

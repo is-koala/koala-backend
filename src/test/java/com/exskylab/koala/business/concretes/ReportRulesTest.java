@@ -32,6 +32,7 @@ class ReportRulesTest {
     private ReportDao reportDao;
     private SecurityService securityService;
     private StaffAccountService staffAccountService;
+    private MessagingService messagingService;
     private ReportManager manager;
 
     private final UUID reporterId = UUID.randomUUID();
@@ -43,7 +44,7 @@ class ReportRulesTest {
         staffAccountService = mock(StaffAccountService.class);
         UserService userService = mock(UserService.class);
         JobService jobService = mock(JobService.class);
-        MessagingService messagingService = mock(MessagingService.class);
+        messagingService = mock(MessagingService.class);
 
         manager = new ReportManager(reportDao, userService, jobService, messagingService, securityService,
                 mock(ImageService.class), mock(com.exskylab.koala.core.mappers.ReportMapper.class),
@@ -73,6 +74,52 @@ class ReportRulesTest {
     void nobodyCanReportThemselves() {
         assertThrows(ValidationException.class,
                 () -> manager.createReport(reporterId, null, null, null, ReportReason.HARASSMENT, "ben"));
+    }
+
+    @Test
+    void aSenderCannotReportTheirOwnMessage() {
+        UUID messageId = UUID.randomUUID();
+        Message message = new Message();
+        message.setId(messageId);
+        User sender = new User();
+        sender.setId(reporterId);
+        message.setSender(sender);
+        when(messagingService.getMessageForReport(messageId, reporterId)).thenReturn(message);
+
+        assertThrows(ValidationException.class,
+                () -> manager.createReport(null, null, messageId, null, ReportReason.HARASSMENT, "ben"));
+        verify(reportDao, never()).save(any());
+    }
+
+    @Test
+    void anUnauthorizedMessageTargetNeverCreatesAReport() {
+        UUID messageId = UUID.randomUUID();
+        when(messagingService.getMessageForReport(messageId, reporterId))
+                .thenThrow(new ResourceNotFoundException("{messaging.message.not.found}"));
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> manager.createReport(null, null, messageId, null, ReportReason.SPAM, "yok"));
+        verify(reportDao, never()).save(any());
+    }
+
+    @Test
+    void aDifferentRetryPayloadNeverCreatesAnotherMessageReport() {
+        UUID messageId = UUID.randomUUID();
+        Message message = new Message();
+        message.setId(messageId);
+        User sender = new User();
+        sender.setId(UUID.randomUUID());
+        message.setSender(sender);
+        Report existing = new Report();
+        existing.setReason(ReportReason.SPAM);
+        existing.setDescription("ilk şikâyet");
+        when(messagingService.getMessageForReport(messageId, reporterId)).thenReturn(message);
+        when(reportDao.findByReporterIdAndMessageId(reporterId, messageId)).thenReturn(Optional.of(existing));
+
+        assertThrows(ConflictException.class,
+                () -> manager.createReport(null, null, messageId, null,
+                        ReportReason.FRAUD, "başka şikâyet"));
+        verify(reportDao, never()).save(any());
     }
 
     @Test

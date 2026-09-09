@@ -160,13 +160,16 @@ class RequestValidationTest {
     }
 
     @Test
-    void aReportMustPointAtAUserAJobOrAMessage() {
+    void aReportMustPointAtAtLeastOneTarget() {
         CreateReportDto empty = new CreateReportDto();
         empty.setReason(ReportReason.SPAM);
 
         assertTrue(messagesFor(empty).contains("{report.target.required}"));
 
         empty.setJobId(UUID.randomUUID());
+        assertTrue(isValid(empty));
+
+        empty.setMessageId(UUID.randomUUID());
         assertTrue(isValid(empty));
     }
 

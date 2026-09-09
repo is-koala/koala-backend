@@ -7,7 +7,9 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.hasItems;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -56,6 +58,40 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.paths['/jobs'].get.parameters[?(@.name == 'companyId')]").isNotEmpty())
                 .andExpect(jsonPath("$.paths['/job-assignments/{assignmentId}'].get.responses.200").exists())
                 .andExpect(jsonPath("$.paths['/job-assignments/{assignmentId}'].get.responses.404").exists());
+    }
+
+    @Test
+    void jobSummariesDocumentTheirAuthoritativeRevisionTime() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.components.schemas.JobSummaryDto.properties.updatedAt.type")
+                        .value(hasItems("string", "null")))
+                .andExpect(jsonPath("$.components.schemas.JobSummaryDto.properties.updatedAt.format")
+                        .value("date-time"))
+                .andExpect(jsonPath("$.components.schemas.JobSummaryDto.properties.updatedAt.description")
+                        .value(containsString("sitemap")));
+    }
+
+    @Test
+    void sitemapProjectionDocumentsItsPublicPrivacySafeContract() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paths['/sitemap/jobs/manifest'].get.security").doesNotExist())
+                .andExpect(jsonPath("$.paths['/sitemap/jobs/manifest'].get.responses.200").exists())
+                .andExpect(jsonPath("$.paths['/sitemap/jobs/manifest'].get.responses.429").exists())
+                .andExpect(jsonPath("$.paths['/sitemap/jobs/manifests/{version}/shards/{shard}'].get.security")
+                        .doesNotExist())
+                .andExpect(jsonPath("$.paths['/sitemap/jobs/manifests/{version}/shards/{shard}'].get.responses.400")
+                        .exists())
+                .andExpect(jsonPath("$.paths['/sitemap/jobs/manifests/{version}/shards/{shard}'].get.responses.404")
+                        .exists())
+                .andExpect(jsonPath("$.paths['/sitemap/jobs/manifests/{version}/shards/{shard}'].get.responses.429")
+                        .exists())
+                .andExpect(jsonPath("$.components.schemas.SitemapJobDto.properties.length()").value(2))
+                .andExpect(jsonPath("$.components.schemas.SitemapJobDto.properties.updatedAt.type")
+                        .value(hasItems("string", "null")))
+                .andExpect(jsonPath("$.components.schemas.SitemapJobDto.properties.updatedAt.format")
+                        .value("date-time"));
     }
 
     @Test

@@ -325,9 +325,9 @@ public class MessagingManager implements MessagingService {
     }
 
     @Override
-    @Transactional(readOnly = true)
-    public Message getMessageById(UUID messageId) {
-        return messageDao.findById(messageId)
+    @Transactional
+    public Message getMessageForReport(UUID messageId, UUID reporterId) {
+        return messageDao.findReportableByIdForUpdate(messageId, reporterId)
                 .orElseThrow(() -> new ResourceNotFoundException(MessagingMessages.MESSAGE_NOT_FOUND));
     }
 }

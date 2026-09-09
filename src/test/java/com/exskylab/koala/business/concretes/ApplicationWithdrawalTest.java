@@ -13,8 +13,10 @@ import com.exskylab.koala.core.dtos.jobApplication.request.CreateJobApplicationD
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ValidationException;
+import com.exskylab.koala.core.helpers.JobAvailability;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.mappers.JobApplicationMapper;
+import com.exskylab.koala.core.properties.JobSearchProperties;
 import com.exskylab.koala.dataAccess.JobApplicationDao;
 import com.exskylab.koala.entities.Address;
 import com.exskylab.koala.entities.ApplicationStatus;
@@ -27,6 +29,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -42,6 +48,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ApplicationWithdrawalTest {
+
+    private static final Instant POLICY_NOW = Instant.parse("2026-09-09T10:00:00Z");
+    private static final JobSearchProperties POLICY_PROPERTIES = new JobSearchProperties();
+    private static final ZoneId POLICY_ZONE = POLICY_PROPERTIES.zone();
 
     private JobApplicationDao jobApplicationDao;
     private SecurityService securityService;
@@ -77,6 +87,7 @@ class ApplicationWithdrawalTest {
         job.setCreator(employer);
         job.setEmployerType(JobEmployerType.INDIVIDUAL);
         job.setStatus(JobStatus.OPEN);
+        job.setEndDateTime(LocalDateTime.ofInstant(POLICY_NOW, POLICY_ZONE).plusDays(1));
         when(jobService.getById(job.getId())).thenReturn(job);
 
         when(securityService.getAuthenticatedUser()).thenReturn(applicant);
@@ -86,7 +97,8 @@ class ApplicationWithdrawalTest {
                 mock(CompanyContactService.class), jobAssignmentService,
                 mock(JobApplicationMapper.class), new PageableSanitizer(),
                 mock(GalleryService.class), activityNotificationService,
-                bankAccountService, mock(PricingService.class));
+                bankAccountService, mock(PricingService.class),
+                new JobAvailability(Clock.fixed(POLICY_NOW, POLICY_ZONE), POLICY_PROPERTIES));
 
         when(jobApplicationDao.save(any())).thenAnswer(i -> i.getArgument(0));
     }
