@@ -4,6 +4,12 @@ Dalga 1 kararı, ADR-0001'deki tek pre-production ortamını sona erdirir. Local
 staging ve production aynı uygulama imajını, birbirinden tamamen ayrılmış veri
 ve sağlayıcı kaynaklarıyla çalıştırır.
 
+İlk lansmanda “mevcut altyapıyı production'a çevirme”, mevcut Dokploy uygulama
+kaydı ile production domainlerinin terfi ettirilmesi demektir; pre-production
+database, queue veya media state'inin production'a taşınması değildir. Bu sınır
+ve geçiş sonrası staging modeli [ADR-0016](adr/0016-promote-the-deployment-not-its-state.md)
+ile sabitlenmiştir.
+
 | Kaynak | Local | Staging | Production |
 | --- | --- | --- | --- |
 | API | yerel Spring Boot | `https://api-staging.iskoala.com` | `https://api.iskoala.com` |
@@ -100,4 +106,6 @@ Backend ve web üretim dağıtımı yalnız doğrulanmış `v*` etiketiyle tetik
 Staging ve production ayrı Dokploy servisleri, domainleri, persistent volume'ları
 ve secret setleri kullanır. Staging smoke testi kayıt → ilan → Başvuru akışında
 oluşan kayıtların production veritabanında bulunmadığını doğrular. Production
-deploy öncesi yedek, sonrası dar health/readiness smoke uygulanır.
+deploy öncesi yedek, sonrası dar health/readiness smoke uygulanır. İlk lansman
+geçişi günlük deploy değildir; hedef, geri dönüş ve sağlayıcı kapıları
+[`launch-cutover.md`](runbooks/launch-cutover.md) yordamıyla ayrıca yürütülür.
