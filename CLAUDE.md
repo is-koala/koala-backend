@@ -237,27 +237,32 @@ yoktu**; şimdi hepsinde var.
 | `PUT/DELETE /users/me/experiences/{id}` | başkasının kaydı | `experience.not.found` |
 | `GET/DELETE /users/me/job-templates/{id}` | başkasının şablonu | `job.template.not.found` |
 | `POST /job-assignments/{id}/cancel`, `GET .../cancellation[-preview]` | taraf değil | `job.assignment.not.found` |
+| `POST /job-assignments/{id}/respond` | işçisi değil | `job.assignment.not.found` |
 | `POST /job-assignments/{id}/check-in`, `check-out` | işçisi değil | `job.assignment.not.found` |
 | `GET /job-assignments/{id}/work-sessions` | taraf değil | `job.assignment.not.found` |
 | `POST /job-assignments/{id}/complete` | işvereni değil | `job.assignment.not.found` |
 | `POST /job-assignments/{id}/reviews` | taraf değil | `job.assignment.not.found` |
 
-Kullanılmayan hâle gelen sekiz anahtar üç katalogdan da düşürüldü (`education.not.owner`,
+Kullanılmayan hâle gelen dokuz anahtar üç katalogdan da düşürüldü (`education.not.owner`,
 `experience.not.owner`, `job.template.not.owner`, `cancellation.not.a.participant`, `timesheet.not.the.worker`,
-`timesheet.not.a.participant`, `review.not.a.participant`, `job.assignment.only.employer.can.complete`) —
+`timesheet.not.a.participant`, `review.not.a.participant`, `job.assignment.only.employer.can.complete`,
+`job.assignment.not.worker.for.assignment`) —
 duran bir anahtar sonradan yeniden çağrılabilir.
 
-**İstemciye görünen iki davranış değişikliği.** `check-in`/`check-out` uçlarında **işveren** artık 404
+**İstemciye görünen davranış değişiklikleri.** `check-in`/`check-out` uçlarında **işveren** artık 404
 alıyor: eskiden de 404 alıyordu ama `TIMESHEET_NOT_THE_WORKER` koduyla, şimdi `JOB_ASSIGNMENT_NOT_FOUND`.
 Aynısı `complete` ucunda **işçi** için geçerli. Kod bazlı dallanan istemci bunu güncellemeli;
 `JobAssignmentOperationsController`'daki `@ApiResponse` blokları koddaki gerçek davranışa hizalandı (iki uçtaki
 403 satırı kaldırıldı, `check-out`'un "açık oturum yok" satırı 404'ten 409'a çekildi — kod baştan beri
-`ConflictException` atıyordu).
+`ConflictException` atıyordu). `respond` ucunda işçi olmayan aktörün önceki 403/409 ayrımı da
+durumdan bağımsız `JOB_ASSIGNMENT_NOT_FOUND` 404'e birleştirildi.
 
-**Sıra da yanıtın parçası: yetkilendirme durum kontrolünden önce gelir (§2ar3).** İki yerde tersti ve durum
+**Sıra da yanıtın parçası: yetkilendirme durum kontrolünden önce gelir (§2ar3).** Üç yerde tersti ve durum
 eşitlense bile sızıntı sürüyordu: `completeAssignment` yabancıya önce `PAYMENT_NOT_SECURED` (**409**)
 döndürüyordu — hem atamanın var olduğunu hem ödeme durumunu söylüyordu; `leaveReview` de aynı şekilde
-`WORK_NOT_COMPLETED` (**409**) döndürüyordu. İkisinde de yetki kontrolü öne alındı.
+`WORK_NOT_COMPLETED` (**409**) döndürüyordu. `answerToAssignment` ise terminal kaydı yabancıya
+`ALREADY_ANSWERED` (**409**), bekleyen kaydı `NOT_WORKER_FOR_ASSIGNMENT` (**403**) ile açığa çıkarıyordu.
+Üçünde de yetki kontrolü öne alındı.
 
 **`resource` / `resourceId` zaten eşitti — varsayılmadı, ölçüldü.** `RequestResourceResolver` ikisini de
 istek yolundan türetiyor (§2d), yani aynı uca giden iki istek aynı `resource`'u üretiyor ve `resourceId`
@@ -269,11 +274,11 @@ dalına düşüyor: hem 403 hem `MESSAGING_SUBSCRIPTION_NOT_ALLOWED` ortak. Tara
 
 **İki yapısal koruma var ve neyi yakalayamadıkları yazılı.**
 
-`ExistenceConcealmentIT` **yanıtı** sabitliyor: dokuz uçta yabancı bir kullanıcı aynı isteği iki kez atıyor —
+`ExistenceConcealmentIT` **yanıtı** sabitliyor: gizlenen uçlarda yabancı bir kullanıcı aynı isteği iki kez atıyor —
 rastgele bir UUID'ye ve gerçekten var olan ama başkasına ait bir kaynağa. İki yanıt gövdesi, istemcinin kendi
 gönderdiği id yer tutucuya çevrildikten ve istek başına zorunlu olarak değişen iki alan (`timeStamp`,
 `requestId`) düşüldükten sonra **birebir aynı** olmak zorunda. Sekiz alanı birden sabitliyor, kırmızıya
-dönme biçimi de öğretici (düzeltme öncesi dokuzunun dokuzu kırmızıydı). **Yakalayamadığı:** listesinde
+dönme biçimi de öğretici. **Yakalayamadığı:** listesinde
 olmayan uçlar ve sonradan eklenen uçlar.
 
 `ExistenceConcealmentRulesTest` **kaynak kodu** tarıyor ve testin göremediği yerleri kapatıyor: `business/concretes`
