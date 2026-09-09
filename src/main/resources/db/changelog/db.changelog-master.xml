@@ -81,5 +81,6 @@
     <include file="db/changelog/2026/09/08-01-payout-settlement-reconciliation.xml"/>
     <include file="db/changelog/2026/09/08-02-payout-settlement-clock.xml"/>
     <include file="db/changelog/2026/09/09-01-staff-decision-actors.xml"/>
+    <include file="db/changelog/2026/09/09-02-message-report-idempotency.xml"/>
     <include file="db/changelog/2026/09/09-02-sitemap-manifest.xml"/>
 </databaseChangeLog>

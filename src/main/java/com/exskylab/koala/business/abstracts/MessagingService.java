@@ -39,5 +39,5 @@ public interface MessagingService {
 
     void assertParticipant(UUID conversationId, UUID userId);
 
-    Message getMessageById(UUID messageId);
+    Message getMessageForReport(UUID messageId, UUID reporterId);
 }

@@ -27,6 +27,8 @@ public interface ReportDao extends JpaRepository<Report, UUID> {
 
     Page<Report> findAllByReporterId(UUID reporterId, Pageable pageable);
 
+    Optional<Report> findByReporterIdAndMessageId(UUID reporterId, UUID messageId);
+
     long countByReportedUserId(UUID reportedUserId);
 
     @EntityGraph(attributePaths = {"reporter", "reporter.profilePicture",
