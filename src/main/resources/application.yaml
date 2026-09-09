@@ -48,6 +48,8 @@ spring:
     username: ${RABBITMQ_USERNAME:guest}
     password: ${RABBITMQ_PASSWORD:guest}
     virtual-host: ${RABBITMQ_VHOST:/}
+    publisher-confirm-type: correlated
+    publisher-returns: true
 
   messages:
     basename: messages
@@ -161,6 +163,26 @@ password-reset:
 
 notification-preferences:
   unsubscribe-token-validity-ms: ${UNSUBSCRIBE_TOKEN_VALIDITY_MS:7776000000}
+
+notification:
+  dispatch:
+    enabled: ${NOTIFICATION_DISPATCH_ENABLED:true}
+    fixed-delay: ${NOTIFICATION_DISPATCH_FIXED_DELAY:PT5S}
+    max-attempts: ${NOTIFICATION_DISPATCH_MAX_ATTEMPTS:8}
+    initial-backoff: ${NOTIFICATION_DISPATCH_INITIAL_BACKOFF:PT5S}
+    max-backoff: ${NOTIFICATION_DISPATCH_MAX_BACKOFF:PT5M}
+    jitter-factor: ${NOTIFICATION_DISPATCH_JITTER_FACTOR:0.5}
+    claim-timeout: ${NOTIFICATION_DISPATCH_CLAIM_TIMEOUT:PT5M}
+    publisher-confirm-timeout: ${NOTIFICATION_DISPATCH_PUBLISHER_CONFIRM_TIMEOUT:PT10S}
+    delivery-claim-timeout: ${NOTIFICATION_DELIVERY_CLAIM_TIMEOUT:PT5M}
+    provider-timeout: ${NOTIFICATION_PROVIDER_TIMEOUT:PT45S}
+    delivery-busy-retry-interval: ${NOTIFICATION_DELIVERY_BUSY_RETRY_INTERVAL:PT5S}
+    delivery-busy-max-retries: ${NOTIFICATION_DELIVERY_BUSY_MAX_RETRIES:61}
+    legacy-grace-period: ${NOTIFICATION_DISPATCH_LEGACY_GRACE_PERIOD:PT15M}
+    batch-size: ${NOTIFICATION_DISPATCH_BATCH_SIZE:50}
+    executor:
+      threads: ${NOTIFICATION_DISPATCH_EXECUTOR_THREADS:4}
+      queue-capacity: ${NOTIFICATION_DISPATCH_EXECUTOR_QUEUE_CAPACITY:50}
 
 rate-limit:
   enabled: ${RATE_LIMIT_ENABLED:true}

@@ -61,7 +61,7 @@ public class PhoneVerificationManager implements PhoneVerificationService {
         sms.setDestinationPhoneNumber(newPhoneNumber);
         sms.setMessageBody(messageResolver.resolve(VerificationMessages.PHONE_CODE_SMS) + " " + verificationCode);
 
-        notificationService.sendSms(sms, DispatchPriority.CRITICAL, true);
+        notificationService.sendSms(sms, DispatchPriority.HIGH, true);
 
         log.info("Phone verification {} started for user {} to {}",
                 saved.getId(), user.getId(), LogMasks.phone(newPhoneNumber));

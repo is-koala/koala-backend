@@ -13,6 +13,7 @@ import jakarta.mail.Session;
 import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -33,6 +34,7 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Properties;
+import java.util.UUID;
 
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.*;
@@ -79,6 +81,7 @@ class EmailRetryIT extends AbstractIntegrationTest {
     @Autowired private NotificationService notifications;
     @Autowired private NotificationProducerService producer;
     @Autowired @Qualifier("emailQueue") private Queue emailQueue;
+    @Autowired @Qualifier("emailDeadLetterBinding") private Binding emailDeadLetterBinding;
     @MockitoBean private JavaMailSender mailSender;
 
     @Test
@@ -117,6 +120,70 @@ class EmailRetryIT extends AbstractIntegrationTest {
             assertTrue(listener.isRunning(), "A provider failure must not terminate the email consumer");
         } finally {
             listener.stop();
+        }
+    }
+
+    @Test
+    void aMissingDeadLetterRouteCannotAcknowledgeTheSourceMessage() throws Exception {
+        RabbitAdmin admin = new RabbitAdmin(rabbit);
+        admin.purgeQueue(RabbitMQConfig.EMAIL_QUEUE, false);
+        admin.purgeQueue(RabbitMQConfig.EMAIL_DEAD_LETTER_QUEUE, false);
+        admin.removeBinding(emailDeadLetterBinding);
+        AbstractMessageListenerContainer listener = listeners.getListenerContainers().stream()
+                .map(AbstractMessageListenerContainer.class::cast)
+                .filter(container -> Arrays.asList(container.getQueueNames()).contains(RabbitMQConfig.EMAIL_QUEUE))
+                .findFirst().orElseThrow();
+        when(mailSender.createMimeMessage())
+                .thenAnswer(invocation -> new MimeMessage(Session.getInstance(new Properties())));
+        doThrow(new MailSendException("SMTP unavailable")).when(mailSender).send(any(MimeMessage.class));
+
+        listener.start();
+        try {
+            Notification failed = queuedEmail();
+            EmailTaskDto task = taskFor(failed);
+            producer.sendEmailTask(task);
+
+            await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
+                    assertEquals(NotificationStatus.FAILED, notifications.getById(failed.getId()).getStatus()));
+            Thread.sleep(300);
+            admin.declareBinding(emailDeadLetterBinding);
+
+            Message parked = rabbit.receive(RabbitMQConfig.EMAIL_DEAD_LETTER_QUEUE, 15_000);
+            assertNotNull(parked);
+            assertEquals(task, objectMapper.readValue(parked.getBody(), EmailTaskDto.class));
+            verify(mailSender, times(3)).send(any(MimeMessage.class));
+        } finally {
+            admin.declareBinding(emailDeadLetterBinding);
+            listener.stop();
+        }
+    }
+
+    @Test
+    void anOrphanEmailTaskIsConfirmedIntoDeadLetterWithoutHotRequeue() {
+        RabbitAdmin admin = new RabbitAdmin(rabbit);
+        admin.purgeQueue(RabbitMQConfig.EMAIL_QUEUE, false);
+        admin.purgeQueue(RabbitMQConfig.EMAIL_DEAD_LETTER_QUEUE, false);
+        AbstractMessageListenerContainer listener = listeners.getListenerContainers().stream()
+                .map(AbstractMessageListenerContainer.class::cast)
+                .filter(container -> Arrays.asList(container.getQueueNames()).contains(RabbitMQConfig.EMAIL_QUEUE))
+                .findFirst().orElseThrow();
+        EmailTaskDto orphan = new EmailTaskDto(UUID.randomUUID(), "qa-employer@example.test", "Konu",
+                "raw-html-template", Map.of("htmlContent", "<p>Koala</p>"));
+
+        listener.start();
+        try {
+            producer.sendEmailTask(orphan);
+
+            Message parked = rabbit.receive(RabbitMQConfig.EMAIL_DEAD_LETTER_QUEUE, 10_000);
+            assertNotNull(parked, "An orphan task must leave the source queue after confirmed dead-lettering");
+            assertEquals(orphan, objectMapper.readValue(parked.getBody(), EmailTaskDto.class));
+            assertNull(rabbit.receive(RabbitMQConfig.EMAIL_QUEUE, 500),
+                    "An orphan task must not remain in a hot requeue loop");
+            verifyNoInteractions(mailSender);
+        } finally {
+            listener.stop();
+            admin.purgeQueue(RabbitMQConfig.EMAIL_QUEUE, false);
+            admin.purgeQueue(RabbitMQConfig.EMAIL_DEAD_LETTER_QUEUE, false);
         }
     }
 

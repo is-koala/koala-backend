@@ -3,20 +3,20 @@ package com.exskylab.koala.core.consumers;
 import com.exskylab.koala.business.abstracts.NotificationService;
 import com.exskylab.koala.core.configs.RabbitMQConfig;
 import com.exskylab.koala.core.constants.SmsMessages;
+import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.producers.notification.SmsTaskDto;
 import com.exskylab.koala.core.utilities.sms.SmsService;
 import com.exskylab.koala.entities.Notification;
 import com.exskylab.koala.entities.NotificationCategory;
-import com.exskylab.koala.entities.NotificationStatus;
+import com.exskylab.koala.entities.NotificationChannel;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.util.EnumSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 @Service
 @Slf4j
@@ -37,39 +37,37 @@ public class SmsConsumer {
     }
 
     @RabbitListener(queues = RabbitMQConfig.SMS_QUEUE)
-    @Transactional
     public void handleSmsTask(SmsTaskDto smsTaskDto) {
         log.info("Handling sms task for id: {}", smsTaskDto.id());
 
         Notification notification;
         try {
             notification = notificationService.getById(smsTaskDto.id());
-        } catch (Exception e) {
+        } catch (ResourceNotFoundException e) {
             log.error("Notification not found to send sms ID: {}. Aborting request.", smsTaskDto.id(), e);
             return;
         }
 
-        notification.setStatus(NotificationStatus.PROCESSING);
-        notification.setProcessedAt(Instant.now());
-        notificationService.save(notification);
+        var claim = notificationService.claimForDelivery(smsTaskDto.id(), NotificationChannel.SMS);
+        if (claim.isEmpty()) {
+            return;
+        }
+        UUID claimId = claim.orElseThrow();
 
+        String orderId;
         try {
             String body = renderBody(smsTaskDto);
             boolean commercial = COMMERCIAL.contains(notification.getCategory());
 
-            String orderId = smsService.sendSms(new String[]{smsTaskDto.to()}, body, commercial);
-
-            notification.setExternalId(orderId);
-            notification.setStatus(NotificationStatus.SENT);
-            notification.setSentAt(Instant.now());
-            log.info("Sms task sent for id: {}", smsTaskDto.id());
+            orderId = smsService.sendSms(new String[]{smsTaskDto.to()}, body, commercial);
         } catch (Exception e) {
             log.error("Sms task could not be sent for id: {}", smsTaskDto.id(), e);
-            notification.setStatus(NotificationStatus.FAILED);
-            notification.setFailureReason(truncate(e.getMessage()));
-        } finally {
-            notificationService.save(notification);
+            notificationService.failDelivery(smsTaskDto.id(), NotificationChannel.SMS, claimId,
+                    truncate(e.getMessage()));
+            return;
         }
+        notificationService.completeDelivery(smsTaskDto.id(), NotificationChannel.SMS, claimId, orderId);
+        log.info("Sms task sent for id: {}", smsTaskDto.id());
     }
 
     private String renderBody(SmsTaskDto smsTaskDto) {

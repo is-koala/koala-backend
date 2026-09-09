@@ -5,6 +5,7 @@ import com.exskylab.koala.core.exceptions.ExternalServiceException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.Map;
 
 @Service
@@ -12,7 +13,8 @@ import java.util.Map;
 public class UnconfiguredPushService implements PushService {
 
     @Override
-    public String sendPush(String pushToken, String title, String body, Map<String, String> dataPayload) {
+    public String sendPush(String pushToken, String title, String body, Map<String, String> dataPayload,
+                           Duration timeout) {
         log.warn("Push provider is not configured, the notification is recorded as failed instead of "
                 + "sitting in the queue forever.");
         throw new ExternalServiceException(PushMessages.PUSH_PROVIDER_NOT_CONFIGURED);
