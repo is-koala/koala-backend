@@ -558,14 +558,16 @@ Gerekçe: (b) elle SQL yazmayı ortadan kaldırmıyor, yalnızca kopyalanacak bi
 
 ## 2j. Hız sınırı
 
-**Beş kova var, yazma ve pahalı genel uçların hepsi kapsanıyor.**
+**Yedi kova var, yazma ve pahalı genel uçların hepsi kapsanıyor.**
 
 | Kova | Kapsam | Varsayılan | Anahtar |
 |---|---|---|---|
 | `AUTH` | giriş, kayıt akışı, şifre sıfırlama, kimlik doğrulama, **personel girişi/yenilemesi/parola değişimi** | 10 / 1 dk | yol + IP + hedef özeti |
 | `UPLOAD` | görsel, özgeçmiş, profil fotoğrafı, logo, rozet görseli | 20 / 1 dk | kova + IP |
 | `MESSAGE` | mesaj gönderme | 30 / 1 dk | kova + IP |
+| `REALTIME_CREDENTIAL` | WebSocket bağlantı credential'ı üretme | 10 / 1 dk | kova + IP |
 | `PUBLIC` | ilan listesi/detayı/görselleri ve adres ağ geçidi | 120 / 1 dk | kova + IP |
+| `SITEMAP` | sitemap manifesti ve en çok 50.000 satırlık shard projection'ı | 30 / 1 dk | kova + IP |
 | `WRITE` | **diğer tüm** POST/PUT/PATCH/DELETE | 60 / 1 dk | kova + IP |
 
 **`WRITE` bilerek yakalayıcı.** Yeni bir yazma ucu eklendiğinde listeye yazılması gerekmez, kendiliğinden kapsanır — `SecurityConfig`'teki `anyRequest().authenticated()` ile aynı mantık: unutulan uç açıkta kalmaz.
@@ -574,7 +576,8 @@ Gerekçe: (b) elle SQL yazmayı ortadan kaldırmıyor, yalnızca kopyalanacak bi
 
 **Anahtar IP, kullanıcı değil.** `RateLimitFilter` güvenlik zincirinin dışında (`HIGHEST_PRECEDENCE + 20`) çalıştığı için o noktada principal henüz yok. Kullanıcı bazlı sınır istenirse filtrenin `SessionAuthFilter`'dan sonraya, güvenlik zincirinin içine taşınması gerekir.
 
-**Diğer okuma uçları sınırlanmıyor.** Genel ilan korpusu ve adres sağlayıcı ağ geçidi `PUBLIC` kovasındadır; kimlikli profil okumaları sınır dışıdır.
+**Diğer okuma uçları sınırlanmıyor.** Genel ilan korpusu ve adres sağlayıcı ağ geçidi `PUBLIC`, sitemap
+projection'ı ondan bağımsız `SITEMAP` kovasındadır; kimlikli profil okumaları sınır dışıdır.
 
 Aşıldığında 429 ve `TOO_MANY_REQUESTS` döner.
 
@@ -793,6 +796,50 @@ başvuru sonrası doğrulamaya yönlendirmek — `assertReadyToWork` bu yüzden 
 **Swagger `Pageable`'ı düz parametre olarak çizmeli.** `@ParameterObject` olmadan springdoc `Pageable`'ı tek bir nesne sanıyor ve `sort` için `["string"]` örneği üretiyor; "Try it out" diyen herkes 500 alıyordu. Sayfalı uçların hepsinde `@ParameterObject @PageableDefault` var.
 
 **Yanıt zarfı `PageDto`:** `content`, `page`, `size`, `totalElements`, `totalPages`, `first`, `last`.
+
+### İlan sitemap manifesti — değişmez projection (#166)
+
+Public `GET /jobs` sitemap kaynağı değildir. Offset sayfaları hareketli veri kümesinde kayıt atlayıp
+yineler, her sayfa başka availability anını görür ve 50.000 URL için yüzlerce istek genel public-job hız
+sınırını tüketir. Sitemap'in ayrı interface'i iki GET ucudur:
+
+- `GET /sitemap/jobs/manifest` → `version`, `createdAt`, `expiresAt`, `entryCount`, `shardSize` ve
+  `shards[{number,entryCount}]`;
+- `GET /sitemap/jobs/manifests/{version}/shards/{shard}` → `version`, `shard` ve yalnız
+  `entries[{id,updatedAt}]`. `updatedAt` authoritative kolonun nullable değeridir; tarih uydurulmaz.
+
+Manifest oluşturma `SitemapManifestService` seam'inin arkasında materialized snapshot'tır. Uygun küme
+`status = OPEN`, `is_deleted = false`, dolu ve henüz geçmemiş `end_date_time` koşuluyla tek
+`REPEATABLE_READ` transaction'ında sayılır ve `(created_at ASC, id ASC)` ordinal'iyle
+`sitemap_manifest_entries` tablosuna yazılır. Kapanma, yeniden açılma, süre dolumu, soft delete veya yeni
+ilan aynı version'ı değiştiremez. Entry satırının `jobs` yabancı anahtarı bilerek yoktur: ilan sonradan
+silinse bile ilan edilmiş version TTL sonuna kadar aynı union'ı vermek zorundadır. Manifest silinince entry
+satırları cascade ile gider.
+
+Çok örnekli stampede iki kademede kapanır. JVM içindeki adil olmayan kısa kilit aynı instance'ın bağlantı
+yığmasını önler; PostgreSQL session advisory lock bütün instance'ları tek üreticide birleştirir. Lock,
+`REPEATABLE_READ` snapshot'ı başlamadan önce ayrı ve havuz dışı bağlantıda alınır; transaction içindeki
+`pg_advisory_xact_lock` snapshot'ı beklemeden önce sabitleyebileceği için kullanılmaz. Kilidi alan çağrı canlı
+manifesti yeniden okur; başka instance üretmişse aynı version'ı döndürür.
+
+`refresh_after = expiresAt - refreshBeforeExpiry` yeni index çağrısına yeterli yayın penceresi bırakır.
+Yenileme penceresi TTL'nin en fazla yarısı olabilir; böylece aynı anda en fazla iki canlı snapshot tutulur. Bu
+andan sonra yeni version üretilebilir, ama eski version `expiresAt` anına kadar bütün ilan edilmiş shard'ları
+200 döndürür. Bilinmeyen, süresi dolmuş veya aralık dışı shard aynı
+`SITEMAP_MANIFEST_NOT_FOUND` 404'ünü alır; bozuk UUID/int path 400'dür. Bir version'da önceden istenmiş
+olmayan shard sonradan doğamaz, bu yüzden 404 cache zehirlenmesi union'ı eksiltemez.
+Shard ucundaki canlı-manifest doğrulaması ile ordinal aralığı aynı salt-okunur `REPEATABLE_READ`
+transaction'ındadır; eşzamanlı expiry temizliği bu iki sorgu arasında entry'leri cascade silip 200 boş shard
+üretemez.
+
+Bellek sınırı allocation'dan önce doğrulanır: `shardSize` ve `maxShards` ayrı ayrı en fazla 50.000,
+`entryCount` en fazla çarpımlarıdır. Her shard ordinal aralığıyla PK indeksinden okunur; manifest oluşturma
+ve shard okuma sorgu sayısı veri büyüklüğünden bağımsızdır. `statement_timeout`, `lock_timeout` ve Spring
+transaction timeout'u sınırlıdır. Operasyonlar `koala.sitemap.manifest.operations` sayacında
+`operation=manifest|shard`, `outcome=hit|created|served|not_found|failed` etiketleriyle genel public-job
+telemetrisinden ayrılır. Hem manifest hem shard IP başına varsayılan 30/dk olan ayrı `SITEMAP` hız sınırı
+kovasını paylaşır; genel `PUBLIC` ilan bütçesini tüketmez. Yapılandırma `sitemap.manifest.*`, ortam
+değişkenleri `SITEMAP_MANIFEST_*` altındadır.
 
 ## 2m. İstemci sözleşmesi
 

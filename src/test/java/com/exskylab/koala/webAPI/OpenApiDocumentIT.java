@@ -73,6 +73,28 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void sitemapProjectionDocumentsItsPublicPrivacySafeContract() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paths['/sitemap/jobs/manifest'].get.security").doesNotExist())
+                .andExpect(jsonPath("$.paths['/sitemap/jobs/manifest'].get.responses.200").exists())
+                .andExpect(jsonPath("$.paths['/sitemap/jobs/manifest'].get.responses.429").exists())
+                .andExpect(jsonPath("$.paths['/sitemap/jobs/manifests/{version}/shards/{shard}'].get.security")
+                        .doesNotExist())
+                .andExpect(jsonPath("$.paths['/sitemap/jobs/manifests/{version}/shards/{shard}'].get.responses.400")
+                        .exists())
+                .andExpect(jsonPath("$.paths['/sitemap/jobs/manifests/{version}/shards/{shard}'].get.responses.404")
+                        .exists())
+                .andExpect(jsonPath("$.paths['/sitemap/jobs/manifests/{version}/shards/{shard}'].get.responses.429")
+                        .exists())
+                .andExpect(jsonPath("$.components.schemas.SitemapJobDto.properties.length()").value(2))
+                .andExpect(jsonPath("$.components.schemas.SitemapJobDto.properties.updatedAt.type")
+                        .value(hasItems("string", "null")))
+                .andExpect(jsonPath("$.components.schemas.SitemapJobDto.properties.updatedAt.format")
+                        .value("date-time"));
+    }
+
+    @Test
     void theErrorEnvelopeIsPartOfTheSchemaCatalogue() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(jsonPath("$.components.schemas.ErrorResult.properties.errorCategory").exists())
