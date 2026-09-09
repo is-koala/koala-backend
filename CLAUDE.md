@@ -1216,6 +1216,14 @@ bırakıp anlatıyı silmek tutarsız olurdu. `storage_key` ve `checksum_sha256`
 
 **Push sağlayıcısı hâlâ yok, ama kuyruk artık tüketiliyor.** `PushService` arayüzü ve varsayılan `UnconfiguredPushService` var; ikincisi `ExternalServiceException` atıyor ve `PushConsumer` bildirimi `FAILED` işaretliyor. Kuyruğu tüketmeden bırakmak değil bu — bilinçli: mesajlar RabbitMQ'da süresiz biriktiğinde broker doluyor, üstelik üç hafta önceki bir bildirimi sonunda teslim etmenin değeri yok. Şimdi durum `Notification` satırında görünür. **Kalan iş tek sınıf:** Firebase kimlik bilgileri geldiğinde `PushService`'in FCM uygulaması.
 
+**E-posta, SMS ve push kuyruğa doğrudan yazılmaz; `Notification` satırı aynı zamanda kalıcı publish outbox'ıdır.** Üretici transaction yalnızca `QUEUED` bildirimle exact Rabbit payload'ını, önceliği ve ilk çalışma anını birlikte commit eder. Çağıranın gördüğü başarı broker teslimi değil, bu iki verinin atomik ve kalıcı kabulüdür. `HIGH` ile `NORMAL` aynı dayanıklılık sözleşmesine sahiptir; `HIGH` yalnız due batch içinde önce sahiplenilir. Broker o anda kapalıyken `NORMAL` sessizce kaybolmaz, `HIGH` da DB/Rabbit arasında sahte bir atomiklik iddia etmez.
+
+**Publish worker üç fazlıdır.** Kısa DB transaction atomik claim ve rastgele fencing token alır, Rabbit publish DB transaction'ı dışında tamamlanır, sonuç ayrı kısa transaction'da yalnız aynı token hâlâ sahibiyse yazılır. Rabbit gönderimi mandatory routing kullanır; correlated publisher ACK gelmeden ve basic.return ile `NO_ROUTE` olmadığı görülmeden `published_at` yazılmaz. Böylece exchange var olduğu halde binding ya da queue kaybolduğunda sessiz başarı üretilmez. İki instance aynı bildirimi publish etmez. Retry bütçesini yalnız broker'ın yönlendirmediği bilinen publish hataları tüketir; broker onayından sonraki `completeDispatch` DB hatası publish hatası diye yakalanmaz, claim'i yerinde bırakıp scheduler'a taşar. Publish sonrası process çökmesiyle aynı belirsizliği taşıyan stale claim terminal yapılmaz ve bütçeden düşülerek aynı notification ID ile yeniden publish edilir. Geçici broker hatası exponential backoff ve bounded jitter ile en fazla yapılandırılmış attempt sayısı kadar denenir; sonrasında bildirim `FAILED / BROKER_PUBLISH_EXHAUSTED` olur. Ham exception, broker adresi ve kimlik bilgisi `failure_reason`'a yazılmaz. Exact payload'ı bulunmayan eski `QUEUED` kayıt tahmin edilmez; grace period sonunda `FAILED / LEGACY_DISPATCH_PAYLOAD_UNAVAILABLE` ile görünür biçimde kapatılır.
+
+**Publish taraması shared scheduler'ı kullanmaz.** Tek iş parçacıklı ayrı tetikleyici, sabit boyutlu worker havuzuna her notification ID'yi ayrı görev olarak verir; bounded queue dolduğunda caller-runs backpressure uygulanır ve iş düşürülmez. Outbox satırı oluşturan isteğin `requestId`, `userId`, `sessionId` ve `deviceId` değerlerini payload ile birlikte saklar. Worker her publish için yalnız o satırın context'ini kurar ve sonunda önceki MDC'yi geri yükler; eski satırlar her denemede yeni bir `requestId` alır, aynı scheduler taramasının kimliğini paylaşmaz. Outbox backlog sayısı, en eski kaydın yaşı ve terminal broker publish hataları etiketsiz sabit gauge'larla DB'den yenilenir; notification veya kullanıcı kimlikleri metric label olmaz.
+
+**E-posta, SMS ve push consumer idempotency kapısı token'lı `QUEUED → PROCESSING` delivery lease'idir.** Yanlış kanal ile `SENT`, `FAILED` ve `SUPPRESSED` tekrar provider'a gitmez; canlı `PROCESSING` claim'i başarı diye ACK edilmez, Rabbit yeniden dener. Claim sonucu DB cevabı kaybolsa veya process çökerse lease süresi dolan `PROCESSING` kaydı yeni fencing token ile geri alınabilir. Complete/fail/suppress/retry geçişleri yalnız aynı token'a ait delivery kolonlarını dar SQL ile günceller; `published_at`, publish claim'i, exact payload, öncelik ve attempt sayısını entity save ile geri ezmez. E-posta transient hatasında claim tekrar `QUEUED` bırakılır; başarılı sonraki deneme eski retry nedenini temizler. Bounded Rabbit retry bittikten sonra custom recoverer önce sabit `EMAIL_DELIVERY_EXHAUSTED` durumunu kalıcılaştırır, ardından DLQ publish için de mandatory routing ve correlated confirm bekler. DB terminalizasyonu veya DLQ confirm başarısızsa kaynak mesaj ACK edilmez; terminalleşmiş fakat henüz DLQ'ya onaylı yazılamamış e-posta tekrar provider'a gitmeden recovery yoluna döner. Push'ın provider hata sınıflandırması ve token silme politikası Firebase provider işine aittir. SMTP/SMS/FCM provider isteği kabul ettikten fakat `SENT` yazılmadan önce process çökerse provider idempotency anahtarı olmadan mutlak exactly-once garantisi mümkün değildir; lease ve fencing, belirsizliği süreyle sınırlar ve eski worker'ın yeni sonucu bozmasını engeller.
+
 **Bildirim akışı artık teslimat kaydı değil.** `Notification` hem teslimat kaydı (EMAIL/SMS/PUSH) hem uygulama içi bildirim (`IN_APP`) tutuyor; akış **yalnızca `IN_APP`** döndürüyor.
 
 Önceki hâlinde akış bütün kanalları döndürüyordu ve `ActivityNotificationManager` olay başına iki kayıt yazıyordu — dahası `sendPushToUser` **cihaz başına** bir kayıt açıyor, yani iki telefonu olan kullanıcı tek bir olay için üç satır görüyordu. `unreadCount` de aynı sebeple katlanıyordu. Kanala göre süzmek en az değişiklik olurdu ama anlamı zorlardı: e-posta gönderiminin kaydını uygulama içi bildirim diye göstermek olurdu.
@@ -1314,7 +1322,7 @@ yetkilendirme daima durum kontrolünden önce (§2ar3), yani yabancı biri davet
 olmadığını da öğrenemiyor.
 
 **Bekleyen davet tekil.** `PENDING` bir davet dururken aynı kişiye ikinci davet **409**
-(`COMPANY_CONTACT_INVITATION_ALREADY_PENDING`); öncesinde her çağrı yeni bir kayıt ve `CRITICAL` öncelikli
+(`COMPANY_CONTACT_INVITATION_ALREADY_PENDING`); öncesinde her çağrı yeni bir kayıt ve `HIGH` öncelikli
 yeni bir e-posta üretiyordu ve kayıtların hepsi ayrı ayrı kabul edilebiliyordu. Cevaplanmış davet yeni daveti
 engellemez. "Kullanıcı zaten yetkili" dalı da `ValidationException`'dan `ConflictException`'a çekildi (§2ag):
 ikisi de durum çakışması, girdi şekli hatası değil.
@@ -1373,7 +1381,7 @@ yerden kopyalamadan `GET /contact-invitations/{targetId}` ile davetine ulaşabil
 
 **Fan-out `ActivityNotificationService`'e taşınmadı, desen yerinde uygulandı — gerekçesi şu.** O sınıfın her
 ucu `notify(...)` üzerinden geçiyor ve **üç kanala birden** gönderiyor: in-app, push, e-posta. Davet ise
-kendi şablonuna, kendi parametrelerine ve `DispatchPriority.CRITICAL`'e sahip özel bir e-posta gönderiyor.
+kendi şablonuna, kendi parametrelerine ve `DispatchPriority.HIGH`'a sahip özel bir e-posta gönderiyor.
 `notify` çağırmak o e-postanın yanına ikinci bir düz metin e-postası ve bir push daha koyardı — yani
 kullanıcı tek olay için üç yerine beş teslimat alırdı. `ActivityNotificationManager`'a yalnız in-app gönderen
 bir istisna metot eklemek de o sınıfın tek kuralını (her olay üç kanala gider) bozardı. Bu yüzden yalnız
@@ -2549,7 +2557,7 @@ onu çizer. Gönderen tarafın bağlantıyı eklemeyi hatırlaması gerekmiyor.
 
 **Neden `optional` değil de `COMMERCIAL`:** ilk hâli kapatılabilir her kategoriye bağlantı koyuyordu ve bu
 `COMPANY_UPDATES`'i de kapsıyordu — o kategorinin taşıdığı tek şey şirket kurulumu ve **yetkili daveti**
-(`CompanyContactInvitationManager`, `DispatchPriority.CRITICAL`). Eyleme çağıran bir davetin altına "tek tıkla
+(`CompanyContactInvitationManager`, `DispatchPriority.HIGH`). Eyleme çağıran bir davetin altına "tek tıkla
 çıkabilirsin" yazmak yanlış: davet pazarlama değil. Issue #31 de bağlantıyı "pazarlama e-postalarında" diye
 istiyor. Geriye kalan tek kapatılabilir kategori `JOB_ALERTS` ve o bugün yalnızca push gönderiyor, yani
 pratikte kaybedilen bir şey yok; iş alarmı e-postası yazıldığında bu sınır yeniden değerlendirilmeli.

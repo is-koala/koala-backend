@@ -3,14 +3,18 @@ package com.exskylab.koala.core.consumers;
 import com.exskylab.koala.business.abstracts.NotificationService;
 import com.exskylab.koala.core.utilities.sms.SmsService;
 import com.exskylab.koala.core.exceptions.ExternalServiceException;
+import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.producers.notification.SmsTaskDto;
 import com.exskylab.koala.entities.Notification;
 import com.exskylab.koala.entities.NotificationCategory;
+import com.exskylab.koala.entities.NotificationChannel;
 import com.exskylab.koala.entities.NotificationStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessResourceFailureException;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -25,6 +29,7 @@ class SmsConsumerTest {
     private SmsService smsService;
     private SmsConsumer consumer;
     private Notification notification;
+    private UUID claimId;
 
     @BeforeEach
     void setUp() {
@@ -36,9 +41,26 @@ class SmsConsumerTest {
         notification.setId(UUID.randomUUID());
         notification.setCategory(NotificationCategory.ACCOUNT_SECURITY);
         notification.setStatus(NotificationStatus.QUEUED);
+        claimId = UUID.randomUUID();
 
         when(notificationService.getById(notification.getId())).thenReturn(notification);
+        when(notificationService.claimForDelivery(notification.getId(), NotificationChannel.SMS))
+                .thenReturn(Optional.of(claimId));
         when(notificationService.save(any())).thenAnswer(i -> i.getArgument(0));
+        doAnswer(invocation -> {
+            notification.setExternalId(invocation.getArgument(3));
+            notification.setStatus(NotificationStatus.SENT);
+            notification.setSentAt(java.time.Instant.now());
+            notification.setFailureReason(null);
+            return null;
+        }).when(notificationService).completeDelivery(eq(notification.getId()), eq(NotificationChannel.SMS),
+                eq(claimId), any());
+        doAnswer(invocation -> {
+            notification.setStatus(NotificationStatus.FAILED);
+            notification.setFailureReason(invocation.getArgument(3));
+            return null;
+        }).when(notificationService).failDelivery(eq(notification.getId()), eq(NotificationChannel.SMS),
+                eq(claimId), any());
         when(smsService.sendSms(any(), any(), anyBoolean())).thenReturn("order-1");
     }
 
@@ -58,6 +80,8 @@ class SmsConsumerTest {
         assertEquals(NotificationStatus.SENT, notification.getStatus());
         assertNotNull(notification.getSentAt());
         assertEquals("order-1", notification.getExternalId());
+        verify(notificationService).completeDelivery(notification.getId(), NotificationChannel.SMS,
+                claimId, "order-1");
     }
 
     @Test
@@ -87,12 +111,14 @@ class SmsConsumerTest {
 
         assertEquals(NotificationStatus.FAILED, notification.getStatus());
         assertNotNull(notification.getFailureReason());
+        verify(notificationService).failDelivery(eq(notification.getId()), eq(NotificationChannel.SMS),
+                eq(claimId), contains("saglayici hatasi"));
     }
 
     @Test
     void aMissingNotificationRowIsDroppedWithoutSending() {
         UUID unknown = UUID.randomUUID();
-        when(notificationService.getById(unknown)).thenThrow(new RuntimeException("yok"));
+        when(notificationService.getById(unknown)).thenThrow(new ResourceNotFoundException("yok"));
 
         assertDoesNotThrow(() -> consumer.handleSmsTask(
                 new SmsTaskDto(unknown, "+905551112233", "raw-sms-template", Map.of("textContent", "x"))));
@@ -101,11 +127,36 @@ class SmsConsumerTest {
     }
 
     @Test
+    void aTransientNotificationLookupFailureEscapesSoRabbitCanRetry() {
+        when(notificationService.getById(notification.getId()))
+                .thenThrow(new DataAccessResourceFailureException("database unavailable"));
+
+        assertThrows(DataAccessResourceFailureException.class,
+                () -> consumer.handleSmsTask(rawTask("Kod 1")));
+
+        verifyNoInteractions(smsService);
+    }
+
+    @Test
+    void aTransientCompletionFailureEscapesWithoutBeingMisclassifiedAsAProviderFailure() {
+        doThrow(new DataAccessResourceFailureException("database unavailable"))
+                .when(notificationService).completeDelivery(notification.getId(), NotificationChannel.SMS,
+                        claimId, "order-1");
+
+        assertThrows(DataAccessResourceFailureException.class,
+                () -> consumer.handleSmsTask(rawTask("Kod 1")));
+
+        verify(notificationService, never()).failDelivery(any(), any(), any(), any());
+    }
+
+    @Test
     void aTaskWithNoRenderableBodyFailsInsteadOfSendingAnEmptyMessage() {
         consumer.handleSmsTask(task("raw-sms-template", Map.of()));
 
         verifyNoInteractions(smsService);
         assertEquals(NotificationStatus.FAILED, notification.getStatus());
+        verify(notificationService).failDelivery(eq(notification.getId()), eq(NotificationChannel.SMS),
+                eq(claimId), any());
     }
 
     @Test
@@ -114,5 +165,7 @@ class SmsConsumerTest {
 
         verifyNoInteractions(smsService);
         assertEquals(NotificationStatus.FAILED, notification.getStatus());
+        verify(notificationService).failDelivery(eq(notification.getId()), eq(NotificationChannel.SMS),
+                eq(claimId), any());
     }
 }

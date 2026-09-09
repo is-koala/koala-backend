@@ -86,4 +86,44 @@ public class Notification extends BaseEntity{
     @Column(name = "failure_reason")
     private String failureReason;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "dispatch_priority", length = 16)
+    private DispatchPriority dispatchPriority;
+
+    @Column(name = "dispatch_payload", columnDefinition = "TEXT")
+    private String dispatchPayload;
+
+    @Column(name = "dispatch_attempts", nullable = false)
+    private int dispatchAttempts;
+
+    @Column(name = "next_dispatch_at")
+    private Instant nextDispatchAt;
+
+    @Column(name = "dispatch_claimed_at")
+    private Instant dispatchClaimedAt;
+
+    @Column(name = "dispatch_claim_id")
+    private UUID dispatchClaimId;
+
+    @Column(name = "dispatch_request_id", length = 36)
+    private String dispatchRequestId;
+
+    @Column(name = "dispatch_user_id", length = 36)
+    private String dispatchUserId;
+
+    @Column(name = "dispatch_session_id", length = 36)
+    private String dispatchSessionId;
+
+    @Column(name = "dispatch_device_id", length = 36)
+    private String dispatchDeviceId;
+
+    @Column(name = "published_at")
+    private Instant publishedAt;
+
+    @Column(name = "delivery_claimed_at")
+    private Instant deliveryClaimedAt;
+
+    @Column(name = "delivery_claim_id")
+    private UUID deliveryClaimId;
+
 }

@@ -37,6 +37,7 @@ class AggregateBoundaryTest {
             Map.entry("StaffAuditManager", Set.of("AdminAuditEntryDao", "AdminAuditEntryDetailDao")),
             Map.entry("NotificationPreferenceManager",
                     Set.of("NotificationPreferenceDao", "CommercialMessageConsentDao")),
+            Map.entry("NotificationDispatchManager", Set.of("NotificationDao")),
             Map.entry("IysManager", Set.of("IysConsentTaskDao", "IysPermissionStateDao")));
 
     private static final Map<String, Set<String>> RENAMED_AGGREGATES = Map.of(

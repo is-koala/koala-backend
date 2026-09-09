@@ -46,10 +46,10 @@ class NotificationFeedRulesTest {
         NotificationPreferenceService preferences = mock(NotificationPreferenceService.class);
         when(preferences.isAllowed(any(), any(), any())).thenReturn(true);
 
-        manager = new NotificationManager(notificationDao, mock(NotificationProducerService.class),
+        manager = new NotificationManager(notificationDao,
                 mock(DeviceService.class), new ObjectMapper(),
                 security, new PageableSanitizer(), preferences, mock(UnsubscribeTokenService.class),
-                mock(IysService.class));
+                mock(IysService.class), new com.exskylab.koala.core.properties.NotificationDispatchProperties());
 
         when(notificationDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(notificationDao.findAllByRecipientIdAndChannelOrderByCreatedAtDesc(any(), any(), any()))

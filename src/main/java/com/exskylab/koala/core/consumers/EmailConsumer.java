@@ -3,10 +3,12 @@ package com.exskylab.koala.core.consumers;
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.NotificationService;
 import com.exskylab.koala.core.configs.RabbitMQConfig;
+import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.producers.notification.EmailTaskDto;
 import com.exskylab.koala.core.properties.AppProperties;
 import com.exskylab.koala.core.properties.EmailDeliveryProperties;
 import com.exskylab.koala.entities.Notification;
+import com.exskylab.koala.entities.NotificationChannel;
 import com.exskylab.koala.entities.NotificationStatus;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
@@ -18,7 +20,7 @@ import org.springframework.stereotype.Service;
 import org.thymeleaf.context.Context;
 import org.thymeleaf.spring6.SpringTemplateEngine;
 
-import java.time.Instant;
+import java.util.UUID;
 
 @Service
 @Slf4j
@@ -49,37 +51,36 @@ public class EmailConsumer {
         Notification notification;
         try{
             notification = notificationService.getById(emailTaskDto.id());
-        }catch (Exception e){
+        }catch (ResourceNotFoundException e){
             log.error("Notification not found to send mail ID: {}. Aborting request.", emailTaskDto.id(), e);
             throw new AmqpRejectAndDontRequeueException(
                     "Email notification does not exist: " + emailTaskDto.id(), e);
         }
 
-        if (notification.getSentAt() != null || notification.getStatus() == NotificationStatus.SUPPRESSED) {
+        if (notification.getStatus() == NotificationStatus.FAILED
+                && "EMAIL_DELIVERY_EXHAUSTED".equals(notification.getFailureReason())) {
+            throw new IllegalStateException("Email delivery is awaiting confirmed dead-letter publication");
+        }
+
+        var claim = notificationService.claimForDelivery(emailTaskDto.id(), NotificationChannel.EMAIL);
+        if (claim.isEmpty()) {
             return;
         }
+        UUID claimId = claim.orElseThrow();
 
         if (notification.getDestinationEmail() == null || emailTaskDto.to() == null
                 || !notification.getDestinationEmail().strip().equalsIgnoreCase(emailTaskDto.to().strip())) {
-            notification.setStatus(NotificationStatus.FAILED);
-            notification.setProcessedAt(Instant.now());
-            notification.setFailureReason("EMAIL_RECIPIENT_MISMATCH");
-            notificationService.save(notification);
+            notificationService.failDelivery(emailTaskDto.id(), NotificationChannel.EMAIL, claimId,
+                    "EMAIL_RECIPIENT_MISMATCH");
             throw new AmqpRejectAndDontRequeueException("Email task recipient does not match its notification");
         }
 
         if (!deliveryProperties.allows(emailTaskDto.to())) {
-            notification.setStatus(NotificationStatus.SUPPRESSED);
-            notification.setProcessedAt(Instant.now());
-            notification.setFailureReason("EMAIL_RECIPIENT_NOT_ALLOWED");
-            notificationService.save(notification);
+            notificationService.suppressDelivery(emailTaskDto.id(), NotificationChannel.EMAIL, claimId,
+                    "EMAIL_RECIPIENT_NOT_ALLOWED");
             log.info("Email delivery suppressed for notification id: {}", notification.getId());
             return;
         }
-
-        notification.setStatus(NotificationStatus.PROCESSING);
-        notification.setProcessedAt(Instant.now());
-        notificationService.save(notification);
 
         try{
             String trackingUrl = appProperties.apiUrl() + "/notification-tracking/" + emailTaskDto.id() + ".png";
@@ -89,24 +90,17 @@ public class EmailConsumer {
             String htmlBody = templateEngine.process("emails/"+emailTaskDto.templateName(), context);
 
             sendHtmlEmail(emailTaskDto.to(), emailTaskDto.subject(), htmlBody);
-
-            notification.setStatus(NotificationStatus.SENT);
-            notification.setSentAt(Instant.now());
-            log.info("Email task sent for id: {}", emailTaskDto.id());
         }catch (Exception e){
             log.error("Email task could not be sent for id: {}", emailTaskDto.id(), e);
-            notification.setStatus(NotificationStatus.FAILED);
-            String failureMessage = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
-            notification.setFailureReason(failureMessage.substring(0, Math.min(failureMessage.length(), 255)));
-            notificationService.save(notification);
+            notificationService.releaseDeliveryForRetry(emailTaskDto.id(), NotificationChannel.EMAIL, claimId,
+                    "EMAIL_DELIVERY_RETRY_SCHEDULED");
             if (e instanceof RuntimeException runtimeException) {
                 throw runtimeException;
             }
             throw new IllegalStateException("Email delivery failed", e);
         }
-
-        notificationService.save(notification);
-
+        notificationService.completeDelivery(emailTaskDto.id(), NotificationChannel.EMAIL, claimId, null);
+        log.info("Email task sent for id: {}", emailTaskDto.id());
     }
 
     private void sendHtmlEmail(String to, String subject, String htmlBody) throws MessagingException {

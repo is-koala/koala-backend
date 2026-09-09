@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.transaction.TestTransaction;
 import org.springframework.test.web.servlet.MockMvc;
@@ -29,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -63,6 +65,9 @@ class PasswordResetIT extends AbstractIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @Test
     void aPasswordResetLinkCanOnlyBeUsedOnce() throws Exception {
@@ -168,17 +173,24 @@ class PasswordResetIT extends AbstractIntegrationTest {
                         .content(resetBody(COMMIT_TOKEN)))
                 .andExpect(status().isOk());
 
-        verify(notificationProducerService, times(1)).sendEmailTask(any());
+        verifyNoInteractions(notificationProducerService);
 
         TestTransaction.flagForCommit();
         TestTransaction.end();
 
-        var task = org.mockito.ArgumentCaptor.forClass(EmailTaskDto.class);
-        verify(notificationProducerService, times(2)).sendEmailTask(task.capture());
-        assertEquals("password-reset-request-template", task.getAllValues().get(0).templateName());
+        var tasks = jdbcTemplate.queryForList("""
+                select dispatch_payload from notifications
+                where destination_email = ? and dispatch_payload is not null
+                order by created_at
+                """, String.class, email).stream()
+                .map(payload -> objectMapper.readValue(payload, EmailTaskDto.class))
+                .toList();
+        assertEquals(2, tasks.size());
+        assertEquals("password-reset-request-template", tasks.get(0).templateName());
         assertEquals("http://localhost:3000/sifre-sifirla?token=" + COMMIT_TOKEN,
-                task.getAllValues().get(0).templateParameters().get("resetLink"));
-        assertEquals("password-reset-completed-template", task.getAllValues().get(1).templateName());
+                tasks.get(0).templateParameters().get("resetLink"));
+        assertEquals("password-reset-completed-template", tasks.get(1).templateName());
+        verifyNoInteractions(notificationProducerService);
     }
 
     private User saveUser(String email) {

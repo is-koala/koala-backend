@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-09-03-notification-dispatch-outbox" author="koala">
+        <addColumn tableName="notifications">
+            <column name="dispatch_priority" type="VARCHAR(16)"/>
+            <column name="dispatch_payload" type="TEXT"/>
+            <column name="dispatch_attempts" type="INT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="next_dispatch_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="dispatch_claimed_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="dispatch_claim_id" type="UUID"/>
+            <column name="dispatch_request_id" type="VARCHAR(36)"/>
+            <column name="dispatch_user_id" type="VARCHAR(36)"/>
+            <column name="dispatch_session_id" type="VARCHAR(36)"/>
+            <column name="dispatch_device_id" type="VARCHAR(36)"/>
+            <column name="published_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="delivery_claimed_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="delivery_claim_id" type="UUID"/>
+        </addColumn>
+        <sql><![CDATA[
+            CREATE INDEX idx_notifications_dispatch_due
+                ON public.notifications (
+                    (CASE dispatch_priority WHEN 'HIGH' THEN 0 ELSE 1 END),
+                    next_dispatch_at,
+                    created_at
+                )
+                WHERE status = 'QUEUED'
+                  AND published_at IS NULL
+                  AND dispatch_payload IS NOT NULL
+                  AND dispatch_claim_id IS NULL
+                  AND is_deleted = false;
+
+            CREATE INDEX idx_notifications_dispatch_stale_claim
+                ON public.notifications (dispatch_claimed_at)
+                WHERE status = 'QUEUED'
+                  AND published_at IS NULL
+                  AND dispatch_payload IS NOT NULL
+                  AND dispatch_claimed_at IS NOT NULL
+                  AND is_deleted = false;
+
+            CREATE INDEX idx_notifications_dispatch_legacy_payload
+                ON public.notifications (created_at)
+                WHERE status = 'QUEUED'
+                  AND channel IN ('EMAIL', 'SMS', 'PUSH')
+                  AND dispatch_payload IS NULL
+                  AND is_deleted = false;
+
+            CREATE INDEX idx_notifications_dispatch_exhausted
+                ON public.notifications (dispatch_attempts)
+                WHERE status = 'QUEUED'
+                  AND published_at IS NULL
+                  AND dispatch_payload IS NOT NULL
+                  AND dispatch_claim_id IS NULL
+                  AND is_deleted = false;
+
+            CREATE INDEX idx_notifications_dispatch_backlog_age
+                ON public.notifications (created_at)
+                WHERE status = 'QUEUED'
+                  AND published_at IS NULL
+                  AND dispatch_payload IS NOT NULL
+                  AND is_deleted = false;
+
+            CREATE INDEX idx_notifications_dispatch_terminal_broker_failure
+                ON public.notifications (processed_at)
+                WHERE status = 'FAILED'
+                  AND failure_reason = 'BROKER_PUBLISH_EXHAUSTED'
+                  AND is_deleted = false;
+        ]]></sql>
+        <rollback>
+            <sql>DROP INDEX IF EXISTS idx_notifications_dispatch_terminal_broker_failure;</sql>
+            <sql>DROP INDEX IF EXISTS idx_notifications_dispatch_backlog_age;</sql>
+            <sql>DROP INDEX IF EXISTS idx_notifications_dispatch_exhausted;</sql>
+            <sql>DROP INDEX IF EXISTS idx_notifications_dispatch_legacy_payload;</sql>
+            <sql>DROP INDEX IF EXISTS idx_notifications_dispatch_stale_claim;</sql>
+            <sql>DROP INDEX IF EXISTS idx_notifications_dispatch_due;</sql>
+            <dropColumn tableName="notifications" columnName="published_at"/>
+            <dropColumn tableName="notifications" columnName="delivery_claim_id"/>
+            <dropColumn tableName="notifications" columnName="delivery_claimed_at"/>
+            <dropColumn tableName="notifications" columnName="dispatch_claim_id"/>
+            <dropColumn tableName="notifications" columnName="dispatch_claimed_at"/>
+            <dropColumn tableName="notifications" columnName="dispatch_device_id"/>
+            <dropColumn tableName="notifications" columnName="dispatch_session_id"/>
+            <dropColumn tableName="notifications" columnName="dispatch_user_id"/>
+            <dropColumn tableName="notifications" columnName="dispatch_request_id"/>
+            <dropColumn tableName="notifications" columnName="next_dispatch_at"/>
+            <dropColumn tableName="notifications" columnName="dispatch_attempts"/>
+            <dropColumn tableName="notifications" columnName="dispatch_payload"/>
+            <dropColumn tableName="notifications" columnName="dispatch_priority"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>
