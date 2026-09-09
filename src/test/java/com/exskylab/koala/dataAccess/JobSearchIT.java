@@ -21,7 +21,7 @@ class JobSearchIT extends AbstractIntegrationTest {
                 com.exskylab.koala.entities.JobStatus.OPEN,
                 java.time.LocalDateTime.now(),
                 null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null,
+                null, null, null, null, null,
                 PageRequest.of(0, 5, Sort.by(Sort.Direction.DESC, "createdAt"))));
 
         assertNotNull(page);
@@ -34,6 +34,7 @@ class JobSearchIT extends AbstractIntegrationTest {
                 com.exskylab.koala.entities.JobStatus.OPEN,
                 java.time.LocalDateTime.now(),
                 "garson",
+                null,
                 java.util.UUID.randomUUID(),
                 java.util.UUID.randomUUID(),
                 java.util.UUID.randomUUID(),
@@ -54,7 +55,7 @@ class JobSearchIT extends AbstractIntegrationTest {
                 com.exskylab.koala.entities.JobStatus.OPEN,
                 java.time.LocalDateTime.now(),
                 null, null, null, null, null, null, null, null, null, null, null,
-                40.98, 41.10, 28.95, 29.15,
+                null, 40.98, 41.10, 28.95, 29.15,
                 PageRequest.of(0, 20)));
     }
 

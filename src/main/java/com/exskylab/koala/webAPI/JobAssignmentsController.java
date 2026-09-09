@@ -13,6 +13,7 @@ import com.exskylab.koala.core.constants.JobAssignmentMessages;
 import com.exskylab.koala.core.dtos.jobAssignment.request.AnswerAssignmentDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.PaymentSessionDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentDto;
+import com.exskylab.koala.core.dtos.jobAssignment.response.MyAssignmentDto;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.PaymentSessionResponseDto;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import jakarta.servlet.http.HttpServletRequest;
@@ -24,7 +25,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
-@Tag(name = "İş atamaları", description = "Atamaya cevap verme ve ödeme oturumu.")
+@Tag(name = "İş atamaları", description = "Atama okuma, cevap verme ve ödeme oturumu.")
 @RestController
 @RequestMapping("/job-assignments")
 public class JobAssignmentsController {
@@ -34,6 +35,22 @@ public class JobAssignmentsController {
 
     public JobAssignmentsController(JobAssignmentService jobAssignmentService) {
         this.jobAssignmentService = jobAssignmentService;
+    }
+
+
+    @Operation(summary = "Atamayı getir",
+            description = "Yalnızca atanan işçi, ilan sahibi veya şirket ilanının güncel yetkilisi okuyabilir. Taraf olmayan kullanıcı 404 alır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Atama getirildi"),
+            @ApiResponse(responseCode = "404", description = "Atama bulunamadı ya da taraf değilsiniz",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @GetMapping("/{assignmentId}")
+    public ResponseEntity<SuccessDataResult<MyAssignmentDto>> getAssignment(@PathVariable UUID assignmentId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                jobAssignmentService.getMyAssignment(assignmentId),
+                JobAssignmentMessages.RETRIEVED,
+                HttpStatus.OK));
     }
 
 

@@ -67,7 +67,7 @@ public class JobsController {
 
     @SecurityRequirements
     @Operation(summary = "İlan ara",
-            description = "Metin, kategori, il, ilçe, tür, ücret aralığı, sigorta ve deneyim şartı ile süzer. Harita için minLatitude, maxLatitude, minLongitude ve maxLongitude ile sınırlayıcı kutu verilebilir. Yalnızca OPEN durumundaki ilanlar döner. Kart alanı coverImageUrl galerinin kapak görselinden gelir.")
+            description = "Metin, şirket kimliği, kategori, il, ilçe, tür, ücret aralığı, sigorta ve deneyim şartı ile süzer. Harita için minLatitude, maxLatitude, minLongitude ve maxLongitude ile sınırlayıcı kutu verilebilir. Yalnızca OPEN durumundaki ilanlar döner. Kart alanı coverImageUrl galerinin kapak görselinden gelir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "İlanlar listelendi"),
             @ApiResponse(responseCode = "400", description = "Sıralama alanı desteklenmiyor",
@@ -75,7 +75,7 @@ public class JobsController {
     })
     @GetMapping
     public ResponseEntity<SuccessDataResult<PageDto<JobSummaryDto>>> searchJobs(
-            JobSearchCriteriaDto criteria,
+            @ParameterObject JobSearchCriteriaDto criteria,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable,
             @AuthenticationPrincipal UserPrincipal viewer) {
 

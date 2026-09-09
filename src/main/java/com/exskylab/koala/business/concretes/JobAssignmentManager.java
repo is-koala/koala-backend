@@ -439,14 +439,33 @@ public class JobAssignmentManager implements JobAssignmentService {
                 : jobAssignmentDao.findAllByWorkerId(userId, pageable);
 
         List<MyAssignmentDto> summaries = page.getContent().stream().map(assignment -> {
-            MyAssignmentDto dto = jobAssignmentMapper.toMyAssignmentDto(assignment);
             boolean activeWorker = !asEmployer && LIVE_ASSIGNMENT_STATUSES.contains(assignment.getStatus());
-            addressVisibility.protect(assignment.getJob(), dto.job(), userId, activeWorker);
-            return dto;
+            return toMyAssignmentDto(assignment, userId, activeWorker);
         }).toList();
         PageDto<MyAssignmentDto> result = PageDto.of(page, summaries);
         galleryService.fillJobCovers(result.content().stream().map(MyAssignmentDto::job).toList());
         return result;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public MyAssignmentDto getMyAssignment(UUID assignmentId) {
+        JobAssignment assignment = getDetailedById(assignmentId);
+        UUID actorId = securityService.getAuthenticatedUserId();
+        CancellationParty party = participants.partyOf(assignment, actorId)
+                .orElseThrow(() -> Concealment.notFound(JobAssignmentMessages.NOT_FOUND, actorId, assignmentId,
+                        "not a party of the assignment"));
+        boolean activeWorker = party == CancellationParty.WORKER
+                && LIVE_ASSIGNMENT_STATUSES.contains(assignment.getStatus());
+        MyAssignmentDto result = toMyAssignmentDto(assignment, actorId, activeWorker);
+        galleryService.fillJobCovers(List.of(result.job()));
+        return result;
+    }
+
+    private MyAssignmentDto toMyAssignmentDto(JobAssignment assignment, UUID viewerId, boolean activeWorker) {
+        MyAssignmentDto dto = jobAssignmentMapper.toMyAssignmentDto(assignment);
+        addressVisibility.protect(assignment.getJob(), dto.job(), viewerId, activeWorker);
+        return dto;
     }
 
     @Override

@@ -13,8 +13,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
