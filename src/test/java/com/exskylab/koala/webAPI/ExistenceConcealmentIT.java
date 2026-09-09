@@ -129,6 +129,13 @@ class ExistenceConcealmentIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void readingSomeoneElsesAssignmentLooksExactlyLikeReadingOneThatDoesNotExist() throws Exception {
+        assertIndistinguishable(assignmentId,
+                id -> mockMvc.perform(get("/job-assignments/{id}", id)
+                        .with(user(principal(outsiderId)))));
+    }
+
+    @Test
     void readingSomeoneElsesCancellationLooksExactlyLikeReadingOneThatDoesNotExist() throws Exception {
         assertIndistinguishable(assignmentId,
                 id -> mockMvc.perform(get("/job-assignments/{id}/cancellation", id)

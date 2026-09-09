@@ -51,6 +51,14 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void companyJobSearchAndAssignmentReadAreDocumented() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath("$.paths['/jobs'].get.parameters[?(@.name == 'companyId')]").isNotEmpty())
+                .andExpect(jsonPath("$.paths['/job-assignments/{assignmentId}'].get.responses.200").exists())
+                .andExpect(jsonPath("$.paths['/job-assignments/{assignmentId}'].get.responses.404").exists());
+    }
+
+    @Test
     void theErrorEnvelopeIsPartOfTheSchemaCatalogue() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(jsonPath("$.components.schemas.ErrorResult.properties.errorCategory").exists())
