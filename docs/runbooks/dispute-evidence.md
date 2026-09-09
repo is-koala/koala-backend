@@ -18,7 +18,10 @@ addressable by a permanent URL, and is reachable only through an authorization c
 
 The row in `dispute_evidence` carries the dispute, the uploader, the storage key, the original filename, the
 derived content type, the byte size and a SHA-256 checksum of the stored bytes. The API response carries
-everything except the storage key.
+everything except the storage key. The staff list uses a separate response contract with a derived
+`uploaderSide`: the assignment worker is `WORKER`; the job creator and an authorised contact of the job's company
+are `EMPLOYER`. Attachment authorization establishes that invariant at write time, so a former company contact's
+historical evidence remains `EMPLOYER` after the contact is removed. The user-facing response contract is unchanged.
 
 ## Access
 

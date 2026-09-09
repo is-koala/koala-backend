@@ -84,7 +84,8 @@ class AssignmentOperationsAuthorizationTest {
                 securityService, participants, new StaffPayoutManager(payoutService),
                 mock(com.exskylab.koala.business.abstracts.StaffAccountService.class),
                 mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class),
-                new com.exskylab.koala.core.helpers.PageableSanitizer());
+                new com.exskylab.koala.core.helpers.PageableSanitizer(),
+                mock(com.exskylab.koala.core.mappers.DisputeMapper.class));
         timesheetManager = new TimesheetManager(workSessionDao, jobAssignmentService, securityService, participants,
                 new com.exskylab.koala.core.helpers.TimesheetEventPolicy(
                         new com.exskylab.koala.core.properties.TimesheetProperties()),

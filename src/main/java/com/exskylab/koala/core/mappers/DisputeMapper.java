@@ -2,8 +2,10 @@ package com.exskylab.koala.core.mappers;
 
 import com.exskylab.koala.core.dtos.dispute.response.DisputeDto;
 import com.exskylab.koala.core.dtos.dispute.response.DisputeEvidenceDto;
+import com.exskylab.koala.core.dtos.dispute.response.StaffDisputeEvidenceDto;
 import com.exskylab.koala.entities.Dispute;
 import com.exskylab.koala.entities.DisputeEvidence;
+import com.exskylab.koala.entities.EvidenceUploaderSide;
 import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -24,4 +26,10 @@ public interface DisputeMapper {
     DisputeEvidenceDto toEvidenceDto(DisputeEvidence evidence);
 
     List<DisputeEvidenceDto> toEvidenceDtoList(List<DisputeEvidence> evidence);
+
+    @Mapping(target = "disputeId", source = "evidence.dispute.id")
+    @Mapping(target = "fileName", source = "evidence.originalFileName")
+    @Mapping(target = "uploaderSide", source = "uploaderSide")
+    StaffDisputeEvidenceDto toStaffEvidenceDto(DisputeEvidence evidence,
+                                               EvidenceUploaderSide uploaderSide);
 }

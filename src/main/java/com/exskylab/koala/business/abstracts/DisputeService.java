@@ -1,6 +1,7 @@
 package com.exskylab.koala.business.abstracts;
 
 import com.exskylab.koala.core.security.StaffPrincipal;
+import com.exskylab.koala.core.dtos.dispute.response.StaffDisputeEvidenceDto;
 import com.exskylab.koala.entities.Dispute;
 import com.exskylab.koala.entities.DisputeEvidence;
 import com.exskylab.koala.entities.DisputeResolution;
@@ -31,7 +32,7 @@ public interface DisputeService {
 
     DisputeEvidence getEvidenceForDownload(UUID disputeId, UUID evidenceId);
 
-    List<DisputeEvidence> getEvidenceForStaff(UUID disputeId);
+    List<StaffDisputeEvidenceDto> getEvidenceForStaff(UUID disputeId);
 
     DisputeEvidence getEvidenceForStaffDownload(UUID disputeId, UUID evidenceId);
 }
