@@ -191,6 +191,9 @@ rate-limit:
   public:
     max-attempts: ${RATE_LIMIT_PUBLIC_MAX_ATTEMPTS:120}
     window: ${RATE_LIMIT_PUBLIC_WINDOW:1m}
+  sitemap:
+    max-attempts: ${RATE_LIMIT_SITEMAP_MAX_ATTEMPTS:30}
+    window: ${RATE_LIMIT_SITEMAP_WINDOW:1m}
 
 commission:
   rate: ${COMMISSION_RATE:0.075}
@@ -201,6 +204,15 @@ messaging:
 
 job-search:
   zone-id: ${JOB_SEARCH_ZONE_ID:Europe/Istanbul}
+
+sitemap:
+  manifest:
+    ttl: ${SITEMAP_MANIFEST_TTL:1h}
+    refresh-before-expiry: ${SITEMAP_MANIFEST_REFRESH_BEFORE_EXPIRY:15m}
+    shard-size: ${SITEMAP_MANIFEST_SHARD_SIZE:50000}
+    max-shards: ${SITEMAP_MANIFEST_MAX_SHARDS:50000}
+    query-timeout: ${SITEMAP_MANIFEST_QUERY_TIMEOUT:20s}
+    lock-timeout: ${SITEMAP_MANIFEST_LOCK_TIMEOUT:5s}
 
 address-search:
   enabled: ${ADDRESS_SEARCH_ENABLED:false}
