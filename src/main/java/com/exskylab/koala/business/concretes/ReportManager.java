@@ -75,27 +75,50 @@ public class ReportManager implements ReportService {
                                ReportReason reason, String description) {
 
         UUID reporterId = securityService.getAuthenticatedUserId();
-        if (reporterId.equals(reportedUserId)) {
+        if (messageId == null && reporterId.equals(reportedUserId)) {
             throw new ValidationException(ReportMessages.CANNOT_REPORT_SELF);
+        }
+        Message reportedMessage = messageId == null
+                ? null
+                : messagingService.getMessageForReport(messageId, reporterId);
+        if (reportedMessage != null && reporterId.equals(reportedMessage.getSender().getId())) {
+            throw new ValidationException(ReportMessages.CANNOT_REPORT_SELF);
+        }
+        String storedDescription = reportedMessage == null ? description : normalizeDescription(description);
+        Job reportedJob = jobId == null ? null : jobService.getById(jobId);
+        Image reportedImage = imageId == null ? null : imageService.getById(imageId);
+        if (reportedMessage != null) {
+            MessageReportFingerprint requested = MessageReportFingerprint.from(
+                    reportedMessage, reportedJob, reportedImage, reason, storedDescription);
+            Report existing = reportDao.findByReporterIdAndMessageId(reporterId, messageId).orElse(null);
+            if (existing != null) {
+                if (MessageReportFingerprint.from(existing, reportedMessage).equals(requested)) {
+                    existing.setReportedUser(reportedMessage.getSender());
+                    return existing;
+                }
+                throw new ConflictException(ReportMessages.IDEMPOTENCY_CONFLICT);
+            }
         }
 
         Report report = new Report();
         report.setReporter(userService.getReference(reporterId));
         report.setReason(reason);
-        report.setDescription(description);
+        report.setDescription(storedDescription);
         report.setStatus(ReportStatus.OPEN);
 
-        if (reportedUserId != null) {
+        if (reportedMessage != null) {
+            report.setReportedUser(reportedMessage.getSender());
+        } else if (reportedUserId != null) {
             report.setReportedUser(userService.getById(reportedUserId));
         }
-        if (jobId != null) {
-            report.setJob(jobService.getById(jobId));
+        if (reportedJob != null) {
+            report.setJob(reportedJob);
         }
-        if (messageId != null) {
-            report.setMessage(messagingService.getMessageById(messageId));
+        if (reportedMessage != null) {
+            report.setMessage(reportedMessage);
         }
-        if (imageId != null) {
-            report.setImage(imageService.getById(imageId));
+        if (reportedImage != null) {
+            report.setImage(reportedImage);
         }
 
         Report saved = reportDao.save(report);
@@ -187,5 +210,36 @@ public class ReportManager implements ReportService {
 
         return reportDao.tallyByReportedUser(reportedUserIds).stream()
                 .collect(Collectors.toMap(ReportedUserTally::getUserId, ReportedUserTally::getTotal));
+    }
+
+    private String normalizeDescription(String description) {
+        return description == null || description.isBlank() ? null : description.trim();
+    }
+
+    private record MessageReportFingerprint(UUID reportedUserId, UUID jobId, UUID messageId, UUID imageId,
+                                            ReportReason reason, String description) {
+
+        private static MessageReportFingerprint from(Message message, Job job, Image image,
+                                                     ReportReason reason, String description) {
+            return new MessageReportFingerprint(
+                    message.getSender().getId(),
+                    job == null ? null : job.getId(),
+                    message.getId(),
+                    image == null ? null : image.getId(),
+                    reason,
+                    description);
+        }
+
+        private static MessageReportFingerprint from(Report report, Message persistedMessage) {
+            return new MessageReportFingerprint(
+                    persistedMessage.getSender().getId(),
+                    report.getJob() == null ? null : report.getJob().getId(),
+                    persistedMessage.getId(),
+                    report.getImage() == null ? null : report.getImage().getId(),
+                    report.getReason(),
+                    report.getDescription() == null || report.getDescription().isBlank()
+                            ? null
+                            : report.getDescription().trim());
+        }
     }
 }

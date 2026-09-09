@@ -951,7 +951,29 @@ Uyuşmazlık yalnızca **emanette para varken** açılabilir, atama başına ayn
 
 **`SPLIT` çözümü bilerek yok.** `PaymentStateMachine` tek yönlü ve tek sonuçlu: bir atama ya `RELEASED_TO_WORKER` ya `REFUNDED` olur. Kısmi paylaşım eklenirse durum makinesinin de bölünebilir hale gelmesi gerekir; yarım çalışan bir yol bırakmaktansa dışarıda tutuldu.
 
-**Şikayet üç hedeften birine bağlanabilir:** kullanıcı, ilan veya mesaj. Üçü de boşsa 400. Kendini şikayet etmek reddediliyor. Sonuçlanmış (`ACTIONED`/`DISMISSED`) bir şikayet tekrar sonuçlandırılamaz.
+**Şikayet en az bir hedefe bağlanır:** kullanıcı, ilan, mesaj veya görsel. Hepsi boşsa 400; geriye uyumluluk
+için birden fazlası birlikte verilebilir. Kendini şikayet etmek reddediliyor. Sonuçlanmış
+(`ACTIONED`/`DISMISSED`) bir şikayet tekrar sonuçlandırılamaz.
+
+**Mesaj şikayetinin yetkisi mesajlaşma aggregate'inde ve tek sorgudadır.** `POST /reports` mesaj kimliği
+aldığında karar istemcinin gönderebileceği `reportedUserId` ya da `conversationId` değerine dayanmaz;
+`MessageDao` mesajı kalıcı `message → conversation → active participant` ilişkisi üzerinden şikayet eden
+için pessimistic write lock ile yükler. Olmayan, soft-delete edilmiş, konuşması silinmiş veya çağıranın aktif
+katılımcısı olmadığı mesaj aynı `MESSAGING_MESSAGE_NOT_FOUND` 404'üne düşer. Şikayet edilen kullanıcı da
+saklanan mesajın göndereninden türetilir ve eski istemcinin birlikte verdiği `reportedUserId` ezilir; gönderen
+kendi mesajını şikayet ederse 400 alır. Eski istemcinin mesajla birlikte verdiği ilan/görsel hedefleri ise
+korunur. Yükleme, sahiplik
+kontrolü ve şikayet kaydı `ReportManager.createReport` transaction'ında kaldığı için istemcinin mesaj
+geçmişini sayfa sayfa taramasına gerek yoktur.
+
+**Mesaj şikayetinin doğal idempotency anahtarı `(reporter_id, message_id)` çiftidir.** Aynı canonical hedefler
+(kalıcı mesaj, ondan türeyen gönderen ve varsa legacy ilan/görsel), normalize gerekçe ve açıklamayla retry ilk
+`Report` satırını ve kimliğini, karar `ACTIONED`/`DISMISSED` olmuşsa bile döndürür; aynı anahtarın farklı
+canonical payload'la kullanımı 409 `REPORT_IDEMPOTENCY_CONFLICT` olur. Mesaj satırındaki lock
+eşzamanlı retry'ları sıralar, `uk_reports_active_reporter_message` kısmi benzersiz indeksi kalıcı savunmayı
+sağlar. Migration tarihsel aktif duplicate görürse kayıt silerek tahmin yürütmez; operatör uzlaştırana kadar
+HALT eder. Tekillik indeksinden önce eski mesaj şikayetlerinin boş ya da istemciden gelmiş `reported_user_id`
+değerleri kalıcı `messages.sender_id` ile canonical hale getirilir.
 
 ### Şikayet inceleme yüzeyi — iki DTO, bir sınır (#63)
 
