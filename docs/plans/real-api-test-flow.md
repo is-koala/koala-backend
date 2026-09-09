@@ -47,7 +47,7 @@ Durum: Q23–Q37 kararları ve uygulama/test sınırları kullanıcı tarafında
 
 ## Implementation Decisions
 
-- Güncel ortam kararı ADR-0001'dir. Mevcut domain ve Dokploy altyapısı bugün test/pre-production'dır; şimdi ayrı staging kurulmaz. Lansman sırasında aynı altyapı temiz veritabanıyla production olur.
+- Güncel ortam kararı ADR-0016'dır. Mevcut domain ve Dokploy uygulama kaydı bugün test/pre-production'dır; lansmanda bu deployment temiz ve ayrı production state'ine yeniden bağlanarak terfi eder. Legacy database, queue ve media state'i production'a taşınmaz; ayrı staging bundan sonra kendi state'iyle çalışır.
 - Mobil kimlikler production için `com.iskoala.koala`, staging için `com.iskoala.koala.staging`, dev için `com.iskoala.koala.dev` olur. Staging mevcut internet API'sine, dev açıkça seçilen yerel backend'e bağlanır. Ortam eksikliği sessiz internet API varsayımına dönüşmez.
 - İşveren ve iş arayan QA adresleri kullanıcı tarafından sağlandı; ilk adres işveren, ikinci adres iş arayan içindir. Adresler ve şifreler sürüm kontrollü doküman, kaynak kod veya mobil build'e gömülmez.
 - Gerçek SMTP yalnız iki kontrollü QA alıcısına teslimat yapar. Diğer sentetik alıcıların gönderimleri SMTP'ye ulaşmadan engellenir; gönderilmeyen ileti başarılı teslimat gibi işaretlenmez. Mailpit kullanılmaz.

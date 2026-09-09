@@ -1,6 +1,6 @@
 # Koala test ortamı stratejisi
 
-> Karar güncellemesi (5 Eylül 2026): Bu rapordaki ayrı staging/Mailpit/seçici seed temizliği önerileri Q25, Q27, Q33-B, Q34-A, Q35-A ve Q36-C cevaplarıyla değiştirilmiştir. Mevcut API lansmana kadar test ortamıdır; gerçek SMTP iki kontrollü alıcıyla kullanılır; lansmanda mevcut DB sıfırlanır. Güncel karar [ADR-0001](../adr/0001-use-current-stack-until-launch.md), uygulama sentezi [gerçek API test akışı](../plans/real-api-test-flow.md), veri kararı ise [ADR-0008](../adr/0008-ship-an-empty-database-without-sample-data.md) belgesidir; QA seed'i tamamen kaldırıldığı için bu rapordaki seed bölümleri yalnız tarihsel kayıttır. Aşağıdaki metin araştırma tarihindeki alternatif ve gerekçeleri korur.
+> Karar güncellemesi (9 Eylül 2026): Bu rapor tarihsel araştırmadır. Mevcut API lansmana kadar test ortamıdır; gerçek SMTP iki kontrollü alıcıyla kullanılır. Lansmanda mevcut Dokploy deployment/domain terfi ettirilir fakat legacy DB, queue ve media state'i production'a taşınmaz; temiz ve ayrı production state'i bağlanır. Güncel karar [ADR-0016](../adr/0016-promote-the-deployment-not-its-state.md), uygulama sentezi [gerçek API test akışı](../plans/real-api-test-flow.md), veri kararı ise [ADR-0008](../adr/0008-ship-an-empty-database-without-sample-data.md) belgesidir. ADR-0001 ve aşağıdaki Mailpit/seçici seed önerileri yalnız tarihsel kayıttır.
 
 Tarih: 5 Eylül 2026
 Kapsam: Flutter mobil uygulama, Spring Boot API, PostgreSQL, RabbitMQ/e-posta, Google Maps Platform ve iyzico

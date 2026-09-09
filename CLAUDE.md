@@ -3594,6 +3594,18 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 
 **Sürümleme etiketle.** `v1.2.3` → `ghcr.io/<owner>/koala:1.2.3` ve `:latest`; Dokploy `:latest` çeker, CI `deploy` job'ı webhook'u tetikler. main'e push yalnızca `main-<sha7>` üretir, `latest`'i güncellemez.
 
+**İlk production geçişi deploy değildir.** `docs/runbooks/launch-cutover.md`, mevcut
+pre-production kaynaklarını temiz production'a çeviren bir defalık insan yordamıdır;
+`ops/launch/launch-cutover-wizard.sh` dokuz geri dönüş kapısını sıraya koyup yalnız
+kaynak/rol takma adlarını, kararları, UTC zamanlarını ve kanıt kimliklerini git
+dışındaki `.env.launch-cutover` dosyasına yazar. Script hiçbir platform, database,
+kuyruk, bucket veya sağlayıcı
+değişikliği çalıştırmaz ve secret istemez. Reset'in CI/deploy'a bağlanmaması,
+gerçek para yazıldıktan sonra eski snapshot'a kör dönüşün yasak olması ve SMTP ile
+iyzico geçişlerinin ayrı onay taşıması bu yüzden yapısal seçimdir. Dar smoke
+sonrasında ilk çalışma HOLD ile biter; 24 saatlik gözlem yalnız
+`--close-observation` yoluyla, reset/deploy adımları tekrar gösterilmeden kapanır.
+
 **`/api` öneki yok ve olmayacak.** API kendi alt alanında servis ediliyor. **URL sürümlemesi (`/v1`) de bilinçli olarak eklenmedi:** tek first-party istemci için iki API sürümünü paralel bakımda tutmak gerçekçi değil. Bunun yerine **asgari istemci sürümü kapısı** var (Faz 28, §2as). API dışarı açılırsa (B2B entegrasyon) karar değişir ve `/v1` zorunlu hâle gelir.
 
 ## Agent skills
