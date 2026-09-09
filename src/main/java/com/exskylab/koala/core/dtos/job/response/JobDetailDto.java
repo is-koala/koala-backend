@@ -49,6 +49,8 @@ public class JobDetailDto {
     private LocalDateTime startDateTime;
     private LocalDateTime endDateTime;
     private JobStatus status;
+    @Schema(description = "İlanın durum ve bitiş zamanına göre şu anda başvuru kabul edip etmediğini belirtir.")
+    private boolean acceptingApplications;
     private AddressDto address;
     @Schema(description = "Adres ve koordinatın yaklaşık mı kesin mi olduğunu belirtir.")
     private AddressPrecision addressPrecision;
