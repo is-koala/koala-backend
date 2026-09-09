@@ -5,6 +5,7 @@ import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.dataAccess.DeviceDao;
 import com.exskylab.koala.entities.Device;
 import com.exskylab.koala.entities.User;
+import org.mockito.InOrder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -23,6 +24,8 @@ class PushTokenRulesTest {
     private static final String USER_AGENT = "Dart/3.9 (dart:io)";
 
     private DeviceDao deviceDao;
+    private SecurityService securityService;
+    private PushTokenDeliveryLock pushTokenDeliveryLock;
     private DeviceManager manager;
 
     private final User owner = user();
@@ -30,13 +33,15 @@ class PushTokenRulesTest {
     @BeforeEach
     void setUp() {
         deviceDao = mock(DeviceDao.class);
-        SecurityService securityService = mock(SecurityService.class);
+        securityService = mock(SecurityService.class);
+        pushTokenDeliveryLock = mock(PushTokenDeliveryLock.class);
         when(securityService.getAuthenticatedUser()).thenReturn(owner);
 
-        manager = new DeviceManager(deviceDao, securityService);
+        manager = new DeviceManager(deviceDao, securityService, pushTokenDeliveryLock);
 
         when(deviceDao.save(any())).thenAnswer(call -> call.getArgument(0));
         when(deviceDao.findAllByPushToken(any())).thenReturn(List.of());
+        when(securityService.isActiveUser(owner.getId())).thenReturn(true);
     }
 
     private static User user() {
@@ -62,6 +67,9 @@ class PushTokenRulesTest {
         manager.savePushToken(USER_AGENT, DEVICE_ID, TOKEN);
 
         assertEquals(TOKEN, own.getPushToken());
+        verify(pushTokenDeliveryLock).lockMutations();
+        verify(pushTokenDeliveryLock).lockUser(owner.getId());
+        verify(pushTokenDeliveryLock).lockTokens(List.of(TOKEN));
     }
 
     @Test
@@ -87,6 +95,19 @@ class PushTokenRulesTest {
 
         assertNull(previous.getPushToken());
         assertEquals(TOKEN, own.getPushToken());
+        InOrder persistenceOrder = inOrder(deviceDao);
+        persistenceOrder.verify(deviceDao).flush();
+        persistenceOrder.verify(deviceDao).saveAndFlush(own);
+    }
+
+    @Test
+    void rotatingATokenLocksTheOldAndNewValuesInDeterministicOrder() {
+        Device own = device(owner, DEVICE_ID);
+        own.setPushToken("old-token");
+
+        manager.savePushToken(USER_AGENT, DEVICE_ID, TOKEN);
+
+        verify(pushTokenDeliveryLock).lockTokens(List.of("old-token", TOKEN));
     }
 
     @Test
@@ -108,6 +129,8 @@ class PushTokenRulesTest {
         manager.clearPushToken(USER_AGENT, DEVICE_ID);
 
         assertNull(own.getPushToken());
+        verify(pushTokenDeliveryLock).lockMutations();
+        verify(pushTokenDeliveryLock).lockTokens(List.of(TOKEN));
         verify(deviceDao, never()).delete(any());
     }
 
@@ -116,5 +139,26 @@ class PushTokenRulesTest {
         when(deviceDao.findByUser_IdAndClientDeviceId(any(), any())).thenReturn(Optional.empty());
 
         assertDoesNotThrow(() -> manager.clearPushToken(USER_AGENT, "unknown"));
+    }
+
+    @Test
+    void deliveryReadsATokenOnlyThroughTheCurrentDeviceOwner() {
+        Device own = device(owner, DEVICE_ID);
+        own.setPushToken(TOKEN);
+        when(deviceDao.findByIdAndUser_IdAndPushTokenIsNotNull(own.getId(), owner.getId()))
+                .thenReturn(Optional.of(own));
+
+        assertEquals(Optional.of(TOKEN), manager.currentPushToken(owner.getId(), own.getId()));
+    }
+
+    @Test
+    void invalidTokenCleanupCannotEraseARefreshedToken() {
+        UUID deviceId = UUID.randomUUID();
+        when(deviceDao.clearPushTokenIfMatches(deviceId, TOKEN)).thenReturn(0);
+
+        assertFalse(manager.clearPushTokenIfMatches(owner.getId(), deviceId, TOKEN));
+        verify(pushTokenDeliveryLock).lockMutations();
+        verify(pushTokenDeliveryLock).lockUser(owner.getId());
+        verify(pushTokenDeliveryLock).lockTokens(List.of(TOKEN));
     }
 }

@@ -14,4 +14,6 @@ public interface SecurityService {
     User getAuthenticatedUser();
 
     User getSystemUser();
+
+    boolean isActiveUser(UUID userId);
 }

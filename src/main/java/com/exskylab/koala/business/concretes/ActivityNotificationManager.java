@@ -27,6 +27,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.UUID;
 import java.util.Map;
 
@@ -111,11 +112,13 @@ public class ActivityNotificationManager implements ActivityNotificationService 
     @Override
     public void disputeResolved(Dispute dispute) {
         JobAssignment assignment = dispute.getJobAssignment();
+        User employer = employerOf(assignment);
+        preparePushRecipients(assignment.getWorker(), employer);
 
         notify(assignment.getWorker(), assignment.getJob().getTitle(),
                 ActivityMessages.DISPUTE_RESOLVED, NotificationCategory.APPLICATION_UPDATES,
                 NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
-        notify(employerOf(assignment), assignment.getJob().getTitle(),
+        notify(employer, assignment.getJob().getTitle(),
                 ActivityMessages.DISPUTE_RESOLVED, NotificationCategory.APPLICATION_UPDATES,
                 NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
     }
@@ -139,11 +142,13 @@ public class ActivityNotificationManager implements ActivityNotificationService 
     public void assignmentExpired(Cancellation cancellation) {
         JobAssignment assignment = cancellation.getJobAssignment();
         String jobTitle = assignment.getJob().getTitle();
+        User employer = employerOf(assignment);
+        preparePushRecipients(assignment.getWorker(), employer);
 
         notify(assignment.getWorker(), jobTitle,
                 ActivityMessages.ASSIGNMENT_EXPIRED_WORKER, NotificationCategory.APPLICATION_UPDATES,
                 NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
-        notify(employerOf(assignment), jobTitle,
+        notify(employer, jobTitle,
                 ActivityMessages.ASSIGNMENT_EXPIRED_EMPLOYER, NotificationCategory.APPLICATION_UPDATES,
                 NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
     }
@@ -167,16 +172,25 @@ public class ActivityNotificationManager implements ActivityNotificationService 
                 ? ActivityMessages.COMPANY_APPROVED
                 : ActivityMessages.COMPANY_REJECTED;
 
-        company.getContacts().stream()
+        List<User> admins = company.getContacts().stream()
                 .filter(contact -> contact.getRole() == CompanyContactRole.ADMIN)
                 .map(CompanyContact::getUser)
-                .forEach(admin -> notify(admin, company.getName(), key,
-                        NotificationCategory.COMPANY_UPDATES,
-                        NotificationTargetType.COMPANY, company.getId()));
+                .toList();
+        notificationService.preparePushRecipients(admins.stream().map(User::getId).toList());
+        admins.forEach(admin -> notify(admin, company.getName(), key,
+                NotificationCategory.COMPANY_UPDATES,
+                NotificationTargetType.COMPANY, company.getId()));
     }
 
     private User employerOf(JobAssignment assignment) {
         return assignment.getJob().getCreator();
+    }
+
+    private void preparePushRecipients(User... recipients) {
+        notificationService.preparePushRecipients(java.util.Arrays.stream(recipients)
+                .filter(java.util.Objects::nonNull)
+                .map(User::getId)
+                .toList());
     }
 
     private void notify(User recipient, String jobTitle, String bodyKey, NotificationCategory category) {

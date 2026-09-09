@@ -44,7 +44,8 @@ class AggregateBoundaryTest {
             "SettlementManager", Set.of("SettlementTaskDao"),
             "SettingsManager", Set.of("AppSettingDao"),
             "SavedJobManager", Set.of(),
-            "SecurityManager", Set.of());
+            "SecurityManager", Set.of(),
+            "PushDeliveryStore", Set.of("NotificationDao"));
 
     private record Exemption(String manager, String dao, String reason) {
     }

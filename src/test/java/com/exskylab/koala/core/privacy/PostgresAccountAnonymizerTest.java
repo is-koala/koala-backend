@@ -12,8 +12,10 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -42,13 +44,28 @@ class PostgresAccountAnonymizerTest {
 
         IysProperties properties = new IysProperties();
         properties.setRecipientEncryptionKey("MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=");
-        new PostgresAccountAnonymizer(jdbcTemplate, outbox, new IysRecipientCipher(properties), properties)
+        PushTokenMutationLock pushTokenDeliveryLock = mock(PushTokenMutationLock.class);
+        new PostgresAccountAnonymizer(jdbcTemplate, outbox, new IysRecipientCipher(properties), properties,
+                pushTokenDeliveryLock)
                 .anonymize(userId, UUID.randomUUID());
 
         verify(outbox).enqueue(List.of(key, evidenceKey));
+        org.mockito.InOrder tokenCoordination = inOrder(pushTokenDeliveryLock);
+        tokenCoordination.verify(pushTokenDeliveryLock).lockMutations();
+        tokenCoordination.verify(pushTokenDeliveryLock).lockUser(userId);
+        tokenCoordination.verify(pushTokenDeliveryLock).lockTokens(List.of(key));
+        verify(jdbcTemplate).queryForList(argThat(sql -> sql.contains("notification.sender_id = ?")
+                        && sql.contains("notification.destination_device_id = device.id")),
+                eq(String.class), eq(userId), eq(userId), eq(userId));
         verify(outbox, never()).process(List.of(key, evidenceKey));
         TransactionSynchronizationManager.getSynchronizations()
                 .forEach(synchronization -> synchronization.afterCommit());
         verify(outbox).process(List.of(key, evidenceKey));
+        verify(jdbcTemplate).update(argThat(sql -> sql.contains("update notifications")
+                        && sql.contains("push_data_payload = null")
+                        && sql.contains("destination_device_id = null")
+                        && sql.contains("push_processing_claim_id = null")
+                        && sql.contains("status in ('QUEUED', 'PROCESSING')")),
+                eq(userId), eq(userId));
     }
 }

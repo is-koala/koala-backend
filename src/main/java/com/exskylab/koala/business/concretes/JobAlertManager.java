@@ -99,11 +99,15 @@ public class JobAlertManager implements JobAlertService {
             return;
         }
 
-        for (JobAlert alert : matchingAlerts(job)) {
-            if (alert.getUser().getId().equals(job.getCreator() == null ? null : job.getCreator().getId())) {
-                continue;
-            }
+        UUID creatorId = job.getCreator() == null ? null : job.getCreator().getId();
+        List<JobAlert> alerts = matchingAlerts(job).stream()
+                .filter(alert -> !alert.getUser().getId().equals(creatorId))
+                .toList();
+        notificationService.preparePushRecipients(alerts.stream()
+                .map(alert -> alert.getUser().getId())
+                .toList());
 
+        for (JobAlert alert : alerts) {
             try {
                 SendPushToUserDto push = new SendPushToUserDto();
                 push.setRecipient(alert.getUser());

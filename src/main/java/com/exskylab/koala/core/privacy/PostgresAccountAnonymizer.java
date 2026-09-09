@@ -23,20 +23,26 @@ public class PostgresAccountAnonymizer implements AccountAnonymizer {
     private final PersonalMediaDeletionOutbox mediaDeletionOutbox;
     private final IysRecipientCipher iysRecipientCipher;
     private final IysProperties iysProperties;
+    private final PushTokenMutationLock pushTokenDeliveryLock;
 
     public PostgresAccountAnonymizer(JdbcTemplate jdbcTemplate,
                                      PersonalMediaDeletionOutbox mediaDeletionOutbox,
                                      IysRecipientCipher iysRecipientCipher,
-                                     IysProperties iysProperties) {
+                                     IysProperties iysProperties,
+                                     PushTokenMutationLock pushTokenDeliveryLock) {
         this.jdbcTemplate = jdbcTemplate;
         this.mediaDeletionOutbox = mediaDeletionOutbox;
         this.iysRecipientCipher = iysRecipientCipher;
         this.iysProperties = iysProperties;
+        this.pushTokenDeliveryLock = pushTokenDeliveryLock;
     }
 
     @Override
     @Transactional
     public void anonymize(UUID userId, UUID requestId) {
+        pushTokenDeliveryLock.lockMutations();
+        pushTokenDeliveryLock.lockUser(userId);
+        lockPushTokens(userId);
         audit(requestId, "STARTED");
         removeMedia(userId);
         audit(requestId, "MEDIA_REMOVED");
@@ -47,6 +53,24 @@ public class PostgresAccountAnonymizer implements AccountAnonymizer {
         scrubProfile(userId);
         audit(requestId, "PROFILE_SCRUBBED");
         audit(requestId, "COMPLETED");
+    }
+
+    private void lockPushTokens(UUID userId) {
+        List<String> tokens = jdbcTemplate.queryForList("""
+                select distinct device.push_token
+                  from devices device
+                 where device.push_token is not null
+                   and device.is_deleted = false
+                   and (device.user_id = ?
+                     or exists (
+                         select 1
+                           from notifications notification
+                          where notification.destination_device_id = device.id
+                            and (notification.recipient_id = ? or notification.sender_id = ?)
+                     ))
+                 order by device.push_token
+                """, String.class, userId, userId, userId);
+        pushTokenDeliveryLock.lockTokens(tokens);
     }
 
     private void removeMedia(UUID userId) {
@@ -144,7 +168,15 @@ public class PostgresAccountAnonymizer implements AccountAnonymizer {
                 update notifications
                    set destination_phone_number = null, destination_email = null,
                        destination_push_token = null, subject = null, body = null,
-                       template_parameters = null, external_id = null, failure_reason = null
+                       template_parameters = null, external_id = null,
+                       destination_device_id = null, push_data_payload = null,
+                       push_next_attempt_at = null, push_processing_started_at = null,
+                       push_processing_claim_id = null,
+                       processed_at = case when channel = 'PUSH' and status in ('QUEUED', 'PROCESSING')
+                                           then now() else processed_at end,
+                       status = case when channel = 'PUSH' and status in ('QUEUED', 'PROCESSING')
+                                     then 'SUPPRESSED' else status end,
+                       failure_reason = null
                  where recipient_id = ? or sender_id = ?
                 """, userId, userId);
         jdbcTemplate.update("""

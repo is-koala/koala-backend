@@ -15,6 +15,7 @@ import com.exskylab.koala.core.producers.notification.EmailTaskDto;
 import com.exskylab.koala.core.producers.notification.NotificationProducerService;
 import com.exskylab.koala.core.producers.notification.PushTaskDto;
 import com.exskylab.koala.core.producers.notification.SmsTaskDto;
+import com.exskylab.koala.core.privacy.PushTokenMutationLock;
 import com.exskylab.koala.dataAccess.NotificationDao;
 import com.exskylab.koala.entities.*;
 import tools.jackson.core.JacksonException;
@@ -24,6 +25,7 @@ import org.springframework.data.domain.Pageable;
 import java.time.Instant;
 import org.springframework.data.domain.Sort;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
+import java.util.Collection;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,6 +53,7 @@ public class NotificationManager implements NotificationService {
     private final NotificationPreferenceService notificationPreferenceService;
     private final UnsubscribeTokenService unsubscribeTokenService;
     private final IysService iysService;
+    private final PushTokenMutationLock pushTokenMutationLock;
 
     public NotificationManager(NotificationDao notificationDao,
                                 NotificationProducerService notificationProducerService,
@@ -60,7 +63,8 @@ public class NotificationManager implements NotificationService {
                                 PageableSanitizer pageableSanitizer,
                                NotificationPreferenceService notificationPreferenceService,
                                UnsubscribeTokenService unsubscribeTokenService,
-                               IysService iysService) {
+                               IysService iysService,
+                               PushTokenMutationLock pushTokenMutationLock) {
         this.notificationDao = notificationDao;
         this.notificationProducerService = notificationProducerService;
         this.objectMapper = objectMapper;
@@ -70,6 +74,7 @@ public class NotificationManager implements NotificationService {
         this.notificationPreferenceService = notificationPreferenceService;
         this.unsubscribeTokenService = unsubscribeTokenService;
         this.iysService = iysService;
+        this.pushTokenMutationLock = pushTokenMutationLock;
     }
 
     private boolean suppressed(User recipient, NotificationCategory category, NotificationChannel channel,
@@ -256,20 +261,25 @@ public class NotificationManager implements NotificationService {
     @Override
     @Transactional
     public void sendPushToUser(SendPushToUserDto sendPushToUserDto, DispatchPriority dispatchPriority, boolean isSystemPush) {
-        log.info("Dispatching push notification to userId: {} with title: {}",
-                sendPushToUserDto.getRecipient().getId(), sendPushToUserDto.getTitle());
-
         if (sendPushToUserDto.getRecipient() == null) {
             throw new ValidationException(NotificationMessages.USER_ID_CANNOT_BE_NULL);
         }
 
-        if (suppressed(sendPushToUserDto.getRecipient(), sendPushToUserDto.getCategory(),
+        User recipient = sendPushToUserDto.getRecipient();
+        preparePushRecipients(List.of(recipient.getId()));
+        if (!securityService.isActiveUser(recipient.getId())) {
+            log.info("Push notification suppressed because recipient {} is inactive", recipient.getId());
+            return;
+        }
+
+        log.info("Dispatching push notification to userId: {}", recipient.getId());
+
+        if (suppressed(recipient, sendPushToUserDto.getCategory(),
                 NotificationChannel.PUSH, null)) {
             return;
         }
 
         User sender = isSystemPush ? securityService.getSystemUser(): securityService.getAuthenticatedUser();
-        User recipient = sendPushToUserDto.getRecipient();
 
         List<Device> usersDevices = deviceService.getDevicesByUserIdAndPushTokenNotNull(recipient.getId());
         if (usersDevices.isEmpty()) {
@@ -306,13 +316,17 @@ public class NotificationManager implements NotificationService {
             notification.setSender(sender);
             notification.setChannel(NotificationChannel.PUSH);
             notification.setCategory(sendPushToUserDto.getCategory());
-            notification.setDestinationPushToken(device.getPushToken());
+            notification.setDestinationDevice(device);
             notification.setStatus(NotificationStatus.QUEUED);
             notification.setSubject(finalTitle);
-            notification.setTemplateParameters(finalTemplateName);
+            notification.setBody(finalBody);
+            notification.setTemplateName(finalTemplateName);
+            notification.setPushNextAttemptAt(Instant.now());
 
             try{
                 notification.setTemplateParameters(objectMapper.writeValueAsString(finalTemplateParameters));
+                notification.setPushDataPayload(objectMapper.writeValueAsString(
+                        finalDataPayload == null ? Map.of() : finalDataPayload));
             }catch (JacksonException e){
                 log.error("Error while serializing template parameters for push notification with userId: {}", recipient.getId(), e);
                 throw new ExternalServiceException("{parameters.could.not.serialize}");
@@ -320,13 +334,7 @@ public class NotificationManager implements NotificationService {
 
             var savedNotification = notificationDao.save(notification);
 
-            PushTaskDto taskDto = new PushTaskDto(
-                    savedNotification.getId(),
-                    savedNotification.getDestinationPushToken(),
-                    finalTitle,
-                    finalBody,
-                    finalDataPayload
-            );
+            PushTaskDto taskDto = new PushTaskDto(savedNotification.getId());
 
 
             executeDispatch(
@@ -337,6 +345,12 @@ public class NotificationManager implements NotificationService {
             );
         }
 
+    }
+
+    @Override
+    @Transactional
+    public void preparePushRecipients(Collection<UUID> recipientIds) {
+        pushTokenMutationLock.lockUsers(recipientIds);
     }
 
     @Override
@@ -399,19 +413,6 @@ public class NotificationManager implements NotificationService {
 
         }
     }
-
-/*
-    private Locale determineLocale(String requestedLanguage, User recipient){
-        if (requestedLanguage != null && !requestedLanguage.isBlank()){
-            log.debug("Users requested language for notification: {}", requestedLanguage);
-            return Locale.forLanguageTag(requestedLanguage);
-        }
-
-        log.debug("No language specified for notification. Using default language for user: {}", recipient.get());
-        return null;
-    }
-
- */
 
     @Override
     @Transactional

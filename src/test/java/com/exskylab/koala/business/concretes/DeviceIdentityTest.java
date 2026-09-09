@@ -3,6 +3,7 @@ package com.exskylab.koala.business.concretes;
 import com.exskylab.koala.core.helpers.DeviceIdentity;
 import com.exskylab.koala.core.helpers.ClientPlatform;
 import com.exskylab.koala.core.exceptions.ValidationException;
+import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.dataAccess.DeviceDao;
 import com.exskylab.koala.entities.Device;
 import com.exskylab.koala.entities.User;
@@ -24,14 +25,17 @@ class DeviceIdentityTest {
 
     private DeviceDao deviceDao;
     private DeviceManager deviceManager;
+    private SecurityService securityService;
     private User user;
 
     @BeforeEach
     void setUp() {
         deviceDao = mock(DeviceDao.class);
-        deviceManager = new DeviceManager(deviceDao, mock(com.exskylab.koala.business.abstracts.SecurityService.class));
+        securityService = mock(SecurityService.class);
+        deviceManager = new DeviceManager(deviceDao, securityService, mock(PushTokenDeliveryLock.class));
         user = new User();
         user.setId(UUID.randomUUID());
+        when(securityService.isActiveUser(user.getId())).thenReturn(true);
 
         when(deviceDao.save(any())).thenAnswer(i -> {
             Device d = i.getArgument(0);
@@ -40,6 +44,17 @@ class DeviceIdentityTest {
             }
             return d;
         });
+    }
+
+    @Test
+    void deletedAccountCannotCreateANewDeviceFromAStaleUserObject() {
+        when(securityService.isActiveUser(user.getId())).thenReturn(false);
+
+        assertThrows(com.exskylab.koala.core.exceptions.ResourceNotFoundException.class,
+                () -> deviceManager.findOrCreateDevice(user, "1.1.1.1", DART_UA, PHONE_A));
+
+        verify(deviceDao, never()).save(any());
+        verify(securityService).isActiveUser(user.getId());
     }
 
     @Test

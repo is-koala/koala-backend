@@ -23,6 +23,7 @@ import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -108,19 +109,22 @@ public class CompanyFollowManager implements CompanyFollowService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public void notifyFollowers(Job job) {
         if (!properties.isEnabled() || job.getCompany() == null) {
             return;
         }
 
         UUID creatorId = job.getCreator() == null ? null : job.getCreator().getId();
+        List<CompanyFollow> followers = companyFollowDao.findAllByCompanyId(job.getCompany().getId()).stream()
+                .filter(follow -> !follow.getFollower().getId().equals(creatorId))
+                .toList();
+        notificationService.preparePushRecipients(followers.stream()
+                .map(follow -> follow.getFollower().getId())
+                .toList());
 
-        for (CompanyFollow follow : companyFollowDao.findAllByCompanyId(job.getCompany().getId())) {
+        for (CompanyFollow follow : followers) {
             User follower = follow.getFollower();
-            if (follower.getId().equals(creatorId)) {
-                continue;
-            }
 
             try {
                 SendPushToUserDto push = new SendPushToUserDto();

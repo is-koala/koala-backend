@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-09-02-01-push-delivery-state" author="koala">
+        <modifyDataType tableName="notifications"
+                        columnName="destination_push_token"
+                        newDataType="VARCHAR(512)"/>
+        <addColumn tableName="notifications">
+            <column name="destination_device_id" type="UUID"/>
+            <column name="push_attempt_count" type="INTEGER" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="push_data_payload" type="TEXT"/>
+            <column name="push_next_attempt_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="push_processing_started_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="push_processing_claim_id" type="UUID"/>
+        </addColumn>
+        <addForeignKeyConstraint baseTableName="notifications"
+                                 baseColumnNames="destination_device_id"
+                                 constraintName="fk_notifications_destination_device"
+                                 referencedTableName="devices"
+                                 referencedColumnNames="id"/>
+        <sql>UPDATE notifications SET destination_push_token = NULL WHERE channel = 'PUSH';</sql>
+        <rollback>
+            <dropForeignKeyConstraint baseTableName="notifications"
+                                      constraintName="fk_notifications_destination_device"/>
+            <dropColumn tableName="notifications" columnName="push_processing_claim_id"/>
+            <dropColumn tableName="notifications" columnName="push_processing_started_at"/>
+            <dropColumn tableName="notifications" columnName="push_next_attempt_at"/>
+            <dropColumn tableName="notifications" columnName="push_data_payload"/>
+            <dropColumn tableName="notifications" columnName="push_attempt_count"/>
+            <dropColumn tableName="notifications" columnName="destination_device_id"/>
+            <modifyDataType tableName="notifications"
+                            columnName="destination_push_token"
+                            newDataType="VARCHAR(255)"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-09-02-02-active-push-token-owner" author="koala">
+        <sql splitStatements="false"><![CDATA[
+            CREATE OR REPLACE FUNCTION coordinate_legacy_push_token_update()
+            RETURNS trigger
+            LANGUAGE plpgsql
+            AS $$
+            DECLARE
+                lock_key text;
+            BEGIN
+                IF NEW.is_deleted = false
+                    AND (NEW.user_id IS DISTINCT FROM OLD.user_id
+                    OR NEW.type IS DISTINCT FROM OLD.type
+                    OR NEW.name IS DISTINCT FROM OLD.name
+                    OR NEW.client_device_id IS DISTINCT FROM OLD.client_device_id
+                    OR NEW.first_seen_at IS DISTINCT FROM OLD.first_seen_at
+                    OR NEW.last_seen_at IS DISTINCT FROM OLD.last_seen_at
+                    OR NEW.is_deleted IS DISTINCT FROM OLD.is_deleted
+                    OR NEW.deleted_at IS DISTINCT FROM OLD.deleted_at
+                    OR NEW.deleted_by_id IS DISTINCT FROM OLD.deleted_by_id) THEN
+                    NEW.push_token := OLD.push_token;
+                    RETURN NEW;
+                END IF;
+
+                PERFORM pg_advisory_xact_lock(
+                    hashtextextended('push-token:mutations'::text, 0));
+
+                FOR lock_key IN
+                    SELECT DISTINCT candidate
+                      FROM (VALUES
+                          (CASE WHEN OLD.push_token IS NULL THEN NULL
+                                 ELSE 'push-token:value:' || OLD.push_token END),
+                          (CASE WHEN NEW.push_token IS NULL THEN NULL
+                                 ELSE 'push-token:value:' || NEW.push_token END)
+                      ) AS token_locks(candidate)
+                     WHERE candidate IS NOT NULL
+                     ORDER BY candidate
+                LOOP
+                    PERFORM pg_advisory_xact_lock(hashtextextended(lock_key::text, 0));
+                END LOOP;
+
+                IF NEW.push_token IS NOT NULL THEN
+                    UPDATE devices
+                       SET push_token = NULL,
+                           updated_at = now()
+                     WHERE id <> NEW.id
+                       AND is_deleted = false
+                       AND push_token = NEW.push_token;
+                END IF;
+                RETURN NEW;
+            END;
+            $$;
+        ]]></sql>
+        <sql><![CDATA[
+            CREATE TRIGGER trg_devices_coordinate_legacy_push_token_update
+            BEFORE UPDATE OF push_token
+            ON devices
+            FOR EACH ROW
+            WHEN (NEW.push_token IS DISTINCT FROM OLD.push_token)
+            EXECUTE FUNCTION coordinate_legacy_push_token_update();
+        ]]></sql>
+        <sql splitStatements="true" endDelimiter=";"><![CDATA[
+            UPDATE devices
+               SET push_token = NULL,
+                   updated_at = now()
+             WHERE push_token IS NOT NULL
+               AND (is_deleted = true OR btrim(push_token) = '');
+
+            WITH duplicate_tokens AS (
+                SELECT push_token
+                  FROM devices
+                 WHERE is_deleted = false
+                   AND push_token IS NOT NULL
+                 GROUP BY push_token
+                HAVING count(*) > 1
+            )
+            UPDATE devices device
+               SET push_token = NULL,
+                   updated_at = now()
+              FROM duplicate_tokens duplicate
+             WHERE device.is_deleted = false
+               AND device.push_token = duplicate.push_token;
+
+            CREATE UNIQUE INDEX uk_devices_push_token_active
+                ON devices (push_token)
+                WHERE is_deleted = false
+                  AND push_token IS NOT NULL;
+        ]]></sql>
+        <rollback>
+            <sql>DROP TRIGGER IF EXISTS trg_devices_coordinate_legacy_push_token_update ON devices;</sql>
+            <sql>DROP FUNCTION IF EXISTS coordinate_legacy_push_token_update();</sql>
+            <sql>DROP INDEX IF EXISTS uk_devices_push_token_active;</sql>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-09-02-03-scrub-legacy-push-token-snapshots" author="koala">
+        <sql splitStatements="false"><![CDATA[
+            CREATE OR REPLACE FUNCTION scrub_push_notification_token_snapshot()
+            RETURNS trigger
+            LANGUAGE plpgsql
+            AS $$
+            BEGIN
+                IF NEW.channel = 'PUSH' THEN
+                    NEW.destination_push_token := NULL;
+                END IF;
+                RETURN NEW;
+            END;
+            $$;
+        ]]></sql>
+        <sql><![CDATA[
+            CREATE TRIGGER trg_notifications_scrub_push_token_snapshot
+            BEFORE INSERT OR UPDATE OF channel, destination_push_token
+            ON notifications
+            FOR EACH ROW
+            EXECUTE FUNCTION scrub_push_notification_token_snapshot();
+        ]]></sql>
+        <sql>UPDATE notifications SET destination_push_token = NULL WHERE channel = 'PUSH';</sql>
+        <rollback>
+            <sql>DROP TRIGGER IF EXISTS trg_notifications_scrub_push_token_snapshot ON notifications;</sql>
+            <sql>DROP FUNCTION IF EXISTS scrub_push_notification_token_snapshot();</sql>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-09-02-04-due-push-delivery-index" author="koala">
+        <sql><![CDATA[
+            CREATE INDEX idx_notifications_due_push_delivery
+                ON notifications (push_next_attempt_at, id)
+                WHERE is_deleted = false
+                  AND channel = 'PUSH'
+                  AND status = 'QUEUED'
+                  AND (push_attempt_count > 0
+                       OR failure_reason = 'TOKEN_SERIALIZATION_BUSY');
+        ]]></sql>
+        <rollback>
+            <sql>DROP INDEX IF EXISTS idx_notifications_due_push_delivery;</sql>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-09-02-05-stale-push-delivery-index" author="koala">
+        <sql><![CDATA[
+            CREATE INDEX idx_notifications_stale_push_delivery
+                ON notifications (push_processing_started_at, id)
+                WHERE is_deleted = false
+                  AND channel = 'PUSH'
+                  AND status = 'PROCESSING';
+        ]]></sql>
+        <rollback>
+            <sql>DROP INDEX IF EXISTS idx_notifications_stale_push_delivery;</sql>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-09-02-06-coordinate-legacy-account-anonymization" author="koala">
+        <sql splitStatements="false"><![CDATA[
+            CREATE OR REPLACE FUNCTION coordinate_legacy_account_anonymization_start()
+            RETURNS trigger
+            LANGUAGE plpgsql
+            AS $$
+            DECLARE
+                subject_id uuid;
+            BEGIN
+                IF NEW.step <> 'STARTED' THEN
+                    RETURN NEW;
+                END IF;
+
+                SELECT coalesce(request.subject_id, request.user_id)
+                  INTO subject_id
+                  FROM account_deletion_requests request
+                 WHERE request.id = NEW.request_id;
+
+                IF subject_id IS NULL THEN
+                    RETURN NEW;
+                END IF;
+
+                PERFORM pg_advisory_xact_lock(
+                    hashtextextended('push-token:mutations'::text, 0));
+                PERFORM pg_advisory_xact_lock(
+                    hashtextextended(('push-token:user:' || subject_id::text)::text, 0));
+                RETURN NEW;
+            END;
+            $$;
+        ]]></sql>
+        <sql><![CDATA[
+            CREATE TRIGGER trg_account_anonymization_coordinate_legacy_push
+            BEFORE INSERT
+            ON account_anonymization_audit
+            FOR EACH ROW
+            EXECUTE FUNCTION coordinate_legacy_account_anonymization_start();
+        ]]></sql>
+        <rollback>
+            <sql>DROP TRIGGER IF EXISTS trg_account_anonymization_coordinate_legacy_push ON account_anonymization_audit;</sql>
+            <sql>DROP FUNCTION IF EXISTS coordinate_legacy_account_anonymization_start();</sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

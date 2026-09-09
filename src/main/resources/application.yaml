@@ -149,6 +149,22 @@ email:
     mode: ${MAIL_DELIVERY_MODE:ALLOWLIST}
     allowed-recipients: ${MAIL_ALLOWED_RECIPIENTS:}
 
+push:
+  firebase:
+    enabled: ${FIREBASE_PUSH_ENABLED:false}
+    project-id: ${FIREBASE_PROJECT_ID:}
+    connect-timeout: ${FIREBASE_CONNECT_TIMEOUT:5s}
+    read-timeout: ${FIREBASE_READ_TIMEOUT:10s}
+    write-timeout: ${FIREBASE_WRITE_TIMEOUT:10s}
+  delivery:
+    max-attempts: ${PUSH_MAX_ATTEMPTS:3}
+    initial-backoff: ${PUSH_INITIAL_BACKOFF:1m}
+    max-backoff: ${PUSH_MAX_BACKOFF:15m}
+    max-provider-deferral: ${PUSH_MAX_PROVIDER_DEFERRAL:24h}
+    claim-timeout: ${PUSH_CLAIM_TIMEOUT:10m}
+    batch-size: ${PUSH_BATCH_SIZE:100}
+    fixed-delay: ${PUSH_DELIVERY_FIXED_DELAY:30s}
+
 jwt:
   secret: ${JWT_SECRET:}
   access-token:

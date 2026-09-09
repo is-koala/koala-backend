@@ -279,6 +279,7 @@ class WorkerToolsRulesTest {
         jobAlertManager.notifyMatching(job);
 
         ArgumentCaptor<SendPushToUserDto> captor = ArgumentCaptor.forClass(SendPushToUserDto.class);
+        verify(alertNotifications).preparePushRecipients(List.of(me.getId()));
         verify(alertNotifications).sendPushToUser(captor.capture(), any(), anyBoolean());
 
         assertEquals(NotificationCategory.JOB_ALERTS, captor.getValue().getCategory());

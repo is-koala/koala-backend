@@ -46,8 +46,27 @@ public class Notification extends BaseEntity{
     @Column(name = "destination_email")
     private String destinationEmail;
 
-    @Column(name = "destination_push_token")
+    @Column(name = "destination_push_token", length = 512)
     private String destinationPushToken;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "destination_device_id")
+    private Device destinationDevice;
+
+    @Column(name = "push_attempt_count", nullable = false)
+    private int pushAttemptCount;
+
+    @Column(name = "push_data_payload", columnDefinition = "TEXT")
+    private String pushDataPayload;
+
+    @Column(name = "push_next_attempt_at")
+    private Instant pushNextAttemptAt;
+
+    @Column(name = "push_processing_started_at")
+    private Instant pushProcessingStartedAt;
+
+    @Column(name = "push_processing_claim_id")
+    private UUID pushProcessingClaimId;
 
     @Column(name = "subject")
     private String subject;
@@ -85,5 +104,13 @@ public class Notification extends BaseEntity{
 
     @Column(name = "failure_reason")
     private String failureReason;
+
+    @PrePersist
+    @PreUpdate
+    void removePushTokenSnapshot() {
+        if (channel == NotificationChannel.PUSH) {
+            destinationPushToken = null;
+        }
+    }
 
 }
