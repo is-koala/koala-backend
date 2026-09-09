@@ -1063,7 +1063,12 @@ commit dışındaki her sonuçta nesneyi siliyor. Kural testle sabit (`anObjectW
 ve mekanizma çıkarıldığında kırmızıya döndüğü ölçüldü.
 
 **DTO depo anahtarı taşımıyor, indirme ayrı uçtan.** `DisputeEvidenceDto` yalnız kimlik, yükleyen, ad, tip,
-boyut, SHA-256 ve zaman taşıyor. İndirme `GET /disputes/{id}/evidence/{evidenceId}/download` (taraflar) ve
+boyut, SHA-256 ve zaman taşıyor. Personel liste ucu kullanıcı sözleşmesini genişletmez; ayrı
+`StaffDisputeEvidenceDto` döndürür. `AssignmentParticipants` yükleme kapısında yalnız atamanın taraflarını kabul
+ettiği için kanıttaki yükleyen atamanın
+işçisiyse `WORKER`, değilse `EMPLOYER` olur; böylece sonradan şirket irtibat listesinden çıkarılan bir yükleyenin
+tarihsel tarafı da değişmez. İndirme
+`GET /disputes/{id}/evidence/{evidenceId}/download` (taraflar) ve
 `GET /admin/disputes/{id}/evidence/{evidenceId}/download` (personel, `dispute.resolve`) uçlarından; depo imzalı
 adres destekliyorsa `storage.signed-url-minutes` (3 dk) ömürlü imzalı adrese 302, desteklemiyorsa baytlar
 akıtılıyor. İki yolda da `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff` ve

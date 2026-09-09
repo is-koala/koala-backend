@@ -69,7 +69,8 @@ class DisputeResolutionAuthorizationTest {
                 jobAssignmentService, mock(UserService.class),
                 securityService, mock(AssignmentParticipants.class), new StaffPayoutManager(payoutService),
                 staffAccountService,
-                mock(ActivityNotificationService.class), new PageableSanitizer());
+                mock(ActivityNotificationService.class), new PageableSanitizer(),
+                mock(com.exskylab.koala.core.mappers.DisputeMapper.class));
 
         JobAssignment assignment = new JobAssignment();
         assignment.setId(assignmentId);

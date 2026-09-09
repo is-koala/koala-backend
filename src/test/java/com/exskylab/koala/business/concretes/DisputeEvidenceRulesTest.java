@@ -90,7 +90,8 @@ class DisputeEvidenceRulesTest {
                 securityService, participants,
                 new StaffPayoutManager(mock(PayoutService.class)),
                 mock(com.exskylab.koala.business.abstracts.StaffAccountService.class),
-                mock(ActivityNotificationService.class), new PageableSanitizer());
+                mock(ActivityNotificationService.class), new PageableSanitizer(),
+                mock(com.exskylab.koala.core.mappers.DisputeMapper.class));
 
         when(storageService.uploadFile(any(), any(), any(), eq(FolderType.DISPUTE_EVIDENCE))).thenReturn(STORED_KEY);
         when(disputeEvidenceDao.save(any())).thenAnswer(invocation -> {
@@ -170,6 +171,7 @@ class DisputeEvidenceRulesTest {
         DisputeEvidence evidence = new DisputeEvidence();
         evidence.setId(UUID.randomUUID());
         evidence.setStorageKey(STORED_KEY);
+        evidence.setUploadedBy(worker);
         when(disputeEvidenceDao.findByIdAndDisputeId(evidence.getId(), dispute.getId()))
                 .thenReturn(Optional.of(evidence));
         when(securityService.getAuthenticatedUserId()).thenReturn(stranger.getId());
@@ -299,6 +301,7 @@ class DisputeEvidenceRulesTest {
         DisputeEvidence evidence = new DisputeEvidence();
         evidence.setId(UUID.randomUUID());
         evidence.setStorageKey(STORED_KEY);
+        evidence.setUploadedBy(worker);
         when(disputeEvidenceDao.findAllByDisputeIdOrderByCreatedAtAsc(dispute.getId()))
                 .thenReturn(List.of(evidence));
         when(disputeEvidenceDao.findByIdAndDisputeId(evidence.getId(), dispute.getId()))

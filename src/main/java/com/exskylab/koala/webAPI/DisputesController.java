@@ -16,7 +16,7 @@ import com.exskylab.koala.core.constants.DisputeMessages;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.dispute.request.ResolveDisputeDto;
 import com.exskylab.koala.core.dtos.dispute.response.DisputeDto;
-import com.exskylab.koala.core.dtos.dispute.response.DisputeEvidenceDto;
+import com.exskylab.koala.core.dtos.dispute.response.StaffDisputeEvidenceDto;
 import com.exskylab.koala.core.helpers.SignedFileResponses;
 import com.exskylab.koala.core.mappers.DisputeMapper;
 import com.exskylab.koala.entities.DisputeEvidence;
@@ -97,9 +97,9 @@ public class DisputesController {
     })
     @RequiresPermission(StaffPermission.DISPUTE_RESOLVE)
     @GetMapping("/{disputeId}/evidence")
-    public ResponseEntity<SuccessDataResult<List<DisputeEvidenceDto>>> evidence(@PathVariable UUID disputeId) {
+    public ResponseEntity<SuccessDataResult<List<StaffDisputeEvidenceDto>>> evidence(@PathVariable UUID disputeId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
-                disputeMapper.toEvidenceDtoList(disputeService.getEvidenceForStaff(disputeId)),
+                disputeService.getEvidenceForStaff(disputeId),
                 DisputeMessages.EVIDENCE_LISTED, HttpStatus.OK));
     }
 

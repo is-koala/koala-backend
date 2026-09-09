@@ -47,7 +47,9 @@ class DisputeEvidenceIT extends AbstractStaffIntegrationTest {
 
     private final UUID employerId = UUID.randomUUID();
     private final UUID workerId = UUID.randomUUID();
+    private final UUID companyContactId = UUID.randomUUID();
     private final UUID operatorId = UUID.randomUUID();
+    private final UUID companyId = UUID.randomUUID();
     private final UUID categoryId = UUID.randomUUID();
     private final UUID jobId = UUID.randomUUID();
     private final UUID assignmentId = UUID.randomUUID();
@@ -58,7 +60,16 @@ class DisputeEvidenceIT extends AbstractStaffIntegrationTest {
         jdbc.update("delete from admin_audit_entries");
         insertUser(employerId);
         insertUser(workerId);
+        insertUser(companyContactId);
         insertUser(operatorId);
+
+        jdbc.update("insert into companies (id, created_at, is_deleted, name, tax_number, email, approval_status) "
+                        + "values (?, now(), false, ?, ?, ?, 'APPROVED')",
+                companyId, "Kanıt Şirketi " + companyId, String.valueOf(Math.abs(companyId.hashCode())),
+                "evidence-company-" + companyId + "@example.com");
+        jdbc.update("insert into company_contacts (id, created_at, is_deleted, company_id, user_id, role) "
+                        + "values (?, now(), false, ?, ?, 'STAFF')",
+                UUID.randomUUID(), companyId, companyContactId);
 
         jdbc.update("insert into job_categories (id, name, code, requires_insurance) values (?, ?, ?, false)",
                 categoryId, "Kanıt", "EVIDENCE_" + categoryId);
@@ -87,14 +98,18 @@ class DisputeEvidenceIT extends AbstractStaffIntegrationTest {
         jdbc.update("delete from job_assignments where id = ?", assignmentId);
         jdbc.update("delete from jobs where id = ?", jobId);
         jdbc.update("delete from job_categories where id = ?", categoryId);
-        jdbc.update("delete from notifications where recipient_id in (?, ?, ?)",
-                employerId, workerId, operatorId);
-        jdbc.update("delete from authorities where user_id in (?, ?, ?)", employerId, workerId, operatorId);
+        jdbc.update("delete from company_contacts where company_id = ?", companyId);
+        jdbc.update("delete from companies where id = ?", companyId);
+        jdbc.update("delete from notifications where recipient_id in (?, ?, ?, ?)",
+                employerId, workerId, companyContactId, operatorId);
+        jdbc.update("delete from authorities where user_id in (?, ?, ?, ?)",
+                employerId, workerId, companyContactId, operatorId);
         jdbc.update("delete from admin_audit_entries");
         jdbc.update("delete from staff_member_roles where staff_member_id in "
                 + "(select id from staff_members where email like 'evidence-%@iskoala.com')");
         jdbc.update("delete from staff_members where email like 'evidence-%@iskoala.com'");
-        jdbc.update("delete from users where id in (?, ?, ?)", employerId, workerId, operatorId);
+        jdbc.update("delete from users where id in (?, ?, ?, ?)",
+                employerId, workerId, companyContactId, operatorId);
     }
 
     @Test
@@ -127,6 +142,7 @@ class DisputeEvidenceIT extends AbstractStaffIntegrationTest {
         mockMvc.perform(get("/disputes/{id}/evidence", disputeId).with(user(principal(employerId, Role.ROLE_USER))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].uploaderSide").doesNotExist())
                 .andExpect(jsonPath("$.data[0].storageKey").doesNotExist());
 
         mockMvc.perform(get("/admin/disputes/{id}/evidence", disputeId)
@@ -135,7 +151,22 @@ class DisputeEvidenceIT extends AbstractStaffIntegrationTest {
                                 "Uyuşmazlık Uzmanı", "DISPUTE_HANDLER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].uploaderSide").value("WORKER"))
                 .andExpect(jsonPath("$.data[0].storageKey").doesNotExist());
+    }
+
+    @Test
+    void staffSeesAFormerCompanyContactUploaderAsTheEmployerSide() throws Exception {
+        jdbc.update("update jobs set company_id = ?, employer_type = 'COMPANY' where id = ?", companyId, jobId);
+        attachAs(companyContactId).andExpect(status().isCreated());
+        jdbc.update("delete from company_contacts where company_id = ? and user_id = ?", companyId, companyContactId);
+
+        mockMvc.perform(get("/admin/disputes/{id}/evidence", disputeId)
+                        .header("Authorization", "Bearer " + staffTokenFor(
+                                "evidence-" + UUID.randomUUID() + "@iskoala.com",
+                                "Uyuşmazlık Uzmanı", "DISPUTE_HANDLER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].uploaderSide").value("EMPLOYER"));
     }
 
     @Test

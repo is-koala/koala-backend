@@ -15,6 +15,8 @@ import com.exskylab.koala.core.security.StaffAuditContext;
 import com.exskylab.koala.core.helpers.Checksums;
 import com.exskylab.koala.core.helpers.Concealment;
 import com.exskylab.koala.core.helpers.UploadValidator;
+import com.exskylab.koala.core.dtos.dispute.response.StaffDisputeEvidenceDto;
+import com.exskylab.koala.core.mappers.DisputeMapper;
 import com.exskylab.koala.core.properties.UploadProperties;
 import com.exskylab.koala.core.utilities.storage.FolderType;
 import com.exskylab.koala.core.utilities.storage.StorageService;
@@ -67,6 +69,7 @@ public class DisputeManager implements DisputeService {
     private final StaffPayoutService staffPayoutService;
     private final StaffAccountService staffAccountService;
     private final ActivityNotificationService activityNotificationService;
+    private final DisputeMapper disputeMapper;
 
     public DisputeManager(DisputeDao disputeDao, DisputeEvidenceDao disputeEvidenceDao, StorageService storageService,
                           UploadValidator uploadValidator, UploadProperties uploadProperties,
@@ -74,7 +77,7 @@ public class DisputeManager implements DisputeService {
                           SecurityService securityService, AssignmentParticipants participants,
                           StaffPayoutService staffPayoutService, StaffAccountService staffAccountService,
                           ActivityNotificationService activityNotificationService,
-                                PageableSanitizer pageableSanitizer) {
+                          PageableSanitizer pageableSanitizer, DisputeMapper disputeMapper) {
         this.disputeDao = disputeDao;
         this.disputeEvidenceDao = disputeEvidenceDao;
         this.storageService = storageService;
@@ -87,7 +90,8 @@ public class DisputeManager implements DisputeService {
         this.staffPayoutService = staffPayoutService;
         this.staffAccountService = staffAccountService;
         this.activityNotificationService = activityNotificationService;
-            this.pageableSanitizer = pageableSanitizer;
+        this.pageableSanitizer = pageableSanitizer;
+        this.disputeMapper = disputeMapper;
     }
 
     @Override
@@ -296,11 +300,15 @@ public class DisputeManager implements DisputeService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<DisputeEvidence> getEvidenceForStaff(UUID disputeId) {
-        if (!disputeDao.existsById(disputeId)) {
-            throw new ResourceNotFoundException(DisputeMessages.NOT_FOUND);
-        }
-        return disputeEvidenceDao.findAllByDisputeIdOrderByCreatedAtAsc(disputeId);
+    public List<StaffDisputeEvidenceDto> getEvidenceForStaff(UUID disputeId) {
+        Dispute dispute = disputeDao.findById(disputeId)
+                .orElseThrow(() -> new ResourceNotFoundException(DisputeMessages.NOT_FOUND));
+        JobAssignment assignment = jobAssignmentService.getDetailedById(dispute.getJobAssignment().getId());
+
+        return disputeEvidenceDao.findAllByDisputeIdOrderByCreatedAtAsc(disputeId).stream()
+                .map(evidence -> disputeMapper.toStaffEvidenceDto(evidence,
+                        evidenceUploaderSide(assignment, evidence.getUploadedBy().getId())))
+                .toList();
     }
 
     @Override
@@ -308,6 +316,12 @@ public class DisputeManager implements DisputeService {
     public DisputeEvidence getEvidenceForStaffDownload(UUID disputeId, UUID evidenceId) {
         return disputeEvidenceDao.findByIdAndDisputeId(evidenceId, disputeId)
                 .orElseThrow(() -> new ResourceNotFoundException(DisputeMessages.EVIDENCE_NOT_FOUND));
+    }
+
+    private EvidenceUploaderSide evidenceUploaderSide(JobAssignment assignment, UUID uploaderId) {
+        return assignment.getWorker().getId().equals(uploaderId)
+                ? EvidenceUploaderSide.WORKER
+                : EvidenceUploaderSide.EMPLOYER;
     }
 
     private byte[] contentOf(MultipartFile file, UUID actorId) {
