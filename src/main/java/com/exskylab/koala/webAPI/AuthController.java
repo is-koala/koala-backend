@@ -55,6 +55,10 @@ public class AuthController {
             @ApiResponse(responseCode = "400", description = "E-posta biçimi geçersiz",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "429", description = "Çok fazla deneme yapıldı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "413", description = "İstek gövdesi 16 KiB sınırını aşıyor",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "426", description = "İstemci sürümü desteklenen asgari sürümün altında",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping("/start-registration")
@@ -74,6 +78,10 @@ public class AuthController {
             @ApiResponse(responseCode = "400", description = "Token geçersiz ya da süresi dolmuş",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "429", description = "Çok fazla deneme yapıldı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "413", description = "İstek gövdesi 16 KiB sınırını aşıyor",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "426", description = "İstemci sürümü desteklenen asgari sürümün altında",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping("/verify-registration-token")
@@ -96,7 +104,15 @@ public class AuthController {
             @ApiResponse(responseCode = "201", description = "Kayıt tamamlandı, oturum açıldı"),
             @ApiResponse(responseCode = "400", description = "Zorunlu rıza eksik ya da alan doğrulaması başarısız",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "401", description = "Parola belirleme token geçersiz ya da süresi dolmuş",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "Bekleyen kayıt bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "429", description = "Çok fazla deneme yapıldı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "413", description = "İstek gövdesi 16 KiB sınırını aşıyor",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "426", description = "İstemci sürümü desteklenen asgari sürümün altında",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping("/complete-registration")
@@ -124,9 +140,15 @@ public class AuthController {
             description = "Erişim ve yenileme token üretir. Web çağrılarında X-Client-Platform: web ve geçerli X-Device-Id zorunludur; cihaz yalnız bu kimlikle eşlenir. Eski mobil istemcilerin User-Agent geçiş davranışı korunur.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Giriş başarılı"),
+            @ApiResponse(responseCode = "400", description = "İstek alanları ya da web cihaz kimliği geçersiz",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "401", description = "E-posta ya da parola hatalı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "429", description = "Çok fazla deneme yapıldı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "413", description = "İstek gövdesi 16 KiB sınırını aşıyor",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "426", description = "İstemci sürümü desteklenen asgari sürümün altında",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping("/login")
@@ -151,7 +173,15 @@ public class AuthController {
             description = "Süresi dolmuş bir erişim token ile de çağrılabilir; yetkiyi veren şey yenileme token, oturumun aktifliği ve cihaz eşleşmesidir. Web çağrısı login ile aynı X-Device-Id değerini taşır; eksik veya geçersiz değer isteği reddeder, değişmiş değer oturumu geçersiz kılar. Sahte imzalı token yine reddedilir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Yeni token çifti üretildi"),
+            @ApiResponse(responseCode = "400", description = "Yenileme token ya da web cihaz kimliği geçersiz",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "401", description = "Yenileme token geçersiz, oturum kapatılmış ya da cihaz eşleşmiyor",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "429", description = "Çok fazla deneme yapıldı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "413", description = "İstek gövdesi 16 KiB sınırını aşıyor",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "426", description = "İstemci sürümü desteklenen asgari sürümün altında",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping("/refresh-token")
@@ -174,7 +204,13 @@ public class AuthController {
     @Operation(summary = "Oturumu kapat",
             description = "İstek atan oturumu sonlandırır; kullanıcının diğer cihazları etkilenmez.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Oturum kapatıldı")
+            @ApiResponse(responseCode = "200", description = "Oturum kapatıldı"),
+            @ApiResponse(responseCode = "404", description = "Etkin oturum bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "429", description = "Çok fazla deneme yapıldı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "426", description = "İstemci sürümü desteklenen asgari sürümün altında",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping("/logout")
     public ResponseEntity<SuccessResult> logout(HttpServletRequest request){
@@ -194,7 +230,13 @@ public class AuthController {
             description = "Adres kayıtlı olmasa da aynı yanıt döner.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Adres kayıtlıysa sıfırlama e-postası gönderildi"),
+            @ApiResponse(responseCode = "400", description = "E-posta biçimi geçersiz",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "429", description = "Çok fazla deneme yapıldı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "413", description = "İstek gövdesi 16 KiB sınırını aşıyor",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "426", description = "İstemci sürümü desteklenen asgari sürümün altında",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping("/forgot-password")
@@ -211,6 +253,12 @@ public class AuthController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Parola güncellendi"),
             @ApiResponse(responseCode = "400", description = "Token geçersiz ya da süresi dolmuş",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "429", description = "Çok fazla deneme yapıldı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "413", description = "İstek gövdesi 16 KiB sınırını aşıyor",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "426", description = "İstemci sürümü desteklenen asgari sürümün altında",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping("/reset-password")

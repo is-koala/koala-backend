@@ -58,6 +58,49 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void authEndpointsDocumentTheirSpecificFailures() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath("$.paths['/auth/start-registration'].post.responses.400").exists())
+                .andExpect(jsonPath("$.paths['/auth/start-registration'].post.responses.429").exists())
+                .andExpect(jsonPath("$.paths['/auth/start-registration'].post.responses.413").exists())
+                .andExpect(jsonPath("$.paths['/auth/start-registration'].post.responses.426").exists())
+                .andExpect(jsonPath("$.paths['/auth/verify-registration-token'].post.responses.400").exists())
+                .andExpect(jsonPath("$.paths['/auth/verify-registration-token'].post.responses.429").exists())
+                .andExpect(jsonPath("$.paths['/auth/verify-registration-token'].post.responses.413").exists())
+                .andExpect(jsonPath("$.paths['/auth/verify-registration-token'].post.responses.426").exists())
+                .andExpect(jsonPath("$.paths['/auth/verify-registration-token'].post.responses.401").doesNotExist())
+                .andExpect(jsonPath("$.paths['/auth/verify-registration-token'].post.responses.404").doesNotExist())
+                .andExpect(jsonPath("$.paths['/auth/complete-registration'].post.responses.400").exists())
+                .andExpect(jsonPath("$.paths['/auth/complete-registration'].post.responses.401").exists())
+                .andExpect(jsonPath("$.paths['/auth/complete-registration'].post.responses.404").exists())
+                .andExpect(jsonPath("$.paths['/auth/complete-registration'].post.responses.429").exists())
+                .andExpect(jsonPath("$.paths['/auth/complete-registration'].post.responses.413").exists())
+                .andExpect(jsonPath("$.paths['/auth/complete-registration'].post.responses.426").exists())
+                .andExpect(jsonPath("$.paths['/auth/login'].post.responses.400").exists())
+                .andExpect(jsonPath("$.paths['/auth/login'].post.responses.401").exists())
+                .andExpect(jsonPath("$.paths['/auth/login'].post.responses.429").exists())
+                .andExpect(jsonPath("$.paths['/auth/login'].post.responses.413").exists())
+                .andExpect(jsonPath("$.paths['/auth/login'].post.responses.426").exists())
+                .andExpect(jsonPath("$.paths['/auth/refresh-token'].post.responses.400").exists())
+                .andExpect(jsonPath("$.paths['/auth/refresh-token'].post.responses.401").exists())
+                .andExpect(jsonPath("$.paths['/auth/refresh-token'].post.responses.429").exists())
+                .andExpect(jsonPath("$.paths['/auth/refresh-token'].post.responses.404").doesNotExist())
+                .andExpect(jsonPath("$.paths['/auth/refresh-token'].post.responses.413").exists())
+                .andExpect(jsonPath("$.paths['/auth/refresh-token'].post.responses.426").exists())
+                .andExpect(jsonPath("$.paths['/auth/logout'].post.responses.404").exists())
+                .andExpect(jsonPath("$.paths['/auth/logout'].post.responses.429").exists())
+                .andExpect(jsonPath("$.paths['/auth/logout'].post.responses.426").exists())
+                .andExpect(jsonPath("$.paths['/auth/forgot-password'].post.responses.400").exists())
+                .andExpect(jsonPath("$.paths['/auth/forgot-password'].post.responses.429").exists())
+                .andExpect(jsonPath("$.paths['/auth/forgot-password'].post.responses.413").exists())
+                .andExpect(jsonPath("$.paths['/auth/forgot-password'].post.responses.426").exists())
+                .andExpect(jsonPath("$.paths['/auth/reset-password'].post.responses.400").exists())
+                .andExpect(jsonPath("$.paths['/auth/reset-password'].post.responses.429").exists())
+                .andExpect(jsonPath("$.paths['/auth/reset-password'].post.responses.413").exists())
+                .andExpect(jsonPath("$.paths['/auth/reset-password'].post.responses.426").exists());
+    }
+
+    @Test
     void addressWritesExposeOnlyTheCanonicalV2Contract() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(jsonPath("$.components.schemas.AddressWriteV2.properties.countryId").exists())

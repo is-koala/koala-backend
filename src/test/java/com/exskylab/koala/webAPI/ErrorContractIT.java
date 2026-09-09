@@ -1,12 +1,21 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.dataAccess.PendingRegistrationDao;
+import com.exskylab.koala.dataAccess.SessionDao;
+import com.exskylab.koala.entities.PendingRegistration;
+import com.exskylab.koala.entities.Session;
 import com.exskylab.koala.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -20,6 +29,12 @@ class ErrorContractIT extends AbstractIntegrationTest {
 
     @org.springframework.beans.factory.annotation.Value("${jwt.secret}")
     private String jwtSecret;
+
+    @Autowired
+    private SessionDao sessionDao;
+
+    @Autowired
+    private PendingRegistrationDao pendingRegistrationDao;
 
     @Test
     void refreshWithoutAnAuthorizationHeaderIsUnauthorizedNotAServerError() throws Exception {
@@ -69,6 +84,60 @@ class ErrorContractIT extends AbstractIntegrationTest {
                         .content("{\"refreshToken\":\"herhangi-bir-token\"}"))
                 .andExpect(jsonPath("$.errorCode").value(
                         org.hamcrest.Matchers.not("JWT_EXPIRED")));
+    }
+
+    @Test
+    @Transactional
+    void refreshForAClosedSessionIsUnauthorized() throws Exception {
+        Session session = new Session();
+        session.setActive(false);
+        session = sessionDao.saveAndFlush(session);
+
+        mockMvc.perform(post("/auth/refresh-token")
+                        .header("Authorization", "Bearer " + expiredAccessToken(session.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"herhangi-bir-token\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("AUTH_SESSION_NOT_FOUND_OR_INACTIVE"));
+    }
+
+    @Test
+    void anUnknownRegistrationTokenIsBadRequest() throws Exception {
+        mockMvc.perform(post("/auth/verify-registration-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"registrationToken\":\"" + UUID.randomUUID() + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("PENDING_REGISTRATION_NOT_FOUND_BY_TOKEN"));
+    }
+
+    @Test
+    @Transactional
+    void anExpiredRegistrationTokenIsBadRequestAndRemoved() throws Exception {
+        PendingRegistration registration = new PendingRegistration();
+        registration.setToken(UUID.randomUUID());
+        registration.setExpiresAt(Instant.now().minusSeconds(1));
+        registration = pendingRegistrationDao.saveAndFlush(registration);
+
+        mockMvc.perform(post("/auth/verify-registration-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"registrationToken\":\"" + registration.getToken() + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("AUTH_REGISTRATION_TOKEN_EXPIRED"));
+
+        assertFalse(pendingRegistrationDao.existsById(registration.getId()));
+    }
+
+    @Test
+    void anOversizedAuthBodyUsesTheStandardErrorEnvelope() throws Exception {
+        mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("x".repeat(16 * 1024 + 1)))
+                .andExpect(status().isPayloadTooLarge())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.httpStatus").value("413 PAYLOAD_TOO_LARGE"))
+                .andExpect(jsonPath("$.errorCode").value("REQUEST_BODY_TOO_LARGE"))
+                .andExpect(jsonPath("$.errorCategory").value("REQUEST_MALFORMED"))
+                .andExpect(jsonPath("$.path").value("/auth/login"));
     }
 
     @Test
@@ -175,5 +244,16 @@ class ErrorContractIT extends AbstractIntegrationTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.not(
                         org.hamcrest.Matchers.containsString("Exception"))));
+    }
+
+    private String expiredAccessToken(UUID sessionId) {
+        return io.jsonwebtoken.Jwts.builder()
+                .subject(UUID.randomUUID().toString())
+                .id(sessionId.toString())
+                .issuedAt(new java.util.Date(System.currentTimeMillis() - 90_000))
+                .expiration(new java.util.Date(System.currentTimeMillis() - 60_000))
+                .signWith(io.jsonwebtoken.security.Keys.hmacShaKeyFor(
+                        io.jsonwebtoken.io.Decoders.BASE64.decode(jwtSecret)), io.jsonwebtoken.Jwts.SIG.HS256)
+                .compact();
     }
 }

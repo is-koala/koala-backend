@@ -125,12 +125,17 @@ public class AuthManager implements AuthService {
     public AuthSetPasswordDto verifyRegistrationToken(AuthVerifyRegistrationTokenDto authVerifyRegistrationTokenDto) {
         log.debug("Verifying a registration token.");
 
-        PendingRegistration pendingRegistration = pendingRegistrationService.getByToken(authVerifyRegistrationTokenDto.getRegistrationToken());
+        PendingRegistration pendingRegistration;
+        try {
+            pendingRegistration = pendingRegistrationService.getByToken(authVerifyRegistrationTokenDto.getRegistrationToken());
+        } catch (ResourceNotFoundException exception) {
+            throw new ValidationException(exception.getMessage());
+        }
 
         if (pendingRegistration.getExpiresAt().isBefore(Instant.now())){
             pendingRegistrationService.deleteById(pendingRegistration.getId());
             log.warn("Registration token expired for pending registration id: {}", pendingRegistration.getId());
-            throw new UnauthorizedException(AuthMessages.REGISTRATION_TOKEN_EXPIRED);
+            throw new ValidationException(AuthMessages.REGISTRATION_TOKEN_EXPIRED);
         }
 
         String passwordSetToken = jwtService.generatePasswordSetToken(pendingRegistration.getId());
@@ -262,7 +267,12 @@ public class AuthManager implements AuthService {
     public TokenResponseDto refreshToken(RefreshTokenDto refreshTokenDto, UUID sessionId, ClientContext client) {
         client.requireWebDeviceId();
         log.info("Refreshing token for session ID: {}", sessionId);
-        var session = sessionService.findActiveSessionById(sessionId);
+        Session session;
+        try {
+            session = sessionService.findActiveSessionById(sessionId);
+        } catch (ResourceNotFoundException exception) {
+            throw new UnauthorizedException(AuthMessages.SESSION_NOT_FOUND_OR_INACTIVE);
+        }
 
         if (!passwordEncoder.matches(refreshTokenDto.getRefreshToken(), session.getRefreshTokenHash())){
             log.error("Refresh token does not match for session ID: {}", sessionId);
