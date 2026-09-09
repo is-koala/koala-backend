@@ -14,6 +14,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Set;
 import java.util.UUID;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -43,6 +45,7 @@ class ApplicationDecisionIT extends AbstractIntegrationTest {
     private final UUID companyId = UUID.randomUUID();
     private final UUID firstApplicationId = UUID.randomUUID();
     private final UUID secondApplicationId = UUID.randomUUID();
+    private final UUID bankAccountId = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
@@ -68,6 +71,12 @@ class ApplicationDecisionIT extends AbstractIntegrationTest {
         insertJob(1);
         insertApplication(firstApplicationId, firstWorkerId);
         insertApplication(secondApplicationId, secondWorkerId);
+        jdbc.update("update users set identity_verified = true, address_id = ? where id = ?",
+                addressId, thirdWorkerId);
+        jdbc.update("insert into bank_accounts (id, created_at, is_deleted, user_id, iban, is_primary, "
+                        + "is_active, verification_status, verification_attempts, account_holder_name_verified) "
+                        + "values (?, now(), false, ?, ?, true, true, 'UNVERIFIED', 0, false)",
+                bankAccountId, thirdWorkerId, "TR18" + thirdWorkerId.toString().replace("-", "").substring(0, 22));
     }
 
     @AfterEach
@@ -77,17 +86,18 @@ class ApplicationDecisionIT extends AbstractIntegrationTest {
         jdbc.update("delete from jobs where id = ?", jobId);
         jdbc.update("delete from companies where id = ?", companyId);
         jdbc.update("delete from job_categories where id = ?", categoryId);
-        jdbc.update("delete from addresses where id = ?", addressId);
-        jdbc.update("delete from districts where id = ?", districtId);
-        jdbc.update("delete from cities where id = ?", cityId);
-        jdbc.update("delete from countries where id = ?", countryId);
         jdbc.update("delete from notifications where recipient_id in (?, ?, ?, ?) "
                         + "or sender_id in (?, ?, ?, ?) or created_by_id in (?, ?, ?, ?)",
                 ownerId, firstWorkerId, secondWorkerId, thirdWorkerId,
                 ownerId, firstWorkerId, secondWorkerId, thirdWorkerId,
                 ownerId, firstWorkerId, secondWorkerId, thirdWorkerId);
+        jdbc.update("delete from bank_accounts where id = ?", bankAccountId);
         jdbc.update("delete from authorities where user_id in (?, ?, ?, ?)", ownerId, firstWorkerId, secondWorkerId, thirdWorkerId);
         jdbc.update("delete from users where id in (?, ?, ?, ?)", ownerId, firstWorkerId, secondWorkerId, thirdWorkerId);
+        jdbc.update("delete from addresses where id = ?", addressId);
+        jdbc.update("delete from districts where id = ?", districtId);
+        jdbc.update("delete from cities where id = ?", cityId);
+        jdbc.update("delete from countries where id = ?", countryId);
     }
 
     @Test
@@ -210,6 +220,34 @@ class ApplicationDecisionIT extends AbstractIntegrationTest {
                         .content("{\"notes\":\"merhaba\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.errorCode").value("JOB_APPLICATION_JOB_NOT_OPEN"));
+    }
+
+    @Test
+    void anExpiredOpenJobDetailReportsThatApplicationsAreClosed() throws Exception {
+        jdbc.update("update jobs set end_date_time = ? where id = ?",
+                LocalDateTime.now(ZoneId.of("Europe/Istanbul")).minusSeconds(1), jobId);
+
+        mockMvc.perform(get("/jobs/{jobId}", jobId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("OPEN"))
+                .andExpect(jsonPath("$.data.acceptingApplications").value(false));
+    }
+
+    @Test
+    void anExpiredOpenJobRejectsAReadyWorkerWithoutCreatingAnApplication() throws Exception {
+        jdbc.update("update jobs set end_date_time = ? where id = ?",
+                LocalDateTime.now(ZoneId.of("Europe/Istanbul")).minusSeconds(1), jobId);
+
+        mockMvc.perform(post("/jobs/{jobId}/applications", jobId)
+                        .with(user(principal(thirdWorkerId)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"notes\":\"merhaba\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("JOB_APPLICATION_JOB_NOT_OPEN"));
+
+        Integer applicationCount = jdbc.queryForObject(
+                "select count(*) from job_applications where job_id = ?", Integer.class, jobId);
+        org.junit.jupiter.api.Assertions.assertEquals(2, applicationCount);
     }
 
     @Test

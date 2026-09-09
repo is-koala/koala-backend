@@ -22,6 +22,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.helpers.JobAddressVisibility;
+import com.exskylab.koala.core.helpers.JobAvailability;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,6 +53,7 @@ public class JobApplicationManager implements JobApplicationService {
     private final ActivityNotificationService activityNotificationService;
     private final BankAccountService bankAccountService;
     private final PricingService pricingService;
+    private final JobAvailability jobAvailability;
     private final JobAddressVisibility addressVisibility = new JobAddressVisibility();
 
 
@@ -61,7 +63,8 @@ public class JobApplicationManager implements JobApplicationService {
                                  PageableSanitizer pageableSanitizer, GalleryService galleryService,
                                  ActivityNotificationService activityNotificationService,
                                  BankAccountService bankAccountService,
-                                 PricingService pricingService) {
+                                 PricingService pricingService,
+                                 JobAvailability jobAvailability) {
         this.jobApplicationDao = jobApplicationDao;
         this.jobService = jobService;
         this.securityService = securityService;
@@ -73,6 +76,7 @@ public class JobApplicationManager implements JobApplicationService {
         this.activityNotificationService = activityNotificationService;
         this.bankAccountService = bankAccountService;
         this.pricingService = pricingService;
+        this.jobAvailability = jobAvailability;
     }
 
     @Override
@@ -81,7 +85,7 @@ public class JobApplicationManager implements JobApplicationService {
         log.info("Applying to job with id: {}", jobId);
         var job = jobService.getById(jobId);
 
-        if (job.getStatus() != JobStatus.OPEN) {
+        if (!jobAvailability.acceptsApplications(job)) {
             log.info("Job {} is not open for applications, status: {}", jobId, job.getStatus());
             throw new ConflictException(JobApplicationMessages.JOB_NOT_OPEN);
         }
