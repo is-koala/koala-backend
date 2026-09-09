@@ -6,7 +6,7 @@ import com.exskylab.koala.core.dtos.report.response.AdminReportDto;
 import com.exskylab.koala.entities.ReportReason;
 import com.exskylab.koala.entities.ReportStatus;
 import com.exskylab.koala.entities.ReportTargetType;
-import com.exskylab.koala.support.AbstractIntegrationTest;
+import com.exskylab.koala.support.AbstractStaffIntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class ReportModerationIT extends AbstractIntegrationTest {
+class ReportModerationIT extends AbstractStaffIntegrationTest {
 
     private static final String JOB_TITLE = "Ornek ilan basligi";
     private static final String MESSAGE_BODY = "Bu bir ornek mesaj metnidir.";
@@ -107,6 +107,9 @@ class ReportModerationIT extends AbstractIntegrationTest {
     @AfterEach
     void cleanUp() {
         jdbcTemplate.update("delete from reports where reporter_id = ?", reporterId);
+        jdbcTemplate.update("delete from staff_member_roles where staff_member_id in "
+                + "(select id from staff_members where email like 'decision-%@iskoala.com')");
+        jdbcTemplate.update("delete from staff_members where email like 'decision-%@iskoala.com'");
         jdbcTemplate.update("delete from media where id = ?", imageId);
         jdbcTemplate.update("delete from messages where conversation_id = ?", conversationId);
         jdbcTemplate.update("delete from conversations where id = ?", conversationId);
@@ -313,7 +316,9 @@ class ReportModerationIT extends AbstractIntegrationTest {
 
     @Test
     void aStaffModeratorCanActuallyDecideAndGetsTheWholeQueueRowBack() {
-        StaffPrincipal moderator = new StaffPrincipal(UUID.randomUUID(), "moderator@iskoala.com",
+        UUID staffId = createStaffMember("decision-" + UUID.randomUUID() + "@iskoala.com",
+                "Moderator", "MODERATOR");
+        StaffPrincipal moderator = new StaffPrincipal(staffId, "moderator@iskoala.com",
                 "Moderator", Set.of("MODERATOR"), Set.of(), false);
 
         AdminReportDto decided = reportService.review(moderator, openUserReportId,
@@ -324,6 +329,10 @@ class ReportModerationIT extends AbstractIntegrationTest {
                 "Karar yaniti kuyruk satirinin tamamidir; panel ikinci bir istek atmamali.");
         assertEquals(2L, decided.reportedUserReportCount());
         assertNull(decided.reviewedBy(),
-                "Personel kararinda reviewedBy bos kalir; kimin verdigini denetim kaydi soyler.");
+                "Personel karari eski marketplace reviewedBy alanini doldurmamali.");
+        assertEquals(staffId, jdbcTemplate.queryForObject(
+                "select reviewed_by_staff_id from reports where id = ?", UUID.class, openUserReportId));
+        assertNull(jdbcTemplate.queryForObject(
+                "select reviewed_by_id from reports where id = ?", UUID.class, openUserReportId));
     }
 }

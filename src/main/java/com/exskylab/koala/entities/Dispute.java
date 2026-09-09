@@ -52,6 +52,10 @@ public class Dispute extends BaseEntity {
     @JoinColumn(name = "resolved_by_id")
     private User resolvedBy;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "resolved_by_staff_id")
+    private StaffMember resolvedByStaff;
+
     @Column(name = "resolved_at")
     private Instant resolvedAt;
 }

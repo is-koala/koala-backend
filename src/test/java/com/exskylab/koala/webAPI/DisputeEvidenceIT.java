@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -24,10 +25,12 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -52,6 +55,7 @@ class DisputeEvidenceIT extends AbstractStaffIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        jdbc.update("delete from admin_audit_entries");
         insertUser(employerId);
         insertUser(workerId);
         insertUser(operatorId);
@@ -83,12 +87,14 @@ class DisputeEvidenceIT extends AbstractStaffIntegrationTest {
         jdbc.update("delete from job_assignments where id = ?", assignmentId);
         jdbc.update("delete from jobs where id = ?", jobId);
         jdbc.update("delete from job_categories where id = ?", categoryId);
+        jdbc.update("delete from notifications where recipient_id in (?, ?, ?)",
+                employerId, workerId, operatorId);
         jdbc.update("delete from authorities where user_id in (?, ?, ?)", employerId, workerId, operatorId);
-        jdbc.update("delete from users where id in (?, ?, ?)", employerId, workerId, operatorId);
         jdbc.update("delete from admin_audit_entries");
         jdbc.update("delete from staff_member_roles where staff_member_id in "
                 + "(select id from staff_members where email like 'evidence-%@iskoala.com')");
         jdbc.update("delete from staff_members where email like 'evidence-%@iskoala.com'");
+        jdbc.update("delete from users where id in (?, ?, ?)", employerId, workerId, operatorId);
     }
 
     @Test
@@ -177,6 +183,47 @@ class DisputeEvidenceIT extends AbstractStaffIntegrationTest {
 
         assertEquals(0, jdbc.queryForObject(
                 "select count(*) from dispute_evidence where dispute_id = ?", Integer.class, disputeId));
+    }
+
+    @Test
+    void aStaffDecisionIsPersistedAgainstTheStaffAggregate() throws Exception {
+        UUID staffId = createStaffMember("evidence-" + UUID.randomUUID() + "@iskoala.com",
+                "Uyuşmazlık Uzmanı", "DISPUTE_HANDLER");
+
+        mockMvc.perform(post("/admin/disputes/{id}/resolve", disputeId)
+                        .header("Authorization", "Bearer " + staffAccessToken(staffId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"resolution\":\"DISMISSED\",\"note\":\"Dayanaksız\"}"))
+                .andExpect(status().isOk());
+
+        Map<String, Object> decision = jdbc.queryForMap(
+                "select resolved_by_id, resolved_by_staff_id from disputes where id = ?", disputeId);
+        assertEquals(staffId, decision.get("resolved_by_staff_id"));
+        assertNull(decision.get("resolved_by_id"));
+    }
+
+    @Test
+    void aDeniedRefundResolutionLeavesATenYearFinancialAuditRecord() throws Exception {
+        UUID staffId = createStaffMember("evidence-" + UUID.randomUUID() + "@iskoala.com",
+                "Uyuşmazlık Uzmanı", "DISPUTE_HANDLER");
+
+        mockMvc.perform(post("/admin/disputes/{id}/resolve", disputeId)
+                        .header("Authorization", "Bearer " + staffAccessToken(staffId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"resolution\":\"REFUND_EMPLOYER\",\"note\":\"İşveren haklı\"}"))
+                .andExpect(status().isForbidden());
+
+        Map<String, Object> audit = jdbc.queryForMap(
+                "select permission, action, allowed, sensitivity, "
+                        + "extract(year from age(retain_until, occurred_at))::int as retention_years "
+                        + "from admin_audit_entries");
+        assertEquals("payment.refund", audit.get("permission"));
+        assertEquals("dispute.resolve.refund", audit.get("action"));
+        assertEquals(Boolean.FALSE, audit.get("allowed"));
+        assertEquals("FINANCIAL", audit.get("sensitivity"));
+        assertEquals(10, ((Number) audit.get("retention_years")).intValue());
+        assertEquals("OPEN", jdbc.queryForObject(
+                "select status from disputes where id = ?", String.class, disputeId));
     }
 
     private org.springframework.test.web.servlet.ResultActions attachAs(UUID actorId) throws Exception {

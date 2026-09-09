@@ -61,6 +61,10 @@ public class Report extends BaseEntity {
     @JoinColumn(name = "reviewed_by_id")
     private User reviewedBy;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reviewed_by_staff_id")
+    private StaffMember reviewedByStaff;
+
     @Column(name = "review_note", length = 2000)
     private String reviewNote;
 

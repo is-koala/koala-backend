@@ -89,6 +89,7 @@ class DisputeEvidenceRulesTest {
                 new UploadValidator(uploadProperties), uploadProperties, jobAssignmentService, userService,
                 securityService, participants,
                 new StaffPayoutManager(mock(PayoutService.class)),
+                mock(com.exskylab.koala.business.abstracts.StaffAccountService.class),
                 mock(ActivityNotificationService.class), new PageableSanitizer());
 
         when(storageService.uploadFile(any(), any(), any(), eq(FolderType.DISPUTE_EVIDENCE))).thenReturn(STORED_KEY);
