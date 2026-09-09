@@ -38,6 +38,7 @@ class ProductionConfigurationGuardTest {
     private static final String PRODUCTION = "SERVICE_ENVIRONMENT=production";
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
+            .withPropertyValues("CORS_ALLOWED_ORIGINS=")
             .withInitializer(new ConfigDataApplicationContextInitializer())
             .withUserConfiguration(GuardConfiguration.class);
 
@@ -287,6 +288,15 @@ class ProductionConfigurationGuardTest {
             assertNull(context.getStartupFailure());
             assertEquals(List.of(), context.getBean(CorsProperties.class).getAllowedOrigins());
         });
+    }
+
+    @Test
+    void theShippedDefaultIgnoresCorsConfigurationFromTheDeveloperEnvironment() {
+        contextRunner.withSystemProperties("CORS_ALLOWED_ORIGINS=https://must-not-leak.invalid")
+                .run(context -> {
+                    assertNull(context.getStartupFailure());
+                    assertEquals(List.of(), context.getBean(CorsProperties.class).getAllowedOrigins());
+                });
     }
 
     @Test

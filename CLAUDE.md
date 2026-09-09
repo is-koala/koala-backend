@@ -3432,7 +3432,10 @@ cp .env.example .env
 
 `application.yaml` içindeki `spring.config.import: optional:file:./.env[.properties]` satırı sayesinde `.env` yerel çalıştırmada otomatik okunuyor — IDE'de ayrıca env değişkeni tanımlamaya gerek yok. Docker'da aynı dosya compose'un `env_file` girdisiyle veriliyor, CI'da GitHub Secrets, prod'da Dokploy environment ekranı kullanılıyor.
 
-**Testler `.env`'den yalıtılmış.** `src/test/resources/application.properties` içinde `spring.config.import=` satırı bu bağlantıyı keser; geliştirici makinesindeki gerçek anahtarlar testlere sızmaz.
+**Normal test context'leri `.env`'den yalıtılmış.** `src/test/resources/application.properties` içindeki
+`spring.config.import=` satırı bu bağlantıyı keser. `ConfigDataApplicationContextInitializer` ile gerçek
+`application.yaml` zincirini bilinçli olarak açan dar yapılandırma testleri ise ölçtükleri dış girdileri kendi
+`ApplicationContextRunner` fixture'ında ayrıca sabitler; geliştirici makinesindeki değerleri varsayılan saymaz.
 
 **Bekleyen iş:** eski `application.properties` içindeki anahtarlar (Gmail parolası, JWT secret, R2 ve Iyzico anahtarları, SMS anahtarları) bir süre imajda taşındı. Hepsi rotate edilmeli.
 
