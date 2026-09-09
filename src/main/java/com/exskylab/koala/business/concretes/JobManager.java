@@ -19,6 +19,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.helpers.JobAddressVisibility;
+import com.exskylab.koala.core.helpers.JobAvailability;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -27,7 +28,6 @@ import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.mappers.JobMapper;
 import com.exskylab.koala.core.dtos.notification.request.SendPushToUserDto;
 import com.exskylab.koala.core.helpers.MessageResolver;
-import com.exskylab.koala.core.properties.JobSearchProperties;
 import com.exskylab.koala.dataAccess.JobApplicationDao;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
 import com.exskylab.koala.dataAccess.JobDao;
@@ -67,8 +67,8 @@ public class JobManager implements JobService {
     private final JobAssignmentDao jobAssignmentDao;
     private final NotificationService notificationService;
     private final MessageResolver messageResolver;
-    private final JobSearchProperties searchProperties;
     private final PricingService pricingService;
+    private final JobAvailability jobAvailability;
     private final JobAddressVisibility addressVisibility = new JobAddressVisibility();
 
     public JobManager(JobDao jobDao, SecurityService securityService, JobCategoryService jobCategoryService, AddressService addressService, CompanyService companyService, JobMapper jobMapper,
@@ -76,8 +76,8 @@ public class JobManager implements JobService {
                       JobAlertService jobAlertService, GalleryService galleryService,
                       CompanyFollowService companyFollowService, JobApplicationDao jobApplicationDao,
                       JobAssignmentDao jobAssignmentDao, NotificationService notificationService,
-                      MessageResolver messageResolver, JobSearchProperties searchProperties,
-                      PricingService pricingService) {
+                      MessageResolver messageResolver, PricingService pricingService,
+                      JobAvailability jobAvailability) {
         this.jobDao = jobDao;
         this.securityService = securityService;
         this.jobCategoryService = jobCategoryService;
@@ -93,8 +93,8 @@ public class JobManager implements JobService {
         this.jobAssignmentDao = jobAssignmentDao;
         this.notificationService = notificationService;
         this.messageResolver = messageResolver;
-        this.searchProperties = searchProperties;
         this.pricingService = pricingService;
+        this.jobAvailability = jobAvailability;
     }
 
     @Override
@@ -296,6 +296,7 @@ public class JobManager implements JobService {
         Job job = getDetailedById(jobId);
         JobDetailDto detail = jobMapper.toJobDetailDto(job);
         detail.setHiredCount(jobAssignmentDao.countByJobIdAndStatusIn(jobId, HIRED_STATUSES));
+        detail.setAcceptingApplications(jobAvailability.acceptsApplications(job));
         addressVisibility.protect(job, detail, viewerId, hasAddressAccess(jobId, viewerId));
         return detail;
     }
@@ -313,7 +314,7 @@ public class JobManager implements JobService {
         return listJobs(requested, viewerId, pageable -> {
             Page<UUID> ids = jobDao.searchIds(
                     JobStatus.OPEN,
-                    java.time.LocalDateTime.now(searchProperties.zone()),
+                    jobAvailability.currentTime(),
                     blankToNull(criteria.getQuery()),
                     criteria.getCompanyId(),
                     criteria.getCategoryId(),

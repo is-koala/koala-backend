@@ -7,8 +7,10 @@ import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.dtos.jobApplication.request.AnswerApplicationDto;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
+import com.exskylab.koala.core.helpers.JobAvailability;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.mappers.JobApplicationMapper;
+import com.exskylab.koala.core.properties.JobSearchProperties;
 import com.exskylab.koala.dataAccess.JobApplicationDao;
 import com.exskylab.koala.entities.ApplicationStatus;
 import com.exskylab.koala.entities.Company;
@@ -19,6 +21,7 @@ import com.exskylab.koala.entities.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Clock;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -60,7 +63,8 @@ class JobApplicationAuthorizationTest {
                 mock(com.exskylab.koala.business.abstracts.GalleryService.class),
                 mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class),
                 mock(com.exskylab.koala.business.abstracts.BankAccountService.class),
-                mock(com.exskylab.koala.business.abstracts.PricingService.class));
+                mock(com.exskylab.koala.business.abstracts.PricingService.class),
+                new JobAvailability(Clock.systemUTC(), new JobSearchProperties()));
 
         when(jobApplicationDao.save(any())).thenAnswer(i -> i.getArgument(0));
     }

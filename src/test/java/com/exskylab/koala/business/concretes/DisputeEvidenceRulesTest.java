@@ -262,6 +262,19 @@ class DisputeEvidenceRulesTest {
     }
 
     @Test
+    void anAttachmentWithAnUnknownTransactionOutcomeKeepsItsObject() throws IOException {
+        Dispute dispute = dispute(DisputeStatus.OPEN);
+        when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());
+
+        TransactionSynchronizationManager.initSynchronization();
+        disputeManager.attachEvidence(dispute.getId(), png());
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(s -> s.afterCompletion(TransactionSynchronization.STATUS_UNKNOWN));
+
+        verify(storageService, never()).deleteFile(any());
+    }
+
+    @Test
     void aFileThatIsNotWhatItsExtensionClaimsIsRejectedBeforeAnythingIsStored() {
         Dispute dispute = dispute(DisputeStatus.OPEN);
         when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());

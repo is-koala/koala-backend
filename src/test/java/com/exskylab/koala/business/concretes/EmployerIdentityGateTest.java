@@ -6,11 +6,11 @@ import com.exskylab.koala.core.dtos.address.request.AddressWriteDto;
 import com.exskylab.koala.core.dtos.job.request.CreateIndividualJobDto;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.helpers.MessageResolver;
+import com.exskylab.koala.core.helpers.JobAvailability;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
 import com.exskylab.koala.core.mappers.JobMapper;
 import com.exskylab.koala.core.properties.CommissionProperties;
-import com.exskylab.koala.core.properties.JobSearchProperties;
 import com.exskylab.koala.dataAccess.JobApplicationDao;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
 import com.exskylab.koala.dataAccess.JobDao;
@@ -61,8 +61,8 @@ class EmployerIdentityGateTest {
                 mock(JobMapper.class), new PageableSanitizer(), mock(CompanyContactService.class),
                 mock(JobAlertService.class), mock(GalleryService.class), mock(CompanyFollowService.class),
                 mock(JobApplicationDao.class), mock(JobAssignmentDao.class), mock(NotificationService.class),
-                mock(MessageResolver.class), new JobSearchProperties(),
-                new PricingManager(FallbackSettings.commissionCalculator()));
+                mock(MessageResolver.class),
+                new PricingManager(FallbackSettings.commissionCalculator()), mock(JobAvailability.class));
 
         when(jobDao.save(any())).thenAnswer(i -> i.getArgument(0));
     }
