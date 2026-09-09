@@ -29,6 +29,7 @@ public interface JobDao extends JpaRepository<Job, UUID> {
                    or lower(j.title) like lower(concat('%', cast(:query as string), '%'))
                    or lower(j.description) like lower(concat('%', cast(:query as string), '%'))
                    or lower(j.position) like lower(concat('%', cast(:query as string), '%')))
+              and (:companyId is null or j.company.id = :companyId)
               and (:categoryId is null or j.category.id = :categoryId)
               and (:cityId is null or j.address.city.id = :cityId)
               and (:districtId is null or j.address.district.id = :districtId)
@@ -47,6 +48,7 @@ public interface JobDao extends JpaRepository<Job, UUID> {
     Page<UUID> searchIds(@Param("status") JobStatus status,
                          @Param("activeAfter") java.time.LocalDateTime activeAfter,
                          @Param("query") String query,
+                         @Param("companyId") UUID companyId,
                          @Param("categoryId") UUID categoryId,
                          @Param("cityId") UUID cityId,
                          @Param("districtId") UUID districtId,

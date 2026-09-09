@@ -161,6 +161,7 @@ public class SecurityConfig {
 
 
                         //job-assignment endpoints
+                        .requestMatchers(HttpMethod.GET, "/job-assignments/{assignmentId}").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/job-assignments/{assignmentId}/respond").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/job-assignments/{assignmentId}/payment-session").hasAnyRole("USER", "ADMIN")
 

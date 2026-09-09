@@ -27,6 +27,8 @@ public interface JobAssignmentService {
 
     PageDto<MyAssignmentDto> getMyAssignments(boolean asEmployer, Pageable pageable);
 
+    MyAssignmentDto getMyAssignment(UUID assignmentId);
+
     JobAssignment completeAssignment(UUID assignmentId);
 
     List<UUID> findAutoCompletableAssignmentIds();

@@ -6,7 +6,7 @@ Bu dosya projeyi konu konu anlatır: mimari, alınmış kararlar ve gerekçeleri
 
 ## 0. Nerede kaldık — oturum devri
 
-**Son durum (30.08.2026):** 156 endpoint, 64 entity, 97 test dosyası, 44 Liquibase changelog, 536 mesaj anahtarı. `./mvnw verify` — 604 birim testi yeşil; entegrasyon testleri Docker gerektirir.
+**Son durum (09.09.2026):** 214 endpoint. Tam doğrulama komutu `./mvnw verify`; entegrasyon testleri Docker gerektirir. Entity, test, Liquibase ve mesaj envanterleri büyüdükçe kaynak ağacından ölçülür; burada kopya sayaç tutulmaz.
 
 **Tamamlanan fazlar:** 0 (test zemini), 1 (environment + CI/CD), 2 (güvenlik blokerleri), 3 (Spring Boot 4), 3B (MapStruct), 4 (mesaj katmanı), 5 (kod kalitesi — K-21/K-23 hariç), 5B (UserPrincipal), 6 (loglama + zaman + hız sınırı), 7 (ödeme), 7B (payout/refund/bank account), 8 (API yüzeyi — kısmi), 8C (istemci düzeltmeleri), 9 (yasal — kısmi), 9C (soft delete), 10 (mesajlaşma + değerlendirme + engelleme), 10B (iptal + uyuşmazlık + şikayet + timesheet), 8D (istemci profil yüzeyi + kategori seed), 8B (kalan API yüzeyi), 12 (rozetler + iş tamamlama), 11A (otomatik tamamlama), 11B (ödeme dayanıklılığı), 15 (API yüzeyi tutarlılığı), 12B (rozet yönetimi), 13 (WebSocket), 16 (çalışma zamanı ayarları), 17 (depolama → S3), 11C (olgunlaşma), 18 (mimari denetim), 19 (hata sözleşmesi + doğrulama + güvenlik), 19B (hata zarfı zenginleştirme), 21 (medya galerisi), 22 (birleşik işlerim ucu), 23 (şirket takibi + işveren istatistikleri), 24 (API dokümantasyonu + e-posta şablonları), 25 (prod kurulumu).
 
@@ -766,6 +766,10 @@ başvuru sonrası doğrulamaya yönlendirmek — `assertReadyToWork` bu yüzden 
 ## 2l. Sayfalama ve ilan araması
 
 **Sayfalama ile koleksiyon fetch'i aynı sorguda olmaz.** Hibernate LIMIT'i veritabanına veremeyip tüm satırları belleğe çeker. Kural: `JobDao.searchIds` önce **yalnızca id'leri** sayfalar, sonra `findAllByIdIn` o id'ler için varlıkları entity graph ile tek sorguda yükler. Sıra `inIdOrder` ile korunur.
+
+**Şirket detayındaki genel ilan listesi de aynı arama sözleşmesini kullanır.** `GET /jobs?companyId={id}` şirket kimliğini `searchIds` sorgusunda süzer; sonradan ada ya da dönen tek sayfaya göre elemez. Böylece aynı adlı şirketler karışmaz, bireysel ilanlar dışarıda kalır ve şirketin yirmi birinci ilanı normal sayfalama ile okunur. Bu uç herkese açık `OPEN` ilan aramasıdır; yalnız şirket yetkililerine açık olan `GET /companies/{id}/jobs` yönetim listesinin yerine geçmez.
+
+**Tekil atama liste içinde aranmaz.** `GET /job-assignments/{id}` listeyle aynı `MyAssignmentDto` sözleşmesini, adres görünürlüğünü ve kapak zenginleştirmesini kullanır. `AssignmentParticipants` işçiyi, ilan sahibini ve şirketin güncel yetkilisini tek sınırda çözer; diğer kullanıcı ve olmayan kimlik aynı `job.assignment.not.found` 404 yanıtını alır. Güncel şirket yetkilisinin okuma hakkı ona kapalı şirket adresini açmaz: yalnız etkin işçi, ilan sahibi veya `addressPublic` tam konumu görür.
 
 **Süresi geçmiş ilanlar aramada görünmez.** `searchIds` `status = OPEN`'a ek olarak `endDateTime >= :activeAfter` şartını taşır (bitiş tarihi olmayan ilanlar hariç tutulmaz). Öncesinde üç hafta önce bitmiş bir ilan hâlâ listeleniyordu; işçi başvuruyor, işveren anlamsız bir başvuru alıyordu. Karşılaştırma duvar saati olduğu için `job-search.zone-id` üzerinden yapılır (§2h ile aynı gerekçe).
 

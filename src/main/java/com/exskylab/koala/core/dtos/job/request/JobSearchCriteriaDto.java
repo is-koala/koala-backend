@@ -18,6 +18,7 @@ import java.util.UUID;
 public class JobSearchCriteriaDto {
 
     private String query;
+    private UUID companyId;
     private UUID categoryId;
     private UUID cityId;
     private UUID districtId;

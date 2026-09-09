@@ -315,6 +315,7 @@ public class JobManager implements JobService {
                     JobStatus.OPEN,
                     java.time.LocalDateTime.now(searchProperties.zone()),
                     blankToNull(criteria.getQuery()),
+                    criteria.getCompanyId(),
                     criteria.getCategoryId(),
                     criteria.getCityId(),
                     criteria.getDistrictId(),
