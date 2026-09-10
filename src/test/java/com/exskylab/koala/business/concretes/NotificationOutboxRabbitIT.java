@@ -123,7 +123,7 @@ class NotificationOutboxRabbitIT extends AbstractIntegrationTest {
         admin.declareQueue(emailQueue);
         admin.declareBinding(emailBinding);
         for (UUID notificationId : notificationIds) {
-            notificationDao.deleteById(notificationId);
+            jdbcTemplate.update("delete from notifications where id = ?", notificationId);
         }
         notificationIds.clear();
         for (UUID deviceId : deviceIds) {
@@ -269,8 +269,8 @@ class NotificationOutboxRabbitIT extends AbstractIntegrationTest {
         jdbcTemplate.update("""
                 insert into devices
                     (id, created_at, is_deleted, user_id, type, name, client_device_id, push_token)
-                values (?, now(), false, ?, 'ANDROID', 'outbox-device', ?, 'push-token-7')
-                """, deviceId, userId, UUID.randomUUID().toString());
+                values (?, now(), false, ?, 'ANDROID', 'outbox-device', ?, ?)
+                """, deviceId, userId, UUID.randomUUID().toString(), "push-token-" + deviceId);
         userIds.add(userId);
         deviceIds.add(deviceId);
         User recipient = new User();
