@@ -178,6 +178,16 @@ altındaki `response`/`common` yollarına bakıyor ve yalnız iki yazımı tanı
 birleştiren ya da DTO dışında bir sınıfta kuran bir kod görünmez. `request` DTO'ları bilerek dışarıda:
 oradaki `message = "{...}"` Bean Validation'ın anahtarı ve `GlobalExceptionHandler` onu zaten çözüyor (§2aj).
 
+**Taramanın yanlış pozitif yönü de yazılı olsun (is-koala/koala-backend#126).** Tarama kaynak
+metnini okur, davranışı değil. Bir yanıt DTO'su sabiti kurulum anında açıkça çözse —
+`messageResolver.resolve(SomeMessages.FOO)` — test yine kırmızı verir. Bu bilinçli: advice iç içe
+alanı çözmediği için DTO'ya `MessageResolver` enjekte etmek zaten yanlış katman, ve regex'i
+"çözülmüş" yazımı tanıyacak şekilde daraltmak çok satırlı ya da dolaylı bir çağrıyı sessizce
+kaçırırdı. Gerçek bir muafiyet gerekirse dosya adı
+`ResponseMessageResolutionTest` içindeki `FILES_THAT_RESOLVE_MESSAGE_CONSTANTS_AT_CONSTRUCTION`
+kümesine yazılır; küme boşken tarama her `*Messages.SABIT` referansını yasaklar. Bayat muafiyet
+`everyResolvedConstantExemptionStillCarriesAMessageConstant` ile kırmızıya döner.
+
 **Hata zarfı — matmuhbackend deseninden alındı, iki ayrı kod alanıyla:**
 
 ```json
