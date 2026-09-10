@@ -1,7 +1,7 @@
 package com.exskylab.koala.core.dtos.job.response;
 
 import com.exskylab.koala.core.dtos.address.response.AddressDto;
-import com.exskylab.koala.core.dtos.company.response.OnlyCompanyDto;
+import com.exskylab.koala.core.dtos.company.response.JobCompanyDto;
 import com.exskylab.koala.core.dtos.gallery.response.GalleryImageDto;
 import com.exskylab.koala.core.dtos.jobCategory.response.JobCategoryDto;
 import com.exskylab.koala.core.dtos.user.response.SafeUserDto;
@@ -49,11 +49,13 @@ public class JobDetailDto {
     private LocalDateTime startDateTime;
     private LocalDateTime endDateTime;
     private JobStatus status;
+    @Schema(description = "İlanın durum ve bitiş zamanına göre şu anda başvuru kabul edip etmediğini belirtir.")
+    private boolean acceptingApplications;
     private AddressDto address;
     @Schema(description = "Adres ve koordinatın yaklaşık mı kesin mi olduğunu belirtir.")
     private AddressPrecision addressPrecision;
     private SafeUserDto creator;
-    private OnlyCompanyDto company;
+    private JobCompanyDto company;
     private List<GalleryImageDto> images;
     private Instant createdAt;
     private Integer headcount;

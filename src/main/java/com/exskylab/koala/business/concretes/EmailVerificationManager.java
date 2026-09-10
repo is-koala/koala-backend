@@ -68,7 +68,7 @@ public class EmailVerificationManager implements EmailVerificationService {
                 )
         );
 
-        notificationService.sendEmail(newEmailDto, DispatchPriority.CRITICAL, true);
+        notificationService.sendEmail(newEmailDto, DispatchPriority.HIGH, true);
 
         log.info("Email verification mail queued for {}", LogMasks.email(newEmail));
         return emailVerification;

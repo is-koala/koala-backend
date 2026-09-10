@@ -69,6 +69,16 @@ class RateLimitBucketTest {
     }
 
     @Test
+    void sitemapReadsHaveTheirOwnFiniteAllowance() throws Exception {
+        properties.getPublic().setMaxAttempts(1);
+
+        assertEquals(30, passing("GET", "/sitemap/jobs/manifest", "10.0.0.12", 31));
+        assertEquals(0, passing("GET", "/sitemap/jobs/manifests/" + UUID.randomUUID()
+                + "/shards/0", "10.0.0.12", 1));
+        assertEquals(1, passing("GET", "/jobs", "10.0.0.12", 2));
+    }
+
+    @Test
     void addressAutocompleteHasItsOwnAllowanceIncludingReads() throws Exception {
         properties.getPublic().setMaxAttempts(3);
         properties.getWrite().setMaxAttempts(50);

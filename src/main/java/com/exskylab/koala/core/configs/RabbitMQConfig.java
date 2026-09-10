@@ -1,6 +1,13 @@
 package com.exskylab.koala.core.configs;
 
 
+import com.exskylab.koala.business.abstracts.NotificationService;
+import com.exskylab.koala.core.consumers.EmailDeliveryRecoverer;
+import com.exskylab.koala.core.consumers.ConfirmedRepublishMessageRecoverer;
+import com.exskylab.koala.core.consumers.NotificationDeliveryBusyException;
+import com.exskylab.koala.core.consumers.NotificationDeliveryBusyRecoverer;
+import com.exskylab.koala.core.producers.ConfirmedRabbitPublisher;
+import com.exskylab.koala.core.properties.NotificationDispatchProperties;
 import com.exskylab.koala.core.logging.LogContextListenerAdvice;
 import com.exskylab.koala.core.properties.PushDeliveryProperties;
 import com.exskylab.koala.core.logging.LogContextPublishPostProcessor;
@@ -19,6 +26,8 @@ import org.springframework.amqp.support.converter.JacksonJsonMessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.retry.RetryPolicy;
+import tools.jackson.databind.ObjectMapper;
 
 @Configuration
 @EnableRabbit
@@ -40,6 +49,13 @@ public class RabbitMQConfig {
     public static final String PUSH_DEAD_LETTER_EXCHANGE = "notification.push.dead-letter.exchange";
     public static final String PUSH_DEAD_LETTER_QUEUE = "push.queue.dlq";
     public static final String PUSH_DEAD_LETTER_ROUTING_KEY = "notification.push.dead-letter";
+
+    public static final String NOTIFICATION_DELIVERY_BUSY_PARKING_EXCHANGE =
+            "notification.delivery.busy.parking.exchange";
+    public static final String NOTIFICATION_DELIVERY_BUSY_PARKING_QUEUE =
+            "notification.delivery.busy.parking.queue";
+    public static final String NOTIFICATION_DELIVERY_BUSY_PARKING_ROUTING_KEY =
+            "notification.delivery.busy.parked";
 
     public static final String USER_EXCHANGE = "user.exchange";
     public static final String USER_PROFILE_UPDATED_FOR_SYNC_QUEUE = "user.profile.updated.for.sync.queue";
@@ -127,6 +143,23 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public DirectExchange notificationDeliveryBusyParkingExchange() {
+        return new DirectExchange(NOTIFICATION_DELIVERY_BUSY_PARKING_EXCHANGE);
+    }
+
+    @Bean
+    public Queue notificationDeliveryBusyParkingQueue() {
+        return QueueBuilder.durable(NOTIFICATION_DELIVERY_BUSY_PARKING_QUEUE).build();
+    }
+
+    @Bean
+    public Binding notificationDeliveryBusyParkingBinding() {
+        return BindingBuilder.bind(notificationDeliveryBusyParkingQueue())
+                .to(notificationDeliveryBusyParkingExchange())
+                .with(NOTIFICATION_DELIVERY_BUSY_PARKING_ROUTING_KEY);
+    }
+
+    @Bean
     public TopicExchange usersExchange(){
         return new TopicExchange(USER_EXCHANGE);
     }
@@ -157,7 +190,7 @@ public class RabbitMQConfig {
                                          LogContextPublishPostProcessor logContextPublishPostProcessor) {
         RabbitTemplate template = new RabbitTemplate(connectionFactory);
         template.setMessageConverter(messageConverter());
-        template.setChannelTransacted(true);
+        template.setMandatory(true);
         template.setBeforePublishPostProcessors(logContextPublishPostProcessor);
         return template;
     }
@@ -166,22 +199,53 @@ public class RabbitMQConfig {
     public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
             SimpleRabbitListenerContainerFactoryConfigurer configurer,
             ConnectionFactory connectionFactory,
-            LogContextListenerAdvice logContextListenerAdvice) {
+            LogContextListenerAdvice logContextListenerAdvice,
+            @Qualifier("notificationDeliveryBusyRetryInterceptor")
+            StatelessRetryOperationsInterceptor notificationDeliveryBusyRetryInterceptor) {
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(factory, connectionFactory);
         factory.setMessageConverter(messageConverter());
-        factory.setAdviceChain(logContextListenerAdvice);
+        factory.setAdviceChain(logContextListenerAdvice, notificationDeliveryBusyRetryInterceptor);
         return factory;
     }
 
+    @Bean
+    public NotificationDeliveryBusyRecoverer notificationDeliveryBusyRecoverer(
+            ConfirmedRabbitPublisher publisher) {
+        return new NotificationDeliveryBusyRecoverer(publisher);
+    }
+
+    @Bean(name = "notificationDeliveryBusyRetryInterceptor")
+    public StatelessRetryOperationsInterceptor notificationDeliveryBusyRetryInterceptor(
+            NotificationDispatchProperties properties, NotificationDeliveryBusyRecoverer recoverer) {
+        RetryPolicy policy = RetryPolicy.builder()
+                .includes(NotificationDeliveryBusyException.class)
+                .maxRetries(properties.getDeliveryBusyMaxRetries())
+                .delay(properties.getDeliveryBusyRetryInterval())
+                .build();
+        return RetryInterceptorBuilder.stateless()
+                .retryPolicy(policy)
+                .recoverer(recoverer)
+                .build();
+    }
+
     @Bean(name = "emailRetryInterceptor")
-    public StatelessRetryOperationsInterceptor emailRetryInterceptor(RabbitTemplate rabbitTemplate) {
+    public StatelessRetryOperationsInterceptor emailRetryInterceptor(EmailDeliveryRecoverer recoverer) {
         return RetryInterceptorBuilder.stateless()
                 .maxRetries(2)
                 .backOffOptions(1000, 2.0, 5000)
-                .recoverer(new RepublishMessageRecoverer(rabbitTemplate,
-                        EMAIL_DEAD_LETTER_EXCHANGE, EMAIL_DEAD_LETTER_ROUTING_KEY))
+                .recoverer(recoverer)
                 .build();
+    }
+
+    @Bean
+    public EmailDeliveryRecoverer emailDeliveryRecoverer(NotificationService notificationService,
+                                                          ObjectMapper objectMapper,
+                                                          RabbitTemplate rabbitTemplate,
+                                                          ConfirmedRabbitPublisher publisher) {
+        return new EmailDeliveryRecoverer(notificationService, objectMapper,
+                new ConfirmedRepublishMessageRecoverer(rabbitTemplate, publisher,
+                        EMAIL_DEAD_LETTER_EXCHANGE, EMAIL_DEAD_LETTER_ROUTING_KEY));
     }
 
     @Bean(name = "emailListenerContainerFactory")
@@ -189,11 +253,14 @@ public class RabbitMQConfig {
             SimpleRabbitListenerContainerFactoryConfigurer configurer,
             ConnectionFactory connectionFactory,
             @Qualifier("emailRetryInterceptor") StatelessRetryOperationsInterceptor emailRetryInterceptor,
+            @Qualifier("notificationDeliveryBusyRetryInterceptor")
+            StatelessRetryOperationsInterceptor notificationDeliveryBusyRetryInterceptor,
             LogContextListenerAdvice logContextListenerAdvice) {
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(factory, connectionFactory);
         factory.setMessageConverter(messageConverter());
-        factory.setAdviceChain(logContextListenerAdvice, emailRetryInterceptor);
+        factory.setAdviceChain(logContextListenerAdvice, emailRetryInterceptor,
+                notificationDeliveryBusyRetryInterceptor);
         return factory;
     }
 

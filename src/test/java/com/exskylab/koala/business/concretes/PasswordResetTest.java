@@ -88,7 +88,7 @@ class PasswordResetTest {
         authManager.requestPasswordReset(new ForgotPasswordDto("ada@example.com"));
 
         var email = org.mockito.ArgumentCaptor.forClass(SendEmailDto.class);
-        verify(notificationService).sendEmail(email.capture(), eq(com.exskylab.koala.entities.DispatchPriority.CRITICAL), eq(true));
+        verify(notificationService).sendEmail(email.capture(), eq(com.exskylab.koala.entities.DispatchPriority.HIGH), eq(true));
         assertEquals("password-reset-request-template", email.getValue().getTemplateName());
         assertEquals("https://iskoala.com/sifre-sifirla?token=reset-token",
                 email.getValue().getTemplateParameters().get("resetLink"));

@@ -6,6 +6,7 @@ import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.DeviceService;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.ClientPlatform;
+import com.exskylab.koala.core.properties.NotificationDispatchProperties;
 import com.exskylab.koala.core.properties.PushDeliveryProperties;
 import com.exskylab.koala.core.utilities.push.PushService;
 import com.exskylab.koala.dataAccess.DeviceDao;
@@ -257,14 +258,15 @@ class PushDeliveryClaimIT extends AbstractIntegrationTest {
         CountDownLatch providerEntered = new CountDownLatch(1);
         CountDownLatch releaseProvider = new CountDownLatch(1);
         AtomicInteger providerCalls = new AtomicInteger();
-        PushService pushService = message -> {
+        PushService pushService = (message, timeout) -> {
             int call = providerCalls.incrementAndGet();
             providerEntered.countDown();
             await(releaseProvider);
             return "provider-message-" + call;
         };
         PushDeliveryManager manager = new PushDeliveryManager(
-                store, deviceService, pushService, tokenDeliveryLock, new PushDeliveryProperties(), clock);
+                store, deviceService, pushService, tokenDeliveryLock, new PushDeliveryProperties(),
+                new NotificationDispatchProperties(), clock);
         ExecutorService executor = Executors.newFixedThreadPool(2);
 
         try {
@@ -298,9 +300,10 @@ class PushDeliveryClaimIT extends AbstractIntegrationTest {
         Clock clock = mock(Clock.class);
         when(clock.instant()).thenAnswer(ignored -> now.get());
         AtomicInteger providerCalls = new AtomicInteger();
-        PushService pushService = message -> "provider-message-" + providerCalls.incrementAndGet();
+        PushService pushService = (message, timeout) -> "provider-message-" + providerCalls.incrementAndGet();
         PushDeliveryManager manager = new PushDeliveryManager(
-                store, deviceService, pushService, tokenDeliveryLock, new PushDeliveryProperties(), clock);
+                store, deviceService, pushService, tokenDeliveryLock, new PushDeliveryProperties(),
+                new NotificationDispatchProperties(), clock);
         CountDownLatch lockHeld = new CountDownLatch(1);
         CountDownLatch releaseLock = new CountDownLatch(1);
         ExecutorService executor = Executors.newFixedThreadPool(2);

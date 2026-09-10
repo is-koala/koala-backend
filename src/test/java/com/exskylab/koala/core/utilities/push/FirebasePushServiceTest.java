@@ -29,7 +29,8 @@ class FirebasePushServiceTest {
         FirebasePushService service = new FirebasePushService(messaging);
 
         assertEquals("projects/p/messages/m", service.send(
-                new PushMessage("token", "title", "body", Map.of("notificationId", "id"))));
+                new PushMessage("token", "title", "body", Map.of("notificationId", "id")),
+                Duration.ofSeconds(45)));
 
         ArgumentCaptor<Message> message = ArgumentCaptor.forClass(Message.class);
         org.mockito.Mockito.verify(messaging).send(message.capture());
@@ -47,7 +48,8 @@ class FirebasePushServiceTest {
         FirebasePushService service = new FirebasePushService(mock(FirebaseMessaging.class));
 
         PushDeliveryException exception = assertThrows(PushDeliveryException.class,
-                () -> service.send(new PushMessage(" ", "title", "secret-body", Map.of())));
+                () -> service.send(new PushMessage(" ", "title", "secret-body", Map.of()),
+                        Duration.ofSeconds(45)));
 
         assertEquals(PushFailureCode.INVALID_MESSAGE, exception.code());
         assertEquals("INVALID_MESSAGE", exception.getMessage());
@@ -58,10 +60,24 @@ class FirebasePushServiceTest {
     void disabledProviderFailsPermanentlyWithoutReadingCredentials() {
         PushDeliveryException exception = assertThrows(PushDeliveryException.class,
                 () -> new UnconfiguredPushService().send(
-                        new PushMessage("token", "title", "body", Map.of())));
+                        new PushMessage("token", "title", "body", Map.of()),
+                        Duration.ofSeconds(45)));
 
         assertEquals(PushFailureCode.PROVIDER_NOT_CONFIGURED, exception.code());
         assertFalse(exception.retryable());
+    }
+
+    @Test
+    void configuredAndUnconfiguredProvidersRejectAMissingDeadline() {
+        FirebasePushService firebase = new FirebasePushService(mock(FirebaseMessaging.class));
+        PushMessage message = new PushMessage("token", "title", "body", Map.of());
+
+        assertThrows(IllegalArgumentException.class, () -> firebase.send(message, null));
+        assertThrows(IllegalArgumentException.class, () -> firebase.send(message, Duration.ZERO));
+        assertThrows(IllegalArgumentException.class,
+                () -> new UnconfiguredPushService().send(message, null));
+        assertThrows(IllegalArgumentException.class,
+                () -> new UnconfiguredPushService().send(message, Duration.ZERO));
     }
 
     @Test
@@ -89,9 +105,11 @@ class FirebasePushServiceTest {
         FirebasePushService service = new FirebasePushService(messaging);
 
         PushDeliveryException reservedKey = assertThrows(PushDeliveryException.class,
-                () -> service.send(new PushMessage("token", "title", "body", Map.of("google.secret", "x"))));
+                () -> service.send(new PushMessage("token", "title", "body", Map.of("google.secret", "x")),
+                        Duration.ofSeconds(45)));
         PushDeliveryException oversized = assertThrows(PushDeliveryException.class,
-                () -> service.send(new PushMessage("token", "title", "x".repeat(4096), Map.of())));
+                () -> service.send(new PushMessage("token", "title", "x".repeat(4096), Map.of()),
+                        Duration.ofSeconds(45)));
 
         assertEquals(PushFailureCode.INVALID_MESSAGE, reservedKey.code());
         assertEquals(PushFailureCode.INVALID_MESSAGE, oversized.code());

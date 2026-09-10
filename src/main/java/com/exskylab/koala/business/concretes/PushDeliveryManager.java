@@ -2,6 +2,7 @@ package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.DeviceService;
 import com.exskylab.koala.business.abstracts.PushDeliveryService;
+import com.exskylab.koala.core.properties.NotificationDispatchProperties;
 import com.exskylab.koala.core.properties.PushDeliveryProperties;
 import com.exskylab.koala.core.utilities.push.PushDeliveryException;
 import com.exskylab.koala.core.utilities.push.PushFailureCode;
@@ -25,16 +26,19 @@ public class PushDeliveryManager implements PushDeliveryService {
     private final PushService pushService;
     private final PushTokenDeliveryLock tokenDeliveryLock;
     private final PushDeliveryProperties properties;
+    private final NotificationDispatchProperties dispatchProperties;
     private final Clock clock;
 
     public PushDeliveryManager(PushDeliveryStore store, DeviceService deviceService,
                                PushService pushService, PushTokenDeliveryLock tokenDeliveryLock,
-                               PushDeliveryProperties properties, Clock clock) {
+                               PushDeliveryProperties properties,
+                               NotificationDispatchProperties dispatchProperties, Clock clock) {
         this.store = store;
         this.deviceService = deviceService;
         this.pushService = pushService;
         this.tokenDeliveryLock = tokenDeliveryLock;
         this.properties = properties;
+        this.dispatchProperties = dispatchProperties;
         this.clock = clock;
     }
 
@@ -72,7 +76,8 @@ public class PushDeliveryManager implements PushDeliveryService {
                 PushTokenDeliveryResult<String> result = tokenDeliveryLock.tryExecuteIfCurrent(
                         claim.recipientId(), claim.deviceId(), claim.token(),
                         () -> pushService.send(new PushMessage(
-                                claim.token(), claim.title(), claim.body(), claim.data())));
+                                claim.token(), claim.title(), claim.body(), claim.data()),
+                                dispatchProperties.getProviderTimeout()));
                 if (!result.lockAcquired()) {
                     Instant deferredAt = clock.instant();
                     store.deferForTokenContention(

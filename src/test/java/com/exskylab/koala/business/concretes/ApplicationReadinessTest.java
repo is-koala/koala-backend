@@ -3,13 +3,19 @@ package com.exskylab.koala.business.concretes;
 import com.exskylab.koala.business.abstracts.*;
 import com.exskylab.koala.core.dtos.jobApplication.request.CreateJobApplicationDto;
 import com.exskylab.koala.core.exceptions.ValidationException;
+import com.exskylab.koala.core.helpers.JobAvailability;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.mappers.JobApplicationMapper;
+import com.exskylab.koala.core.properties.JobSearchProperties;
 import com.exskylab.koala.dataAccess.JobApplicationDao;
 import com.exskylab.koala.entities.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -18,6 +24,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class ApplicationReadinessTest {
+
+    private static final Instant POLICY_NOW = Instant.parse("2026-09-09T10:00:00Z");
+    private static final JobSearchProperties POLICY_PROPERTIES = new JobSearchProperties();
+    private static final ZoneId POLICY_ZONE = POLICY_PROPERTIES.zone();
 
     private JobApplicationDao jobApplicationDao;
     private BankAccountService bankAccountService;
@@ -46,6 +56,7 @@ class ApplicationReadinessTest {
         job.setCreator(employer);
         job.setEmployerType(JobEmployerType.INDIVIDUAL);
         job.setStatus(JobStatus.OPEN);
+        job.setEndDateTime(LocalDateTime.ofInstant(POLICY_NOW, POLICY_ZONE).plusDays(1));
 
         JobService jobService = mock(JobService.class);
         when(jobService.getById(job.getId())).thenReturn(job);
@@ -54,7 +65,8 @@ class ApplicationReadinessTest {
                 mock(CompanyContactService.class), mock(JobAssignmentService.class),
                 mock(JobApplicationMapper.class), new PageableSanitizer(),
                 mock(GalleryService.class), mock(ActivityNotificationService.class),
-                bankAccountService, mock(PricingService.class));
+                bankAccountService, mock(PricingService.class),
+                new JobAvailability(Clock.fixed(POLICY_NOW, POLICY_ZONE), POLICY_PROPERTIES));
 
         when(jobApplicationDao.save(any())).thenAnswer(i -> i.getArgument(0));
     }

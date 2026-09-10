@@ -558,14 +558,16 @@ Gerekçe: (b) elle SQL yazmayı ortadan kaldırmıyor, yalnızca kopyalanacak bi
 
 ## 2j. Hız sınırı
 
-**Beş kova var, yazma ve pahalı genel uçların hepsi kapsanıyor.**
+**Yedi kova var, yazma ve pahalı genel uçların hepsi kapsanıyor.**
 
 | Kova | Kapsam | Varsayılan | Anahtar |
 |---|---|---|---|
 | `AUTH` | giriş, kayıt akışı, şifre sıfırlama, kimlik doğrulama, **personel girişi/yenilemesi/parola değişimi** | 10 / 1 dk | yol + IP + hedef özeti |
 | `UPLOAD` | görsel, özgeçmiş, profil fotoğrafı, logo, rozet görseli | 20 / 1 dk | kova + IP |
 | `MESSAGE` | mesaj gönderme | 30 / 1 dk | kova + IP |
+| `REALTIME_CREDENTIAL` | WebSocket bağlantı credential'ı üretme | 10 / 1 dk | kova + IP |
 | `PUBLIC` | ilan listesi/detayı/görselleri ve adres ağ geçidi | 120 / 1 dk | kova + IP |
+| `SITEMAP` | sitemap manifesti ve en çok 50.000 satırlık shard projection'ı | 30 / 1 dk | kova + IP |
 | `WRITE` | **diğer tüm** POST/PUT/PATCH/DELETE | 60 / 1 dk | kova + IP |
 
 **`WRITE` bilerek yakalayıcı.** Yeni bir yazma ucu eklendiğinde listeye yazılması gerekmez, kendiliğinden kapsanır — `SecurityConfig`'teki `anyRequest().authenticated()` ile aynı mantık: unutulan uç açıkta kalmaz.
@@ -574,7 +576,8 @@ Gerekçe: (b) elle SQL yazmayı ortadan kaldırmıyor, yalnızca kopyalanacak bi
 
 **Anahtar IP, kullanıcı değil.** `RateLimitFilter` güvenlik zincirinin dışında (`HIGHEST_PRECEDENCE + 20`) çalıştığı için o noktada principal henüz yok. Kullanıcı bazlı sınır istenirse filtrenin `SessionAuthFilter`'dan sonraya, güvenlik zincirinin içine taşınması gerekir.
 
-**Diğer okuma uçları sınırlanmıyor.** Genel ilan korpusu ve adres sağlayıcı ağ geçidi `PUBLIC` kovasındadır; kimlikli profil okumaları sınır dışıdır.
+**Diğer okuma uçları sınırlanmıyor.** Genel ilan korpusu ve adres sağlayıcı ağ geçidi `PUBLIC`, sitemap
+projection'ı ondan bağımsız `SITEMAP` kovasındadır; kimlikli profil okumaları sınır dışıdır.
 
 Aşıldığında 429 ve `TOO_MANY_REQUESTS` döner.
 
@@ -776,7 +779,7 @@ başvuru sonrası doğrulamaya yönlendirmek — `assertReadyToWork` bu yüzden 
 
 **Tekil atama liste içinde aranmaz.** `GET /job-assignments/{id}` listeyle aynı `MyAssignmentDto` sözleşmesini, adres görünürlüğünü ve kapak zenginleştirmesini kullanır. `AssignmentParticipants` işçiyi, ilan sahibini ve şirketin güncel yetkilisini tek sınırda çözer; diğer kullanıcı ve olmayan kimlik aynı `job.assignment.not.found` 404 yanıtını alır. Güncel şirket yetkilisinin okuma hakkı ona kapalı şirket adresini açmaz: yalnız etkin işçi, ilan sahibi veya `addressPublic` tam konumu görür.
 
-**Süresi geçmiş ilanlar aramada görünmez.** `searchIds` `status = OPEN`'a ek olarak `endDateTime >= :activeAfter` şartını taşır (bitiş tarihi olmayan ilanlar hariç tutulmaz). Öncesinde üç hafta önce bitmiş bir ilan hâlâ listeleniyordu; işçi başvuruyor, işveren anlamsız bir başvuru alıyordu. Karşılaştırma duvar saati olduğu için `job-search.zone-id` üzerinden yapılır (§2h ile aynı gerekçe).
+**Süresi geçmiş ilanlar aramada görünmez ve başvuru kabul etmez.** `searchIds` `status = OPEN`'a ek olarak `endDateTime > :activeAfter` şartını taşır (bitiş tarihi olmayan ilanlar aramada hariç tutulmaz). Tam bitiş anı artık kapalıdır. `JobAvailability`, `Clock` ve `job-search.zone-id` ile aynı kuralı başvuru yazımında ve detay cevabındaki `acceptingApplications` alanında uygular; eksik bitiş zamanını başvuru ve detay için fail-closed değerlendirir. Böylece doğrudan detay URL'si aramadan düşmüş bir ilana yazma yolu açmaz, web de aynı boolean ile başvuru ve indeksleme kararını verebilir. Karşılaştırma duvar saati olduğu için `job-search.zone-id` üzerinden yapılır (§2h ile aynı gerekçe).
 
 `:activeAfter` **null olamaz.** Null bırakılsaydı Postgres parametrenin tipini çıkaramayıp `could not determine data type` verirdi — `:query` için `cast(... as string)` gerektiren tuzağın aynısı. Parametreyi zorunlu yapmak sorunu kaynağında kaldırıyor.
 
@@ -793,6 +796,54 @@ başvuru sonrası doğrulamaya yönlendirmek — `assertReadyToWork` bu yüzden 
 **Swagger `Pageable`'ı düz parametre olarak çizmeli.** `@ParameterObject` olmadan springdoc `Pageable`'ı tek bir nesne sanıyor ve `sort` için `["string"]` örneği üretiyor; "Try it out" diyen herkes 500 alıyordu. Sayfalı uçların hepsinde `@ParameterObject @PageableDefault` var.
 
 **Yanıt zarfı `PageDto`:** `content`, `page`, `size`, `totalElements`, `totalPages`, `first`, `last`.
+
+### İlan sitemap manifesti — değişmez projection (#166)
+
+Public `GET /jobs` sitemap kaynağı değildir. Offset sayfaları hareketli veri kümesinde kayıt atlayıp
+yineler, her sayfa başka availability anını görür ve 50.000 URL için yüzlerce istek genel public-job hız
+sınırını tüketir. Sitemap'in ayrı interface'i iki GET ucudur:
+
+- `GET /sitemap/jobs/manifest` → `version`, `createdAt`, `expiresAt`, `entryCount`, `shardSize` ve
+  `shards[{number,entryCount}]`;
+- `GET /sitemap/jobs/manifests/{version}/shards/{shard}` → `version`, `shard` ve yalnız
+  `entries[{id,updatedAt}]`. `updatedAt` authoritative kolonun nullable değeridir; tarih uydurulmaz.
+
+Manifest oluşturma `SitemapManifestService` seam'inin arkasında materialized snapshot'tır. Uygun küme
+`status = OPEN`, `is_deleted = false`, dolu ve henüz geçmemiş `end_date_time` koşuluyla tek
+`REPEATABLE_READ` transaction'ında sayılır ve `(created_at ASC, id ASC)` ordinal'iyle
+`sitemap_manifest_entries` tablosuna yazılır. Kapanma, yeniden açılma, süre dolumu, soft delete veya yeni
+ilan aynı version'ı değiştiremez. Entry satırının `jobs` yabancı anahtarı bilerek yoktur: ilan sonradan
+silinse bile ilan edilmiş version TTL sonuna kadar aynı union'ı vermek zorundadır. Manifest silinince entry
+satırları cascade ile gider. Bu iki tablo denetlenen domain kaydı değil, TTL'li türetilmiş cache'tir;
+`created_at` manifest version'ının yayın anıdır, audit alanı değildir. Bu yüzden `BaseEntity` soft-delete
+kolonlarını taşımazlar: süresi dolan manifest fiziksel silinir ve bağlı projection da fiziksel cascade olur.
+Soft delete, eski snapshot'ları ve potansiyel olarak çok büyük entry kümelerini süresiz tutarak bounded-storage
+garantisini bozardı.
+
+Çok örnekli stampede iki kademede kapanır. JVM içindeki adil olmayan kısa kilit aynı instance'ın bağlantı
+yığmasını önler; PostgreSQL session advisory lock bütün instance'ları tek üreticide birleştirir. Lock,
+`REPEATABLE_READ` snapshot'ı başlamadan önce ayrı ve havuz dışı bağlantıda alınır; transaction içindeki
+`pg_advisory_xact_lock` snapshot'ı beklemeden önce sabitleyebileceği için kullanılmaz. Kilidi alan çağrı canlı
+manifesti yeniden okur; başka instance üretmişse aynı version'ı döndürür.
+
+`refresh_after = expiresAt - refreshBeforeExpiry` yeni index çağrısına yeterli yayın penceresi bırakır.
+Yenileme penceresi TTL'nin en fazla yarısı olabilir; böylece aynı anda en fazla iki canlı snapshot tutulur. Bu
+andan sonra yeni version üretilebilir, ama eski version `expiresAt` anına kadar bütün ilan edilmiş shard'ları
+200 döndürür. Bilinmeyen, süresi dolmuş veya aralık dışı shard aynı
+`SITEMAP_MANIFEST_NOT_FOUND` 404'ünü alır; bozuk UUID/int path 400'dür. Bir version'da önceden istenmiş
+olmayan shard sonradan doğamaz, bu yüzden 404 cache zehirlenmesi union'ı eksiltemez.
+Shard ucundaki canlı-manifest doğrulaması ile ordinal aralığı aynı salt-okunur `REPEATABLE_READ`
+transaction'ındadır; eşzamanlı expiry temizliği bu iki sorgu arasında entry'leri cascade silip 200 boş shard
+üretemez.
+
+Bellek sınırı allocation'dan önce doğrulanır: `shardSize` ve `maxShards` ayrı ayrı en fazla 50.000,
+`entryCount` en fazla çarpımlarıdır. Her shard ordinal aralığıyla PK indeksinden okunur; manifest oluşturma
+ve shard okuma sorgu sayısı veri büyüklüğünden bağımsızdır. `statement_timeout`, `lock_timeout` ve Spring
+transaction timeout'u sınırlıdır. Operasyonlar `koala.sitemap.manifest.operations` sayacında
+`operation=manifest|shard`, `outcome=hit|created|served|not_found|failed` etiketleriyle genel public-job
+telemetrisinden ayrılır. Hem manifest hem shard IP başına varsayılan 30/dk olan ayrı `SITEMAP` hız sınırı
+kovasını paylaşır; genel `PUBLIC` ilan bütçesini tüketmez. Yapılandırma `sitemap.manifest.*`, ortam
+değişkenleri `SITEMAP_MANIFEST_*` altındadır.
 
 ## 2m. İstemci sözleşmesi
 
@@ -850,6 +901,8 @@ giriş kapatılmamıştı — tek gerçek kaynak sunucunun 400'üydü. `expiresA
 **`ConversationDto` liste için gerekeni taşıyor.** Sohbet listesi son mesaj metnini ve okunmamış sayısını çiziyordu, ikisi de yoktu; istemci satır başına ayrı istek atmak zorunda kalıyordu. `lastMessageBody` `Conversation` üzerine **denormalize edildi** (mesaj gönderilirken yazılıyor), `unreadCount` ise sayfadaki tüm konuşmalar için `countUnreadByConversationIds` ile **tek sorguda** toplanıyor. Yani liste iki sorgu: konuşmalar + sayaçlar.
 
 **İki ayrı ilan DTO'su var.** `JobSummaryDto` liste ve harita için, `JobDetailDto` detay sayfası için. İkisi de `addressPrecision` taşır. Tam adres ve gerçek koordinat yalnız ilan sahibi, etkin ataması (`PENDING_CONFIRMATION`/`CONFIRMED`/`IN_PROGRESS`) bulunan işçi veya `addressPublic=true` olan şirket ilanında döner. Tamamlanan/iptal edilen atamalarda adres yeniden gizlenir ve bireysel ilanlarda `addressPublic` değeri dikkate alınmaz. Diğer çağrılarda sokak, bina, kapı, posta kodu ve yön tarifi temizlenir; koordinat iki ondalığa yuvarlanır. `JobAddressVisibility` bu kararı ve maskelemeyi tek yerde tutar. `GET /jobs/{id}` özet değil detay döner.
+
+**İlan özetinin revizyon zamanı kalıcı kayıttan gelir.** `JobSummaryDto.updatedAt`, `Job`'un `BaseEntity.updatedAt` alanından MapStruct ile doğrudan eşlenir; arama isteğinin saatiyle üretilmez. Alan `Instant` JSON sözleşmesine göre UTC ISO-8601 (`2026-09-09T10:11:12Z`) döner ve eski kayıtlarda `null` olabilir. Bütün özet liste yolları aynı `JobMapper.toJobSummaryDto` yüzeyinden geçtiği için arama, kaydedilen ilanlar, şirket ilanları ve iç içe başvuru/atama özetleri aynı yetkili değeri taşır. Web sitemap'i `lastModified` için bu alanı kullanır; alan adres görünürlüğü kararını veya herkese açık gizlilik sınırını değiştirmez.
 
 **Yenileme ucu süresi dolmuş erişim token'ıyla çalışır.** `/auth/refresh-token` zaten *token süresi dolduğu için* çağrılıyor; iki yerde birden reddediliyordu:
 1. `SessionAuthFilter` `permitAll` uçlarda bile başlığı ayrıştırıp `ExpiredJwtException` fırlatıyordu → filtre artık `shouldNotFilter` ile bu ucu atlıyor. Uç kendi kimlik doğrulamasını yapıyor, filtrenin katacağı bir şey yok.
@@ -949,7 +1002,29 @@ Uyuşmazlık yalnızca **emanette para varken** açılabilir, atama başına ayn
 
 **`SPLIT` çözümü bilerek yok.** `PaymentStateMachine` tek yönlü ve tek sonuçlu: bir atama ya `RELEASED_TO_WORKER` ya `REFUNDED` olur. Kısmi paylaşım eklenirse durum makinesinin de bölünebilir hale gelmesi gerekir; yarım çalışan bir yol bırakmaktansa dışarıda tutuldu.
 
-**Şikayet üç hedeften birine bağlanabilir:** kullanıcı, ilan veya mesaj. Üçü de boşsa 400. Kendini şikayet etmek reddediliyor. Sonuçlanmış (`ACTIONED`/`DISMISSED`) bir şikayet tekrar sonuçlandırılamaz.
+**Şikayet en az bir hedefe bağlanır:** kullanıcı, ilan, mesaj veya görsel. Hepsi boşsa 400; geriye uyumluluk
+için birden fazlası birlikte verilebilir. Kendini şikayet etmek reddediliyor. Sonuçlanmış
+(`ACTIONED`/`DISMISSED`) bir şikayet tekrar sonuçlandırılamaz.
+
+**Mesaj şikayetinin yetkisi mesajlaşma aggregate'inde ve tek sorgudadır.** `POST /reports` mesaj kimliği
+aldığında karar istemcinin gönderebileceği `reportedUserId` ya da `conversationId` değerine dayanmaz;
+`MessageDao` mesajı kalıcı `message → conversation → active participant` ilişkisi üzerinden şikayet eden
+için pessimistic write lock ile yükler. Olmayan, soft-delete edilmiş, konuşması silinmiş veya çağıranın aktif
+katılımcısı olmadığı mesaj aynı `MESSAGING_MESSAGE_NOT_FOUND` 404'üne düşer. Şikayet edilen kullanıcı da
+saklanan mesajın göndereninden türetilir ve eski istemcinin birlikte verdiği `reportedUserId` ezilir; gönderen
+kendi mesajını şikayet ederse 400 alır. Eski istemcinin mesajla birlikte verdiği ilan/görsel hedefleri ise
+korunur. Yükleme, sahiplik
+kontrolü ve şikayet kaydı `ReportManager.createReport` transaction'ında kaldığı için istemcinin mesaj
+geçmişini sayfa sayfa taramasına gerek yoktur.
+
+**Mesaj şikayetinin doğal idempotency anahtarı `(reporter_id, message_id)` çiftidir.** Aynı canonical hedefler
+(kalıcı mesaj, ondan türeyen gönderen ve varsa legacy ilan/görsel), normalize gerekçe ve açıklamayla retry ilk
+`Report` satırını ve kimliğini, karar `ACTIONED`/`DISMISSED` olmuşsa bile döndürür; aynı anahtarın farklı
+canonical payload'la kullanımı 409 `REPORT_IDEMPOTENCY_CONFLICT` olur. Mesaj satırındaki lock
+eşzamanlı retry'ları sıralar, `uk_reports_active_reporter_message` kısmi benzersiz indeksi kalıcı savunmayı
+sağlar. Migration tarihsel aktif duplicate görürse kayıt silerek tahmin yürütmez; operatör uzlaştırana kadar
+HALT eder. Tekillik indeksinden önce eski mesaj şikayetlerinin boş ya da istemciden gelmiş `reported_user_id`
+değerleri kalıcı `messages.sender_id` ile canonical hale getirilir.
 
 ### Şikayet inceleme yüzeyi — iki DTO, bir sınır (#63)
 
@@ -1147,6 +1222,14 @@ bırakıp anlatıyı silmek tutarsız olurdu. `storage_key` ve `checksum_sha256`
 
 **Push DLQ transport/poison hataları içindir, provider retry kuyruğu değildir.** Beklenen FCM sonuçları DB state machine içinde ACK'lenir. Beklenmeyen runtime hatası claim'i yeniden alınabilir bırakıp listener'a taşar; stateless sınırlı Rabbit retry sonunda `RepublishMessageRecoverer` ayrı `push.queue.dlq`'ya yollar. Canlıda arguments'sız yaratılmış `push.queue` declaration'ına DLX argument eklenmedi; aksi hâlde Rabbit `PRECONDITION_FAILED` ile deploy'u kırardı. Scheduler daha önce provider denemesi yapılmış (`push_attempt_count > 0`) due/stale teslimatları ve yalnız `failure_reason = 'TOKEN_SERIALIZATION_BUSY'` olan due kayıtları sürer. İkinci istisna attempt'i sıfıra geri alınmış ilk Rabbit teslimatının token kilidi çakışmasında kaybolmaması içindir; düz attempt=0 satırı scheduler'a girmez. İlk publish ve publish-loss recovery genel notification outbox'ının sorumluluğudur. Böylece outbox publisher ile provider scheduler aynı ilk PUSH satırını ayrı ayrı claim etmez.
 
+**E-posta, SMS ve push kuyruğa doğrudan yazılmaz; `Notification` satırı aynı zamanda kalıcı publish outbox'ıdır.** Üretici transaction yalnızca `QUEUED` bildirimle exact Rabbit payload'ını, önceliği ve ilk çalışma anını birlikte commit eder. Çağıranın gördüğü başarı broker teslimi değil, bu iki verinin atomik ve kalıcı kabulüdür. `HIGH` ile `NORMAL` aynı dayanıklılık sözleşmesine sahiptir; `HIGH` yalnız due batch içinde önce sahiplenilir. Broker o anda kapalıyken `NORMAL` sessizce kaybolmaz, `HIGH` da DB/Rabbit arasında sahte bir atomiklik iddia etmez.
+
+**Publish worker üç fazlıdır.** Kısa DB transaction atomik claim ve rastgele fencing token alır, Rabbit publish DB transaction'ı dışında tamamlanır, sonuç ayrı kısa transaction'da yalnız aynı token hâlâ sahibiyse yazılır. Rabbit gönderimi mandatory routing kullanır; correlated publisher ACK gelmeden ve basic.return ile `NO_ROUTE` olmadığı görülmeden `published_at` yazılmaz. Böylece exchange var olduğu halde binding ya da queue kaybolduğunda sessiz başarı üretilmez. İki instance aynı bildirimi publish etmez. Retry bütçesini yalnız broker'ın yönlendirmediği bilinen publish hataları tüketir; broker onayından sonraki `completeDispatch` DB hatası publish hatası diye yakalanmaz, claim'i yerinde bırakıp scheduler'a taşar. Publish sonrası process çökmesiyle aynı belirsizliği taşıyan stale claim terminal yapılmaz ve bütçeden düşülerek aynı notification ID ile yeniden publish edilir. Geçici broker hatası exponential backoff ve bounded jitter ile en fazla yapılandırılmış attempt sayısı kadar denenir; sonrasında bildirim `FAILED / BROKER_PUBLISH_EXHAUSTED` olur. Ham exception, broker adresi ve kimlik bilgisi `failure_reason`'a yazılmaz. Exact payload'ı bulunmayan eski `QUEUED` kayıt tahmin edilmez; grace period sonunda `FAILED / LEGACY_DISPATCH_PAYLOAD_UNAVAILABLE` ile görünür biçimde kapatılır.
+
+**Publish taraması shared scheduler'ı kullanmaz.** Tek iş parçacıklı ayrı tetikleyici, sabit boyutlu worker havuzuna her notification ID'yi ayrı görev olarak verir; bounded queue dolduğunda caller-runs backpressure uygulanır ve iş düşürülmez. Outbox satırı oluşturan isteğin `requestId`, `userId`, `sessionId` ve `deviceId` değerlerini payload ile birlikte saklar. Worker her publish için yalnız o satırın context'ini kurar ve sonunda önceki MDC'yi geri yükler; eski satırlar her denemede yeni bir `requestId` alır, aynı scheduler taramasının kimliğini paylaşmaz. Outbox backlog sayısı, en eski kaydın yaşı ve terminal broker publish hataları etiketsiz sabit gauge'larla DB'den yenilenir; notification veya kullanıcı kimlikleri metric label olmaz.
+
+**E-posta, SMS ve push consumer idempotency kapısı token'lı `QUEUED → PROCESSING` delivery lease'idir.** Yanlış kanal ile `SENT`, `FAILED` ve `SUPPRESSED` tekrar provider'a gitmez; canlı `PROCESSING` claim'i başarı diye ACK edilmez, Rabbit yeniden dener. Claim sonucu DB cevabı kaybolsa veya process çökerse lease süresi dolan `PROCESSING` kaydı yeni fencing token ile geri alınabilir. Complete/fail/suppress/retry geçişleri yalnız aynı token'a ait delivery kolonlarını dar SQL ile günceller; `published_at`, publish claim'i, exact payload, öncelik ve attempt sayısını entity save ile geri ezmez. E-posta transient hatasında claim tekrar `QUEUED` bırakılır; başarılı sonraki deneme eski retry nedenini temizler. Bounded Rabbit retry bittikten sonra custom recoverer önce sabit `EMAIL_DELIVERY_EXHAUSTED` durumunu kalıcılaştırır, ardından DLQ publish için de mandatory routing ve correlated confirm bekler. DB terminalizasyonu veya DLQ confirm başarısızsa kaynak mesaj ACK edilmez; terminalleşmiş fakat henüz DLQ'ya onaylı yazılamamış e-posta tekrar provider'a gitmeden recovery yoluna döner. Push'ın provider hata sınıflandırması ve token silme politikası Firebase provider işine aittir. SMTP/SMS/FCM provider isteği kabul ettikten fakat `SENT` yazılmadan önce process çökerse provider idempotency anahtarı olmadan mutlak exactly-once garantisi mümkün değildir; lease ve fencing, belirsizliği süreyle sınırlar ve eski worker'ın yeni sonucu bozmasını engeller.
+
 **Bildirim akışı artık teslimat kaydı değil.** `Notification` hem teslimat kaydı (EMAIL/SMS/PUSH) hem uygulama içi bildirim (`IN_APP`) tutuyor; akış **yalnızca `IN_APP`** döndürüyor.
 
 Önceki hâlinde akış bütün kanalları döndürüyordu ve `ActivityNotificationManager` olay başına iki kayıt yazıyordu — dahası `sendPushToUser` **cihaz başına** bir kayıt açıyor, yani iki telefonu olan kullanıcı tek bir olay için üç satır görüyordu. `unreadCount` de aynı sebeple katlanıyordu. Kanala göre süzmek en az değişiklik olurdu ama anlamı zorlardı: e-posta gönderiminin kaydını uygulama içi bildirim diye göstermek olurdu.
@@ -1245,7 +1328,7 @@ yetkilendirme daima durum kontrolünden önce (§2ar3), yani yabancı biri davet
 olmadığını da öğrenemiyor.
 
 **Bekleyen davet tekil.** `PENDING` bir davet dururken aynı kişiye ikinci davet **409**
-(`COMPANY_CONTACT_INVITATION_ALREADY_PENDING`); öncesinde her çağrı yeni bir kayıt ve `CRITICAL` öncelikli
+(`COMPANY_CONTACT_INVITATION_ALREADY_PENDING`); öncesinde her çağrı yeni bir kayıt ve `HIGH` öncelikli
 yeni bir e-posta üretiyordu ve kayıtların hepsi ayrı ayrı kabul edilebiliyordu. Cevaplanmış davet yeni daveti
 engellemez. "Kullanıcı zaten yetkili" dalı da `ValidationException`'dan `ConflictException`'a çekildi (§2ag):
 ikisi de durum çakışması, girdi şekli hatası değil.
@@ -1304,7 +1387,7 @@ yerden kopyalamadan `GET /contact-invitations/{targetId}` ile davetine ulaşabil
 
 **Fan-out `ActivityNotificationService`'e taşınmadı, desen yerinde uygulandı — gerekçesi şu.** O sınıfın her
 ucu `notify(...)` üzerinden geçiyor ve **üç kanala birden** gönderiyor: in-app, push, e-posta. Davet ise
-kendi şablonuna, kendi parametrelerine ve `DispatchPriority.CRITICAL`'e sahip özel bir e-posta gönderiyor.
+kendi şablonuna, kendi parametrelerine ve `DispatchPriority.HIGH`'a sahip özel bir e-posta gönderiyor.
 `notify` çağırmak o e-postanın yanına ikinci bir düz metin e-postası ve bir push daha koyardı — yani
 kullanıcı tek olay için üç yerine beş teslimat alırdı. `ActivityNotificationManager`'a yalnız in-app gönderen
 bir istisna metot eklemek de o sınıfın tek kuralını (her olay üç kanala gider) bozardı. Bu yüzden yalnız
@@ -2258,6 +2341,10 @@ TD1 olmayan bir MRZ reddediliyor — pasaportta (TD3) zaten TCKN yok.
 
 **Varsayılan kapalı ve fail-closed.** `identity.passive-authentication.enabled=false` iken davranış §2aq'daki gibi. Açıkken `sod`+`dg1` **zorunlu**; eksikse `IDENTITY_EVIDENCE_REQUIRED`. Güven çıpası yüklenmemişse hiçbir şey doğrulanmıyor — açılışta hata loglanıyor ve her doğrulama reddediliyor. Yani "açtım ama sertifika koymayı unuttum" hâli sessizce herkesi geçirmiyor.
 
+**Active Authentication, Passive Authentication olmadan açılamaz (#154).** `identity.passive-authentication.active-authentication-required=true` verilip `identity.passive-authentication.enabled=false` bırakılırsa `IdentityVerificationProperties` doğrulaması uygulamayı açılışta düşürüyor. Böylece `IDENTITY_ACTIVE_AUTH_REQUIRED=true` değerinin çalışma anında sessizce etkisiz kalması mümkün değil; hata yalnızca iki yapılandırma anahtarını söylüyor, güven çıpası dizini gibi dağıtıma özgü değerleri taşımıyor. İki bayrağın varsayılanı da `false`; PA+AA birlikte `true` olduğunda bağlama geçerli.
+
+**Eksik güven çıpasının public sözleşmesi değişmedi, operasyonel görünürlüğü değişti.** Çalışma anındaki `IDENTITY_NO_TRUST_ANCHORS` istemciye yine 400 dönüyor; fakat `GlobalExceptionHandler` bu tek doğrulama kodunu `BackendErrorMonitor`'a iletiyor. Böylece `koala.backend.errors{code="IDENTITY_NO_TRUST_ANCHORS",type="VALIDATION_EXCEPTION"}` sayacı artıyor ve Sentry açıksa aynı hata oraya da gidiyor. Diğer 400 doğrulama hataları operasyonel alarm üretmiyor.
+
 **CSCA sertifikaları imajın içinde geliyor.** `src/main/resources/csca/` altında 12 Türkiye sertifikası duruyor (48 KB) ve classpath'ten yükleniyor. Bunlar **açık anahtar, sır değil** — repoda durmalarının sakıncası yok, üstelik hangi sürümde hangi çıpalara güvenildiği git geçmişinden okunabiliyor.
 
 Bu tercih bilinçli: dizinden okusaydı prod'da volume bağlamak ve dosyaları elle kopyalamak gerekirdi, üstelik unutulduğunda hata açılışta değil ilk doğrulamada çıkardı. `identity.passive-authentication.trust-anchor-directory` hâlâ duruyor ama artık **ek** çıpa yüklüyor, tek kaynak değil — test ortamında ya da NVİ'den ayrı bir sertifika gelirse diye.
@@ -2476,7 +2563,7 @@ onu çizer. Gönderen tarafın bağlantıyı eklemeyi hatırlaması gerekmiyor.
 
 **Neden `optional` değil de `COMMERCIAL`:** ilk hâli kapatılabilir her kategoriye bağlantı koyuyordu ve bu
 `COMPANY_UPDATES`'i de kapsıyordu — o kategorinin taşıdığı tek şey şirket kurulumu ve **yetkili daveti**
-(`CompanyContactInvitationManager`, `DispatchPriority.CRITICAL`). Eyleme çağıran bir davetin altına "tek tıkla
+(`CompanyContactInvitationManager`, `DispatchPriority.HIGH`). Eyleme çağıran bir davetin altına "tek tıkla
 çıkabilirsin" yazmak yanlış: davet pazarlama değil. Issue #31 de bağlantıyı "pazarlama e-postalarında" diye
 istiyor. Geriye kalan tek kapatılabilir kategori `JOB_ALERTS` ve o bugün yalnızca push gönderiyor, yani
 pratikte kaybedilen bir şey yok; iş alarmı e-postası yazıldığında bu sınır yeniden değerlendirilmeli.
@@ -3570,6 +3657,9 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 - `PendingRegistration` — **bilerek hard delete.** Kaydını hiç tamamlamamış birinin e-postasını süresiz saklamak koruma değil, gereksiz veri tutma. Kayıt akışı zaten sil-ve-yeniden-oluştur mantığıyla çalışıyor.
 - `CompanyContact` ve `JobCategory` — `BaseEntity` alt sınıfı değiller, denetim kolonları yok. `CompanyContact` bir üyelik kaydı ve silinmesi geçmiş kaybı demek; ileride `BaseEntity`'ye taşınmalı.
 - `AdminAuditEntry` ve `AdminAuditEntryDetail` — **bilerek hard delete.** Saklama işinin işi zaten fiziksel silmek; soft delete edilen bir denetim satırı süresini hiç doldurmazdı (§2av).
+- `sitemap_manifests` ve `sitemap_manifest_entries` — **bilerek hard delete.** Bunlar denetlenen domain kaydı
+  değil, TTL'li türetilmiş cache'tir; manifestteki `created_at` yayın/version zamanıdır. Expiry temizliği
+  manifesti fiziksel siler, entry'ler cascade olur. Soft delete bounded-storage garantisini bozardı (§2l).
 - `LoginAttempt` — **yarı istisna, ve ayrımı karıştırma.** Entity `@SQLDelete` + `@SQLRestriction` taşımaya devam ediyor: `loginAttemptDao.deleteById(...)` hâlâ soft delete ve satır tabloda kalıyor. **Ama saklama işi fiziksel siliyor** — `LoginAttemptDao.deleteUnattributedBefore` / `deleteAttributedBefore` native SQL, çünkü Hibernate `@SQLRestriction`'ı bulk JPQL delete'e de uyguluyor ve soft delete edilmiş bir satır saklama süresini hiçbir zaman dolduramazdı; adresi süresiz taşımaya devam ederdi. Gerekçesi denetim tablolarınınkiyle aynı, farkı bu tablonun `BaseEntity`'yi bırakamaması. Tam anlatım §2aw'de. Bu yüzden `SoftDeleteBehaviourIT`'in soft delete örneği artık `login_attempts` değil `universities`: aynı tabloyu hem "fiziksel olarak silinmemeliydi" örneği hem "saklama işi fiziksel siler" örneği olarak kullanmak iki belgeyi çelişkiye sokuyordu.
 - `EmailVerification`, `PhoneVerification`, `IdentityVerification` tek tabloyu (`user_verifications`) paylaşıyor; `@SQLDelete` kök sınıf `UserVerification` üzerinde, alt sınıflarda ayrıca yok. Aynı durum `Media` hiyerarşisi için de geçerli.
 

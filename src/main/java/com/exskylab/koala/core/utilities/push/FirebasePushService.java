@@ -33,7 +33,8 @@ public class FirebasePushService implements PushService {
 
     @Override
     @SuppressWarnings("deprecation")
-    public String send(PushMessage pushMessage) {
+    public String send(PushMessage pushMessage, Duration timeout) {
+        requirePositiveTimeout(timeout);
         Message message;
         try {
             if (pushMessage == null || pushMessage.token() == null || pushMessage.token().isBlank()
@@ -158,6 +159,12 @@ public class FirebasePushService implements PushService {
 
     private Duration atLeast(Duration duration, Duration minimum) {
         return duration == null || duration.compareTo(minimum) < 0 ? minimum : duration;
+    }
+
+    private static void requirePositiveTimeout(Duration timeout) {
+        if (timeout == null || timeout.isNegative() || timeout.isZero()) {
+            throw new IllegalArgumentException();
+        }
     }
 
     private void validateDataKeys(Map<String, String> data) {

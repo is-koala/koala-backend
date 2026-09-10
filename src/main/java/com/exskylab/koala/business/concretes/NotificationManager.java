@@ -9,10 +9,11 @@ import com.exskylab.koala.business.abstracts.NotificationService;
 import com.exskylab.koala.business.abstracts.UnsubscribeTokenService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.NotificationMessages;
+import com.exskylab.koala.core.consumers.NotificationDeliveryBusyException;
 import com.exskylab.koala.core.dtos.notification.request.*;
 import com.exskylab.koala.core.exceptions.*;
+import com.exskylab.koala.core.logging.NotificationDispatchLogContext;
 import com.exskylab.koala.core.producers.notification.EmailTaskDto;
-import com.exskylab.koala.core.producers.notification.NotificationProducerService;
 import com.exskylab.koala.core.producers.notification.PushTaskDto;
 import com.exskylab.koala.core.producers.notification.SmsTaskDto;
 import com.exskylab.koala.core.privacy.PushTokenMutationLock;
@@ -25,7 +26,9 @@ import org.springframework.data.domain.Pageable;
 import java.time.Instant;
 import org.springframework.data.domain.Sort;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
+import com.exskylab.koala.core.properties.NotificationDispatchProperties;
 import java.util.Collection;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,7 +49,6 @@ public class NotificationManager implements NotificationService {
 
     private final PageableSanitizer pageableSanitizer;
     private final NotificationDao notificationDao;
-    private final NotificationProducerService notificationProducerService;
     private final ObjectMapper objectMapper;
     private final DeviceService deviceService;
     private final SecurityService securityService;
@@ -54,9 +56,9 @@ public class NotificationManager implements NotificationService {
     private final UnsubscribeTokenService unsubscribeTokenService;
     private final IysService iysService;
     private final PushTokenMutationLock pushTokenMutationLock;
+    private final NotificationDispatchProperties dispatchProperties;
 
     public NotificationManager(NotificationDao notificationDao,
-                                NotificationProducerService notificationProducerService,
                                DeviceService deviceService,
                                  ObjectMapper objectMapper,
                                SecurityService securityService,
@@ -64,9 +66,9 @@ public class NotificationManager implements NotificationService {
                                NotificationPreferenceService notificationPreferenceService,
                                UnsubscribeTokenService unsubscribeTokenService,
                                IysService iysService,
-                               PushTokenMutationLock pushTokenMutationLock) {
+                               PushTokenMutationLock pushTokenMutationLock,
+                               NotificationDispatchProperties dispatchProperties) {
         this.notificationDao = notificationDao;
-        this.notificationProducerService = notificationProducerService;
         this.objectMapper = objectMapper;
         this.deviceService = deviceService;
         this.securityService = securityService;
@@ -75,6 +77,7 @@ public class NotificationManager implements NotificationService {
         this.unsubscribeTokenService = unsubscribeTokenService;
         this.iysService = iysService;
         this.pushTokenMutationLock = pushTokenMutationLock;
+        this.dispatchProperties = dispatchProperties;
     }
 
     private boolean suppressed(User recipient, NotificationCategory category, NotificationChannel channel,
@@ -146,6 +149,7 @@ public class NotificationManager implements NotificationService {
         notification.setCategory(sendEmailDto.getCategory());
         notification.setDestinationEmail(sendEmailDto.getDestinationEmail());
         notification.setSubject(finalSubject);
+        notification.setTemplateName(finalTemplateName);
         notification.setStatus(NotificationStatus.QUEUED);
 
         try {
@@ -165,12 +169,7 @@ public class NotificationManager implements NotificationService {
                 finalTemplateParameters
         );
 
-        executeDispatch(
-                () -> notificationProducerService.sendEmailTask(taskDto),
-                NotificationChannel.EMAIL,
-                dispatchPriority,
-                savedNotification.getId()
-        );
+        prepareDispatch(savedNotification, taskDto, dispatchPriority);
 
         return savedNotification;
     }
@@ -230,6 +229,7 @@ public class NotificationManager implements NotificationService {
         notification.setChannel(NotificationChannel.SMS);
         notification.setCategory(sendSmsDto.getCategory());
         notification.setDestinationPhoneNumber(sendSmsDto.getDestinationPhoneNumber());
+        notification.setTemplateName(finalTemplateName);
         notification.setStatus(NotificationStatus.QUEUED);
 
         try {
@@ -247,12 +247,7 @@ public class NotificationManager implements NotificationService {
                 finalTemplateParameters
         );
 
-        executeDispatch(
-                () -> notificationProducerService.sendSmsTask(taskDto),
-                NotificationChannel.SMS,
-                dispatchPriority,
-                savedNotification.getId()
-        );
+        prepareDispatch(savedNotification, taskDto, dispatchPriority);
 
         return savedNotification;
 
@@ -337,12 +332,7 @@ public class NotificationManager implements NotificationService {
             PushTaskDto taskDto = new PushTaskDto(savedNotification.getId());
 
 
-            executeDispatch(
-                    () -> notificationProducerService.sendPushTask(taskDto),
-                    NotificationChannel.PUSH,
-                    dispatchPriority,
-                    savedNotification.getId()
-            );
+            prepareDispatch(savedNotification, taskDto, dispatchPriority);
         }
 
     }
@@ -367,50 +357,96 @@ public class NotificationManager implements NotificationService {
     }
 
     @Override
+    @Transactional
+    public Optional<UUID> claimForDelivery(UUID notificationId, NotificationChannel channel) {
+        Instant now = Instant.now();
+        UUID claimId = UUID.randomUUID();
+        if (notificationDao.claimDelivery(notificationId, channel.name(), claimId, now,
+                now.minus(dispatchProperties.getDeliveryClaimTimeout())) == 1) {
+            return Optional.of(claimId);
+        }
+        Notification notification = notificationDao.findById(notificationId).orElse(null);
+        if (notification != null && notification.getChannel() == channel
+                && (notification.getStatus() == NotificationStatus.QUEUED
+                || notification.getStatus() == NotificationStatus.PROCESSING)) {
+            throw new NotificationDeliveryBusyException();
+        }
+        return Optional.empty();
+    }
+
+    @Override
+    @Transactional
+    public void completeDelivery(UUID notificationId, NotificationChannel channel, UUID claimId,
+                                 String externalId) {
+        requireDeliveryUpdate(notificationDao.completeDelivery(notificationId, channel.name(), claimId,
+                externalId, Instant.now()));
+    }
+
+    @Override
+    @Transactional
+    public void failDelivery(UUID notificationId, NotificationChannel channel, UUID claimId, String reason) {
+        requireDeliveryUpdate(notificationDao.failDelivery(notificationId, channel.name(), claimId,
+                reason, Instant.now()));
+    }
+
+    @Override
+    @Transactional
+    public void suppressDelivery(UUID notificationId, NotificationChannel channel, UUID claimId, String reason) {
+        requireDeliveryUpdate(notificationDao.suppressDelivery(notificationId, channel.name(), claimId,
+                reason, Instant.now()));
+    }
+
+    @Override
+    @Transactional
+    public void releaseDeliveryForRetry(UUID notificationId, NotificationChannel channel, UUID claimId,
+                                        String reason) {
+        requireDeliveryUpdate(notificationDao.releaseDeliveryForRetry(notificationId, channel.name(), claimId,
+                reason, Instant.now()));
+    }
+
+    @Override
+    @Transactional
+    public void terminalizeDelivery(UUID notificationId, NotificationChannel channel, String reason) {
+        if (notificationDao.terminalizeDelivery(notificationId, channel.name(), reason, Instant.now()) == 1) {
+            return;
+        }
+        Notification notification = notificationDao.findById(notificationId).orElse(null);
+        if (notification == null || notification.getChannel() != channel
+                || notification.getStatus() != NotificationStatus.FAILED) {
+            throw new IllegalStateException("Notification delivery could not be terminalized");
+        }
+    }
+
+    private void requireDeliveryUpdate(int updatedRows) {
+        if (updatedRows != 1) {
+            throw new IllegalStateException("Notification delivery claim was lost");
+        }
+    }
+
+    @Override
+    @Transactional
     public void setAsOpened(UUID id) {
-        var notification = notificationDao.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException(NotificationMessages.NOTIFICATION_NOT_FOUND_WITH_ID));
         log.info("Setting notification with ID: {} as opened", id);
-        notification.setStatus(NotificationStatus.OPENED);
-        notificationDao.save(notification);
-        log.info("Notification with ID: {} set as opened", id);
+        if (notificationDao.markDeliveredEmailAsOpened(id, Instant.now()) == 1) {
+            log.info("Notification with ID: {} set as opened", id);
+            return;
+        }
+        if (!notificationDao.existsById(id)) {
+            throw new ResourceNotFoundException(NotificationMessages.NOTIFICATION_NOT_FOUND_WITH_ID);
+        }
+        log.debug("Notification with ID: {} was not eligible to be marked as opened", id);
     }
 
 
-    private void executeDispatch(Runnable dispatchAction, NotificationChannel channel, DispatchPriority dispatchPriority,
-                                 UUID id) {
+    private void prepareDispatch(Notification notification, Object payload, DispatchPriority dispatchPriority) {
         try {
-            dispatchAction.run();
-        } catch (ExternalServiceException e) {
-            log.warn("Dispatch to queue failed for notification id: {}, Priority: {}. Error: {}"
-                    , id, dispatchPriority, e.getMessage());
-
-
-            if (dispatchPriority == DispatchPriority.CRITICAL) {
-                switch (channel) {
-                    case EMAIL -> {
-                        log.error("Critical email notification could not be queued for notification id: {}. " +
-                                "The process will stop.", id, e);
-                        throw new ExternalServiceException("{critical.email.dispatch.failed}");
-                    }
-                    case SMS -> {
-                        log.error("Critical SMS notification could not be queued for notification id: {}. " +
-                                "The process will stop.", id, e);
-                        throw new ExternalServiceException("{critical.sms.dispatch.failed}");
-                    }
-                    case PUSH -> {
-                        log.error("Critical push notification could not be queued for notification id: {}. " +
-                                "The process will stop.", id, e);
-                        throw new ExternalServiceException("{critical.push.dispatch.failed}");
-                    }
-                    default -> throw new ValidationException("{invalid.notification.channel}");
-                }
-
-            }
-
-            log.error("Non-critical notification could not be queued for notification id: {}. " +
-                    "The process will continue. A cleanup job might handle this.", id, e);
-
+            NotificationDispatchLogContext.capture(notification);
+            notification.setDispatchPayload(objectMapper.writeValueAsString(payload));
+            notification.setDispatchPriority(dispatchPriority);
+            notification.setNextDispatchAt(Instant.now());
+            notificationDao.save(notification);
+        } catch (JacksonException exception) {
+            throw new ExternalServiceException("{notification.dispatch.payload.could.not.serialize}");
         }
     }
 

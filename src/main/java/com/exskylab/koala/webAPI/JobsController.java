@@ -67,7 +67,7 @@ public class JobsController {
 
     @SecurityRequirements
     @Operation(summary = "İlan ara",
-            description = "Metin, şirket kimliği, kategori, il, ilçe, tür, ücret aralığı, sigorta ve deneyim şartı ile süzer. Harita için minLatitude, maxLatitude, minLongitude ve maxLongitude ile sınırlayıcı kutu verilebilir. Yalnızca OPEN durumundaki ilanlar döner. Kart alanı coverImageUrl galerinin kapak görselinden gelir.")
+            description = "Metin, şirket kimliği, kategori, il, ilçe, tür, ücret aralığı, sigorta ve deneyim şartı ile süzer. Harita için minLatitude, maxLatitude, minLongitude ve maxLongitude ile sınırlayıcı kutu verilebilir. Yalnızca OPEN durumundaki ilanlar döner. Kart alanı coverImageUrl galerinin kapak görselinden gelir. updatedAt, ilanın veri tabanındaki son değişiklik anıdır ve sitemap lastModified için yetkili kaynaktır.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "İlanlar listelendi"),
             @ApiResponse(responseCode = "400", description = "Sıralama alanı desteklenmiyor",

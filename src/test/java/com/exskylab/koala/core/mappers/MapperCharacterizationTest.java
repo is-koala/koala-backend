@@ -229,6 +229,17 @@ class MapperCharacterizationTest {
     }
 
     @Test
+    void aJobSummaryCarriesThePersistedRevisionTime() {
+        Job job = individualJob();
+        Instant revisionTime = Instant.parse("2026-09-09T10:11:12Z");
+        job.setUpdatedAt(revisionTime);
+
+        var dto = jobMapper.toJobSummaryDto(job);
+
+        assertEquals(revisionTime, dto.getUpdatedAt());
+    }
+
+    @Test
     void nestedApplicationAndAssignmentSummariesAlsoDefaultToApproximateCoordinates() {
         var application = jobApplicationMapper.toMyApplicationDto(application());
         var assignment = jobAssignmentMapper.toMyAssignmentDto(assignment(individualJob()));

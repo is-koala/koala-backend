@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-09-02-01-sitemap-manifest" author="koala">
+        <createTable tableName="sitemap_manifests">
+            <column name="version" type="UUID">
+                <constraints nullable="false" primaryKey="true" primaryKeyName="pk_sitemap_manifests"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="refresh_after" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="expires_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="entry_count" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="shard_size" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="shard_count" type="INT">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createTable tableName="sitemap_manifest_entries">
+            <column name="manifest_version" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="ordinal" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="job_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"/>
+        </createTable>
+
+        <addPrimaryKey tableName="sitemap_manifest_entries"
+                       columnNames="manifest_version,ordinal"
+                       constraintName="pk_sitemap_manifest_entries"/>
+        <addUniqueConstraint tableName="sitemap_manifest_entries"
+                             columnNames="manifest_version,job_id"
+                             constraintName="uq_sitemap_manifest_entries_job"/>
+        <addForeignKeyConstraint baseTableName="sitemap_manifest_entries"
+                                 baseColumnNames="manifest_version"
+                                 constraintName="fk_sitemap_manifest_entries_manifest"
+                                 referencedTableName="sitemap_manifests"
+                                 referencedColumnNames="version"
+                                 onDelete="CASCADE"/>
+
+        <sql>
+            ALTER TABLE sitemap_manifests
+                ADD CONSTRAINT ck_sitemap_manifest_lifetime
+                CHECK (created_at &lt; refresh_after AND refresh_after &lt; expires_at),
+                ADD CONSTRAINT ck_sitemap_manifest_entry_count
+                CHECK (entry_count BETWEEN 0 AND 2500000000),
+                ADD CONSTRAINT ck_sitemap_manifest_shard_size
+                CHECK (shard_size BETWEEN 1 AND 50000),
+                ADD CONSTRAINT ck_sitemap_manifest_shard_count
+                CHECK (shard_count BETWEEN 0 AND 50000),
+                ADD CONSTRAINT ck_sitemap_manifest_shard_math
+                CHECK (shard_count = CASE WHEN entry_count = 0 THEN 0
+                    ELSE ((entry_count - 1) / shard_size) + 1 END);
+            ALTER TABLE sitemap_manifest_entries
+                ADD CONSTRAINT ck_sitemap_manifest_entry_ordinal CHECK (ordinal &gt;= 0);
+        </sql>
+
+        <createIndex tableName="sitemap_manifests" indexName="ix_sitemap_manifests_current">
+            <column name="refresh_after" descending="true"/>
+            <column name="created_at" descending="true"/>
+        </createIndex>
+        <createIndex tableName="sitemap_manifests" indexName="ix_sitemap_manifests_expiry">
+            <column name="expires_at"/>
+        </createIndex>
+
+        <sql>
+            CREATE INDEX ix_jobs_sitemap_projection
+                ON jobs (created_at ASC, id ASC)
+                INCLUDE (updated_at, end_date_time)
+                WHERE status = 'OPEN' AND is_deleted = false;
+        </sql>
+
+        <rollback>
+            <sql>DROP INDEX ix_jobs_sitemap_projection;</sql>
+            <dropTable tableName="sitemap_manifest_entries"/>
+            <dropTable tableName="sitemap_manifests"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

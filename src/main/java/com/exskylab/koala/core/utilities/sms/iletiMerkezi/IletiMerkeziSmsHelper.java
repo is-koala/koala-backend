@@ -11,6 +11,7 @@ import com.exskylab.koala.core.utilities.sms.iletiMerkezi.response.IletiMerkeziS
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -22,7 +23,8 @@ public class IletiMerkeziSmsHelper implements SmsService {
     private final RestTemplate restTemplate;
     private final IletiMerkeziProperties properties;
 
-    public IletiMerkeziSmsHelper(RestTemplate restTemplate, IletiMerkeziProperties properties) {
+    public IletiMerkeziSmsHelper(@Qualifier("notificationRestTemplate") RestTemplate restTemplate,
+                                 IletiMerkeziProperties properties) {
         this.restTemplate = restTemplate;
         this.properties = properties;
     }

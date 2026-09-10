@@ -17,6 +17,8 @@ class ApiConventionTest {
     private static final Path DTOS = Paths.get("src/main/java/com/exskylab/koala/core/dtos");
     private static final Path SECURITY_CONFIG =
             Paths.get("src/main/java/com/exskylab/koala/core/configs/SecurityConfig.java");
+    private static final Path SITEMAP_MANAGER =
+            Paths.get("src/main/java/com/exskylab/koala/business/concretes/SitemapManifestManager.java");
 
     private static final Pattern CLASS_MAPPING = Pattern.compile("@RequestMapping\\(\"([^\"]*)\"\\)");
     private static final Pattern METHOD_MAPPING =
@@ -193,5 +195,14 @@ class ApiConventionTest {
 
         assertTrue(misplaced.isEmpty(),
                 "DTO yalnızca request/response (ve common) altında durur: " + misplaced);
+    }
+
+    @Test
+    void sitemapResponseDtosAreCreatedByMapStruct() throws IOException {
+        String manager = Files.readString(SITEMAP_MANAGER);
+
+        assertFalse(Pattern.compile("new\\s+Sitemap(?:ManifestDto|ShardDto|JobDto|ShardMetadataDto)\\s*\\(")
+                        .matcher(manager).find(),
+                "Sitemap response DTO'ları manager'da elle kurulamaz; MapStruct mapper kullanılmalı");
     }
 }

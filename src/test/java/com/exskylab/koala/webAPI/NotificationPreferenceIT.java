@@ -88,7 +88,7 @@ class NotificationPreferenceIT extends AbstractIntegrationTest {
 
         assertNotNull(notificationService.sendEmail(
                 jobAlertEmail(loud), DispatchPriority.NORMAL, true));
-        verify(notificationProducerService).sendEmailTask(any());
+        verify(notificationProducerService, never()).sendEmailTask(any());
     }
 
     @Test
@@ -119,7 +119,7 @@ class NotificationPreferenceIT extends AbstractIntegrationTest {
         payment.setCategory(NotificationCategory.APPLICATION_UPDATES);
 
         assertNotNull(notificationService.sendEmail(payment, DispatchPriority.NORMAL, true));
-        verify(notificationProducerService).sendEmailTask(any());
+        verify(notificationProducerService, never()).sendEmailTask(any());
     }
 
     @Test

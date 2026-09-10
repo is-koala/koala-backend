@@ -3,6 +3,7 @@ package com.exskylab.koala.core.configs;
 import org.springframework.boot.restclient.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
@@ -27,6 +28,7 @@ public class AppConfig {
     }
 
     @Bean
+    @Primary
     public RestTemplate restTemplate(RestTemplateBuilder builder, ClientHttpRequestFactory factory) {
         return builder.requestFactory(() -> factory).build();
     }

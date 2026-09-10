@@ -14,6 +14,7 @@ import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.core.security.StaffAuditContext;
 import com.exskylab.koala.core.helpers.Checksums;
 import com.exskylab.koala.core.helpers.Concealment;
+import com.exskylab.koala.core.helpers.StorageRollbackCleanup;
 import com.exskylab.koala.core.helpers.UploadValidator;
 import com.exskylab.koala.core.dtos.dispute.response.StaffDisputeEvidenceDto;
 import com.exskylab.koala.core.mappers.DisputeMapper;
@@ -38,8 +39,6 @@ import java.util.Set;
 import com.exskylab.koala.business.abstracts.ActivityNotificationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 import java.util.List;
@@ -231,7 +230,7 @@ public class DisputeManager implements DisputeService {
         String contentType = MediaTypeFactory.getMediaType(fileName)
                 .orElse(MediaType.APPLICATION_OCTET_STREAM).toString();
         String key = storageService.uploadFile(content, fileName, contentType, FolderType.DISPUTE_EVIDENCE);
-        removeObjectUnlessCommitted(key);
+        StorageRollbackCleanup.deleteOnRollback(storageService, key);
 
         DisputeEvidence evidence = new DisputeEvidence();
         evidence.setDispute(dispute);
@@ -276,26 +275,6 @@ public class DisputeManager implements DisputeService {
     private boolean isParticipantOf(Dispute dispute, UUID actorId) {
         return participants.isParticipant(
                 jobAssignmentService.getDetailedById(dispute.getJobAssignment().getId()), actorId);
-    }
-
-    private void removeObjectUnlessCommitted(String key) {
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            return;
-        }
-
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCompletion(int status) {
-                if (status == STATUS_COMMITTED) {
-                    return;
-                }
-                try {
-                    storageService.deleteFile(key);
-                } catch (RuntimeException exception) {
-                    log.error("Orphaned dispute evidence object could not be removed", exception);
-                }
-            }
-        });
     }
 
     @Override

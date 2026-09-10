@@ -1,9 +1,12 @@
 package com.exskylab.koala.core.properties;
 
+import jakarta.validation.constraints.AssertTrue;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
+import org.springframework.validation.annotation.Validated;
 
 @Component
+@Validated
 @ConfigurationProperties(prefix = "identity.passive-authentication")
 public class IdentityVerificationProperties {
 
@@ -45,5 +48,10 @@ public class IdentityVerificationProperties {
 
     public void setChallengeValidityMinutes(int challengeValidityMinutes) {
         this.challengeValidityMinutes = challengeValidityMinutes;
+    }
+
+    @AssertTrue(message = "identity.passive-authentication.enabled must be true when active authentication is required")
+    public boolean isActiveAuthenticationBackedByPassiveAuthentication() {
+        return !activeAuthenticationRequired || enabled;
     }
 }

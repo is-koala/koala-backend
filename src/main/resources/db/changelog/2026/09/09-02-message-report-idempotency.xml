@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-09-02-01-message-report-idempotency" author="koala">
+        <preConditions onFail="HALT" onError="HALT"
+                       onFailMessage="Message report migration blocked: reconcile duplicate active reporter/message pairs before deployment."
+                       onErrorMessage="Message report migration could not verify active reporter/message uniqueness.">
+            <sqlCheck expectedResult="0"><![CDATA[
+                SELECT count(*)
+                FROM (
+                    SELECT reporter_id, message_id
+                    FROM reports
+                    WHERE message_id IS NOT NULL AND is_deleted = false
+                    GROUP BY reporter_id, message_id
+                    HAVING count(*) > 1
+                ) duplicates
+            ]]></sqlCheck>
+        </preConditions>
+        <sql><![CDATA[
+            UPDATE reports r
+            SET reported_user_id = m.sender_id
+            FROM messages m
+            WHERE r.message_id = m.id
+              AND r.reported_user_id IS DISTINCT FROM m.sender_id
+        ]]></sql>
+        <sql>
+            CREATE UNIQUE INDEX uk_reports_active_reporter_message
+                ON reports (reporter_id, message_id)
+                WHERE message_id IS NOT NULL AND is_deleted = false
+        </sql>
+        <rollback>
+            <dropIndex tableName="reports" indexName="uk_reports_active_reporter_message"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

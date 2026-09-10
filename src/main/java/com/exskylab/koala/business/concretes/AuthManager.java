@@ -115,7 +115,7 @@ public class AuthManager implements AuthService {
         sendEmailDto.setTemplateParameters(emailParams);
         sendEmailDto.setSubject("Koala kayıt işlemi için e-posta doğrulaması");
 
-        notificationService.sendEmail(sendEmailDto, DispatchPriority.CRITICAL, true);
+        notificationService.sendEmail(sendEmailDto, DispatchPriority.HIGH, true);
         log.info("Verification email queued for pending registration id: {}", pendingRegistration.getId());
 
         log.info("Registration process started successfully for pending registration id: {}", pendingRegistration.getId());
@@ -360,7 +360,7 @@ public class AuthManager implements AuthService {
                 "lastName", user.getLastName() == null ? "" : user.getLastName(),
                 "resetLink", resetLink));
 
-        notificationService.sendEmail(sendEmailDto, DispatchPriority.CRITICAL, true);
+        notificationService.sendEmail(sendEmailDto, DispatchPriority.HIGH, true);
         log.info("Password reset mail queued for user id: {}", user.getId());
     }
 

@@ -40,6 +40,7 @@ public interface JobMapper {
     JobSummaryDto toJobSummaryDto(Job job);
 
     @Mapping(target = "hiredCount", ignore = true)
+    @Mapping(target = "acceptingApplications", ignore = true)
     @Mapping(target = "addressPrecision", ignore = true)
     @Mapping(target = "pricing", source = "job")
     JobDetailDto toJobDetailDto(Job job);

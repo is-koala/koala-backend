@@ -41,6 +41,26 @@ groups:
         for: 10m
         labels: { severity: warning, owner: backend }
         annotations: { summary: "RabbitMQ tüketici kuyruğu büyüyor" }
+      - alert: KoalaNotificationDispatchBacklog
+        expr: max(koala_notification_dispatch_backlog) > 100
+        for: 10m
+        labels: { severity: warning, owner: backend }
+        annotations: { summary: "Bildirim outbox kuyruğunda 100'den fazla gönderim bekliyor" }
+      - alert: KoalaNotificationDispatchOldestAge
+        expr: max(koala_notification_dispatch_oldest_age_seconds) > 600
+        for: 5m
+        labels: { severity: critical, owner: backend }
+        annotations: { summary: "En eski gönderilmemiş bildirim 10 dakikadan uzun süredir bekliyor" }
+      - alert: KoalaNotificationDispatchTerminalBrokerFailure
+        expr: max(koala_notification_dispatch_terminal_broker_failures) > 0
+        for: 1m
+        labels: { severity: critical, owner: backend }
+        annotations: { summary: "Bildirim outbox gönderimi broker hataları nedeniyle kalıcı olarak durdu" }
+      - alert: KoalaNotificationDeliveryParkingQueue
+        expr: rabbitmq_queue_messages_ready{queue="notification.delivery.busy.parking.queue"} > 0
+        for: 1m
+        labels: { severity: critical, owner: backend }
+        annotations: { summary: "Bildirim teslimatı aktif claim süresi boyunca ilerleyemeyip park edildi" }
       - alert: KoalaRabbitDeadLetterQueue
         expr: rabbitmq_queue_messages_ready{queue=~".*(dlq|dead-letter).*"} > 0
         for: 5m

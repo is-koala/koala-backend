@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -100,6 +101,69 @@ class OperationalRunbookContractTest {
                 "Ikinci kademe ilkinden farkli bir ilk mudahale istiyor; yoksa yeni alarm yalnizca gurultu.");
     }
 
+    @Test
+    void notificationDispatchBacklogHasABoundedAlertAndDocumentedResponse() throws Exception {
+        String rule = alertRule("KoalaNotificationDispatchBacklog");
+
+        assertAll(
+                () -> assertTrue(rule.contains("expr: max(koala_notification_dispatch_backlog) > 100")),
+                () -> assertTrue(rule.contains("for: 10m")),
+                () -> assertTrue(rule.contains("severity: warning")),
+                () -> assertTrue(rule.contains("owner: backend")));
+
+        String responses = Files.readString(Path.of("docs/runbooks/alerts.md"));
+        assertTrue(responses.contains("`KoalaNotificationDispatchBacklog`"),
+                "Outbox backlog alarminin ilk mudahalesi alerts.md'de yazili olmali.");
+    }
+
+    @Test
+    void oldestNotificationDispatchAgeHasABoundedAlertAndDocumentedResponse() throws Exception {
+        String rule = alertRule("KoalaNotificationDispatchOldestAge");
+
+        assertAll(
+                () -> assertTrue(rule.contains(
+                        "expr: max(koala_notification_dispatch_oldest_age_seconds) > 600")),
+                () -> assertTrue(rule.contains("for: 5m")),
+                () -> assertTrue(rule.contains("severity: critical")),
+                () -> assertTrue(rule.contains("owner: backend")));
+
+        String responses = Files.readString(Path.of("docs/runbooks/alerts.md"));
+        assertTrue(responses.contains("`KoalaNotificationDispatchOldestAge`"),
+                "Outbox yas alarminin ilk mudahalesi alerts.md'de yazili olmali.");
+    }
+
+    @Test
+    void terminalNotificationBrokerFailuresHaveAnImmediateAlertAndDocumentedResponse() throws Exception {
+        String rule = alertRule("KoalaNotificationDispatchTerminalBrokerFailure");
+
+        assertAll(
+                () -> assertTrue(rule.contains(
+                        "expr: max(koala_notification_dispatch_terminal_broker_failures) > 0")),
+                () -> assertTrue(rule.contains("for: 1m")),
+                () -> assertTrue(rule.contains("severity: critical")),
+                () -> assertTrue(rule.contains("owner: backend")));
+
+        String responses = Files.readString(Path.of("docs/runbooks/alerts.md"));
+        assertTrue(responses.contains("`KoalaNotificationDispatchTerminalBrokerFailure`"),
+                "Terminal broker hatasi alarminin ilk mudahalesi alerts.md'de yazili olmali.");
+    }
+
+    @Test
+    void parkedNotificationDeliveriesHaveAnImmediateAlertAndDocumentedResponse() throws Exception {
+        String rule = alertRule("KoalaNotificationDeliveryParkingQueue");
+
+        assertAll(
+                () -> assertTrue(rule.contains(
+                        "expr: rabbitmq_queue_messages_ready{queue=\"notification.delivery.busy.parking.queue\"} > 0")),
+                () -> assertTrue(rule.contains("for: 1m")),
+                () -> assertTrue(rule.contains("severity: critical")),
+                () -> assertTrue(rule.contains("owner: backend")));
+
+        String responses = Files.readString(Path.of("docs/runbooks/alerts.md"));
+        assertTrue(responses.contains("`KoalaNotificationDeliveryParkingQueue`"),
+                "Park edilen teslimat alarminin ilk mudahalesi alerts.md'de yazili olmali.");
+    }
+
     private static void assertOutcomeIsWatchedByAnAlert(Consumer<PaymentMetrics> record,
                                                         String operation, String outcome) throws Exception {
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
@@ -150,6 +214,17 @@ class OperationalRunbookContractTest {
 
     private static String alertRules() throws Exception {
         return Files.readString(Path.of("ops/monitoring/prometheus-alerts.yml"));
+    }
+
+    private static String alertRule(String alertName) throws Exception {
+        String alerts = alertRules();
+        String marker = "      - alert: " + alertName;
+        int start = alerts.indexOf(marker);
+        if (start < 0) {
+            throw new AssertionError(alertName + " alarmi tanimli degil.");
+        }
+        int next = alerts.indexOf("\n      - alert:", start + marker.length());
+        return next < 0 ? alerts.substring(start) : alerts.substring(start, next);
     }
 
     @Test

@@ -15,9 +15,9 @@ import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.helpers.MessageResolver;
+import com.exskylab.koala.core.helpers.JobAvailability;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.mappers.JobMapper;
-import com.exskylab.koala.core.properties.JobSearchProperties;
 import com.exskylab.koala.dataAccess.JobApplicationDao;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
 import com.exskylab.koala.dataAccess.JobDao;
@@ -81,8 +81,8 @@ class CompanyJobListingRulesTest {
                 mock(AddressService.class), companyService, jobMapper, new PageableSanitizer(),
                 companyContactService, mock(JobAlertService.class), mock(GalleryService.class),
                 mock(CompanyFollowService.class), mock(JobApplicationDao.class), jobAssignmentDao,
-                mock(NotificationService.class), mock(MessageResolver.class), new JobSearchProperties(),
-                new PricingManager(FallbackSettings.commissionCalculator()));
+                mock(NotificationService.class), mock(MessageResolver.class),
+                new PricingManager(FallbackSettings.commissionCalculator()), mock(JobAvailability.class));
 
         when(jobMapper.toJobSummaryDto(any(Job.class))).thenAnswer(invocation -> unprotected(invocation.getArgument(0)));
     }

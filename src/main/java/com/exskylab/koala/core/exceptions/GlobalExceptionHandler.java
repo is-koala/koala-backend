@@ -1,6 +1,7 @@
 package com.exskylab.koala.core.exceptions;
 
 import lombok.extern.slf4j.Slf4j;
+import com.exskylab.koala.core.constants.IdentityMessages;
 import com.exskylab.koala.core.helpers.MessageResolver;
 import com.exskylab.koala.core.logging.LogContext;
 import com.exskylab.koala.core.monitoring.BackendErrorMonitor;
@@ -66,6 +67,10 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ValidationException.class)
     public ResponseEntity<Result> handleValidationException(ValidationException ex) {
+        if (IdentityMessages.NO_TRUST_ANCHORS.equals(ex.getMessage())) {
+            log.error("Identity verification trust anchors are unavailable: {}", ex.getErrorCode(), ex);
+            backendErrorMonitor.capture(ex, ex.getErrorCode());
+        }
         return build(ex.getHttpStatus(), ex.getMessage(), ex.getErrorCode(), categoryOf(ex.getHttpStatus()), null);
     }
 

@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.exskylab.koala.business.abstracts.DeviceService;
+import com.exskylab.koala.core.properties.NotificationDispatchProperties;
 import com.exskylab.koala.core.properties.PushDeliveryProperties;
 import com.exskylab.koala.core.utilities.push.PushDeliveryException;
 import com.exskylab.koala.core.utilities.push.PushFailureCode;
@@ -27,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
@@ -58,7 +60,7 @@ class PushDeliveryManagerTest {
         properties.setMaxProviderDeferral(Duration.ofHours(24));
         properties.setClaimTimeout(Duration.ofMinutes(2));
         manager = new PushDeliveryManager(store, deviceService, pushService, tokenDeliveryLock, properties,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                new NotificationDispatchProperties(), Clock.fixed(NOW, ZoneOffset.UTC));
         claim = new PushDeliveryClaim(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 "current-token", "title", "body", Map.of("notificationId", "n"), 1);
         when(store.claim(claim.notificationId(), NOW)).thenReturn(Optional.of(claim));
@@ -70,12 +72,12 @@ class PushDeliveryManagerTest {
 
     @Test
     void successfulDeliveryCompletesTheOwnedClaim() {
-        when(pushService.send(any())).thenReturn("projects/p/messages/m");
+        when(pushService.send(any(), any())).thenReturn("projects/p/messages/m");
 
         manager.deliver(claim.notificationId());
 
         ArgumentCaptor<PushMessage> message = ArgumentCaptor.forClass(PushMessage.class);
-        verify(pushService).send(message.capture());
+        verify(pushService).send(message.capture(), eq(Duration.ofSeconds(45)));
         assertEquals("current-token", message.getValue().token());
         verify(store).complete(claim, "projects/p/messages/m", NOW);
     }
@@ -84,7 +86,7 @@ class PushDeliveryManagerTest {
     void retryableFailureIsPersistedForADeferredAttempt() {
         PushDeliveryException failure = PushDeliveryException.retryable(
                 PushFailureCode.RATE_LIMITED, Duration.ofMinutes(30), new RuntimeException("secret response"));
-        when(pushService.send(any())).thenThrow(failure);
+        when(pushService.send(any(), any())).thenThrow(failure);
 
         manager.deliver(claim.notificationId());
 
@@ -104,10 +106,10 @@ class PushDeliveryManagerTest {
         properties.setMaxProviderDeferral(Duration.ofHours(24));
         properties.setClaimTimeout(Duration.ofMinutes(2));
         manager = new PushDeliveryManager(store, deviceService, pushService, tokenDeliveryLock, properties,
-                movingClock);
+                new NotificationDispatchProperties(), movingClock);
         PushDeliveryException failure = PushDeliveryException.retryable(
                 PushFailureCode.RATE_LIMITED, Duration.ofMinutes(30), new RuntimeException("provider response"));
-        when(pushService.send(any())).thenThrow(failure);
+        when(pushService.send(any(), any())).thenThrow(failure);
 
         manager.deliver(claim.notificationId());
 
@@ -119,7 +121,7 @@ class PushDeliveryManagerTest {
     void providerRetryAfterIsCappedByTheDurableDeferralLimit() {
         PushDeliveryException failure = PushDeliveryException.retryable(
                 PushFailureCode.RATE_LIMITED, Duration.ofDays(30), new RuntimeException("secret response"));
-        when(pushService.send(any())).thenThrow(failure);
+        when(pushService.send(any(), any())).thenThrow(failure);
 
         manager.deliver(claim.notificationId());
 
@@ -128,7 +130,7 @@ class PushDeliveryManagerTest {
 
     @Test
     void invalidTokenIsClearedOnlyWhenItStillMatchesTheClaim() {
-        when(pushService.send(any())).thenThrow(PushDeliveryException.invalidToken(
+        when(pushService.send(any(), any())).thenThrow(PushDeliveryException.invalidToken(
                 new RuntimeException("response containing token")));
 
         manager.deliver(claim.notificationId());
@@ -148,7 +150,7 @@ class PushDeliveryManagerTest {
                 org.mockito.ArgumentMatchers.eq(claim.recipientId()),
                 org.mockito.ArgumentMatchers.eq(claim.deviceId()),
                 org.mockito.ArgumentMatchers.eq(claim.token()), any());
-        verify(pushService, never()).send(any());
+        verify(pushService, never()).send(any(), any());
         verify(store).suppress(claim, PushFailureCode.TOKEN_NO_LONGER_ASSIGNED, NOW);
     }
 
@@ -159,14 +161,14 @@ class PushDeliveryManagerTest {
 
         manager.deliver(claim.notificationId());
 
-        verify(pushService, never()).send(any());
+        verify(pushService, never()).send(any(), any());
         verify(store).deferForTokenContention(claim, NOW.plus(Duration.ofMinutes(1)), NOW);
         verify(store, never()).recordInfrastructureFailure(any(), any());
     }
 
     @Test
     void unexpectedFailuresEscapeForRabbitRetryAndDlq() {
-        when(pushService.send(any())).thenThrow(new IllegalStateException("database unavailable"));
+        when(pushService.send(any(), any())).thenThrow(new IllegalStateException("database unavailable"));
 
         try {
             manager.deliver(claim.notificationId());
@@ -184,7 +186,7 @@ class PushDeliveryManagerTest {
     void persistenceFailureWhileRecordingAnExpectedResultIsReleasedForRabbitRetry() {
         PushDeliveryException providerFailure = PushDeliveryException.retryable(
                 PushFailureCode.PROVIDER_UNAVAILABLE, null, new RuntimeException("provider response"));
-        when(pushService.send(any())).thenThrow(providerFailure);
+        when(pushService.send(any(), any())).thenThrow(providerFailure);
         org.mockito.Mockito.doThrow(new IllegalStateException("database unavailable"))
                 .when(store).retry(any(), any(), any(), any());
 

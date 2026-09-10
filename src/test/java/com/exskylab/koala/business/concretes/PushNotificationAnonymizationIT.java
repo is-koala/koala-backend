@@ -9,7 +9,7 @@ import com.exskylab.koala.business.abstracts.UnsubscribeTokenService;
 import com.exskylab.koala.core.dtos.notification.request.SendPushToUserDto;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.privacy.AccountAnonymizer;
-import com.exskylab.koala.core.producers.notification.NotificationProducerService;
+import com.exskylab.koala.core.properties.NotificationDispatchProperties;
 import com.exskylab.koala.dataAccess.NotificationDao;
 import com.exskylab.koala.entities.DispatchPriority;
 import com.exskylab.koala.entities.NotificationCategory;
@@ -86,8 +86,7 @@ class PushNotificationAnonymizationIT extends AbstractIntegrationTest {
             return snapshot;
         });
 
-        NotificationManager manager = manager(userId, coordinatedDevices,
-                mock(NotificationProducerService.class));
+        NotificationManager manager = manager(userId, coordinatedDevices);
         SendPushToUserDto request = request(userId);
 
         TransactionTemplate transaction = new TransactionTemplate(transactionManager);
@@ -131,8 +130,7 @@ class PushNotificationAnonymizationIT extends AbstractIntegrationTest {
         UUID deviceId = UUID.randomUUID();
         UUID requestId = UUID.randomUUID();
         seed(userId, deviceId, requestId);
-        NotificationManager manager = manager(userId, deviceService,
-                mock(NotificationProducerService.class));
+        NotificationManager manager = manager(userId, deviceService);
         CountDownLatch oldScrubFinished = new CountDownLatch(1);
         CountDownLatch allowOldCommit = new CountDownLatch(1);
         TransactionTemplate transaction = new TransactionTemplate(transactionManager);
@@ -247,8 +245,7 @@ class PushNotificationAnonymizationIT extends AbstractIntegrationTest {
         });
     }
 
-    private NotificationManager manager(UUID userId, DeviceService devices,
-                                        NotificationProducerService producer) {
+    private NotificationManager manager(UUID userId, DeviceService devices) {
         SecurityService securityService = mock(SecurityService.class);
         User systemUser = new User();
         systemUser.setId(SYSTEM_USER_ID);
@@ -260,9 +257,9 @@ class PushNotificationAnonymizationIT extends AbstractIntegrationTest {
         NotificationPreferenceService preferences = mock(NotificationPreferenceService.class);
         when(preferences.isAllowed(any(), any(), any())).thenReturn(true);
         return new NotificationManager(
-                notificationDao, producer, devices, objectMapper, securityService,
+                notificationDao, devices, objectMapper, securityService,
                 new PageableSanitizer(), preferences, mock(UnsubscribeTokenService.class),
-                mock(IysService.class), tokenMutationLock);
+                mock(IysService.class), tokenMutationLock, new NotificationDispatchProperties());
     }
 
     private SendPushToUserDto request(UUID userId) {

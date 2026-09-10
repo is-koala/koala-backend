@@ -79,7 +79,7 @@ public class CompanyContactInvitationManager implements CompanyContactInvitation
         ));
         log.info("Sending notification to user with id: {} about the invitation.", userToInvite.getId());
 
-        notificationService.sendEmail(sendEmailDto, DispatchPriority.CRITICAL, true);
+        notificationService.sendEmail(sendEmailDto, DispatchPriority.HIGH, true);
 
         recordInvitationInFeed(savedInvitation);
 

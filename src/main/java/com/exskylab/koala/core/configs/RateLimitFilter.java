@@ -78,6 +78,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             PARSER.parse("/locations/address-search-sessions/**");
     private static final PathPattern ADDRESS_REVERSE_PATH =
             PARSER.parse("/locations/address-candidates/reverse");
+    private static final PathPattern SITEMAP_PATH = PARSER.parse("/sitemap/jobs/**");
 
     private static final List<PathPattern> PUBLIC_PATHS = List.of(
             PARSER.parse("/jobs"),
@@ -103,7 +104,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     private enum Bucket {
-        AUTH, UPLOAD, MESSAGE, REALTIME_CREDENTIAL, PUBLIC, WRITE, NONE
+        AUTH, UPLOAD, MESSAGE, REALTIME_CREDENTIAL, PUBLIC, SITEMAP, WRITE, NONE
     }
 
     @Override
@@ -143,6 +144,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
         PathContainer container = PathContainer.parsePath(path);
 
+        if ("GET".equals(request.getMethod()) && SITEMAP_PATH.matches(container)) {
+            return Bucket.SITEMAP;
+        }
+
         if (ADDRESS_SEARCH_PATH.matches(container) || ADDRESS_REVERSE_PATH.matches(container)
                 || "GET".equals(request.getMethod())
                 && PUBLIC_PATHS.stream().anyMatch(pattern -> pattern.matches(container))) {
@@ -175,6 +180,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             case MESSAGE -> properties.getMessage();
             case REALTIME_CREDENTIAL -> properties.getRealtimeCredential();
             case PUBLIC -> properties.getPublic();
+            case SITEMAP -> properties.getSitemap();
             default -> properties.getWrite();
         };
     }
