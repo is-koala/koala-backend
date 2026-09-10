@@ -99,6 +99,8 @@ class CompanyFollowRulesTest {
 
         manager.notifyFollowers(job(company, creatorId));
 
+        verify(notificationService).preparePushRecipients(argThat(ids ->
+                ids.size() == 1 && !ids.contains(creatorId)));
         verify(notificationService, times(1)).sendPushToUser(any(), any(), anyBoolean());
     }
 

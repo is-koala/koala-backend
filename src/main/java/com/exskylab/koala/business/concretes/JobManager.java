@@ -406,7 +406,12 @@ public class JobManager implements JobService {
     }
 
     private void notifyApplicantsOfCancellation(Job job) {
-        for (JobApplication application : jobApplicationDao.findAllByJobId(job.getId())) {
+        List<JobApplication> applications = jobApplicationDao.findAllByJobId(job.getId());
+        notificationService.preparePushRecipients(applications.stream()
+                .map(application -> application.getUser().getId())
+                .toList());
+
+        for (JobApplication application : applications) {
             try {
                 SendPushToUserDto push = new SendPushToUserDto();
                 push.setRecipient(application.getUser());

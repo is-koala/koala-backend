@@ -9,17 +9,23 @@ import com.exskylab.koala.core.dtos.notification.request.SendEmailDto;
 import com.exskylab.koala.core.dtos.notification.request.SendInAppDto;
 import com.exskylab.koala.core.dtos.notification.request.SendPushToUserDto;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
+import com.exskylab.koala.core.exceptions.ValidationException;
+import com.exskylab.koala.core.privacy.PushTokenMutationLock;
 import com.exskylab.koala.core.producers.notification.EmailTaskDto;
+import com.exskylab.koala.core.producers.notification.PushTaskDto;
 import com.exskylab.koala.dataAccess.NotificationDao;
 import com.exskylab.koala.entities.Device;
 import com.exskylab.koala.entities.DispatchPriority;
 import com.exskylab.koala.entities.NotificationCategory;
 import com.exskylab.koala.entities.NotificationChannel;
+import com.exskylab.koala.entities.Notification;
+import com.exskylab.koala.entities.NotificationStatus;
 import com.exskylab.koala.entities.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 
 import java.util.HashMap;
 import java.util.List;
@@ -29,6 +35,8 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -41,6 +49,9 @@ class NotificationSuppressionTest {
     private NotificationDao notificationDao;
     private NotificationPreferenceService preferences;
     private IysService iysService;
+    private DeviceService devices;
+    private SecurityService security;
+    private PushTokenMutationLock tokenMutationLock;
     private NotificationManager manager;
     private User recipient;
 
@@ -58,14 +69,16 @@ class NotificationSuppressionTest {
         when(iysService.isAllowed(eq(recipient), eq(NotificationChannel.EMAIL), eq(recipient.getEmail())))
                 .thenReturn(true);
 
-        SecurityService security = mock(SecurityService.class);
+        security = mock(SecurityService.class);
         when(security.getAuthenticatedUserId()).thenReturn(recipient.getId());
         when(security.getSystemUser()).thenReturn(recipient);
+        when(security.isActiveUser(recipient.getId())).thenReturn(true);
 
         Device device = new Device();
         device.setPushToken("push-token");
-        DeviceService devices = mock(DeviceService.class);
+        devices = mock(DeviceService.class);
         when(devices.getDevicesByUserIdAndPushTokenNotNull(any())).thenReturn(List.of(device));
+        tokenMutationLock = mock(PushTokenMutationLock.class);
 
         UnsubscribeTokenService unsubscribeTokens = mock(UnsubscribeTokenService.class);
         when(unsubscribeTokens.issueLink(any(), any(), any()))
@@ -73,7 +86,7 @@ class NotificationSuppressionTest {
 
         manager = new NotificationManager(notificationDao, devices,
                 new ObjectMapper(), security, new PageableSanitizer(),
-                preferences, unsubscribeTokens, iysService,
+                preferences, unsubscribeTokens, iysService, tokenMutationLock,
                 new com.exskylab.koala.core.properties.NotificationDispatchProperties());
 
         when(notificationDao.save(any())).thenAnswer(call -> call.getArgument(0));
@@ -101,6 +114,17 @@ class NotificationSuppressionTest {
         dto.setTitle("Yeni ilan");
         dto.setBody("Barista aranıyor");
         return dto;
+    }
+
+    @Test
+    void pushWithoutARecipientIsRejectedByThePublicContract() {
+        SendPushToUserDto dto = push(NotificationCategory.JOB_ALERTS);
+        dto.setRecipient(null);
+
+        assertThrows(ValidationException.class,
+                () -> manager.sendPushToUser(dto, DispatchPriority.NORMAL, true));
+
+        verify(notificationDao, never()).save(any());
     }
 
     private SendInAppDto inApp(NotificationCategory category) {
@@ -139,6 +163,47 @@ class NotificationSuppressionTest {
         manager.sendPushToUser(push(NotificationCategory.JOB_ALERTS), DispatchPriority.NORMAL, true);
 
         verify(notificationDao, org.mockito.Mockito.atLeast(2)).save(any());
+    }
+
+    @Test
+    void queuedPushPersistsEverythingNeededForDurableDelivery() {
+        SendPushToUserDto dto = push(NotificationCategory.JOB_ALERTS);
+        dto.setDataPayload(Map.of("route", "jobs"));
+
+        manager.sendPushToUser(dto, DispatchPriority.NORMAL, true);
+
+        ArgumentCaptor<Notification> saved = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationDao, org.mockito.Mockito.atLeast(2)).save(saved.capture());
+        Notification notification = saved.getValue();
+        assertEquals(NotificationStatus.QUEUED, notification.getStatus());
+        assertEquals("Yeni ilan", notification.getSubject());
+        assertEquals("Barista aranıyor", notification.getBody());
+        assertEquals("{\"route\":\"jobs\"}", notification.getPushDataPayload());
+        assertNotNull(notification.getDestinationDevice());
+        assertNull(notification.getDestinationPushToken());
+        assertNotNull(notification.getPushNextAttemptAt());
+        assertNotNull(notification.getDispatchPayload());
+        PushTaskDto task = new ObjectMapper().readValue(notification.getDispatchPayload(), PushTaskDto.class);
+        assertEquals(notification.getId(), task.id());
+    }
+
+    @Test
+    void pushRevalidatesTheRecipientUnderItsAnonymizationLockBeforeReadingDevices() {
+        manager.sendPushToUser(push(NotificationCategory.JOB_ALERTS), DispatchPriority.NORMAL, true);
+
+        InOrder order = org.mockito.Mockito.inOrder(tokenMutationLock, security, devices);
+        order.verify(tokenMutationLock).lockUsers(List.of(recipient.getId()));
+        order.verify(security).isActiveUser(recipient.getId());
+        order.verify(devices).getDevicesByUserIdAndPushTokenNotNull(recipient.getId());
+    }
+
+    @Test
+    void anInactiveRecipientCannotGainANewPushDelivery() {
+        when(security.isActiveUser(recipient.getId())).thenReturn(false);
+
+        manager.sendPushToUser(push(NotificationCategory.JOB_ALERTS), DispatchPriority.NORMAL, true);
+
+        verify(notificationDao, never()).save(any());
     }
 
     @Test
@@ -216,6 +281,7 @@ class NotificationSuppressionTest {
         manager = new NotificationManager(notificationDao,
                 mock(DeviceService.class), new ObjectMapper(),
                 mock(SecurityService.class), new PageableSanitizer(), preferences, unsubscribeTokens, iysService,
+                mock(PushTokenMutationLock.class),
                 new com.exskylab.koala.core.properties.NotificationDispatchProperties());
 
         manager.sendEmail(email(NotificationCategory.NEWSLETTER), DispatchPriority.NORMAL, true);
@@ -229,6 +295,7 @@ class NotificationSuppressionTest {
         manager = new NotificationManager(notificationDao,
                 mock(DeviceService.class), new ObjectMapper(),
                 mock(SecurityService.class), new PageableSanitizer(), preferences, unsubscribeTokens, iysService,
+                mock(PushTokenMutationLock.class),
                 new com.exskylab.koala.core.properties.NotificationDispatchProperties());
         switchedOff(NotificationCategory.NEWSLETTER, NotificationChannel.EMAIL);
 

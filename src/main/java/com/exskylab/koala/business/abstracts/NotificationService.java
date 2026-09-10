@@ -8,6 +8,7 @@ import com.exskylab.koala.entities.NotificationChannel;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.util.Collection;
 import java.util.UUID;
 import java.util.Optional;
 
@@ -18,6 +19,8 @@ public interface NotificationService {
     Notification sendSms(SendSmsDto sendSmsDto, DispatchPriority dispatchPriority, boolean isSystemSms);
 
     void sendPushToUser(SendPushToUserDto sendPushToUserDto, DispatchPriority dispatchPriority, boolean isSystemPush);
+
+    void preparePushRecipients(Collection<UUID> recipientIds);
 
     Notification sendInApp(SendInAppDto sendInAppDto);
 

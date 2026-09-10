@@ -1,13 +1,11 @@
 package com.exskylab.koala.core.producers.notification;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import java.io.Serializable;
-import java.util.Map;
 import java.util.UUID;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record PushTaskDto(
-        UUID id,
-        String pushToken,
-        String title,
-        String body,
-        Map<String, String> dataPayload
+        UUID id
 ) implements Serializable {}

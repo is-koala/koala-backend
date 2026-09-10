@@ -20,7 +20,9 @@ import com.exskylab.koala.entities.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 
+import java.util.Collection;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -194,6 +196,10 @@ class ActivityNotificationRulesTest {
 
         manager.disputeResolved(dispute);
 
+        InOrder order = inOrder(notificationService);
+        order.verify(notificationService).preparePushRecipients(argThat((Collection<UUID> ids) ->
+                ids.size() == 2 && ids.contains(worker.getId()) && ids.contains(employer.getId())));
+        order.verify(notificationService, times(2)).sendPushToUser(any(), any(), anyBoolean());
         verify(notificationService, times(2)).sendPushToUser(any(), any(), anyBoolean());
     }
 

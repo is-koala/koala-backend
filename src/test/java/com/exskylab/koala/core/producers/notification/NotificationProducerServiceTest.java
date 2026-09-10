@@ -47,8 +47,7 @@ class NotificationProducerServiceTest {
 
     @Test
     void pushUsesItsExactRoutingKeyAndWaitsForAnAck() {
-        PushTaskDto task = new PushTaskDto(UUID.randomUUID(), "token-7", "Exact title", "Exact body",
-                Map.of("jobId", "job-7"));
+        PushTaskDto task = new PushTaskDto(UUID.randomUUID());
         producer.sendPushTask(task);
 
         verify(publisher).convertAndPublish(RabbitMQConfig.NOTIFICATION_EXCHANGE,

@@ -4,13 +4,16 @@ import com.exskylab.koala.business.abstracts.NotificationDispatchService;
 import com.exskylab.koala.core.configs.RabbitMQConfig;
 import com.exskylab.koala.core.producers.notification.EmailTaskDto;
 import com.exskylab.koala.core.producers.notification.PushTaskDto;
+import com.exskylab.koala.core.utilities.push.PushMessage;
 import com.exskylab.koala.core.utilities.push.PushService;
 import com.exskylab.koala.dataAccess.NotificationDao;
+import com.exskylab.koala.entities.Device;
 import com.exskylab.koala.entities.DispatchPriority;
 import com.exskylab.koala.entities.Notification;
 import com.exskylab.koala.entities.NotificationCategory;
 import com.exskylab.koala.entities.NotificationChannel;
 import com.exskylab.koala.entities.NotificationStatus;
+import com.exskylab.koala.entities.User;
 import com.exskylab.koala.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +28,7 @@ import org.springframework.amqp.rabbit.listener.AbstractMessageListenerContainer
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
@@ -48,6 +52,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -93,9 +99,12 @@ class NotificationOutboxRabbitIT extends AbstractIntegrationTest {
     @Autowired private TopicExchange notificationsExchange;
     @Autowired @Qualifier("emailQueue") private Queue emailQueue;
     @Autowired @Qualifier("emailBinding") private Binding emailBinding;
+    @Autowired private JdbcTemplate jdbcTemplate;
     @MockitoBean private Clock clock;
     @MockitoBean private PushService pushService;
     private final List<UUID> notificationIds = new ArrayList<>();
+    private final List<UUID> userIds = new ArrayList<>();
+    private final List<UUID> deviceIds = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
@@ -114,9 +123,17 @@ class NotificationOutboxRabbitIT extends AbstractIntegrationTest {
         admin.declareQueue(emailQueue);
         admin.declareBinding(emailBinding);
         for (UUID notificationId : notificationIds) {
-            notificationDao.deleteById(notificationId);
+            jdbcTemplate.update("delete from notifications where id = ?", notificationId);
         }
         notificationIds.clear();
+        for (UUID deviceId : deviceIds) {
+            jdbcTemplate.update("delete from devices where id = ?", deviceId);
+        }
+        deviceIds.clear();
+        for (UUID userId : userIds) {
+            jdbcTemplate.update("delete from users where id = ?", userId);
+        }
+        userIds.clear();
     }
 
     @Test
@@ -159,8 +176,7 @@ class NotificationOutboxRabbitIT extends AbstractIntegrationTest {
     void aDuplicatePushDeliveryCannotInvokeTheProviderTwice() {
         Notification notification = queuedPush(NotificationStatus.QUEUED);
         PushTaskDto task = objectMapper.readValue(notification.getDispatchPayload(), PushTaskDto.class);
-        when(pushService.sendPush(task.pushToken(), task.title(), task.body(), task.dataPayload(),
-                Duration.ofMillis(50)))
+        when(pushService.send(any(PushMessage.class), eq(Duration.ofMillis(50))))
                 .thenReturn("message-7");
 
         AbstractMessageListenerContainer listener = listenerFor(RabbitMQConfig.PUSH_QUEUE);
@@ -174,39 +190,30 @@ class NotificationOutboxRabbitIT extends AbstractIntegrationTest {
             rabbit.convertAndSend(RabbitMQConfig.NOTIFICATION_EXCHANGE, RabbitMQConfig.PUSH_ROUTING_KEY, task);
 
             await().during(Duration.ofMillis(500)).atMost(Duration.ofSeconds(3)).untilAsserted(() ->
-                    verify(pushService, times(1)).sendPush(task.pushToken(), task.title(), task.body(),
-                            task.dataPayload(), Duration.ofMillis(50)));
+                    verify(pushService, times(1)).send(any(PushMessage.class), eq(Duration.ofMillis(50))));
         } finally {
             listener.stop();
         }
     }
 
     @Test
-    void anActivePushClaimWaitsForItsLeaseAndThenReachesTheProviderExactlyOnce() {
+    void anInFlightPushProcessingClaimDoesNotInvokeTheProvider() {
         Notification notification = queuedPush(NotificationStatus.PROCESSING);
-        notification.setDeliveryClaimId(UUID.randomUUID());
-        notification.setDeliveryClaimedAt(Instant.now());
+        notification.setPushProcessingClaimId(UUID.randomUUID());
+        notification.setPushProcessingStartedAt(Instant.now());
         notificationDao.saveAndFlush(notification);
         PushTaskDto task = objectMapper.readValue(notification.getDispatchPayload(), PushTaskDto.class);
-        when(pushService.sendPush(task.pushToken(), task.title(), task.body(), task.dataPayload(),
-                Duration.ofMillis(50)))
-                .thenReturn("message-after-lease");
 
         AbstractMessageListenerContainer listener = listenerFor(RabbitMQConfig.PUSH_QUEUE);
         listener.start();
         try {
             rabbit.convertAndSend(RabbitMQConfig.NOTIFICATION_EXCHANGE, RabbitMQConfig.PUSH_ROUTING_KEY, task);
 
-            await().pollInterval(Duration.ofMillis(10))
-                    .during(Duration.ofMillis(75)).atMost(Duration.ofMillis(150))
-                    .untilAsserted(() -> verifyNoInteractions(pushService));
-            await().atMost(Duration.ofSeconds(3)).untilAsserted(() -> {
-                assertEquals(NotificationStatus.SENT,
+            await().during(Duration.ofMillis(500)).atMost(Duration.ofSeconds(3)).untilAsserted(() -> {
+                verifyNoInteractions(pushService);
+                assertEquals(NotificationStatus.PROCESSING,
                         notificationDao.findById(notification.getId()).orElseThrow().getStatus());
-                verify(pushService, times(1)).sendPush(task.pushToken(), task.title(), task.body(),
-                        task.dataPayload(), Duration.ofMillis(50));
             });
-            assertNull(rabbit.receive(RabbitMQConfig.PUSH_QUEUE, 100));
         } finally {
             listener.stop();
         }
@@ -251,19 +258,39 @@ class NotificationOutboxRabbitIT extends AbstractIntegrationTest {
     }
 
     private Notification queuedPush(NotificationStatus status) {
+        UUID userId = UUID.randomUUID();
+        UUID deviceId = UUID.randomUUID();
+        jdbcTemplate.update("""
+                insert into users
+                    (id, first_name, username, email, email_verified, phone_verified,
+                     identity_verified, is_employer, created_at, is_deleted)
+                values (?, 'Outbox', ?, ?, false, false, false, false, now(), false)
+                """, userId, "outbox-" + userId, userId + "@koala.test");
+        jdbcTemplate.update("""
+                insert into devices
+                    (id, created_at, is_deleted, user_id, type, name, client_device_id, push_token)
+                values (?, now(), false, ?, 'ANDROID', 'outbox-device', ?, ?)
+                """, deviceId, userId, UUID.randomUUID().toString(), "push-token-" + deviceId);
+        userIds.add(userId);
+        deviceIds.add(deviceId);
+        User recipient = new User();
+        recipient.setId(userId);
+        Device device = new Device();
+        device.setId(deviceId);
         Notification notification = new Notification();
+        notification.setRecipient(recipient);
+        notification.setDestinationDevice(device);
         notification.setChannel(NotificationChannel.PUSH);
         notification.setCategory(NotificationCategory.APPLICATION_UPDATES);
         notification.setStatus(status);
-        notification.setDestinationPushToken("push-token-7");
         notification.setSubject("Exact title");
         notification.setBody("Exact body");
+        notification.setPushDataPayload("{\"jobId\":\"job-7\"}");
+        notification.setPushNextAttemptAt(NOW);
         notification.setDispatchPriority(DispatchPriority.NORMAL);
         notification.setNextDispatchAt(NOW);
         notification = notificationDao.saveAndFlush(notification);
-        notification.setDispatchPayload(objectMapper.writeValueAsString(new PushTaskDto(notification.getId(),
-                notification.getDestinationPushToken(), notification.getSubject(), notification.getBody(),
-                Map.of("jobId", "job-7"))));
+        notification.setDispatchPayload(objectMapper.writeValueAsString(new PushTaskDto(notification.getId())));
         notification = notificationDao.saveAndFlush(notification);
         notificationIds.add(notification.getId());
         return notification;

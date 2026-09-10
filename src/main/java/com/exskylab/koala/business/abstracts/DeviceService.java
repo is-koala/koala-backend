@@ -28,4 +28,8 @@ public interface DeviceService {
     void savePushToken(String userAgent, String clientDeviceId, String pushToken);
 
     void clearPushToken(String userAgent, String clientDeviceId);
+
+    Optional<String> currentPushToken(UUID userId, UUID deviceId);
+
+    boolean clearPushTokenIfMatches(UUID userId, UUID deviceId, String expectedToken);
 }

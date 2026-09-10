@@ -83,5 +83,6 @@
     <include file="db/changelog/2026/09/09-01-staff-decision-actors.xml"/>
     <include file="db/changelog/2026/09/09-02-message-report-idempotency.xml"/>
     <include file="db/changelog/2026/09/09-02-sitemap-manifest.xml"/>
+    <include file="db/changelog/2026/09/09-02-firebase-push-delivery.xml"/>
     <include file="db/changelog/2026/09/09-03-notification-dispatch-outbox.xml"/>
 </databaseChangeLog>

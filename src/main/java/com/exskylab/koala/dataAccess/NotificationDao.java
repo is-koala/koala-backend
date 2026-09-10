@@ -4,6 +4,7 @@ import com.exskylab.koala.entities.Notification;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -11,7 +12,10 @@ import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+
+import jakarta.persistence.LockModeType;
 
 @Repository
 public interface NotificationDao extends JpaRepository<Notification, UUID> {
@@ -34,6 +38,31 @@ public interface NotificationDao extends JpaRepository<Notification, UUID> {
     int markAllRead(@Param("recipientId") UUID recipientId,
                     @Param("channel") com.exskylab.koala.entities.NotificationChannel channel,
                     @Param("readAt") Instant readAt);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select n from Notification n where n.id = :id")
+    Optional<Notification> findForPushDelivery(@Param("id") UUID id);
+
+    @Query("""
+            select n.id from Notification n
+            where n.channel = com.exskylab.koala.entities.NotificationChannel.PUSH
+              and n.status = com.exskylab.koala.entities.NotificationStatus.QUEUED
+              and n.sentAt is null
+              and (n.pushAttemptCount > 0
+                   or n.failureReason = 'TOKEN_SERIALIZATION_BUSY')
+              and (n.pushNextAttemptAt is null or n.pushNextAttemptAt <= :now)
+            order by n.pushNextAttemptAt asc nulls first, n.id asc
+            """)
+    List<UUID> findDuePushDeliveryIds(@Param("now") Instant now, Pageable pageable);
+
+    @Query("""
+            select n.id from Notification n
+            where n.channel = com.exskylab.koala.entities.NotificationChannel.PUSH
+              and n.status = com.exskylab.koala.entities.NotificationStatus.PROCESSING
+              and n.pushProcessingStartedAt < :staleBefore
+            order by n.pushProcessingStartedAt asc
+            """)
+    List<UUID> findStalePushDeliveryIds(@Param("staleBefore") Instant staleBefore, Pageable pageable);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = """

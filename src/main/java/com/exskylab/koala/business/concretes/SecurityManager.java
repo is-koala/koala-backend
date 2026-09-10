@@ -59,4 +59,10 @@ public class SecurityManager implements SecurityService {
         return userDao.findById(SystemUser.ID)
                 .orElseThrow(() -> new ResourceNotFoundException("{system.user.not.found}"));
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isActiveUser(UUID userId) {
+        return userDao.existsById(userId);
+    }
 }

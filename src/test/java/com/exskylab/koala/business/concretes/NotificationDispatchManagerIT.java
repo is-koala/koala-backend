@@ -480,8 +480,7 @@ class NotificationDispatchManagerIT extends AbstractIntegrationTest {
     @Test
     void exactPushPayloadSurvivesPersistenceAndRoutesEveryFieldToThePushProducer() {
         Notification notification = queuedNotification(NotificationChannel.PUSH);
-        PushTaskDto expected = new PushTaskDto(notification.getId(), "push-token-7", "Exact title",
-                "Exact body", Map.of("jobId", "job-7", "screen", "job-detail"));
+        PushTaskDto expected = new PushTaskDto(notification.getId());
         storePayload(notification, expected);
 
         assertTrue(dispatchService.runTask(notification.getId()));
