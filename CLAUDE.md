@@ -206,7 +206,7 @@ kümesine yazılır; küme boşken tarama her `*Messages.SABIT` referansını ya
 }
 ```
 
-**`errorCategory` kapalı küme, `errorCode` spesifik.** İstemci `errorCategory` üzerinde `switch` yazabilir (`ErrorCategory` enum'u 16 değer, hepsi tanımlı); `errorCode` ise mesaj anahtarından türediği için hangi kaynağın bulunamadığını söyler (`PAYMENT_NOT_FOUND` vs `USER_NOT_FOUND`). İkisini birden vermek, matmuh'un sabit katalog yaklaşımıyla koala'nın türetilmiş kodunun birleşimi — kapalı küme davranış için, spesifik kod log ve hata ayıklama için.
+**`errorCategory` kapalı küme, `errorCode` spesifik.** İstemci `errorCategory` üzerinde `switch` yazabilir (`ErrorCategory` sabitlerinin tamamı tanımlı); `errorCode` ise mesaj anahtarından türediği için hangi kaynağın bulunamadığını söyler (`PAYMENT_NOT_FOUND` vs `USER_NOT_FOUND`). İkisini birden vermek, matmuh'un sabit katalog yaklaşımıyla koala'nın türetilmiş kodunun birleşimi — kapalı küme davranış için, spesifik kod log ve hata ayıklama için. Yayımlanan kaynak OpenAPI şemasıdır: `OpenApiDocumentIT.theErrorCategorySchemaListsEveryJavaConstant` `/v3/api-docs` içindeki enum listesini Java sabitleriyle birebir tutar, böylece mobil sözleşme testi şema/Java kaynağına bağlanabilir (is-koala/koala#85).
 
 **`resource` / `resourceId` istek yolundan türetilir.** `RequestResourceResolver` yolun son kaynak segmentini ve varsa UUID'sini çıkarır; istemci "neyin bulunamadığını" ayrıca ayrıştırmak zorunda kalmaz.
 
