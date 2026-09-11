@@ -15,6 +15,7 @@ import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.StaffPayoutService;
 import com.exskylab.koala.core.constants.PayoutMessages;
+import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.payout.request.ConfirmPayoutSettlementDto;
 import com.exskylab.koala.core.dtos.payout.request.RefundRequestDto;
 import com.exskylab.koala.core.dtos.payout.request.ReleaseRequestDto;
@@ -22,7 +23,11 @@ import com.exskylab.koala.core.dtos.payout.response.PayoutDto;
 import com.exskylab.koala.core.mappers.PayoutMapper;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.core.utilities.results.SuccessResult;
+import com.exskylab.koala.entities.PayoutStatus;
 import jakarta.validation.Valid;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -82,6 +87,24 @@ public class PayoutsController {
 
         return ResponseEntity.status(HttpStatus.OK).body(new SuccessDataResult<>(
                 payout, PayoutMessages.RELEASED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "Hakediş kuyruğu",
+            description = "status verilmezse yalnız PROCESSING (banka mutabakatı bekleyen) döner. "
+                    + "Onay mevcut reconcile ucundan yapılır; bu GET yalnız okur.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Hakedişler listelendi")
+    })
+    @RequiresPermission(value = StaffPermission.PAYOUT_RECONCILE, action = "payout.reconcile")
+    @GetMapping("/admin/payouts")
+    public ResponseEntity<SuccessDataResult<PageDto<PayoutDto>>> list(
+            @RequestParam(required = false) List<PayoutStatus> status,
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
+
+        var page = payoutService.listForStaff(status, pageable);
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                PageDto.of(page, payoutMapper.toPayoutDtoList(page.getContent())),
+                PayoutMessages.LISTED, HttpStatus.OK));
     }
 
     @Operation(summary = "Banka mutabakatıyla hakedişi tamamlanmış işaretle",

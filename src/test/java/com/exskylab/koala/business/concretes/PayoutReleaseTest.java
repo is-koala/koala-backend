@@ -29,6 +29,8 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
+import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.Pageable;
 
 class PayoutReleaseTest {
 
@@ -338,6 +340,20 @@ class PayoutReleaseTest {
 
         verify(settlementService).enqueueRefund(eq(payment), eq(assignment), eq(new BigDecimal("537.50")));
         verify(settlementService).enqueue(eq(payment), eq(assignment), eq(SettlementOperation.DISAPPROVE));
+    }
+
+    @Test
+    void staffListDefaultsToAwaitingSettlementAndCapsSize() {
+        when(payoutDao.findAllByStatusIn(eq(PayoutStatus.AWAITING_SETTLEMENT), any(Pageable.class)))
+                .thenReturn(org.springframework.data.domain.Page.empty());
+
+        payoutManager.listForStaff(List.of(), org.springframework.data.domain.PageRequest.of(0, 500));
+
+        ArgumentCaptor<Pageable> requested = ArgumentCaptor.forClass(Pageable.class);
+        verify(payoutDao).findAllByStatusIn(eq(PayoutStatus.AWAITING_SETTLEMENT), requested.capture());
+        assertEquals(50, requested.getValue().getPageSize());
+        assertEquals(org.springframework.data.domain.Sort.Direction.DESC,
+                requested.getValue().getSort().getOrderFor("createdAt").getDirection());
     }
 
 }
