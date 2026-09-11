@@ -36,7 +36,7 @@ class BankAccountTest {
     void setUp() {
         bankAccountDao = mock(BankAccountDao.class);
         manager = new BankAccountManager(bankAccountDao, mock(SecurityService.class),
-                new BankVerificationProperties());
+                new BankVerificationProperties(), new com.exskylab.koala.core.helpers.PageableSanitizer());
 
         user = new User();
         user.setId(UUID.randomUUID());

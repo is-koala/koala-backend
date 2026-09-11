@@ -25,6 +25,9 @@ import com.exskylab.koala.core.constants.AdminMessages;
 import com.exskylab.koala.core.constants.BankAccountMessages;
 import com.exskylab.koala.core.dtos.bankAccount.request.ConfirmIbanTransferDto;
 import com.exskylab.koala.core.dtos.bankAccount.response.BankAccountDto;
+import com.exskylab.koala.core.dtos.bankAccount.response.IbanPendingDto;
+import com.exskylab.koala.core.exceptions.ValidationException;
+import com.exskylab.koala.entities.BankAccountVerificationStatus;
 import com.exskylab.koala.core.mappers.BankAccountMapper;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.company.request.ApproveCompanyDto;
@@ -121,6 +124,29 @@ public class AdminController {
     public ResponseEntity<Result> removeImage(@PathVariable UUID imageId) {
         galleryService.removeImageEverywhere(imageId);
         return ResponseEntity.ok(new SuccessResult(GalleryMessages.IMAGE_REMOVED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "Bekleyen IBAN doğrulamaları",
+            description = "status verilmezse ya da PENDING ise süresi dolmamış bekleyen transferler sayfalanır. "
+                    + "Yanıt maskeli IBAN ve referans taşır; tam IBAN yoktur. Onay mevcut confirm ucundan yapılır; ret ucu yoktur.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Bekleyen doğrulamalar listelendi"),
+            @ApiResponse(responseCode = "400", description = "Yalnız PENDING kuyruğu vardır",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(StaffPermission.BANK_ACCOUNT_VERIFY)
+    @GetMapping("/bank-account-verifications")
+    public ResponseEntity<SuccessDataResult<PageDto<IbanPendingDto>>> pendingIbanVerifications(
+            @RequestParam(defaultValue = "PENDING") BankAccountVerificationStatus status,
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
+
+        if (status != BankAccountVerificationStatus.PENDING) {
+            throw new ValidationException(BankAccountMessages.PENDING_QUEUE_ONLY);
+        }
+        var page = bankAccountService.listPendingForStaff(pageable);
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                PageDto.of(page, page.getContent().stream().map(bankAccountMapper::toIbanPendingDto).toList()),
+                BankAccountMessages.PENDING_LISTED, HttpStatus.OK));
     }
 
     @Operation(summary = "IBAN doğrulama transferini onayla",

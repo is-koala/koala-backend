@@ -1,17 +1,21 @@
 package com.exskylab.koala.core.mappers;
 
 import com.exskylab.koala.core.dtos.bankAccount.response.BankAccountDto;
+import com.exskylab.koala.core.dtos.bankAccount.response.IbanPendingDto;
 import com.exskylab.koala.core.dtos.bankAccount.response.IbanVerificationDto;
 import com.exskylab.koala.core.helpers.BankAccountVerificationPolicy;
 import com.exskylab.koala.core.helpers.LogMasks;
 import com.exskylab.koala.entities.BankAccount;
+import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 import java.time.Instant;
 import java.util.List;
 
-@Mapper(componentModel = "spring", imports = {LogMasks.class, BankAccountVerificationPolicy.class, Instant.class})
+@Mapper(componentModel = "spring", uses = UserMapper.class,
+        injectionStrategy = InjectionStrategy.CONSTRUCTOR,
+        imports = {LogMasks.class, BankAccountVerificationPolicy.class, Instant.class})
 public interface BankAccountMapper {
 
     @Mapping(target = "maskedIban", expression = "java(LogMasks.iban(account.getIban()))")
@@ -32,4 +36,13 @@ public interface BankAccountMapper {
     @Mapping(target = "expiresAt", source = "account.verificationExpiresAt")
     @Mapping(target = "attemptsLeft", source = "attemptsLeft")
     IbanVerificationDto toIbanVerificationDto(BankAccount account, String targetIban, int attemptsLeft);
+
+    @Mapping(target = "accountId", source = "id")
+    @Mapping(target = "maskedIban", expression = "java(LogMasks.iban(account.getIban()))")
+    @Mapping(target = "user", source = "user")
+    @Mapping(target = "reference", source = "verificationReference")
+    @Mapping(target = "amount", source = "verificationAmount")
+    @Mapping(target = "startedAt", source = "verificationStartedAt")
+    @Mapping(target = "expiresAt", source = "verificationExpiresAt")
+    IbanPendingDto toIbanPendingDto(BankAccount account);
 }
