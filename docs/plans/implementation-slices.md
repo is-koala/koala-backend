@@ -21,11 +21,11 @@ Durum: Kullanıcı tarafından onaylandı; GitHub alt işleri ve bağımlılıkl
 
 **Önkoşul:** Yok. QA alıcıları sağlandı.
 
-- [ ] Dev/staging/production kimlikleri ile API hedefi uyumludur; eksik seçim internet API'sine sessizce bağlanmaz.
-- [ ] Mevcut demo bootstrap ve gömülü hesap bilgileri runtime'dan çıkarılır; gerçek login ve token yenileme korunur.
-- [ ] Mail alıcı kontrolü SMTP'den önce uygulanır; iki kontrollü adres dışındaki gönderim teslim edilmiş sayılmaz.
-- [ ] Şirket ve bireysel işveren akışı korunur; kullanılan doğrulama/reset bağlantısı doğru ortamdaki uygulamaya gider.
-- [ ] Gerçek HTTP giriş/yenileme, bozuk token ve SMTP izinli/engelli alıcı davranışları sınanır.
+- [x] Dev/staging/production kimlikleri ile API hedefi uyumludur; eksik seçim internet API'sine sessizce bağlanmaz. (mobil #7 kod dilimi)
+- [x] Mevcut demo bootstrap ve gömülü hesap bilgileri runtime'dan çıkarılır; gerçek login ve token yenileme korunur.
+- [x] Mail alıcı kontrolü SMTP'den önce uygulanır; iki kontrollü adres dışındaki gönderim teslim edilmiş sayılmaz. Staging `UNRESTRICTED` açılışı durur (#191).
+- [x] Şirket ve bireysel işveren akışı korunur; kullanılan doğrulama/reset bağlantısı doğru ortamdaki uygulamaya gider.
+- [ ] Gerçek HTTP giriş/yenileme, bozuk token ve SMTP izinli/engelli alıcı davranışları **iki QA gelen kutusunda** sınanır — insan kabulü (#4 / mobil #7).
 
 **Önerilen mobil branch:** `feat/staging-real-auth`
 
@@ -35,7 +35,9 @@ Durum: Kullanıcı tarafından onaylandı; GitHub alt işleri ve bağımlılıkl
 
 **Önkoşul:** 1.
 
-- [ ] Sürümlü one-shot seed iki QA adresini yerel/ortam ayarından alır; kaynak kodda ortak parola bulunmaz.
+Bu paket [ADR-0008](../adr/0008-ship-an-empty-database-without-sample-data.md) ile **geçersizdir**: marketplace seed kalkmıştır. Test hesapları gerçek kayıt + SMTP allowlist ile oluşur. Aşağıdaki kutular tarihsel spec metnidir; seed runner geri yazılmaz.
+
+- [ ] ~~Sürümlü one-shot seed~~ — yapılmayacak; ADR-0008.
 - [ ] Tekrar çalıştırma kayıt çoğaltmaz, manuel testte ilerleyen iş durumlarını geri almaz.
 - [ ] Kullanıcı, şirket, ilan, başvuru ve mesaj ilişkileri PostgreSQL'de doğrulanır.
 - [ ] Normal servis açılışı seed çalıştırmaz; selective testData/seedRunId modeli eklenmez.

@@ -29,7 +29,10 @@ ile sabitlenmiştir.
 - `AUTH_LINK_APP_SCHEME=koala-staging`
 - `PAYMENTS_RETURN_BASE_URL=koala-staging://`
 - `IYZICO_BASE_URL=https://sandbox-api.iyzipay.com`
-- `MAIL_DELIVERY_MODE=ALLOWLIST`; allowlist dışındaki teslimat reddedilir
+- `MAIL_DELIVERY_MODE=ALLOWLIST`; allowlist dışındaki teslimat reddedilir.
+  `UNRESTRICTED` staging açılışını **durdurur** (`MAIL_DELIVERY_GUARD`).
+  Boş `MAIL_ALLOWED_RECIPIENTS` SMTP çağırmaz; açılış `WARN` yazar, alıcı
+  adresini loga koymaz.
 - `STOMP_STAGING_ORIGIN=https://staging.iskoala.com`
 - DB, RabbitMQ, S3 ve Google anahtarları production ile ortak olamaz
 
@@ -78,6 +81,12 @@ Kuralları `ProductionConfigurationGuardTest` iki yönde de sabitliyor; hangisin
 durdurup hangisinin uyardığı ve gerekçesi `CLAUDE.md` §2ax'te. Bu tablonun
 guard'ın gerçek kural listesinden ayrışmadığını `ProductionConfigurationContractTest`
 doğruluyor — kuralı olmayan satır da, satırı olmayan kural da testi kırar.
+
+Mail teslimatı bu tabloya **eklenmedi**: CORS kataloğunu bozmamak için ayrı
+`MailDeliveryEnvironmentGuard` (`MAIL_DELIVERY_GUARD`) okur. Staging
+`UNRESTRICTED` açılışı durdurur. Production `UNRESTRICTED` lansman cutover yolu
+olduğu için yalnız `WARN` yazar; boş ALLOWLIST local dışında `WARN` yazar.
+Alıcı adresi loga girmez. Gerekçe `CLAUDE.md` §2ay.
 
 ## STOMP handshake origin'leri
 
