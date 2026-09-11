@@ -748,11 +748,8 @@ değil. Uç `/admin/**` altında olduğu için denetim kaydına giriyor (§2av).
    canlıya çıkılamaz; `.env.example` bunu yazıyor.
 3. **Gelen transferin iadesi düşünülmedi.** Doğrulama tutarı Koala'da kalıyor; kullanıcıya geri gönderilmesi ya
    da ilk hakedişine eklenmesi ürün kararı.
-4. **Alt üye işyeri kaydındaki IBAN'ın tazelenmesi.** `UserProducerService` profil güncellemesinde birincil
-   IBAN'ı olduğu gibi kuyruğa yazıyor ve `IyzicoSynchronizationConsumer` onu alt üye işyerine geçiriyor;
-   bu yol **doğrulanmamış bir IBAN'ı sağlayıcıya taşıyabiliyor**. Emanet kapısı parayı yine durduruyor ama
-   sağlayıcıdaki kayıt bayat kalabiliyor. Kapatmak, doğrulanmış IBAN yokken güncellemenin ne göndereceğine
-   (atla mı, null mı) karar vermeyi gerektiriyor ve o karar Iyzico'nun cevabına bağlı (§2x, Faz 7C).
+4. ~~**Alt üye işyeri kaydındaki IBAN'ın tazelenmesi.**~~ **Kapandı (#109).** Profil güncellemesi artık
+   yalnız doğrulanmış IBAN'ı kuyruğa yazıyor; gerekçesi aşağıdaki başlıkta.
 5. **KKB IBAN Doğrulama Hizmeti** erişimi gelirse bu akışın yerini alabilir ya da onu tamamlayabilir; başvuru
    insan işi ve #71'de duruyor.
 
@@ -779,6 +776,55 @@ kendi anahtarıyla (`job.assignment.iban.not.verified.for.worker`).
 pratikte işe alım anına da düşüyor. Kabul edildi çünkü depo aynı noktada aynı kararı zaten vermiş: iki satır
 aşağıda kimliği doğrulanmamış işçi için ödeme aynı şekilde reddediliyor. İstemcinin yapması gereken, işçiyi
 başvuru sonrası doğrulamaya yönlendirmek — `assertReadyToWork` bu yüzden serbest bırakıldı.
+
+### Sağlayıcıdaki kayıt yalnız doğrulanmış IBAN'ı gösterir (#109)
+
+**Kapı indikten sonra profil güncellemesi yolu açık kalmıştı.** `UserProducerService.convertToEventDto`
+`findPrimaryIban` okuyordu, yani doğrulama durumuna hiç bakmıyordu. İşçi doğrulanmış IBAN A ile alt üye
+işyeri açtırıp sonra IBAN'ını B ile değiştirdiğinde `BankAccount.setIban` doğrulamayı doğru biçimde
+düşürüyor, ama bir sonraki profil güncellemesi **B'yi** Iyzico'ya senkronize ediyordu. Para akmıyordu —
+`releaseToWorker` kapısı tutuyor. Kaybolan şey Koala'nın kaydı ile sağlayıcının kaydı arasındaki
+**tutarlılık**tı: mutabakatta iki taraf farklı IBAN gösteriyor ve Koala'nın hangi hesabı bildiği artık
+sağlayıcıya bakarak anlaşılamıyor. Iyzico tarafında Koala'nın görmediği bir yolla ödeme tetiklenirse
+(mutabakat düzeltmesi, elle işlem) para doğrulanmamış hesaba giderdi.
+
+**Karar: son doğrulanmış IBAN gönderilmeye devam eder, doğrulanmış hesap yoksa alan `null` gider.** Kod
+artık `findVerifiedPrimaryAccount` okuyor, yani süzgeç `BankAccountVerificationPolicy.isVerified` üzerinden
+ve kapının geri kalanıyla aynı yerden geliyor. Gerekçe tek cümlede: **sağlayıcıdaki kayıt, Koala'nın fiilen
+para göndermeye razı olduğu hesabı göstermeli.** `releaseToWorker` doğrulanmamış hesaba para vermiyor;
+sağlayıcı kaydının da onu göstermesi, mutabakatta iki tarafın aynı şeyi söylemesi demek. Kullanıcının yeni
+IBAN'ı doğrulanana kadar sağlayıcıda eskisi kalıyor — **kayıp değil, kastedilen davranış**: doğrulanmamış
+hesap Koala için henüz yok hükmünde.
+
+**Doğrulanmış hesap hiç yokken ne olduğu tel seviyesinde yazılı olsun.** Alan `null` gidiyor ve
+`IyzicoSynchronizationConsumer` onu olduğu gibi `SubMerchantUpdateRequestDto`'ya geçiriyor;
+`IyzicoPaymentService.updateSubMerchant` gövdeyi `HashMap` ile kuruyor ve uygulamada Jackson'ın null atlama
+ayarı açık değil, yani istek `"iban": null` taşıyor — alan atlanmıyor. Iyzico'nun bunu "değiştirme" diye mi
+okuduğu yoksa reddettiği mi **doğrulanmış değil**; bu, #71'in insan yarısındaki sorunun burada kalan tek
+kalıntısı ve sandbox'ta ölçülmeden kapanmaz (§2x, Faz 7C). Kalıntının kapsamı dar: yalnız alt üye işyeri
+anahtarı olan bir kullanıcı doğrulanmış IBAN'ını doğrulanmamış bir yenisiyle değiştirdiğinde bu yola giriliyor.
+Yine de eski davranıştan **kötü değil**: o hâlde aynı istek doğrulanmamış IBAN'ı sağlayıcıya yazıyordu.
+
+**Senkronizasyonu tümden ertelemek elendi, ve kaynaktan.** Olay yalnız IBAN taşımıyor: `id`, `firstName`,
+`lastName`, `email`, `gsmNumber`, `address`, `identityNumber` ve `iyzicoSubMerchantKey` aynı olayda gidiyor.
+"IBAN doğrulanana kadar bekle" demek, doğrulanmamış bir IBAN yüzünden **ad, e-posta, telefon ve adres**
+değişikliklerinin de sağlayıcıya ulaşmasını engellemek olurdu — kapatmaya çalıştığımızdan daha büyük bir
+tutarsızlık. O yüzden kural alan bazında: yalnız `iban` düşüyor, olayın geri kalanı her iki hâlde de gidiyor
+ve `UserProfileSyncRulesTest` bunu ayrıca bağlıyor.
+
+**"Alanı hiç gönderme" seçeneği açık bir soruya bağlıydı, seçilen yol değil.** #71'in insan yarısındaki soru
+— Iyzico PERSONAL alt üye işyeri için `iban` ve `identityNumber`'ı kendisi doğruluyor mu (§2x, Faz 7C) —
+yalnız o seçeneği ilgilendiriyor: alanı hiç göndermemenin mümkün olup olmadığını o belirliyor. Burada her
+zaman geçerli, doğrulanmış bir IBAN gidiyor, yani sağlayıcının doğrulama davranışı sonucu değiştirmiyor.
+Belirsizlik yalnız **doğrulanmış hesap hiç yokken** kalıyor ve o hâlde zaten gönderilecek geçerli bir değer
+yok.
+
+**Kapsam bilerek dar tutuldu: `findPrimaryIban`'ın diğer iki çağrısı değişmedi.** `UserManager` (§2s) onu
+`maskedIban` üretmek için okuyor — kullanıcının kendi verisini kendine gösteriyor, doğrulama sorusu orada
+yok. `JobApplicationManager.assertReadyToWork` (§2ar) başvuru kapısında yalnız IBAN'ın *varlığına* bakıyor;
+bu bilinçli olabilir — doğrulama zaman aldığı için hunideki başvuruyu değil parayı tıkamak — ve ayrı bir
+ürün kararı olarak #127'de bekliyor. Kusur sayıp kapatmak, iki paragraf yukarıdaki "kapıyı zararın doğduğu
+yere koy" kararını sessizce geri almak olurdu.
 
 
 ## 2l. Sayfalama ve ilan araması
@@ -3375,7 +3421,13 @@ tahsilat hesabı tanımsızken doğrulama başlatılamaz. `BankAccountTest` üç
 üstüne yeni IBAN yazılınca doğrulamanın her izi düşer** (durum, referans, tutar, süre, deneme sayısı, ad),
 aynı IBAN yeniden gönderildiğinde doğrulama korunur, yalnız doğrulanmış birincil hesap doğrulanmış sayılır.
 `PayoutReleaseTest` iki kural kazandı: doğrulanmamış IBAN'lı işçiye emanet çıkmaz ve kuyruğa hiçbir mutabakat
-görevi girmez, çıkan `Payout` doğrulanmış hesabı gösterir.
+görevi girmez, çıkan `Payout` doğrulanmış hesabı gösterir. `UserProfileSyncRulesTest` altı kural (#109):
+doğrulanmamış IBAN Iyzico senkronizasyon kuyruğuna girmez, doğrulanmış girer, doğrulanmış IBAN'ın üstüne
+yazılan yenisi kendisi doğrulanana kadar girmez, hesabı olmayan kullanıcı IBAN'sız senkronize olur, ve
+**olayın geri kalanı iki hâlde de gider** — son ikisi olmadan "senkronizasyonu tümden ertele" seçeneğinin
+elenmesi kodda bağlı olmazdı. Test `BankAccountManager`'ı gerçek nesne olarak kuruyor, yani doğrulama
+süzgeci taklit edilmiyor; `findVerifiedPrimaryAccount` yerine `findPrimaryIban` yazan mutasyon üç testi
+birden kırmızıya döndürüyor.
 
 `IbanOwnershipGateIT` kapıyı **gerçek Postgres üzerinde** kanıtlıyor: emanetteki para doğrulanmamış IBAN'a
 çıkmıyor ve `payment_status` `HELD_IN_ESCROW` kalıyor, doğrulandığında çıkıyor, doğrulanmış IBAN'ın üstüne
