@@ -1,15 +1,30 @@
 name: koala ci
 
+# push: [main] üzerindeki test tekrarı kaldırıldı (is-koala/koala-backend#91).
+# PR yeşil olmadan birleşmiyor; birleşen commit'i Pi'de bir kez daha
+# `./mvnw verify` etmek, birkaç dakika önce geçmiş zinciri ikinci kez
+# koşturup diğer depoların kuyruğunu tıkıyordu. main ve etiket push'u
+# yalnız imaj basıyor — dağıtım hâlâ o imaja bağlı.
+#
+# workflow_dispatch, birleştirme sonucunu elle doğrulamak için duruyor.
 on:
   push:
     branches: [main]
     tags: ['v*']
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+# Aynı PR'a arka arkaya push atılırsa önceki çalışmayı iptal et.
+# main iptal edilmiyor: imaj basımı yarıda kesilmesin.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
     name: test
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v7
@@ -36,7 +51,9 @@ jobs:
 
   build:
     name: build and push
-    needs: test
+    # PR zaten test işinde doğrulandı; main/etiket push'unda verify
+    # tekrarlanmıyor (#91). needs: test olsaydı atlanan test işi imaj
+    # basımını da atlatırdı.
     if: github.event_name == 'push'
     runs-on: self-hosted
     permissions:
