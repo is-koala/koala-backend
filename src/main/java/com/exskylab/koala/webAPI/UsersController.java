@@ -9,9 +9,11 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
+import com.exskylab.koala.business.abstracts.IdentityDocumentReviewService;
 import com.exskylab.koala.business.abstracts.JobService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.UserService;
+import com.exskylab.koala.core.dtos.identity.response.IdentityReviewDto;
 import com.exskylab.koala.core.constants.JobMessages;
 import com.exskylab.koala.core.constants.UserMessages;
 import com.exskylab.koala.core.dtos.common.PageDto;
@@ -66,9 +68,11 @@ public class UsersController {
     private final JobMapper jobMapper;
     private final StatisticsService statisticsService;
     private final PublicProfileService publicProfileService;
+    private final IdentityDocumentReviewService identityDocumentReviewService;
 
     public UsersController(UserService userService, JwtService jwtService, SecurityService securityService, JobService jobService, JobMapper jobMapper,
-                           StatisticsService statisticsService, PublicProfileService publicProfileService) {
+                           StatisticsService statisticsService, PublicProfileService publicProfileService,
+                           IdentityDocumentReviewService identityDocumentReviewService) {
         this.userService = userService;
         this.jwtService = jwtService;
         this.securityService = securityService;
@@ -76,6 +80,7 @@ public class UsersController {
         this.jobMapper = jobMapper;
         this.statisticsService = statisticsService;
         this.publicProfileService = publicProfileService;
+        this.identityDocumentReviewService = identityDocumentReviewService;
     }
 
     @Operation(summary = "Kullanıcının profili",
@@ -203,6 +208,26 @@ public class UsersController {
         return ResponseEntity.ok(new SuccessDataResult<>(
                 userService.startIdentityChallenge(),
                 UserMessages.IDENTITY_CHALLENGE_CREATED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "TCKK fotoğrafı ile kimlik incelemesi başlat",
+            description = "Ön ve arka TCKK fotoğrafı personel kuyruğuna düşer. Çip kanıtı bu uçta yoktur; "
+                    + "kimlik personel onayından sonra damgalanır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "İnceleme kuyruğa alındı"),
+            @ApiResponse(responseCode = "400", description = "Dosya eksik, zaten doğrulanmış ya da bekleyen inceleme var",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @PostMapping(value = "/me/identity-documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<SuccessDataResult<IdentityReviewDto>> submitIdentityDocuments(
+            @RequestPart("identity") @Valid VerifyIdentityDto identity,
+            @RequestPart("front") MultipartFile front,
+            @RequestPart("back") MultipartFile back) {
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(new SuccessDataResult<>(
+                IdentityReviewDto.from(identityDocumentReviewService.submit(identity, front, back)),
+                UserMessages.USER_IDENTITY_DOCUMENTS_SUBMITTED,
+                HttpStatus.CREATED));
     }
 
     @Operation(summary = "Kimlik doğrulama başlat",

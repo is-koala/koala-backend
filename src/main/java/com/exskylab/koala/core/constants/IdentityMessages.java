@@ -3,6 +3,11 @@ package com.exskylab.koala.core.constants;
 public class IdentityMessages {
     public static final String EVIDENCE_REQUIRED = "{identity.evidence.required}";
     public static final String DOCUMENT_REVIEW_REQUIRED = "{identity.document.review.required}";
+    public static final String DOCUMENTS_REQUIRED = "{identity.documents.required}";
+    public static final String DOCUMENTS_ALREADY_PENDING = "{identity.documents.already.pending}";
+    public static final String REVIEW_NOT_FOUND = "{identity.review.not.found}";
+    public static final String REVIEW_ALREADY_DECIDED = "{identity.review.already.decided}";
+    public static final String REJECTION_REASON_REQUIRED = "{identity.review.rejection.reason.required}";
     public static final String NO_TRUST_ANCHORS = "{identity.no.trust.anchors}";
     public static final String SOD_UNREADABLE = "{identity.sod.unreadable}";
     public static final String SIGNATURE_INVALID = "{identity.signature.invalid}";

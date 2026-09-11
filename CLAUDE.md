@@ -2343,7 +2343,7 @@ Bu hata biçiminin kötülüğü şurada: "senin bilgilerin yanlış" ile "servi
 
 **Beş alanlık `POST /users/me/identity-verification` ürün yüzeyi değildir.** Bayrak kapalıyken de checksum'ı geçen TCKN damgalanmaz. Çip kanıtı gönderilse bile PA kapalıyken damga yok — o uç yalnız `IDENTITY_PASSIVE_AUTH_ENABLED` açıkken çalışır. Kimlik damgası ya çipten (bayrak açık) ya personelin TCKK fotoğrafını onayından gelir.
 
-Bayrağı bugün açmamak hâlâ doğru: açılırsa kanıt göndermeyen her istemci `IDENTITY_EVIDENCE_REQUIRED` alır ve belge yolu henüz yokken kimse doğrulanamaz. Sıra: belge yükleme + personel kuyruğu (#193), gerçek kart çıpası (#70), sonra bayrak (#73).
+Bayrağı bugün açmamak hâlâ doğru: açılırsa kanıt göndermeyen her istemci `IDENTITY_EVIDENCE_REQUIRED` alır. Belge yolu #193 ile açık: `POST /users/me/identity-documents` TCKK ön/arka fotoğrafını kuyruğa alır, `IDENTITY_REVIEW` izniyle personel `POST /admin/identity-verifications/{id}/approve` deyince `identityVerified` damgalanır. TCKN benzersizliği durur. Çip PA bu issue'da açılmaz.
 
 **Passive Authentication'dan sonra kalan artık risk.** Çip doğrulaması "kart gerçek" der, "kartı tutan kişi sahibidir" demez — onu kuran şey yüz eşleştirmesi ve o cihazda. Yani elinde **başkasının gerçek kartı** olan biri, uygulamayı değiştirerek o kimlikle kayıt olabilir. Sonucu iş değil para: alt üye işyeri **kurbanın TCKN'siyle** ama **saldırganın IBAN'ıyla** açılır.
 

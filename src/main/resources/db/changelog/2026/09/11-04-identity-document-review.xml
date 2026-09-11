@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-11-04-01-identity-document-review" author="koala">
+        <addColumn tableName="user_verifications">
+            <column name="first_name" type="VARCHAR(255)"/>
+            <column name="last_name" type="VARCHAR(255)"/>
+            <column name="birth_date" type="DATE"/>
+            <column name="tc_document_number" type="VARCHAR(255)"/>
+            <column name="rejection_reason" type="VARCHAR(1000)"/>
+            <column name="rejected_at" type="TIMESTAMPTZ"/>
+            <column name="reviewed_by_staff_id" type="UUID"/>
+            <column name="back_document_id" type="UUID"/>
+        </addColumn>
+
+        <addForeignKeyConstraint baseTableName="user_verifications"
+                                 baseColumnNames="reviewed_by_staff_id"
+                                 constraintName="fk_user_verifications_reviewed_by_staff"
+                                 referencedTableName="staff_members" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="user_verifications"
+                                 baseColumnNames="back_document_id"
+                                 constraintName="fk_user_verifications_back_document"
+                                 referencedTableName="media" referencedColumnNames="id"/>
+        <addUniqueConstraint tableName="user_verifications" columnNames="back_document_id"
+                             constraintName="uc_user_verifications_back_document"/>
+
+        <rollback>
+            <dropUniqueConstraint tableName="user_verifications"
+                                 constraintName="uc_user_verifications_back_document"/>
+            <dropForeignKeyConstraint baseTableName="user_verifications"
+                                      constraintName="fk_user_verifications_back_document"/>
+            <dropForeignKeyConstraint baseTableName="user_verifications"
+                                      constraintName="fk_user_verifications_reviewed_by_staff"/>
+            <dropColumn tableName="user_verifications" columnName="back_document_id"/>
+            <dropColumn tableName="user_verifications" columnName="reviewed_by_staff_id"/>
+            <dropColumn tableName="user_verifications" columnName="rejected_at"/>
+            <dropColumn tableName="user_verifications" columnName="rejection_reason"/>
+            <dropColumn tableName="user_verifications" columnName="tc_document_number"/>
+            <dropColumn tableName="user_verifications" columnName="birth_date"/>
+            <dropColumn tableName="user_verifications" columnName="last_name"/>
+            <dropColumn tableName="user_verifications" columnName="first_name"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-11-04-02-identity-review-staff-permission" author="koala">
+        <sql>
+            INSERT INTO staff_role_permissions (id, staff_role_id, permission_code, created_at)
+            SELECT gen_random_uuid(), role.id, 'identity.review', now()
+            FROM staff_roles role
+            WHERE role.code = 'TRUST_LEAD'
+            ON CONFLICT ON CONSTRAINT uk_staff_role_permissions_role_code DO NOTHING;
+        </sql>
+        <rollback>
+            <sql>
+                DELETE FROM staff_role_permissions
+                WHERE permission_code = 'identity.review';
+            </sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

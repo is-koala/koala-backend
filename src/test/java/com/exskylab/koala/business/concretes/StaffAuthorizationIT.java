@@ -69,7 +69,7 @@ class StaffAuthorizationIT extends AbstractIntegrationTest {
                 Set.of("TRUST_LEAD", "MODERATOR", "DISPUTE_HANDLER", "SUPPORT_AGENT")));
         assertEquals(Set.of(StaffPermission.USER_READ, StaffPermission.USER_READ_PII,
                         StaffPermission.USER_DELETION_MANAGE, StaffPermission.CONTENT_MODERATE,
-                        StaffPermission.DISPUTE_RESOLVE),
+                        StaffPermission.DISPUTE_RESOLVE, StaffPermission.IDENTITY_REVIEW),
                 resolved.permissions());
     }
 

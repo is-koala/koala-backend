@@ -15,8 +15,12 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.business.abstracts.CompanyService;
 import com.exskylab.koala.business.abstracts.GalleryService;
+import com.exskylab.koala.business.abstracts.IdentityDocumentReviewService;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.UserService;
+import com.exskylab.koala.core.dtos.identity.request.RejectIdentityReviewDto;
+import com.exskylab.koala.core.dtos.identity.response.IdentityReviewDto;
+import com.exskylab.koala.entities.IdentityReviewStatus;
 import com.exskylab.koala.core.constants.AdminMessages;
 import com.exskylab.koala.core.constants.BankAccountMessages;
 import com.exskylab.koala.core.dtos.bankAccount.request.ConfirmIbanTransferDto;
@@ -64,12 +68,14 @@ public class AdminController {
     private final JobAssignmentService jobAssignmentService;
     private final BankAccountService bankAccountService;
     private final BankAccountMapper bankAccountMapper;
+    private final IdentityDocumentReviewService identityDocumentReviewService;
 
     public AdminController(CompanyService companyService, UserService userService,
                            CompanyMapper companyMapper, UserMapper userMapper,
                            GalleryService galleryService, RoleGrantMapper roleGrantMapper,
                            JobAssignmentService jobAssignmentService,
-                           BankAccountService bankAccountService, BankAccountMapper bankAccountMapper) {
+                           BankAccountService bankAccountService, BankAccountMapper bankAccountMapper,
+                           IdentityDocumentReviewService identityDocumentReviewService) {
         this.companyService = companyService;
         this.userService = userService;
         this.companyMapper = companyMapper;
@@ -79,6 +85,7 @@ public class AdminController {
         this.jobAssignmentService = jobAssignmentService;
         this.bankAccountService = bankAccountService;
         this.bankAccountMapper = bankAccountMapper;
+        this.identityDocumentReviewService = identityDocumentReviewService;
     }
 
     @Operation(summary = "Atama özeti",
@@ -270,5 +277,65 @@ public class AdminController {
                                                  @AuthenticationPrincipal StaffPrincipal actor) {
         userService.revokeRole(actor, userId, role);
         return ResponseEntity.ok(new SuccessResult(AdminMessages.USER_ROLE_REVOKED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "TCKK kimlik incelemelerini listele",
+            description = "status verilmezse onay bekleyenler döner.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "İncelemeler listelendi")
+    })
+    @RequiresPermission(StaffPermission.IDENTITY_REVIEW)
+    @GetMapping("/identity-verifications")
+    public ResponseEntity<SuccessDataResult<PageDto<IdentityReviewDto>>> identityReviews(
+            @RequestParam(defaultValue = "PENDING") IdentityReviewStatus status,
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
+
+        var page = identityDocumentReviewService.search(status, pageable);
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                PageDto.of(page, page.getContent().stream().map(IdentityReviewDto::from).toList()),
+                AdminMessages.IDENTITY_REVIEWS_LISTED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "TCKK kimlik incelemesini onayla",
+            description = "Kullanıcının identityVerified damgası çip olmadan konur. TCKN benzersizliği durur.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Kimlik onaylandı"),
+            @ApiResponse(responseCode = "404", description = "İnceleme bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "İnceleme sonuçlanmış ya da TCKN kullanımda",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(value = StaffPermission.IDENTITY_REVIEW, action = "identity.approve")
+    @PostMapping("/identity-verifications/{reviewId}/approve")
+    public ResponseEntity<SuccessDataResult<IdentityReviewDto>> approveIdentityReview(
+            @PathVariable UUID reviewId,
+            @AuthenticationPrincipal StaffPrincipal actor) {
+
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                IdentityReviewDto.from(identityDocumentReviewService.approve(actor, reviewId)),
+                AdminMessages.IDENTITY_REVIEW_APPROVED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "TCKK kimlik incelemesini reddet",
+            description = "Gerekçe zorunludur. Kullanıcı identityVerified olmadan kalır ve yeniden yükleyebilir.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "İnceleme reddedildi"),
+            @ApiResponse(responseCode = "400", description = "Gerekçe boş",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "İnceleme bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "İnceleme sonuçlanmış",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(value = StaffPermission.IDENTITY_REVIEW, action = "identity.reject")
+    @PostMapping("/identity-verifications/{reviewId}/reject")
+    public ResponseEntity<SuccessDataResult<IdentityReviewDto>> rejectIdentityReview(
+            @PathVariable UUID reviewId,
+            @RequestBody @Valid RejectIdentityReviewDto request,
+            @AuthenticationPrincipal StaffPrincipal actor) {
+
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                IdentityReviewDto.from(identityDocumentReviewService.reject(actor, reviewId, request.getReason())),
+                AdminMessages.IDENTITY_REVIEW_REJECTED, HttpStatus.OK));
     }
 }

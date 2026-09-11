@@ -35,6 +35,7 @@ public interface UserService {
 
     boolean existsByEmail(String email);
     boolean existsById(UUID id);
+    boolean existsByTcIdentityNumber(String tcIdentityNumber);
 
 
 
