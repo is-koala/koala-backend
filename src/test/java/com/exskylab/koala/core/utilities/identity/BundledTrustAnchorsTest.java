@@ -68,4 +68,27 @@ class BundledTrustAnchorsTest {
                 "T.C. Seyahat Belgesi kok sertifikasi eksik: kimlik karti Document Signer'i buna "
                         + "zincirleniyor ve o olmadan her dogrulama reddedilir");
     }
+
+    @Test
+    void aBlankExtraDirectoryLeavesBundledAnchorsInPlace() {
+        IdentityVerificationProperties properties = new IdentityVerificationProperties();
+        properties.setTrustAnchorDirectory("");
+        CscaTrustStore store = new CscaTrustStore(properties);
+        store.load();
+
+        assertEquals(load().size(), store.anchors().size(),
+                "bos IDENTITY_CSCA_DIRECTORY paketlenmis cipalari dusurmemeli");
+    }
+
+    @Test
+    void aMissingExtraDirectoryDoesNotDropBundledAnchors() {
+        IdentityVerificationProperties properties = new IdentityVerificationProperties();
+        properties.setTrustAnchorDirectory("/this/does/not/exist/koala-csca");
+        CscaTrustStore store = new CscaTrustStore(properties);
+        store.load();
+
+        assertFalse(store.anchors().isEmpty(),
+                "eksik ek dizin classpath cipalari yerine gecmemeli");
+        assertTrue(store.anchors().size() >= 12);
+    }
 }
