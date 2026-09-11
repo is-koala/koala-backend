@@ -38,6 +38,17 @@ class MessageCatalogTest {
         assertTrue(missingEn.isEmpty(), "messages_en.properties eksik: " + missingEn);
     }
 
+    /**
+     * Kullanılmayan anahtarlar silinmez: bir DTO anotasyonu veya başka bir
+     * mesajdan dolaylı çağrılıyor olabilir. Liste bilinçli ve kısa tutulur;
+     * yeni öksüz bir anahtar buraya sessizce eklenemez.
+     */
+    private static final Set<String> DOCUMENTED_UNUSED_KEYS = Set.of(
+            "critical.email.dispatch.failed",
+            "critical.push.dispatch.failed",
+            "critical.sms.dispatch.failed",
+            "invalid.notification.channel");
+
     @Test
     void theTwoCatalogsCoverExactlyTheSameKeys() throws IOException {
         Properties tr = load("messages_tr.properties");
@@ -49,6 +60,48 @@ class MessageCatalogTest {
         assertTrue(onlyTr.isEmpty(), "Yalnizca TR'de olan anahtarlar: " + onlyTr);
         assertTrue(onlyEn.isEmpty(), "Yalnizca EN'de olan anahtarlar: " + onlyEn);
         assertEquals(tr.size(), en.size());
+    }
+
+    @Test
+    void unusedKeysAreReportedAndOnlyTheDocumentedOnesRemain() throws IOException {
+        Set<String> used = keysUsedInSource();
+        Properties tr = load("messages_tr.properties");
+
+        List<String> unused = tr.stringPropertyNames().stream()
+                .filter(k -> !used.contains(k))
+                .sorted()
+                .toList();
+
+        List<String> undocumented = unused.stream()
+                .filter(k -> !DOCUMENTED_UNUSED_KEYS.contains(k))
+                .toList();
+        List<String> stale = DOCUMENTED_UNUSED_KEYS.stream()
+                .filter(k -> !unused.contains(k))
+                .sorted()
+                .toList();
+
+        assertTrue(undocumented.isEmpty(),
+                "Katalogda kullanilmayan ve allowlist'te olmayan anahtarlar (silme, gozden gecirme): "
+                        + undocumented);
+        assertTrue(stale.isEmpty(),
+                "Allowlist bayatladi, anahtar artik kullaniliyor veya yok: " + stale);
+    }
+
+    @Test
+    void theDefaultCatalogWasRemovedRatherThanLeftHalfSynced() {
+        Path defaultCatalog = Path.of("src", "main", "resources", "messages.properties");
+        assertTrue(!Files.exists(defaultCatalog),
+                "messages.properties yarim katalog olarak duruyor; ya tr/en ile senkron tut ya kaldir.");
+    }
+
+    @Test
+    void localeFallbackIsExplicitlyTurkish() throws IOException {
+        String source = Files.readString(Path.of(
+                "src", "main", "java", "com", "exskylab", "koala", "core", "configs",
+                "MultiLanguageSupportConfig.java"));
+
+        assertTrue(source.contains("setDefaultLocale(Locale.of(\"tr\"))"),
+                "Varsayilan katalog kaldirildi; LocaleResolver varsayilanı acikca tr olmali.");
     }
 
     @Test

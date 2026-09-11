@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -17,8 +18,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LogPrivacyTest {
 
+    /**
+     * `log.` yaninda Lombok disi alicilar da taranir. Eskiden yalniz `log.`
+     * taniniyordu; `accessLog.info(email)` PII taramasinin disinda kaliyordu.
+     */
     private static final Pattern LOG_CALL =
-            Pattern.compile("log\\.(?:trace|debug|info|warn|error)\\(([^;]*?)\\);", Pattern.DOTALL);
+            Pattern.compile("(?:log|accessLog|logger|LOGGER)\\.(?:trace|debug|info|warn|error)\\(([^;]*?)\\);",
+                    Pattern.DOTALL);
 
     private static final List<String> FORBIDDEN_ARGUMENTS = List.of(
             "getIban()", "getTcIdentityNumber()", "getPassword()", "getRefreshTokenHash()",
@@ -180,6 +186,69 @@ class LogPrivacyTest {
 
         assertTrue(argumentsOf(call).contains("token"), "Mesajdaki virguller argumanlara karisti.");
         assertFalse(argumentsOf(call).contains("b"), "Mesaj metni arguman sanildi.");
+    }
+
+    @Test
+    void concatenatedPiiAfterAStringLiteralIsStillAnArgument() {
+        List<String> arguments = argumentsOf("\"user \" + email");
+
+        assertTrue(arguments.stream().anyMatch(argument -> argument.contains("email")),
+                "\"... \" + email birlestirmesi taramada kayboldu: " + arguments);
+    }
+
+    @Test
+    void aNonLogReceiverWithPiiIsStillSeen() {
+        String source = """
+                class Example {
+                    private static final Logger accessLog = LoggerFactory.getLogger("http.access");
+                    void f(String email) {
+                        accessLog.info("login {}", email);
+                    }
+                }
+                """;
+
+        assertTrue(violationsIn(source).stream().anyMatch(v -> v.contains("email")),
+                "accessLog alicisi PII taramasinin disinda kaldi.");
+    }
+
+    @Test
+    void loggerFieldsUseScannedNames() throws IOException {
+        Pattern field = Pattern.compile(
+                "private static final Logger\\s+(\\w+)\\s*=");
+        List<String> unknown = new ArrayList<>();
+
+        for (Path file : javaFiles()) {
+            Matcher matcher = field.matcher(Files.readString(file, StandardCharsets.UTF_8));
+            while (matcher.find()) {
+                String name = matcher.group(1);
+                if (!Set.of("log", "accessLog", "logger", "LOGGER").contains(name)) {
+                    unknown.add(file.getFileName() + " -> " + name);
+                }
+            }
+        }
+
+        assertTrue(unknown.isEmpty(),
+                "LOG_CALL'in tanimadigi bir Logger alicisi: " + unknown);
+    }
+
+    private List<String> violationsIn(String source) {
+        List<String> violations = new ArrayList<>();
+        Matcher matcher = LOG_CALL.matcher(source);
+        while (matcher.find()) {
+            String call = matcher.group(1);
+            for (String argument : argumentsOf(call)) {
+                if (argument.contains("LogMasks.")) {
+                    continue;
+                }
+                for (String name : PII_VARIABLE_NAMES) {
+                    if (Pattern.compile("(?<![.\\w])" + Pattern.quote(name) + PII_NAME_SUFFIX)
+                            .matcher(argument).find()) {
+                        violations.add(name + ": " + oneLine(call));
+                    }
+                }
+            }
+        }
+        return violations;
     }
 
     private List<String> argumentsOf(String call) {

@@ -25,7 +25,8 @@ class SoftDeleteCoverageTest {
             "File", "Image", "VerificationDocument",
             "EmailVerification", "PhoneVerification", "IdentityVerification");
 
-    private static final Set<String> NOT_AUDITED = Set.of("CompanyContact", "JobCategory");
+    // CompanyContact BaseEntity + @SQLDelete taşıyor; muafiyet bayattı (#88).
+    private static final Set<String> NOT_AUDITED = Set.of("JobCategory");
 
     @Test
     void everyAuditedEntityIsSoftDeleted() throws IOException {
@@ -79,14 +80,71 @@ class SoftDeleteCoverageTest {
         List<String> stale = new ArrayList<>();
 
         for (String excluded : HARD_DELETE_BY_DESIGN) {
-            Path file = Path.of("src", "main", "java", "com", "exskylab", "koala",
-                    "entities", excluded + ".java");
+            Path file = entityPath(excluded);
             if (!Files.exists(file)) {
-                stale.add(excluded);
+                stale.add(excluded + " (yok)");
+                continue;
+            }
+            String source = Files.readString(file, StandardCharsets.UTF_8);
+            if (source.contains("@SQLDelete")) {
+                stale.add(excluded + " (artik soft-delete)");
             }
         }
 
-        assertTrue(stale.isEmpty(), "Artik var olmayan entity'ler haric tutuluyor: " + stale);
+        for (String excluded : INHERITS_FROM_ROOT) {
+            Path file = entityPath(excluded);
+            if (!Files.exists(file)) {
+                stale.add(excluded + " (yok)");
+                continue;
+            }
+            String source = Files.readString(file, StandardCharsets.UTF_8);
+            if (!inheritsSoftDeleteFromRoot(source)) {
+                stale.add(excluded + " (kokten soft-delete miras almiyor)");
+            }
+        }
+
+        for (String excluded : NOT_AUDITED) {
+            Path file = entityPath(excluded);
+            if (!Files.exists(file)) {
+                stale.add(excluded + " (yok)");
+                continue;
+            }
+            String source = Files.readString(file, StandardCharsets.UTF_8);
+            if (notAuditedExemptionIsStale(source)) {
+                stale.add(excluded + " (artik BaseEntity + @SQLDelete)");
+            }
+        }
+
+        assertTrue(stale.isEmpty(),
+                "Muafiyet bayatladi; gerekce artik gecerli degil: " + stale);
+    }
+
+    @Test
+    void aNotAuditedExemptionGoesStaleOnceTheEntityIsSoftDeleted() {
+        String source = """
+                @Entity
+                @SQLDelete(sql = "UPDATE example SET is_deleted = true WHERE id = ?")
+                public class Example extends BaseEntity {}
+                """;
+
+        assertTrue(notAuditedExemptionIsStale(source),
+                "BaseEntity + @SQLDelete tasuyan bir NOT_AUDITED kaydi bayat sayilmaliydi.");
+    }
+
+    static boolean notAuditedExemptionIsStale(String source) {
+        return source.contains("extends BaseEntity") && source.contains("@SQLDelete");
+    }
+
+    private static boolean inheritsSoftDeleteFromRoot(String source) {
+        if (source.contains("@SQLDelete")) {
+            return false;
+        }
+        return source.contains("extends Media") || source.contains("extends UserVerification");
+    }
+
+    private static Path entityPath(String name) {
+        return Path.of("src", "main", "java", "com", "exskylab", "koala",
+                "entities", name + ".java");
     }
 
     private List<Path> entityFiles() throws IOException {

@@ -12,16 +12,20 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PageableSortSafetyTest {
 
     private static final Path MANAGERS = Paths.get("src/main/java/com/exskylab/koala/business/concretes");
 
+    /**
+     * `throws` yan tumcesi eski `)\\s*\\{` deseninin disinda kaliyordu.
+     * Govde artik sabit 900 karakterlik pencere degil, eslesen suslu parantez.
+     */
     private static final Pattern PAGED_METHOD =
-            Pattern.compile("public [^\\n(]*\\(([^)]*\\bPageable\\b[^)]*)\\)\\s*\\{");
-
-    private static final int BODY_WINDOW = 900;
+            Pattern.compile("public [^\\n(]*\\(([^)]*\\bPageable\\b[^)]*)\\)(?:\\s*throws[^{]+)?\\s*\\{");
 
     private record Exemption(String manager, String method, String reason) {
     }
@@ -84,6 +88,38 @@ class PageableSortSafetyTest {
                         + String.join("\n", stale));
     }
 
+    @Test
+    void aPagedMethodWithThrowsIsStillFound() {
+        String source = """
+                public Page<Foo> search(Pageable pageable) throws DataAccessException {
+                    return dao.findAll(pageable);
+                }
+                """;
+
+        List<PagedMethod> found = pagedMethodsIn("ExampleManager", source);
+        assertEquals(1, found.size(), "throws yan tumcesi sayfali metodu gizledi: " + found);
+        assertTrue(found.getFirst().body().contains("dao.findAll"),
+                "throws'lu metodun govdesi okunamadi: " + found.getFirst().body());
+    }
+
+    @Test
+    void aFollowingSanitisedMethodDoesNotGuardThePreviousOne() {
+        String source = """
+                public Page<Foo> first(Pageable pageable) {
+                    return dao.findAll(pageable);
+                }
+                public Page<Bar> second(Pageable pageable) {
+                    return pageableSanitizer.rejectUnknownSort(pageable, Set.of("id"));
+                }
+                """;
+
+        List<PagedMethod> found = pagedMethodsIn("ExampleManager", source);
+        assertEquals(2, found.size());
+        assertFalse(found.getFirst().body().contains("rejectUnknownSort"),
+                "sonraki metodun sanitizasyonu onceki govdeye tasarak koruma gibi gorundu");
+        assertTrue(found.get(1).body().contains("rejectUnknownSort"));
+    }
+
     private record PagedMethod(String manager, String signature, String body) {
     }
 
@@ -94,20 +130,40 @@ class PageableSortSafetyTest {
             for (Path file : files.filter(f -> f.toString().endsWith(".java")).sorted().toList()) {
                 String source = Files.readString(file);
                 String manager = file.getFileName().toString().replace(".java", "");
-
-                Matcher method = PAGED_METHOD.matcher(source);
-                while (method.find()) {
-                    String signature = method.group();
-                    if (signature.contains("public " + manager + "(")) {
-                        continue;
-                    }
-
-                    methods.add(new PagedMethod(manager, signature, source.substring(method.end(),
-                            Math.min(source.length(), method.end() + BODY_WINDOW))));
-                }
+                methods.addAll(pagedMethodsIn(manager, source));
             }
         }
 
         return methods;
+    }
+
+    static List<PagedMethod> pagedMethodsIn(String manager, String source) {
+        List<PagedMethod> methods = new ArrayList<>();
+        Matcher method = PAGED_METHOD.matcher(source);
+        while (method.find()) {
+            String signature = method.group();
+            if (signature.contains("public " + manager + "(")) {
+                continue;
+            }
+            int openBrace = method.end() - 1;
+            methods.add(new PagedMethod(manager, signature, methodBody(source, openBrace)));
+        }
+        return methods;
+    }
+
+    static String methodBody(String source, int openBraceIndex) {
+        int depth = 0;
+        for (int i = openBraceIndex; i < source.length(); i++) {
+            char c = source.charAt(i);
+            if (c == '{') {
+                depth++;
+            } else if (c == '}') {
+                depth--;
+                if (depth == 0) {
+                    return source.substring(openBraceIndex + 1, i);
+                }
+            }
+        }
+        return source.substring(openBraceIndex + 1);
     }
 }

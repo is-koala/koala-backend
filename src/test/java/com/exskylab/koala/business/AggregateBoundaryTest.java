@@ -16,7 +16,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AggregateBoundaryTest {
 
     private static final Path MANAGERS = Paths.get("src/main/java/com/exskylab/koala/business/concretes");
-    private static final Pattern DAO_TYPE = Pattern.compile("\\b([A-Z]\\w+Dao)\\b");
+    private static final Pattern DAO_TYPE = Pattern.compile("\\b([A-Z]\\w+(?:Dao|Repository))\\b");
+    private static final Pattern ENTITY_MANAGER_CALL =
+            Pattern.compile("entityManager\\.(\\w+)\\s*\\(");
+    private static final Set<String> ENTITY_MANAGER_LOCAL_ONLY = Set.of("flush", "clear");
 
     private static final Map<String, Set<String>> OWNED_BY = Map.ofEntries(
             Map.entry("GalleryManager", Set.of("CompanyImageDao", "JobImageDao")),
@@ -155,5 +158,58 @@ class AggregateBoundaryTest {
                 .toList();
 
         assertTrue(silent.isEmpty(), "gerekçesiz muafiyet: " + silent);
+    }
+
+    @Test
+    void aRepositorySuffixIsStillABoundaryCrossing() {
+        Set<String> used = dataAccessTypesIn("private final UserRepository userRepository;");
+        assertTrue(used.contains("UserRepository"),
+                "Dao ile bitmeyen veri erisim tipi siniri sessizce gecti: " + used);
+    }
+
+    @Test
+    void entityManagerPersistCrossesTheAggregateBoundary() {
+        assertTrue(entityManagerCrossesAggregate("entityManager.persist(user);"),
+                "persist taramada yoktu, koruma EntityManager yolunu gormuyordu.");
+    }
+
+    @Test
+    void flushAndClearAreNotBoundaryCrossings() {
+        assertTrue(!entityManagerCrossesAggregate("entityManager.flush();\nentityManager.clear();"),
+                "flush/clear yerel kalicilik araci, yabanci aggregate degil.");
+    }
+
+    @Test
+    void managersDoNotUseEntityManagerToReachAnotherAggregate() throws IOException {
+        List<String> failures = new ArrayList<>();
+        try (Stream<Path> files = Files.list(MANAGERS)) {
+            for (Path file : files.filter(f -> f.toString().endsWith(".java")).toList()) {
+                String source = Files.readString(file);
+                if (entityManagerCrossesAggregate(source)) {
+                    failures.add(file.getFileName().toString());
+                }
+            }
+        }
+        assertTrue(failures.isEmpty(),
+                "EntityManager yabanci aggregate'e uzaniyor: " + failures);
+    }
+
+    static Set<String> dataAccessTypesIn(String source) {
+        Set<String> used = new TreeSet<>();
+        Matcher matcher = DAO_TYPE.matcher(source);
+        while (matcher.find()) {
+            used.add(matcher.group(1));
+        }
+        return used;
+    }
+
+    static boolean entityManagerCrossesAggregate(String source) {
+        Matcher matcher = ENTITY_MANAGER_CALL.matcher(source);
+        while (matcher.find()) {
+            if (!ENTITY_MANAGER_LOCAL_ONLY.contains(matcher.group(1))) {
+                return true;
+            }
+        }
+        return false;
     }
 }
