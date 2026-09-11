@@ -204,10 +204,24 @@ class ProductionConfigurationGuardTest {
 
     @Test
     void aBlankServiceVersionWarnsInProduction() {
-        contextRunner.withPropertyValues(PRODUCTION, "APP_TRUSTED_PROXIES=10.0.0.0/24")
+        contextRunner.withPropertyValues(PRODUCTION, "SERVICE_VERSION=",
+                        "APP_TRUSTED_PROXIES=10.0.0.0/24")
                 .run(context -> {
                     assertNull(context.getStartupFailure());
                     assertTrue(warnedAbout("SERVICE_VERSION"), warnings().toString());
+                });
+    }
+
+    @Test
+    void anUnsetServiceVersionUsesTheMavenProjectVersion() {
+        contextRunner.withPropertyValues(PRODUCTION, "APP_TRUSTED_PROXIES=10.0.0.0/24")
+                .run(context -> {
+                    assertNull(context.getStartupFailure());
+                    assertFalse(warnedAbout("SERVICE_VERSION"), warnings().toString());
+                    assertTrue(appender.list.stream()
+                                    .filter(event -> event.getLevel() == Level.INFO)
+                                    .anyMatch(event -> event.getFormattedMessage().contains("version=0.9.5")),
+                            messages().toString());
                 });
     }
 
@@ -301,7 +315,7 @@ class ProductionConfigurationGuardTest {
 
     @Test
     void everyWarningTheGuardWritesNamesARuleTheCatalogueDeclares() {
-        contextRunner.withPropertyValues(PRODUCTION, "SPRINGDOC_ENABLED=true",
+        contextRunner.withPropertyValues(PRODUCTION, "SERVICE_VERSION=", "SPRINGDOC_ENABLED=true",
                         "CORS_ALLOWED_ORIGINS=https://iskoala.com")
                 .run(context -> {
                     assertNull(context.getStartupFailure());

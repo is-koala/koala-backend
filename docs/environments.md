@@ -50,7 +50,7 @@ girmez**, yalnızca adı geçer ve değeri Dokploy secret store'da yaşar.
 | `CORS_ALLOWED_ORIGINS` | **boş** (ADR-0011) | dolu ise `WARN`; tam origin olmayan değer açılışı **durdurur** |
 | `APP_TRUSTED_PROXIES` | yalnız BFF/ingress IP veya CIDR | boş ise `WARN`; birleşimi bir adres ailesinin tamamını kapsayan değer açılışı **durdurur** |
 | `SPRINGDOC_ENABLED` | `false` | açık ise `WARN` |
-| `SERVICE_VERSION` | tek tanım, dağıtılan `v*` etiketiyle aynı | boş ise `WARN` |
+| `SERVICE_VERSION` | tek tanım, dağıtılan `v*` / Maven `pom` sürümüyle aynı | bilinçli boş (`SERVICE_VERSION=`) ise `WARN`; tanımsızsa imajdaki Maven sürümü |
 
 `app.deployment` bu tablonun kapısıdır ve `SERVICE_ENVIRONMENT`'ı okuyan
 **üçüncü** bağlama noktasıdır; diğer ikisi ECS log alanı ve `iyzico.deployment`.
