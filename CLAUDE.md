@@ -30,7 +30,7 @@ Bu dosya projeyi konu konu anlatır: mimari, alınmış kararlar ve gerekçeleri
 6. **Dokploy'dan `QA_MARKETPLACE_SEED_VERSION`, `QA_WORKER_EMAIL`, `QA_WORKER_PASSWORD`, `QA_EMPLOYER_EMAIL`, `QA_EMPLOYER_PASSWORD` kaldırılmalı** — seed kaldırıldı (ADR-0008), bu değişkenler işlevsiz ve parola taşıyorlar.
 7. **İlk personel hesabı** — taze bir veritabanında ilk `OWNER` personeli `BOOTSTRAP_OWNER_EMAIL` + `BOOTSTRAP_OWNER_PASSWORD` verilip uygulama yeniden başlatılarak doğar (§2au §Personel girişi). Hesap "ilk girişte parola değiştir" bayrağıyla gelir; **parola değiştirildikten sonra iki değişken de Dokploy'dan silinmelidir** — `BOOTSTRAP_OWNER_PASSWORD` bir sırdır. Tablo boş değilken bootstrap hiçbir şey yazmaz. **`/admin/**` artık yalnız personel token'ı kabul ediyor:** marketplace `ROLE_ADMIN` köprüsü kapandı, yani bu hesap açılmadan panele hiç girilemez.
 8. **İlk admin ve iş kategorisi kataloğu** — taze bir veritabanında ilk yönetici `ADMIN_BOOTSTRAP_EMAIL` verilip uygulama yeniden başlatılarak doğar (§2f3); değişken ilk admin oluştuktan sonra kaldırılmalı. Kategori seed'i kaldırıldı (§2m). Prod ve taze veritabanları kategorisiz; kategori ilanın zorunlu alanı olduğu için katalog `POST /admin/job-categories` ile kurulmadan **hiç ilan açılamaz**. Mobil istemcinin ikon eşlemesi `code` üzerinden gittiği için eski kodların (`PHOTOGRAPHY`, `WAITER`, `PET_CARE`, `DESIGN`, `BARISTA`) yeniden verilmesi gerekebilir.
-9. **`BANK_VERIFICATION_COLLECTION_IBAN` verilmeden lansman yapılamaz.** İşçinin IBAN sahipliği, kendi hesabından Koala'ya yaptığı küçük transferle kanıtlanıyor (§2k2) ve o transferin gideceği hesap bu değişkenle veriliyor. Boşken doğrulama **başlatılamıyor** (`VERIFICATION_UNAVAILABLE`), doğrulanmamış IBAN ise alt üye işyeri açtırmıyor — yani **hiçbir işveren ödeme oturumu açamaz**. Kilit çift yönlü: değer girilmeden ne doğrulama başlar ne para akar. Bilinçli olarak bayrak arkasına alınmadı; bayrak, kapının sessizce kapalı kalmasının yolu olurdu.
+9. **1,01 TL IBAN sahipliği doğrulaması şimdilik kapı değil (#127).** Akış kodda durur (`BANK_VERIFICATION_COLLECTION_IBAN` boşken başlatılamaz) ama alt üye işyeri ve emanet çıkışı birincil IBAN'ın **varlığına** bakar, doğrulanmış olmasına değil. Kimlik: TCKK çipi veya belge fotoğrafı. Havale doğrulaması çok sonraya.
 10. **R2'deki mevcut nesnelerin S3'e kopyalanması** (§2ab), yasal metinlerin avukattan gelmesi, ve prod'da WebSocket'in `wss://` üzerinden servis edildiğinin teyidi (§2ai).
 11. **Dokploy'da dört değer düzeltilmeli (#66).** `CORS_ALLOWED_ORIGINS` boşaltılmalı (ADR-0011), `APP_TRUSTED_PROXIES` web yayına çıkmadan önce yalnız BFF/ingress IP-CIDR'ıyla tanımlanmalı, `SPRINGDOC_ENABLED=false` yapılmalı, `SERVICE_VERSION` tekilleştirilmeli. Dördü de depodan görülemiyor; kontrol indi ve sapmayı açılış logunda görünür kılıyor (§2ax) ama **düzeltmiyor**. Beklenen değerler `docs/environments.md` §Production zorunlulukları'nda.
 
@@ -755,9 +755,7 @@ değil. Uç `/admin/**` altında olduğu için denetim kaydına giriyor (§2av).
 
 ### Kapı nereye kondu ve neden
 
-**Karar: emanet çıkışı — `PayoutManager.releaseToWorker`.** Doğrulanmış birincil hesabı olmayan işçiye emanetten
-para çıkmıyor (409, `payout.worker.iban.not.verified`) ve `Payout.bankAccount` artık `orElse(null)` değil,
-doğrulanmış hesabın kendisi.
+**Karar (#127):** `releaseToWorker` birincil IBAN yoksa reddeder; sahipliğin 1,01 TL ile kanıtlanmış olması şimdilik şart değil. 1,01 TL akışı kodda durur, kapı değildir.
 
 **`JobApplicationManager.assertReadyToWork` bilerek değiştirilmedi.** Orada bugün yalnız IBAN'ın *varlığına*
 bakılıyor (§2ar) ve öyle kalıyor. Gerekçe: başvuruyu engellemek kullanıcıyı **zararın doğmasından çok önce**
@@ -765,17 +763,9 @@ durdurur — henüz kimse ona para göndermeyecekken bankasına gönderir, üste
 için doğrulama transferi yaptırmak boşa iş. Zarar parayla doğuyor, kapı da tam orada kesiyor. Araştırmanın
 kendi ifadesi de bu: "işçinin **ilk emanet çıkışı** serbest bırakılmadan önce".
 
-**Ama emanet kapısı tek başına kâğıttan olurdu, bu yüzden ikinci bir nokta kapatıldı.** Paranın gerçekte gittiği
-IBAN Koala'nın tablosunda değil, Iyzico'daki alt üye işyeri kaydında duruyor ve o kayıt
-`JobAssignmentManager.createSubMerchantDtoForWorker` ile yazılıyor. Doğrulanmamış bir IBAN oraya bir kez
-yazıldıktan sonra emanet kapısı kilidi başka kapıda olan bir kapıyı bekliyor olurdu. O yüzden alt üye işyeri
-kaydına yalnız doğrulanmış IBAN gidiyor — hemen altındaki `isIdentityVerified` kontrolüyle **aynı desende**,
-kendi anahtarıyla (`job.assignment.iban.not.verified.for.worker`).
+**Alt üye işyeri kaydı birincil IBAN'ı yazar (#127).** 1,01 TL sahiplik kanıtı şimdilik bu kaydı durdurmaz. Kimlik hâlâ `isIdentityVerified` ister.
 
-**Bunun bedeli yazılı olsun:** işçinin IBAN'ı doğrulanmamışken **işveren ödeme oturumu açamıyor**, yani kapı
-pratikte işe alım anına da düşüyor. Kabul edildi çünkü depo aynı noktada aynı kararı zaten vermiş: iki satır
-aşağıda kimliği doğrulanmamış işçi için ödeme aynı şekilde reddediliyor. İstemcinin yapması gereken, işçiyi
-başvuru sonrası doğrulamaya yönlendirmek — `assertReadyToWork` bu yüzden serbest bırakıldı.
+**Bunun bedeli yazılı olsun (#127, 2026-09-11):** 1,01 TL havale doğrulaması şimdilik **zorunlu değil**. Alt üye işyeri ve emanet, dosyadaki birincil IBAN'a gider. Kimlik TCKK veya belge fotoğrafı. Havale çok sonraya; `findVerifiedPrimaryAccount` durur, kapı olarak kullanılmaz.
 
 ### Sağlayıcıdaki kayıt yalnız doğrulanmış IBAN'ı gösterir (#109)
 
@@ -3705,7 +3695,7 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 | İptal kutusunda `GET /job-assignments/{id}/cancellation-preview` ile kesinti gösterilmeli | §2p |
 | `pendingVerifications[]` artık `message` taşımıyor, yerine `expiresAt` (ISO-8601, `Z`) var — doğrulama kodu sayacı bu ana bağlanmalı | §2m |
 | Başvuru ekranı: kimlik/adres/IBAN eksikse "Başvur" kapalı olmalı, uç 400 döndürüyor | §2ar |
-| IBAN sahipliği doğrulaması: `POST /users/me/bank-accounts/{id}/verification` talimatı verir (tutar, referans, hedef IBAN, son tarih); doğrulanmamış IBAN'lı işçi için emanet çıkışı 409 (`PAYOUT_WORKER_IBAN_NOT_VERIFIED`) ve ödeme oturumu 400 (`JOB_ASSIGNMENT_IBAN_NOT_VERIFIED_FOR_WORKER`) döner | §2k2 |
+| IBAN sahipliği doğrulaması kodda durur ama **şimdilik kapı değil** (#127): ödeme/emanet birincil IBAN'ın varlığına bakar. 1,01 TL akışı çok sonraya. | §2k2 / #127 |
 | `BankAccountDto.verificationStatus` artık gerçek bir kapı: `UNVERIFIED`/`PENDING`/`VERIFIED`/`EXPIRED` | §2k2 |
 | Bireysel ilan açma ekranı: kimlik doğrulanmamışsa kapalı olmalı (`JOB_INDIVIDUAL_EMPLOYER_IDENTITY_NOT_VERIFIED`) | §2aq |
 | Kimlik doğrulamada `sod` + `dg1` (base64) gönderilmeli — bayrak açıldığında zorunlu olacak | §2aq2 |

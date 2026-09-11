@@ -94,9 +94,9 @@ public class PayoutManager implements PayoutService {
         }
 
         BankAccount destination = bankAccountService
-                .findVerifiedPrimaryAccount(assignment.getWorker().getId())
+                .findPrimaryAccount(assignment.getWorker().getId())
                 .orElseThrow(() -> {
-                    log.warn("Release refused on assignment {}: worker {} has not proven IBAN ownership.",
+                    log.warn("Release refused on assignment {}: worker {} has no primary IBAN on file.",
                             jobAssignmentId, assignment.getWorker().getId());
                     return new ConflictException(PayoutMessages.WORKER_IBAN_NOT_VERIFIED);
                 });

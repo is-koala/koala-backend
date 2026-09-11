@@ -335,6 +335,42 @@ class PaymentSessionAuthorizationTest {
     }
 
     @Test
+    void anUnverifiedWorkerIbanStillCreatesTheSubmerchant() {
+        Job job = individualJob();
+        job.setAddress(address());
+        employer.setAddress(address());
+        employer.setFirstName("Koala");
+        employer.setLastName("Employer");
+        employer.setEmail("employer@example.test");
+        employer.setPhoneNumber("+905551112233");
+        worker.setIyzicoSubmerchantKey(null);
+        worker.setIdentityVerified(true);
+        worker.setTcIdentityNumber("10000000146");
+        worker.setFirstName("Koala");
+        worker.setLastName("Worker");
+        worker.setEmail("worker@example.test");
+        worker.setPhoneNumber("+905554445566");
+        worker.setAddress(address());
+        JobAssignment assignment = confirmedAssignment(job);
+        when(jobAssignmentDao.findById(assignment.getId())).thenReturn(Optional.of(assignment));
+        when(securityService.getAuthenticatedUser()).thenReturn(employer);
+        com.exskylab.koala.entities.BankAccount workerAccount = new com.exskylab.koala.entities.BankAccount();
+        workerAccount.setIban("TR000000000000000000000001");
+        workerAccount.setVerificationStatus(com.exskylab.koala.entities.BankAccountVerificationStatus.UNVERIFIED);
+        when(bankAccountService.findPrimaryAccount(worker.getId())).thenReturn(Optional.of(workerAccount));
+        var merchant = new com.exskylab.koala.core.utilities.payment.iyzico.dtos.SubMerchantCreateResponseDto();
+        merchant.setSubMerchantKey("submerchant-key");
+        when(iyzicoPaymentService.createSubMerchant(any())).thenReturn(merchant);
+        when(iyzicoPaymentService.initiateCheckoutFormPayment(any()))
+                .thenThrow(new IllegalStateException("provider unavailable"));
+
+        assertThrows(IllegalStateException.class,
+                () -> manager.initiatePaymentSession(assignment.getId(), "127.0.0.1"));
+
+        verify(iyzicoPaymentService).createSubMerchant(any());
+    }
+
+    @Test
     void anExplicitProviderRejectionFailsTheReservedAttemptInsteadOfLeavingItAmbiguous() {
         Job job = individualJob();
         job.setAddress(address());

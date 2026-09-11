@@ -113,12 +113,11 @@ class IbanOwnershipGateIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void escrowIsNotReleasedToAnUnverifiedIban() {
-        assertThrows(ConflictException.class, () -> payoutService.releaseToWorker(assignmentId));
+    void escrowIsReleasedToAnUnverifiedPrimaryIban() {
+        Payout payout = payoutService.releaseToWorker(assignmentId);
 
-        assertEquals(0, (int) jdbcTemplate.queryForObject(
-                "select count(*) from payouts where job_assignment_id = ?", Integer.class, assignmentId));
-        assertEquals("HELD_IN_ESCROW", paymentStatusOfTheAssignment());
+        assertNotNull(payout.getId());
+        assertEquals("RELEASED_TO_WORKER", paymentStatusOfTheAssignment());
     }
 
     @Test
@@ -134,7 +133,7 @@ class IbanOwnershipGateIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void writingANewIbanOverTheVerifiedOneClosesTheGateAgain() {
+    void replacingTheIbanDoesNotBlockRelease() {
         jdbcTemplate.update("""
                 update bank_accounts set verification_status = 'VERIFIED', verified_at = now(),
                                          verification_reference = 'KOALA-ABCDEFGH',
@@ -154,7 +153,20 @@ class IbanOwnershipGateIT extends AbstractIntegrationTest {
         assertNull(jdbcTemplate.queryForObject(
                 "select verification_reference from bank_accounts where id = ?", String.class, accountId));
 
+        Payout payout = payoutService.releaseToWorker(assignmentId);
+
+        assertNotNull(payout.getId());
+        assertEquals("RELEASED_TO_WORKER", paymentStatusOfTheAssignment());
+    }
+
+    @Test
+    void escrowIsNotReleasedWhenTheWorkerHasNoPrimaryIban() {
+        jdbcTemplate.update("delete from bank_accounts where user_id = ?", workerId);
+
         assertThrows(ConflictException.class, () -> payoutService.releaseToWorker(assignmentId));
+
+        assertEquals(0, (int) jdbcTemplate.queryForObject(
+                "select count(*) from payouts where job_assignment_id = ?", Integer.class, assignmentId));
         assertEquals("HELD_IN_ESCROW", paymentStatusOfTheAssignment());
     }
 }

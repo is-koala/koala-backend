@@ -64,7 +64,7 @@ class PayoutReleaseTest {
         when(refundDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(settlementService.enqueue(any(), any(), any())).thenReturn(Optional.of(new SettlementTask()));
         when(settlementService.enqueueRefund(any(), any(), any())).thenReturn(Optional.of(new SettlementTask()));
-        when(bankAccountService.findVerifiedPrimaryAccount(any()))
+        when(bankAccountService.findPrimaryAccount(any()))
                 .thenAnswer(invocation -> Optional.of(verifiedAccount()));
     }
 
@@ -195,10 +195,24 @@ class PayoutReleaseTest {
     }
 
     @Test
-    void moneyIsNotReleasedToAWorkerWhoseIbanOwnershipIsUnproven() {
+    void moneyIsReleasedToThePrimaryIbanEvenWhenOwnershipIsUnproven() {
         JobAssignment assignment = assignment(AssignmentStatus.COMPLETED, PaymentStatus.HELD_IN_ESCROW);
         settledPaymentExists();
-        when(bankAccountService.findVerifiedPrimaryAccount(any())).thenReturn(Optional.empty());
+        BankAccount unverified = verifiedAccount();
+        unverified.setVerificationStatus(BankAccountVerificationStatus.UNVERIFIED);
+        when(bankAccountService.findPrimaryAccount(any())).thenReturn(Optional.of(unverified));
+
+        Payout payout = payoutManager.releaseToWorker(assignmentId);
+
+        assertEquals(BankAccountVerificationStatus.UNVERIFIED, payout.getBankAccount().getVerificationStatus());
+        assertEquals(PaymentStatus.RELEASED_TO_WORKER, assignment.getPaymentStatus());
+    }
+
+    @Test
+    void moneyIsNotReleasedWhenTheWorkerHasNoPrimaryIban() {
+        JobAssignment assignment = assignment(AssignmentStatus.COMPLETED, PaymentStatus.HELD_IN_ESCROW);
+        settledPaymentExists();
+        when(bankAccountService.findPrimaryAccount(any())).thenReturn(Optional.empty());
 
         assertThrows(ConflictException.class, () -> payoutManager.releaseToWorker(assignmentId));
 
@@ -208,7 +222,7 @@ class PayoutReleaseTest {
     }
 
     @Test
-    void theReleasedPayoutPointsAtTheVerifiedAccount() {
+    void theReleasedPayoutPointsAtThePrimaryAccount() {
         assignment(AssignmentStatus.COMPLETED, PaymentStatus.HELD_IN_ESCROW);
         settledPaymentExists();
 
