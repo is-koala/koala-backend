@@ -30,6 +30,7 @@ public interface JobMapper {
     @Mapping(target = "cityName", source = "address.city.name")
     @Mapping(target = "districtName", source = "address.district.name")
     @Mapping(target = "companyName", source = "company.name")
+    @Mapping(target = "companyId", source = "company.id")
     @Mapping(target = "latitude", source = "address.latitude", qualifiedByName = "approximateCoordinate")
     @Mapping(target = "longitude", source = "address.longitude", qualifiedByName = "approximateCoordinate")
     @Mapping(target = "coverImageUrl", ignore = true)

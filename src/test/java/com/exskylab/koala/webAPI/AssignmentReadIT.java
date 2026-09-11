@@ -122,6 +122,7 @@ class AssignmentReadIT extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(assignmentId.toString()))
                 .andExpect(jsonPath("$.data.job.companyName").value("Atama Şirketi " + companyId))
+                .andExpect(jsonPath("$.data.job.companyId").value(companyId.toString()))
                 .andExpect(jsonPath("$.data.job.addressPrecision").value("APPROXIMATE"))
                 .andExpect(jsonPath("$.data.job.latitude").value(40.99));
     }

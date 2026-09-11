@@ -49,6 +49,10 @@ public class JobSummaryDto {
     private String districtName;
     private String companyName;
 
+    @Schema(types = {"string", "null"}, format = "uuid",
+            description = "İlanı açan şirket. Bireysel ilanlarda null.")
+    private UUID companyId;
+
     private String coverImageUrl;
 
     private long applicationCount;

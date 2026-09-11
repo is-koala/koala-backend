@@ -276,6 +276,20 @@ class MapperCharacterizationTest {
     }
 
     @Test
+    void aCompanyJobSummaryCarriesTheCompanyIdAndAnIndividualJobDoesNot() {
+        Job companyJob = companyJob();
+        UUID companyId = companyJob.getCompany().getId();
+
+        var companySummary = jobMapper.toJobSummaryDto(companyJob);
+        var individualSummary = jobMapper.toJobSummaryDto(individualJob());
+
+        assertEquals(companyId, companySummary.getCompanyId());
+        assertEquals("Akme AS", companySummary.getCompanyName());
+        assertNull(individualSummary.getCompanyId());
+        assertNull(individualSummary.getCompanyName());
+    }
+
+    @Test
     void theCategoryExposesAStableCodeNotJustItsName() {
         var dto = jobMapper.toJobSummaryDto(individualJob());
 
