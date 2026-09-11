@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-11-03-user-profile-sync-outbox" author="koala">
+        <createTable tableName="user_profile_sync_outbox">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="user_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="payload" type="TEXT"><constraints nullable="false"/></column>
+            <column name="status" type="VARCHAR(16)"><constraints nullable="false"/></column>
+            <column name="attempts" type="INT" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="next_attempt_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="claimed_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="claim_id" type="UUID"/>
+            <column name="published_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="processed_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="processing_claimed_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="processing_claim_id" type="UUID"/>
+            <column name="failure_reason" type="VARCHAR(64)"/>
+            <column name="dispatch_request_id" type="VARCHAR(36)"/>
+            <column name="dispatch_user_id" type="VARCHAR(36)"/>
+            <column name="dispatch_session_id" type="VARCHAR(36)"/>
+            <column name="dispatch_device_id" type="VARCHAR(36)"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="deleted_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="deleted_by_id" type="UUID"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="user_profile_sync_outbox" baseColumnNames="user_id"
+                                 constraintName="fk_user_profile_sync_outbox_user"
+                                 referencedTableName="users" referencedColumnNames="id"/>
+        <sql><![CDATA[
+            CREATE UNIQUE INDEX uk_user_profile_sync_unpublished
+                ON user_profile_sync_outbox (user_id)
+                WHERE published_at IS NULL AND claim_id IS NULL AND is_deleted = false;
+
+            CREATE INDEX idx_user_profile_sync_due
+                ON user_profile_sync_outbox (next_attempt_at, created_at)
+                WHERE status = 'PENDING'
+                  AND published_at IS NULL
+                  AND payload IS NOT NULL
+                  AND claim_id IS NULL
+                  AND is_deleted = false;
+
+            CREATE INDEX idx_user_profile_sync_stale_claim
+                ON user_profile_sync_outbox (claimed_at)
+                WHERE status = 'PENDING'
+                  AND published_at IS NULL
+                  AND claimed_at IS NOT NULL
+                  AND is_deleted = false;
+
+            CREATE INDEX idx_user_profile_sync_backlog
+                ON user_profile_sync_outbox (created_at)
+                WHERE status = 'PENDING'
+                  AND published_at IS NULL
+                  AND payload IS NOT NULL
+                  AND is_deleted = false;
+
+            CREATE INDEX idx_user_profile_sync_terminal_broker_failure
+                ON user_profile_sync_outbox (updated_at)
+                WHERE status = 'FAILED'
+                  AND failure_reason = 'BROKER_PUBLISH_EXHAUSTED'
+                  AND is_deleted = false;
+        ]]></sql>
+        <rollback>
+            <sql>DROP INDEX IF EXISTS idx_user_profile_sync_terminal_broker_failure;</sql>
+            <sql>DROP INDEX IF EXISTS idx_user_profile_sync_backlog;</sql>
+            <sql>DROP INDEX IF EXISTS idx_user_profile_sync_stale_claim;</sql>
+            <sql>DROP INDEX IF EXISTS idx_user_profile_sync_due;</sql>
+            <sql>DROP INDEX IF EXISTS uk_user_profile_sync_unpublished;</sql>
+            <dropTable tableName="user_profile_sync_outbox"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

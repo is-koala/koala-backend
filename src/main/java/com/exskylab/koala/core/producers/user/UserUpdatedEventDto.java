@@ -9,6 +9,7 @@ import java.util.UUID;
 @Getter
 @Setter
 public class UserUpdatedEventDto {
+    private UUID intentId;
     private UUID id;
     private String firstName;
     private String lastName;

@@ -91,6 +91,8 @@ class CollectionQueryWithoutGraphTest {
             "UserDao.findByFirstNameContainingIgnoreCaseOrLastNameContainingIgnoreCase",
             "UserDao.search",
             "UserDao.findRoleGrants",
+            // Native id list for the Iyzico profile-sync dispatch worker (#158); no entity graph.
+            "UserProfileSyncOutboxDao.findDueDispatchIds",
             "WorkSessionDao.findAllByJobAssignmentIdOrderByCheckInAtAsc");
 
     @Test

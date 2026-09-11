@@ -32,6 +32,7 @@ class LaunchCutoverRunbookContractTest {
                 () -> assertTrue(runbook.contains("settlement_tasks")),
                 () -> assertTrue(runbook.contains("iys_consent_tasks")),
                 () -> assertTrue(runbook.contains("account_media_deletion_outbox")),
+                () -> assertTrue(runbook.contains("user_profile_sync_outbox")),
                 () -> assertTrue(runbook.contains("media")),
                 () -> assertTrue(runbook.contains("ADR-0005")),
                 () -> assertTrue(runbook.contains("ADR-0016")),

@@ -1,8 +1,8 @@
 package com.exskylab.koala.core.producers.user;
 
 import com.exskylab.koala.business.abstracts.SecurityService;
+import com.exskylab.koala.business.abstracts.UserProfileSyncService;
 import com.exskylab.koala.business.concretes.BankAccountManager;
-import com.exskylab.koala.core.configs.RabbitMQConfig;
 import com.exskylab.koala.core.properties.BankVerificationProperties;
 import com.exskylab.koala.dataAccess.BankAccountDao;
 import com.exskylab.koala.entities.Address;
@@ -12,17 +12,15 @@ import com.exskylab.koala.entities.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 class UserProfileSyncRulesTest {
 
@@ -30,15 +28,15 @@ class UserProfileSyncRulesTest {
     private static final String REPLACEMENT_IBAN = "TR330006100519786457841326";
 
     private BankAccountDao bankAccountDao;
-    private RabbitTemplate rabbitTemplate;
+    private UserProfileSyncService syncService;
     private UserProducerService producer;
     private User user;
 
     @BeforeEach
     void setUp() {
         bankAccountDao = mock(BankAccountDao.class);
-        rabbitTemplate = mock(RabbitTemplate.class);
-        producer = new UserProducerService(rabbitTemplate, new BankAccountManager(
+        syncService = mock(UserProfileSyncService.class);
+        producer = new UserProducerService(syncService, new BankAccountManager(
                 bankAccountDao, mock(SecurityService.class), new BankVerificationProperties()));
 
         Address address = new Address();
@@ -55,8 +53,7 @@ class UserProfileSyncRulesTest {
         user.setTcIdentityNumber("11111111110");
         user.setIyzicoSubmerchantKey("sub-merchant-key");
 
-        when(bankAccountDao.findByUserIdAndPrimaryAccountTrueAndActiveTrue(user.getId()))
-                .thenReturn(Optional.empty());
+        whenEmptyAccount();
     }
 
     @Test
@@ -107,6 +104,13 @@ class UserProfileSyncRulesTest {
         assertProfileFieldsPresent(event);
     }
 
+    @Test
+    void aProfileUpdateAcceptsTheSyncIntentWithoutTalkingToTheBroker() {
+        publishProfileUpdate();
+
+        verifyNoMoreInteractions(syncService);
+    }
+
     private void assertProfileFieldsPresent(UserUpdatedEventDto event) {
         assertEquals(user.getId(), event.getId());
         assertEquals("Ada", event.getFirstName());
@@ -119,8 +123,13 @@ class UserProfileSyncRulesTest {
     }
 
     private void givenPrimaryAccount(BankAccount account) {
-        when(bankAccountDao.findByUserIdAndPrimaryAccountTrueAndActiveTrue(user.getId()))
+        org.mockito.Mockito.when(bankAccountDao.findByUserIdAndPrimaryAccountTrueAndActiveTrue(user.getId()))
                 .thenReturn(Optional.of(account));
+    }
+
+    private void whenEmptyAccount() {
+        org.mockito.Mockito.when(bankAccountDao.findByUserIdAndPrimaryAccountTrueAndActiveTrue(user.getId()))
+                .thenReturn(Optional.empty());
     }
 
     private BankAccount unverifiedAccount(String iban) {
@@ -143,8 +152,7 @@ class UserProfileSyncRulesTest {
         producer.publishUserProfileUpdated(user);
 
         ArgumentCaptor<UserUpdatedEventDto> captor = ArgumentCaptor.forClass(UserUpdatedEventDto.class);
-        verify(rabbitTemplate).convertAndSend(eq(RabbitMQConfig.USER_EXCHANGE),
-                eq(RabbitMQConfig.USER_PROFILE_UPDATED_ROUTING_KEY), captor.capture());
+        verify(syncService).enqueue(captor.capture());
         return captor.getValue();
     }
 }

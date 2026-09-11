@@ -826,6 +826,21 @@ bu bilinçli olabilir — doğrulama zaman aldığı için hunideki başvuruyu d
 ürün kararı olarak #127'de bekliyor. Kusur sayıp kapatmak, iki paragraf yukarıdaki "kapıyı zararın doğduğu
 yere koy" kararını sessizce geri almak olurdu.
 
+### Profil senkronu Rabbit hatasında kaybolmaz (#158)
+
+`UserProducerService.publishUserProfileUpdated` broker hatasını loglayıp yutuyordu: kullanıcı transaction'ı
+commit oluyor, Iyzico senkronunun tek tetikleyicisi kayboluyordu. Outbox yoktu.
+
+**Karar: #155 bildirim dispatch outbox'ının aynı sözleşmesi.** Çağıranın gördüğü başarı broker teslimi değil,
+DB değişikliği ile exact sync payload'ının aynı transaction'da kalıcı kabulüdür. `UserProducerService` artık
+yalnız `UserProfileSyncService.enqueue` çağırır; Rabbit'e buradan gidilmez. Worker üç fazlıdır: kısa
+transaction claim + fencing token alır, `ConfirmedRabbitPublisher` mandatory routing ve correlated confirm
+ile transaction dışında yayınlar, sonuç yalnız aynı token hâlâ sahibiyse yazılır. Broker outage retry/backoff
+ile en fazla yapılandırılmış attempt kadar dener, sonra `BROKER_PUBLISH_EXHAUSTED` ile terminal olur ve
+alarm yanar. Stale claim attempt bütçesinden düşülmeden yeniden alınır — publish sonrası process çökmesi
+sessiz kayıp değildir. Aynı intent'in yeniden teslimi `processing_claim_id` ile Iyzico'ya ikinci kez gitmez.
+#109'un doğrulanmış-IBAN süzgeci enqueue anındaki payload'da duruyor.
+
 
 ## 2l. Sayfalama ve ilan araması
 
@@ -3435,7 +3450,9 @@ yazılan yenisi kendisi doğrulanana kadar girmez, hesabı olmayan kullanıcı I
 **olayın geri kalanı iki hâlde de gider** — son ikisi olmadan "senkronizasyonu tümden ertele" seçeneğinin
 elenmesi kodda bağlı olmazdı. Test `BankAccountManager`'ı gerçek nesne olarak kuruyor, yani doğrulama
 süzgeci taklit edilmiyor; `findVerifiedPrimaryAccount` yerine `findPrimaryIban` yazan mutasyon üç testi
-birden kırmızıya döndürüyor.
+birden kırmızıya döndürüyor. `UserProfileSyncOutboxAtomicityIT` / `UserProfileSyncDispatchIT` /
+`UserProfileSyncOutboxRabbitIT` (#158) çağıran transaction ile intent'in atomikliğini, broker kaybında
+retry/exhaustion ve Testcontainers redelivery idempotency'sini sabitliyor.
 
 `IbanOwnershipGateIT` kapıyı **gerçek Postgres üzerinde** kanıtlıyor: emanetteki para doğrulanmamış IBAN'a
 çıkmıyor ve `payment_status` `HELD_IN_ESCROW` kalıyor, doğrulandığında çıkıyor, doğrulanmış IBAN'ın üstüne

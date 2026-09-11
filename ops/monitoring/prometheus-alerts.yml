@@ -56,6 +56,21 @@ groups:
         for: 1m
         labels: { severity: critical, owner: backend }
         annotations: { summary: "Bildirim outbox gönderimi broker hataları nedeniyle kalıcı olarak durdu" }
+      - alert: KoalaUserProfileSyncBacklog
+        expr: max(koala_user_profile_sync_backlog) > 100
+        for: 10m
+        labels: { severity: warning, owner: payments }
+        annotations: { summary: "Iyzico profil senkron outbox kuyruğunda 100'den fazla gönderim bekliyor" }
+      - alert: KoalaUserProfileSyncOldestAge
+        expr: max(koala_user_profile_sync_oldest_age_seconds) > 600
+        for: 5m
+        labels: { severity: critical, owner: payments }
+        annotations: { summary: "En eski gönderilmemiş Iyzico profil senkronu 10 dakikadan uzun süredir bekliyor" }
+      - alert: KoalaUserProfileSyncTerminalBrokerFailure
+        expr: max(koala_user_profile_sync_terminal_broker_failures) > 0
+        for: 1m
+        labels: { severity: critical, owner: payments }
+        annotations: { summary: "Iyzico profil senkron outbox gönderimi broker hataları nedeniyle kalıcı olarak durdu" }
       - alert: KoalaNotificationDeliveryParkingQueue
         expr: rabbitmq_queue_messages_ready{queue="notification.delivery.busy.parking.queue"} > 0
         for: 1m
