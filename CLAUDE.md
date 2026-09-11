@@ -2409,7 +2409,7 @@ TD1 olmayan bir MRZ reddediliyor — pasaportta (TD3) zaten TCKN yok.
 
 Bu tercih bilinçli: dizinden okusaydı prod'da volume bağlamak ve dosyaları elle kopyalamak gerekirdi, üstelik unutulduğunda hata açılışta değil ilk doğrulamada çıkardı. `identity.passive-authentication.trust-anchor-directory` hâlâ duruyor ama artık **ek** çıpa yüklüyor, tek kaynak değil — test ortamında ya da NVİ'den ayrı bir sertifika gelirse diye.
 
-Liste üç ayda bir güncelleniyor; `scripts/fetch-csca-anchors.sh` çalıştırılıp commit edilmesi yeterli. Telefona gömülemez — istemcide doğrulama zaten istemciye güvenmek demek.
+Liste üç ayda bir güncelleniyor; `scripts/fetch-csca-anchors.sh` çalıştırılıp commit edilmesi yeterli. Betik `scripts/` altında git'te izleniyor — unutulursa `PassiveAuthenticationPrepTest` kırmızıya döner. Telefona gömülemez — istemcide doğrulama zaten istemciye güvenmek demek.
 
 **Sertifika iptali (CRL) kontrol edilmiyor.** `PKIXParameters.setRevocationEnabled(false)`. ICAO PA pratiğinde yaygın olan bu, ama eksiklik olarak bilinsin: iptal edilmiş bir Document Signer sertifikası hâlâ geçer. Kapatmak CRL dağıtım noktalarına erişim ve tazelik yönetimi ister.
 
@@ -2433,7 +2433,9 @@ Sürüm 1'in doğru kök olduğunun ikinci kanıtı tarihte: karttaki DS sertifi
 
 `BundledTrustAnchorsTest.theTravelDocumentRootThatSignsIdentityCardsIsBundled` bu çıpayı SHA-256 parmak iziyle sabitliyor. **Bu testi doğrularken tuzak var:** `target/classes/csca/` bayat kalıyor, çıpayı kaynak ağacından silmek testi kırmızıya döndürmüyor. `rm -rf target/classes/csca` gerekiyor — §1'in `rm -rf target/test-classes` uyarısının kaynak dosyalar için karşılığı.
 
-**`csca-tr-00` ve `csca-tr-03`'ün süresi 2026-07-28'de doldu** ve kimse yenilemedi, çünkü `scripts/fetch-csca-anchors.sh` git'e hiç alınmadı. Liste üç ayda bir güncelleniyor; betiğin commit edilmemiş olması sessiz bir tek-kişi bağımlılığı.
+**`csca-tr-00` ve `csca-tr-03`'ün süresi 2026-07-28'de doldu.** Liste üç ayda bir güncelleniyor; `scripts/fetch-csca-anchors.sh` artık git'te. Geri alma ve tazeleme: `docs/runbooks/identity-passive-authentication.md`.
+
+**Bayrak hâlâ kapalı.** `IDENTITY_PASSIVE_AUTH_ENABLED` açılmıyor: gerçek kart dökümü (#70) ve kanıt gönderen istemci sürümü (koala#59) olmadan her doğrulama ya `UNTRUSTED_DOCUMENT_SIGNER` ya da `EVIDENCE_REQUIRED` ile durur. Test kaynakları da bayrağı açmaz. Açma ve geri alma yolu runbook'ta; geçiş kararı (mevcut `identityVerified` hesapları) hâlâ ürün tarafında, bu yüzden buraya yazılmadı.
 
 **Gerçek kartın teşhisinden çıkan diğer cevaplar:** erişim kontrolü **BAC** (PACE şart değil), veri grupları **1, 2, 5, 11, 12, 15** (DG11 ve DG15 ikisi de var), **Active Authentication çalışıyor** (imza doğrulandı), Chip Authentication yok, LDS 1.7, bütün DG hash'leri SOD ile eşleşiyor. Yani `sod`/`dg1`/`dg11`/`dg15` zincirinin tamamı gerçek kartta karşılığını buluyor; eksik olan tek şey çıpaydı.
 
