@@ -35,6 +35,8 @@ class EagerFetchCoverageIT extends AbstractIntegrationTest {
             entry("JobDao.findAllByCompanyId", "company", "JobSummaryDto yalnızca companyName taşıyor"),
             entry("JobAssignmentDao.findAllByWorkerId", "job.company", "JobSummaryDto yalnızca companyName taşıyor"),
             entry("JobAssignmentDao.findAllByJobCreatorId", "job.company", "JobSummaryDto yalnızca companyName taşıyor"),
+            entry("JobAssignmentDao.findAllForStaff", "job.company",
+                    "AdminAssignmentDto yalnızca companyName taşıyor"),
             entry("JobApplicationDao.findAllByUserId", "job.company", "JobSummaryDto yalnızca companyName taşıyor"),
             entry("JobApplicationDao.findAllByUserIdAndStatus", "job.company", "JobSummaryDto yalnızca companyName taşıyor"),
             entry("TalentPoolEntryDao.findAllByEmployerId", "company", "TalentPoolEntryDto yalnızca companyId taşıyor"),

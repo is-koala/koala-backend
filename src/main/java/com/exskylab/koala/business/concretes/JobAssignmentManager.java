@@ -74,6 +74,11 @@ public class JobAssignmentManager implements JobAssignmentService {
     private static final java.util.Set<String> MY_ASSIGNMENTS_SORTABLE =
             java.util.Set.of("assignmentDateTime", "actualCompletionDateTime", "status");
 
+    private static final java.util.Set<String> ADMIN_LIST_SORTABLE =
+            java.util.Set.of("createdAt", "assignmentDateTime", "status", "paymentStatus");
+
+    private static final Sort ADMIN_LIST_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
+
 
     private final JobAssignmentDao jobAssignmentDao;
     private final SecurityService securityService;
@@ -576,6 +581,15 @@ public class JobAssignmentManager implements JobAssignmentService {
     @Transactional(readOnly = true)
     public AdminAssignmentDto getAdminDetail(UUID assignmentId) {
         return jobAssignmentMapper.toAdminAssignmentDto(getDetailedById(assignmentId));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<AdminAssignmentDto> listForStaff(Pageable requested) {
+        pageableSanitizer.rejectUnknownSort(requested, ADMIN_LIST_SORTABLE);
+        return jobAssignmentDao.findAllForStaff(
+                        pageableSanitizer.sanitize(requested, ADMIN_LIST_SORTABLE, ADMIN_LIST_SORT))
+                .map(jobAssignmentMapper::toAdminAssignmentDto);
     }
 
     @Override
