@@ -241,6 +241,26 @@ class AdminPermissionMappingIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void everyPermissionConstantIsBoundToAtLeastOneAdminMapping() {
+        Set<StaffPermission> bound = new LinkedHashSet<>();
+        for (AdminMapping mapping : adminMappings()) {
+            RequiresPermission declared = mapping.declared();
+            if (declared == null) {
+                continue;
+            }
+            bound.addAll(Arrays.asList(declared.value()));
+        }
+
+        List<StaffPermission> unused = Arrays.stream(StaffPermission.values())
+                .filter(permission -> !bound.contains(permission))
+                .toList();
+
+        assertTrue(unused.isEmpty(),
+                "Tohumda olup hiçbir @RequiresPermission'a bağlanmamış izin — panel izni kör kalır: "
+                        + unused);
+    }
+
+    @Test
     void onlyTheIdentityEndpointMayNameNoPermission() {
         List<String> open = adminMappings().stream()
                 .filter(mapping -> mapping.declared() != null && mapping.declared().value().length == 0)

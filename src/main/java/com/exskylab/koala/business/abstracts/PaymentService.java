@@ -4,6 +4,8 @@ import com.exskylab.koala.core.helpers.CommissionCalculator;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.Payment;
 
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -36,4 +38,10 @@ public interface PaymentService {
     boolean hasPendingAttemptForAssignment(UUID jobAssignmentId);
 
     boolean hasPendingPaymentForUser(UUID userId);
+
+    SucceededVolume succeededVolume(Instant fromInclusive, Instant toExclusive, String currency);
+
+    record SucceededVolume(BigDecimal employerVolume, BigDecimal koalaFee,
+                           BigDecimal workerPayout, long count) {
+    }
 }

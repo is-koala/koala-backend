@@ -75,7 +75,12 @@ class CollectionQueryWithoutGraphTest {
             "NotificationPreferenceDao.findAllByUserId",
             "PaymentDao.findDueVerificationIds",
             "PaymentDao.findStuckInitiationIds",
+            // Aggregate SUM/COUNT row, not an entity collection (#186).
+            "PaymentDao.summarizeSucceeded",
             "PayoutDao.findIdsAwaitingSettlementSince",
+            // Aggregate SUM/COUNT rows, not entity collections (#186).
+            "PayoutDao.summarizeAwaiting",
+            "PayoutDao.summarizeCompleted",
             "RefundDao.findAllByPaymentIdOrderByCreatedAtDesc",
             "ReportDao.findAllByReporterId",
             "ReportDao.search",

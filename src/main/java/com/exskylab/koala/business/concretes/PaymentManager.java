@@ -472,4 +472,27 @@ public class PaymentManager implements PaymentService {
     public boolean hasPendingPaymentForUser(UUID userId) {
         return paymentDao.existsPendingForUser(userId, PENDING_STATUSES);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public SucceededVolume succeededVolume(Instant fromInclusive, Instant toExclusive, String currency) {
+        List<Object[]> rows = paymentDao.summarizeSucceeded(
+                PaymentAttemptStatus.SUCCEEDED, currency, fromInclusive, toExclusive);
+        Object[] row = rows.isEmpty() ? new Object[]{0, 0, 0, 0L} : rows.getFirst();
+        return new SucceededVolume(decimal(row[0]), decimal(row[1]), decimal(row[2]), count(row[3]));
+    }
+
+    private static BigDecimal decimal(Object value) {
+        if (value == null) {
+            return BigDecimal.ZERO;
+        }
+        if (value instanceof BigDecimal amount) {
+            return amount;
+        }
+        return new BigDecimal(value.toString());
+    }
+
+    private static long count(Object value) {
+        return value == null ? 0L : ((Number) value).longValue();
+    }
 }

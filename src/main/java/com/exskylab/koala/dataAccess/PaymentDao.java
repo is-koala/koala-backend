@@ -12,7 +12,6 @@ import org.springframework.data.domain.Pageable;
 
 import jakarta.persistence.LockModeType;
 import java.time.Instant;
-
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -71,4 +70,20 @@ public interface PaymentDao extends JpaRepository<Payment, UUID> {
             """)
     boolean existsPendingForUser(@Param("userId") UUID userId,
                                  @Param("statuses") List<PaymentAttemptStatus> statuses);
+
+    @Query("""
+            select coalesce(sum(p.totalCharged), 0),
+                   coalesce(sum(p.commissionAmount), 0),
+                   coalesce(sum(p.workerPayout), 0),
+                   count(p)
+            from Payment p
+            where p.status = :status
+              and p.currency = :currency
+              and p.completedAt >= :fromInclusive
+              and p.completedAt < :toExclusive
+            """)
+    List<Object[]> summarizeSucceeded(@Param("status") PaymentAttemptStatus status,
+                                      @Param("currency") String currency,
+                                      @Param("fromInclusive") Instant fromInclusive,
+                                      @Param("toExclusive") Instant toExclusive);
 }
