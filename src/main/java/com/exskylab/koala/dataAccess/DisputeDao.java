@@ -42,5 +42,9 @@ public interface DisputeDao extends JpaRepository<Dispute, UUID> {
     Page<Dispute> findAllByStatusIn(List<DisputeStatus> statuses, Pageable pageable);
 
     @EntityGraph(attributePaths = {"openedBy", "openedBy.profilePicture", "jobAssignment"})
+    @Query("select d from Dispute d where d.id = :id")
+    Optional<Dispute> findByIdForStaff(@Param("id") UUID id);
+
+    @EntityGraph(attributePaths = {"openedBy", "openedBy.profilePicture", "jobAssignment"})
     List<Dispute> findAllByJobAssignmentIdOrderByCreatedAtDesc(UUID jobAssignmentId);
 }

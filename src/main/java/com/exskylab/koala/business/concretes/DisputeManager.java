@@ -193,6 +193,13 @@ public class DisputeManager implements DisputeService {
 
     @Override
     @Transactional(readOnly = true)
+    public Dispute getForStaff(UUID disputeId) {
+        return disputeDao.findByIdForStaff(disputeId)
+                .orElseThrow(() -> new ResourceNotFoundException(DisputeMessages.NOT_FOUND));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public boolean hasActiveDispute(UUID jobAssignmentId) {
         return disputeDao.existsByJobAssignmentIdAndStatusIn(jobAssignmentId, ACTIVE);
     }

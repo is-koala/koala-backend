@@ -204,6 +204,22 @@ public class AdminController {
                 AdminMessages.COMPANIES_LISTED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Şirket incelemesi",
+            description = "Kuyruk satırıyla aynı CompanyReviewDto: adres, galeri kimlikleri, onay durumu. "
+                    + "Onay ve red ayrı uçlardan; bu GET yalnız okur.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Şirket getirildi"),
+            @ApiResponse(responseCode = "404", description = "Şirket bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(StaffPermission.COMPANY_APPROVE)
+    @GetMapping("/companies/{companyId}")
+    public ResponseEntity<SuccessDataResult<CompanyReviewDto>> company(@PathVariable UUID companyId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                companyMapper.toCompanyReviewDto(companyService.getCompanyById(companyId)),
+                AdminMessages.COMPANY_FETCHED, HttpStatus.OK));
+    }
+
     @Operation(summary = "Şirket galeri görselini indir",
             description = "Depo imzalı adres destekliyorsa kısa ömürlü imzalı adrese yönlendirir, desteklemiyorsa baytları akıtır. Kuyruk yanıtı depo anahtarı taşımaz.")
     @ApiResponses({
@@ -284,6 +300,22 @@ public class AdminController {
         return ResponseEntity.ok(new SuccessDataResult<>(
                 PageDto.of(page, page.getContent().stream().map(userMapper::toSafeUserDto).toList()),
                 AdminMessages.USERS_LISTED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "Kullanıcı özeti",
+            description = "Kuyruk satırıyla aynı SafeUserDto. Rol listesi /users/{userId}/roles'ta kalır; "
+                    + "tekil GET daha spesifik /roles eşleşmesini bozmaz.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Kullanıcı getirildi"),
+            @ApiResponse(responseCode = "404", description = "Kullanıcı bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(StaffPermission.USER_READ)
+    @GetMapping("/users/{userId}")
+    public ResponseEntity<SuccessDataResult<SafeUserDto>> user(@PathVariable UUID userId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                userMapper.toSafeUserDto(userService.getById(userId)),
+                AdminMessages.USER_FETCHED, HttpStatus.OK));
     }
 
     @Operation(summary = "Kullanıcının rollerini listele",

@@ -2,12 +2,14 @@ package com.exskylab.koala.core.constants;
 
 public class AdminMessages {
     public static final String COMPANIES_LISTED = "{admin.companies.listed}";
+    public static final String COMPANY_FETCHED = "{admin.company.fetched}";
     public static final String COMPANY_APPROVED = "{admin.company.approved}";
     public static final String COMPANY_ALREADY_APPROVED = "{admin.company.already.approved}";
     public static final String COMPANY_REJECTED = "{admin.company.rejected}";
     public static final String COMPANY_ALREADY_REJECTED = "{admin.company.already.rejected}";
     public static final String APPROVED_COMPANY_CANNOT_BE_REJECTED = "{admin.company.approved.not.rejectable}";
     public static final String USERS_LISTED = "{admin.users.listed}";
+    public static final String USER_FETCHED = "{admin.user.fetched}";
     public static final String USER_ROLES_LISTED = "{admin.user.roles.listed}";
     public static final String USER_ROLE_GRANTED = "{admin.user.role.granted}";
     public static final String USER_ROLE_REVOKED = "{admin.user.role.revoked}";

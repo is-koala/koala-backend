@@ -23,6 +23,8 @@ public interface DisputeService {
 
     Page<Dispute> searchForStaff(DisputeStatus status, Pageable pageable);
 
+    Dispute getForStaff(UUID disputeId);
+
     boolean hasActiveDispute(UUID jobAssignmentId);
 
     boolean hasActiveDisputeForUser(UUID userId);

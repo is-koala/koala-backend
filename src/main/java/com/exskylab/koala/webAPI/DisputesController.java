@@ -69,6 +69,22 @@ public class DisputesController {
                 DisputeMessages.LISTED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Uyuşmazlık detayı",
+            description = "Kuyruk satırıyla aynı DisputeDto. Tutarlar yoktur; emanet GET /admin/job-assignments/{id} "
+                    + "(payment.read) otoriter kaynaktır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Uyuşmazlık getirildi"),
+            @ApiResponse(responseCode = "404", description = "Uyuşmazlık bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(StaffPermission.DISPUTE_RESOLVE)
+    @GetMapping("/{disputeId}")
+    public ResponseEntity<SuccessDataResult<DisputeDto>> dispute(@PathVariable UUID disputeId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                disputeMapper.toDisputeDto(disputeService.getForStaff(disputeId)),
+                DisputeMessages.FETCHED, HttpStatus.OK));
+    }
+
     @Operation(summary = "Uyuşmazlığı çöz",
             description = "RELEASE_TO_WORKER parayı işçiye çıkarır, REFUND_EMPLOYER işverene iade eder, DISMISSED emanete dokunmaz. Kısmi paylaşım yoktur: bir atama ya işçiye çıkar ya iade edilir. Para hareketi doğuran iki sonuç dispute.resolve'a ek olarak sonucun yönüne göre payout.release ya da payment.refund iznini de ister; izin yoksa 403 döner ve uyuşmazlığın durumuna hiç bakılmaz.")
     @ApiResponses({
