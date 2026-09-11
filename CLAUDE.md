@@ -3629,10 +3629,17 @@ cp .env.example .env
 
 ## 6. Deployment ve sürümleme
 
-`.github/workflows/ci.yml` üç aşamalı:
+`.github/workflows/ci.yml` üç aşamalı; self-hosted Raspberry Pi üzerinde koşar
+(is-koala/koala-backend#91). Pi bakımı `docs/runbooks/self-hosted-runner.md`.
 
-1. **test** — her push ve PR'da `./mvnw verify`. Testcontainers GitHub runner'ında çalışır.
-2. **build** — yalnızca test yeşilse GHCR'ye imaj basar. matmuh'un aksine testler atlanmıyor; kırmızı testte imaj üretilmez.
+1. **test** — yalnız `pull_request` ve `workflow_dispatch` üzerinde `./mvnw verify`.
+   `main` push'unda tekrarlanmaz (#174): aynı commit PR'da zaten geçti, ikinci
+   verify diğer depoların kuyruğunu tıkıyordu. Artifact kotası dolduğunda rapor
+   yüklemesi işi kırmızıya çekmez; kapı Maven çıkış kodudur. JaCoCo HTML sitesi
+   yüklenmez.
+2. **build** — `push` (main ve `v*` etiket) üzerinde GHCR'ye imaj basar.
+   `needs: test` yok; atlanan test işi imajı da atlatmasın diye. Kota dolduğunda
+   GHA cache yazımı yok sayılır, imaj yine basılır.
 3. **deploy** — yalnızca `v*` tag'inde Dokploy webhook'unu tetikler.
 
 Sürümleme: `v1.2.3` tag'i → `ghcr.io/<owner>/koala:1.2.3` ve `:latest`. main'e push → `ghcr.io/<owner>/koala:main-<sha7>`, `latest` etiketi güncellenmez. Maven sürümü `0.0.1-SNAPSHOT` sabit; imaj etiketi git tag'inden türetiliyor.

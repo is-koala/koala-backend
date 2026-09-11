@@ -26,6 +26,9 @@ jobs:
     name: test
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: self-hosted
+    # Pi tek işçi; takılan bir verify diğer depoların kuyruğunu sonsuza
+    # kilitlemesin. Ölçülen PR verify ~12–24 dk; kuyruk süresi buna dahil değil.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
 
@@ -38,16 +41,20 @@ jobs:
       - name: Run tests
         run: ./mvnw -B verify
 
+      # Kota dolduğunda CreateArtifact kırmızısı verify yeşilini eziyordu.
+      # Kapı Surefire/Failsafe çıkış kodu; rapor yüklemesi isteğe bağlı.
+      # JaCoCo HTML sitesi kota tüketicisiydi, XML raporları yeter.
       - name: Publish test report
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: test-results
           path: |
             target/surefire-reports/
             target/failsafe-reports/
-            target/site/jacoco/
-          retention-days: 14
+          if-no-files-found: ignore
+          retention-days: 3
 
   build:
     name: build and push
@@ -56,6 +63,8 @@ jobs:
     # basımını da atlatırdı.
     if: github.event_name == 'push'
     runs-on: self-hosted
+    # QEMU amd64 basımı ölçülen ~21 dk; 2 saatlik duvar saati kuyruktan.
+    timeout-minutes: 60
     permissions:
       contents: read
       packages: write
@@ -113,7 +122,9 @@ jobs:
           sbom: false
           push: true
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # ignore-error: GHA cache/artifact kotası dolduğunda imaj yine
+          # basılsın. Kota CreateArtifact uyarısı imajı kırmızıya çekmesin.
+          cache-to: type=gha,mode=max,ignore-error=true
           tags: |
             ghcr.io/${{ github.repository_owner }}/koala:${{ steps.version.outputs.VERSION }}
             ${{ startsWith(github.ref, 'refs/tags/v') && format('ghcr.io/{0}/koala:latest', github.repository_owner) || '' }}
@@ -123,6 +134,7 @@ jobs:
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: self-hosted
+    timeout-minutes: 5
     steps:
       - name: Trigger Dokploy deploy
         run: curl -fsSL -X POST "${{ secrets.DOKPLOY_DEPLOY_WEBHOOK }}"

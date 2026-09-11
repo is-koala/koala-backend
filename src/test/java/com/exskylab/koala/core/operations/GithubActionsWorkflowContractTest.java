@@ -2,6 +2,7 @@ package com.exskylab.koala.core.operations;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -46,15 +47,25 @@ class GithubActionsWorkflowContractTest {
         Map<?, ?> uploadInputs = assertInstanceOf(Map.class, upload.get("with"));
         String reportPaths = assertInstanceOf(String.class, uploadInputs.get("path"));
 
+        Map<?, ?> buildPush = stepUsing(jobs, "build", "docker/build-push-action@v7");
+        Map<?, ?> buildPushInputs = assertInstanceOf(Map.class, buildPush.get("with"));
+        String cacheTo = assertInstanceOf(String.class, buildPushInputs.get("cache-to"));
+
         assertAll(
                 () -> assertEquals("maven", setupJavaInputs.get("cache")),
                 () -> assertEquals("./mvnw -B verify", tests.get("run")),
+                () -> assertEquals(45, job(jobs, "test").get("timeout-minutes")),
+                () -> assertEquals(60, job(jobs, "build").get("timeout-minutes")),
+                () -> assertEquals(5, job(jobs, "deploy").get("timeout-minutes")),
                 () -> assertEquals("always()", upload.get("if")),
+                () -> assertEquals(true, upload.get("continue-on-error")),
                 () -> assertEquals("test-results", uploadInputs.get("name")),
+                () -> assertEquals("ignore", uploadInputs.get("if-no-files-found")),
                 () -> assertTrue(reportPaths.contains("target/surefire-reports/")),
                 () -> assertTrue(reportPaths.contains("target/failsafe-reports/")),
-                () -> assertTrue(reportPaths.contains("target/site/jacoco/")),
-                () -> assertEquals(14, uploadInputs.get("retention-days")));
+                () -> assertFalse(reportPaths.contains("jacoco")),
+                () -> assertEquals(3, uploadInputs.get("retention-days")),
+                () -> assertTrue(cacheTo.contains("ignore-error=true")));
     }
 
     @Test
