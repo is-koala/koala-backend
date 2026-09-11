@@ -10,6 +10,7 @@ public class BadgeMessages {
     public static final String FAMILY_REQUIRED = "{badge.family.required}";
     public static final String TIER_REQUIRED = "{badge.tier.required}";
     public static final String NAME_REQUIRED = "{badge.name.required}";
+    public static final String SORT_ORDER_REQUIRED = "{badge.sort.order.required}";
     public static final String SORT_ORDER_RANGE = "{badge.sort.order.range}";
     public static final String RULE_TYPE_REQUIRED = "{badge.rule.type.required}";
     public static final String MIN_COUNT_REQUIRED = "{badge.min.count.required}";
