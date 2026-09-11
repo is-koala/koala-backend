@@ -86,6 +86,12 @@ management:
   info:
     env:
       enabled: true
+    build:
+      enabled: true
+
+info:
+  app:
+    version: ${SERVICE_VERSION:@project.version@}
 
 logging:
   level:
@@ -97,7 +103,7 @@ logging:
     ecs:
       service:
         name: ${SERVICE_NAME:koala}
-        version: ${SERVICE_VERSION:}
+        version: ${SERVICE_VERSION:@project.version@}
         environment: ${SERVICE_ENVIRONMENT:}
 
 springdoc:
