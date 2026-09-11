@@ -40,7 +40,13 @@ class EagerFetchCoverageIT extends AbstractIntegrationTest {
             entry("TalentPoolEntryDao.findAllByEmployerId", "company", "TalentPoolEntryDto yalnızca companyId taşıyor"),
             entry("JobTemplateDao.findAllByOwnerIdOrderByCreatedAtDesc", "company", "JobTemplateDto yalnızca companyId taşıyor"),
             entry("PayoutDao.findAllByWorkerIdOrderByCreatedAtDesc", "worker", "PayoutDto işçiyi çizmiyor"),
-            entry("JobAlertDao.findAllByActiveTrue", "user", "kullanıcı yalnızca bildirim alıcısı, yanıta girmiyor"));
+            entry("JobAlertDao.findAllByActiveTrue", "user", "kullanıcı yalnızca bildirim alıcısı, yanıta girmiyor"),
+            entry("IdentityVerificationDao.findByVerifiedFalseAndRejectedAtIsNull", "user",
+                    "IdentityReviewDto yalnızca userId taşıyor"),
+            entry("IdentityVerificationDao.findByVerifiedTrue", "user",
+                    "IdentityReviewDto yalnızca userId taşıyor"),
+            entry("IdentityVerificationDao.findByRejectedAtIsNotNull", "user",
+                    "IdentityReviewDto yalnızca userId taşıyor"));
 
     private static Map.Entry<String, String> entry(String method, String path, String reason) {
         return Map.entry(method + "#" + path, reason);

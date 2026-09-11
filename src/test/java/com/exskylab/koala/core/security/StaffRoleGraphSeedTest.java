@@ -28,6 +28,8 @@ class StaffRoleGraphSeedTest {
             Path.of("src/main/resources/db/changelog/2026/09/06-20-staff-authorization.xml");
     private static final Path ACCOUNT_DELETION_PERMISSION_CHANGELOG =
             Path.of("src/main/resources/db/changelog/2026/09/06-21-account-deletion-staff-permission.xml");
+    private static final Path IDENTITY_REVIEW_PERMISSION_CHANGELOG =
+            Path.of("src/main/resources/db/changelog/2026/09/11-04-identity-document-review.xml");
 
     private static final Pattern PAIR = Pattern.compile("\\('([A-Za-z_.]+)',\\s*'([A-Za-z_.]+)'\\)");
 
@@ -122,6 +124,16 @@ class StaffRoleGraphSeedTest {
         assertTrue(StaffPermission.fromCode("role.manage").isPresent());
         assertEquals(StaffPermission.STAFF_MANAGE, StaffPermission.fromCode("staff.manage").orElseThrow());
         assertEquals(StaffPermission.ROLE_MANAGE, StaffPermission.fromCode("role.manage").orElseThrow());
+    }
+
+    @Test
+    void trustLeadReceivesTheDedicatedIdentityReviewPermission() throws IOException {
+        String changelog = Files.readString(IDENTITY_REVIEW_PERMISSION_CHANGELOG);
+
+        assertEquals(StaffPermission.IDENTITY_REVIEW,
+                StaffPermission.fromCode("identity.review").orElseThrow());
+        assertTrue(changelog.contains("role.code = 'TRUST_LEAD'"));
+        assertTrue(changelog.contains("'identity.review'"));
     }
 
     @Test

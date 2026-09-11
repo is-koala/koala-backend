@@ -17,6 +17,9 @@ public class AdminMessages {
     public static final String MEMBERSHIP_ROLE_PROTECTED = "{admin.user.role.membership.protected}";
     public static final String SYSTEM_USER_ROLES_PROTECTED = "{admin.user.role.system.protected}";
     public static final String ASSIGNMENT_DETAIL = "{admin.assignment.detail}";
+    public static final String IDENTITY_REVIEWS_LISTED = "{admin.identity.reviews.listed}";
+    public static final String IDENTITY_REVIEW_APPROVED = "{admin.identity.review.approved}";
+    public static final String IDENTITY_REVIEW_REJECTED = "{admin.identity.review.rejected}";
     public static final String REJECTION_REASON_NOT_BLANK = "{admin.company.rejection.reason.not.blank}";
     public static final String DECISION_NOTE_TOO_LONG = "{admin.company.decision.note.too.long}";
 }

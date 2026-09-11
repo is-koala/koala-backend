@@ -17,6 +17,7 @@ public enum StaffPermission {
     USER_DELETION_MANAGE("user.deletion.manage", true, PermissionSensitivity.PERSONAL_DATA),
     USER_ROLE_MANAGE("user.role.manage", true, PermissionSensitivity.NORMAL),
     COMPANY_APPROVE("company.approve", true, PermissionSensitivity.NORMAL),
+    IDENTITY_REVIEW("identity.review", true, PermissionSensitivity.PERSONAL_DATA),
     DISPUTE_RESOLVE("dispute.resolve", true, PermissionSensitivity.NORMAL),
     PAYMENT_READ("payment.read", false, PermissionSensitivity.FINANCIAL),
     FINANCE_READ("finance.read", false, PermissionSensitivity.FINANCIAL),

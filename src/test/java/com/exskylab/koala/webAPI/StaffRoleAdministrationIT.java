@@ -96,14 +96,14 @@ class StaffRoleAdministrationIT extends AbstractStaffIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.code").value("TRUST_LEAD"))
                 .andExpect(jsonPath("$.data.permissions", containsInAnyOrder(
-                        "user.read_pii", "user.deletion.manage")))
+                        "user.read_pii", "user.deletion.manage", "identity.review")))
                 .andExpect(jsonPath("$.data.includes[*].code",
                         containsInAnyOrder("DISPUTE_HANDLER", "MODERATOR")))
                 .andExpect(jsonPath("$.data.effectiveRoles[*].code", containsInAnyOrder(
                         "DISPUTE_HANDLER", "MODERATOR", "SUPPORT_AGENT")))
                 .andExpect(jsonPath("$.data.effectivePermissions", containsInAnyOrder(
                         "content.moderate", "dispute.resolve", "user.deletion.manage",
-                        "user.read", "user.read_pii")));
+                        "user.read", "user.read_pii", "identity.review")));
     }
 
     @Test

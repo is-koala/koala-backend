@@ -80,8 +80,9 @@ public class PostgresAccountAnonymizer implements AccountAnonymizer {
                 where m.file_url is not null
                   and (m.id in (select profile_picture_id from users where id = ?)
                     or m.id in (select cv_id from users where id = ?)
-                    or m.id in (select verification_document_id from user_verifications where user_id = ?))
-                """, String.class, userId, userId, userId));
+                    or m.id in (select verification_document_id from user_verifications where user_id = ?)
+                    or m.id in (select back_document_id from user_verifications where user_id = ?))
+                """, String.class, userId, userId, userId, userId));
         jdbcTemplate.update("""
                 update media
                    set file_name = ?, file_type = null, file_url = null, file_size = 0,
@@ -89,7 +90,8 @@ public class PostgresAccountAnonymizer implements AccountAnonymizer {
                  where id in (select profile_picture_id from users where id = ?)
                     or id in (select cv_id from users where id = ?)
                     or id in (select verification_document_id from user_verifications where user_id = ?)
-                """, REDACTED, userId, userId, userId);
+                    or id in (select back_document_id from user_verifications where user_id = ?)
+                """, REDACTED, userId, userId, userId, userId);
         keys.addAll(removeDisputeEvidence(userId));
         mediaDeletionOutbox.enqueue(keys);
         processMediaAfterCommit(keys);
@@ -240,6 +242,8 @@ public class PostgresAccountAnonymizer implements AccountAnonymizer {
                 update user_verifications
                    set old_phone_number = null, new_phone_number = null, token = null,
                        tc_identity_number = null, verification_document_id = null,
+                       back_document_id = null, first_name = null, last_name = null,
+                       birth_date = null, tc_document_number = null, rejection_reason = null,
                        old_email = null, new_email = null, is_deleted = true, deleted_at = now()
                  where user_id = ?
                 """, userId);

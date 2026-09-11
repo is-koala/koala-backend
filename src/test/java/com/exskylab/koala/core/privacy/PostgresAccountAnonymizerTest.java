@@ -36,6 +36,10 @@ class PostgresAccountAnonymizerTest {
         UUID userId = UUID.randomUUID();
         String key = "cv/private.pdf";
         String evidenceKey = "files/dispute-evidence/9a3b2f11-7f0e-4a3d-8c21-1c5c2f4a77b0.png";
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class), any(), any(), any(), any()))
+                .thenAnswer(invocation -> invocation.getArgument(0, String.class).contains("dispute_evidence")
+                        ? List.of(evidenceKey)
+                        : List.of(key));
         when(jdbcTemplate.queryForList(anyString(), eq(String.class), any(), any(), any()))
                 .thenAnswer(invocation -> invocation.getArgument(0, String.class).contains("dispute_evidence")
                         ? List.of(evidenceKey)

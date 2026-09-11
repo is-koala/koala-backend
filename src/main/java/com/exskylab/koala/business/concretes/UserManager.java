@@ -150,6 +150,11 @@ public class UserManager implements UserService {
     }
 
     @Override
+    public boolean existsByTcIdentityNumber(String tcIdentityNumber) {
+        return userDao.existsByTcIdentityNumber(tcIdentityNumber);
+    }
+
+    @Override
     @Transactional
         public UserUpdateResponseDto patchCurrentUser(UpdateProfileDto userMePatchRequestDto) {
         log.info("Patching current user.");
