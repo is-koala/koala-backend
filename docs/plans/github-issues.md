@@ -6,7 +6,7 @@ Paketlerin teslim ve kabul koşulları [uygulama paketleri](implementation-slice
 
 | Paket | Backend | Mobil |
 | --- | --- | --- |
-| 1 | [#4](https://github.com/is-koala/koala-backend/issues/4) | [#7](https://github.com/is-koala/koala/issues/7) |
+| 1 | [#4](https://github.com/is-koala/koala-backend/issues/4) in-repo [#191](https://github.com/is-koala/koala-backend/issues/191) | [#7](https://github.com/is-koala/koala/issues/7) in-repo [#131](https://github.com/is-koala/koala/issues/131) |
 | 2 | [#5](https://github.com/is-koala/koala-backend/issues/5) | [#8](https://github.com/is-koala/koala/issues/8) |
 | 3 | — | [#5](https://github.com/is-koala/koala/issues/5) |
 | 4 | [#6](https://github.com/is-koala/koala-backend/issues/6) | [#9](https://github.com/is-koala/koala/issues/9) |

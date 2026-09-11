@@ -1,6 +1,9 @@
 # SMTP alıcı güvenliği ve kuyruk dayanıklılığı
 
-İlgili iş: [backend #4](https://github.com/is-koala/koala-backend/issues/4). Bu değişiklik paket 1'in SMTP alt adımıdır; gerçek hesap, uygulama ortamı ve bağlantı kabulü tamamlanmadan issue kapanmaz.
+İlgili iş: [backend #4](https://github.com/is-koala/koala-backend/issues/4),
+in-repo dilim [backend #191](https://github.com/is-koala/koala-backend/issues/191).
+Paket 1 SMTP kodu allowlist + ortam kapısı ile depodadır; gerçek mailbox kabulü
+#4'te `ready-for-human` kalır. Marketplace seed geri gelmez (ADR-0008).
 
 ## Dağıtım öncesi ayarlar
 
