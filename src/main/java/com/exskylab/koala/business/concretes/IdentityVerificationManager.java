@@ -157,6 +157,31 @@ public class IdentityVerificationManager implements IdentityDocumentReviewServic
                 .orElseThrow(() -> new ResourceNotFoundException(IdentityMessages.REVIEW_NOT_FOUND));
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public VerificationDocument getDocumentForStaffDownload(UUID reviewId, UUID documentId) {
+        IdentityVerification review = getById(reviewId);
+        VerificationDocument document = matchingDocument(review, documentId);
+        if (document == null || document.getFileUrl() == null || document.getFileUrl().isBlank()) {
+            throw new ResourceNotFoundException(IdentityMessages.DOCUMENT_NOT_FOUND);
+        }
+        return document;
+    }
+
+    private static VerificationDocument matchingDocument(IdentityVerification review, UUID documentId) {
+        if (belongsTo(review.getVerificationDocument(), documentId)) {
+            return review.getVerificationDocument();
+        }
+        if (belongsTo(review.getBackDocument(), documentId)) {
+            return review.getBackDocument();
+        }
+        return null;
+    }
+
+    private static boolean belongsTo(VerificationDocument document, UUID documentId) {
+        return document != null && documentId.equals(document.getId());
+    }
+
     private void requireOpen(IdentityVerification review) {
         if (review.isVerified() || review.getRejectedAt() != null) {
             throw new ConflictException(IdentityMessages.REVIEW_ALREADY_DECIDED);

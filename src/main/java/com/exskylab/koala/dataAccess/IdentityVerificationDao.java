@@ -15,6 +15,10 @@ import java.util.UUID;
 @Repository
 public interface IdentityVerificationDao extends JpaRepository<IdentityVerification, UUID> {
 
+    @EntityGraph(attributePaths = {"user", "verificationDocument", "backDocument"})
+    @Override
+    Optional<IdentityVerification> findById(UUID id);
+
     @Query("""
             select v from IdentityVerification v
             where v.user.id = :userId and v.verified = false and v.rejectedAt is null

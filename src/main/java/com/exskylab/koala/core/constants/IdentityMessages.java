@@ -6,6 +6,7 @@ public class IdentityMessages {
     public static final String DOCUMENTS_REQUIRED = "{identity.documents.required}";
     public static final String DOCUMENTS_ALREADY_PENDING = "{identity.documents.already.pending}";
     public static final String REVIEW_NOT_FOUND = "{identity.review.not.found}";
+    public static final String DOCUMENT_NOT_FOUND = "{identity.document.not.found}";
     public static final String REVIEW_ALREADY_DECIDED = "{identity.review.already.decided}";
     public static final String REJECTION_REASON_REQUIRED = "{identity.review.rejection.reason.required}";
     public static final String NO_TRUST_ANCHORS = "{identity.no.trust.anchors}";

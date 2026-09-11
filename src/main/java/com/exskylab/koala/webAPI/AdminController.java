@@ -40,9 +40,11 @@ import com.exskylab.koala.core.mappers.RoleGrantMapper;
 import com.exskylab.koala.core.mappers.UserMapper;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.core.constants.GalleryMessages;
+import com.exskylab.koala.core.helpers.SignedFileResponses;
 import com.exskylab.koala.core.utilities.results.Result;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.core.utilities.results.SuccessResult;
+import com.exskylab.koala.entities.VerificationDocument;
 import org.springframework.data.domain.Pageable;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.web.PageableDefault;
@@ -69,13 +71,15 @@ public class AdminController {
     private final BankAccountService bankAccountService;
     private final BankAccountMapper bankAccountMapper;
     private final IdentityDocumentReviewService identityDocumentReviewService;
+    private final SignedFileResponses signedFileResponses;
 
     public AdminController(CompanyService companyService, UserService userService,
                            CompanyMapper companyMapper, UserMapper userMapper,
                            GalleryService galleryService, RoleGrantMapper roleGrantMapper,
                            JobAssignmentService jobAssignmentService,
                            BankAccountService bankAccountService, BankAccountMapper bankAccountMapper,
-                           IdentityDocumentReviewService identityDocumentReviewService) {
+                           IdentityDocumentReviewService identityDocumentReviewService,
+                           SignedFileResponses signedFileResponses) {
         this.companyService = companyService;
         this.userService = userService;
         this.companyMapper = companyMapper;
@@ -86,6 +90,7 @@ public class AdminController {
         this.bankAccountService = bankAccountService;
         this.bankAccountMapper = bankAccountMapper;
         this.identityDocumentReviewService = identityDocumentReviewService;
+        this.signedFileResponses = signedFileResponses;
     }
 
     @Operation(summary = "Atama özeti",
@@ -337,5 +342,21 @@ public class AdminController {
         return ResponseEntity.ok(new SuccessDataResult<>(
                 IdentityReviewDto.from(identityDocumentReviewService.reject(actor, reviewId, request.getReason())),
                 AdminMessages.IDENTITY_REVIEW_REJECTED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "TCKK fotoğrafını indir",
+            description = "Depo imzalı adres destekliyorsa kısa ömürlü imzalı adrese yönlendirir, desteklemiyorsa baytları akıtır. Tekil okuma olduğu için denetim kaydına girer. Kuyruk yanıtı depo anahtarı taşımaz.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Dosya akıtıldı"),
+            @ApiResponse(responseCode = "302", description = "Kısa ömürlü imzalı adrese yönlendirildi",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "İnceleme ya da belge bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(value = StaffPermission.IDENTITY_REVIEW, action = "identity.document.download")
+    @GetMapping("/identity-verifications/{reviewId}/documents/{documentId}/download")
+    public ResponseEntity<?> downloadIdentityDocument(@PathVariable UUID reviewId, @PathVariable UUID documentId) {
+        VerificationDocument document = identityDocumentReviewService.getDocumentForStaffDownload(reviewId, documentId);
+        return signedFileResponses.attachment(document.getFileUrl(), document.getFileName());
     }
 }

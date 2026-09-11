@@ -41,6 +41,8 @@ class EagerFetchCoverageIT extends AbstractIntegrationTest {
             entry("JobTemplateDao.findAllByOwnerIdOrderByCreatedAtDesc", "company", "JobTemplateDto yalnızca companyId taşıyor"),
             entry("PayoutDao.findAllByWorkerIdOrderByCreatedAtDesc", "worker", "PayoutDto işçiyi çizmiyor"),
             entry("JobAlertDao.findAllByActiveTrue", "user", "kullanıcı yalnızca bildirim alıcısı, yanıta girmiyor"),
+            entry("IdentityVerificationDao.findById", "user",
+                    "IdentityReviewDto yalnızca userId taşıyor"),
             entry("IdentityVerificationDao.findByVerifiedFalseAndRejectedAtIsNull", "user",
                     "IdentityReviewDto yalnızca userId taşıyor"),
             entry("IdentityVerificationDao.findByVerifiedTrue", "user",
