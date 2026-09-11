@@ -854,7 +854,7 @@ sessiz kayıp değildir. Aynı intent'in yeniden teslimi `processing_claim_id` i
 
 `:activeAfter` **null olamaz.** Null bırakılsaydı Postgres parametrenin tipini çıkaramayıp `could not determine data type` verirdi — `:query` için `cast(... as string)` gerektiren tuzağın aynısı. Parametreyi zorunlu yapmak sorunu kaynağında kaldırıyor.
 
-**`JobStatus.IN_PROGRESS` ve `COMPLETED` hiçbir yerde set edilmiyor.** İlan `OPEN` → `CLOSED`/`CANCELLED` dışına çıkmıyor; işveren elle kapatıyor. `Job.headcount` eklendikten sonra da böyle kaldı — gerekçe §2ao2'de: ilanı otomatik `IN_PROGRESS`'e almak onu bu sorgudan düşürür ve sonradan işe alımı imkânsızlaştırırdı. Tarih filtresi bunun en görünür sonucunu (bitmiş ilanın listede kalması) zaten kapatıyor.
+**`JobStatus` üç değer:** `OPEN`, `CLOSED`, `CANCELLED` (#115). `IN_PROGRESS` ve `COMPLETED` sözleşmeden düştü — atanmıyorlardı ve ilanı otomatik `IN_PROGRESS`'e almak aramadan düşürüp sonradan işe alımı imkânsızlaştırırdı (§2ao2). İşin sürdüğü/bittiği `AssignmentStatus`'ta durur. İlanı işveren elle kapatır veya iptal eder.
 
 **Sıralama beyaz listeye kısıtlı.** `PageableSanitizer` yalnızca `createdAt`, `salary`, `startDateTime`, `title` alanlarına izin verir; listede olmayan bir alan sessizce yok sayılmaz, **400 döner**. Sayfa boyutu 100 ile sınırlı, `Pageable.unpaged()` geldiğinde varsayılana düşer.
 
@@ -2299,7 +2299,7 @@ Sıkıştırma yalnızca Swagger için değil: `application/json` de kapsamda, y
 
 **Detay eşlemesi controller'dan manager'a taşındı.** `GET /jobs/{id}` artık `jobService.getJobDetail(jobId)` çağırıyor; `hiredCount` mapper'da `ignore`, manager dolduruyor. §2al'deki kararın aynısı — eşleme controller'da kalsaydı sayıyı doldurmanın yeri olmazdı.
 
-**`JobStatus.IN_PROGRESS` ve `COMPLETED` hâlâ kullanılmıyor, ve kontenjan bunu değiştirmiyor.** İlan `IN_PROGRESS`'e alınsaydı aramadan düşerdi (`searchIds` `status = OPEN` istiyor, §2l) ve **sonradan işe alım imkânsızlaşırdı** — yukarıdaki kuralla doğrudan çelişir. İlan `OPEN` → `CLOSED`/`CANCELLED` dışına çıkmıyor; kapatma işverenin elinde kalıyor. İstemci "2/3 alındı" göstergesini `hiredCount`/`headcount` ile kendisi çiziyor.
+**İlan durumu kontenjanla değişmez.** İlan `IN_PROGRESS`'e alınsaydı aramadan düşerdi (`searchIds` `status = OPEN` istiyor, §2l) ve **sonradan işe alım imkânsızlaşırdı**. `JobStatus` bu yüzden üç değer (#115). Kapatma işverenin elinde. İstemci "2/3 alındı" göstergesini `hiredCount`/`headcount` ile kendisi çiziyor.
 
 ## 2ap. İşveren yüzeyi
 
@@ -2557,7 +2557,7 @@ KOALA_CHIP_DIR=/tmp/chip KOALA_CSCA_DIR=src/main/resources/csca ./mvnw test -Dte
 
 Kapatma yalnızca yeni başvuruyu durdurur — `JobsController` bunu zaten böyle belgeliyordu ama **kod durdurmuyordu**, kapalı ilana başvuru hâlâ 201 dönüyordu. İptal ise kararın kendisini de durdurur: `cancelJob` canlı atama varken iptali reddediyor (§2ap) ama sıra tersine çevrilebiliyordu — önce iptal et, sonra bekleyen bir başvuruyu kabul et, iptal edilmiş ilan üzerinde canlı atama doğsun. Bu kapı onu kapatıyor ve `JobAssignment` hiç oluşmuyor.
 
-**Kural bugünkü gerçeğe göre yazıldı.** `JobStatus` beş değer taşıyor ama `src/main` yalnız `OPEN`, `CLOSED`, `CANCELLED` atıyor; `IN_PROGRESS` ve `COMPLETED` için dal açılmadı (§2ao2'deki aynı gerekçe).
+**Kural bugünkü gerçeğe göre yazıldı.** `JobStatus` `OPEN`, `CLOSED`, `CANCELLED` (#115). `IN_PROGRESS` / `COMPLETED` ilan durumu değil (§2ao2).
 
 **Kabul edilen işçi tek bildirim alıyor.** Kabul dalı `assignmentOffered` **ve** `applicationAnswered` çağırıyordu; ikisi de aynı kişiye, aynı kategoride (`APPLICATION_UPDATES`), aynı transaction içinde. `notify` her çağrıda in-app + push + e-posta gönderdiği için kabul edilen işçi tek olay için **altı teslimat** alıyordu. Kabul dalında `assignmentOffered` kaldı (atama id'sini taşıdığı için tıklanabilir hedefi doğru), ret dalı `applicationAnswered` kullanmaya devam ediyor. Seçim `ApplicationDecisionRulesTest` ile sabit.
 

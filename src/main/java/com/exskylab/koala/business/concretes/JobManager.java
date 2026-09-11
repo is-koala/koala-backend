@@ -390,7 +390,7 @@ public class JobManager implements JobService {
     public void cancelJob(UUID jobId) {
         Job job = requireJobEditor(jobId);
 
-        if (job.getStatus() == JobStatus.CANCELLED || job.getStatus() == JobStatus.COMPLETED) {
+        if (job.getStatus() == JobStatus.CANCELLED) {
             throw new ConflictException(JobMessages.JOB_NOT_CANCELLABLE);
         }
 
