@@ -2326,11 +2326,13 @@ Sıkıştırma yalnızca Swagger için değil: `application/json` de kapsamda, y
 
 Bu hata biçiminin kötülüğü şurada: "senin bilgilerin yanlış" ile "servis ölü" ayırt edilemiyordu. Ve `assertReadyToWork`'ün ilk şartı kimlik olduğu için sonuç **hiç kimsenin hiçbir işe başvuramaması** idi — tek bir ucun bozulması değil, başvuru zincirinin tamamının kopması.
 
-**KPS çağrısı kaldırıldı, `KimlikPaylasimSistemiService` silindi.** Doğrulama artık istemcide yapılıyor: NFC ile çipten okuma (ICAO 9303), yüz eşleştirme ve canlılık testi. Sunucu gelen bilgiyi kaydediyor.
+**KPS çağrısı kaldırıldı, `KimlikPaylasimSistemiService` silindi.** Bunun yerine sunucuda Passive Authentication zinciri **yazılı** (`PassiveAuthenticationVerifier`, CSCA çıpa kümesi, challenge ucu) ama **bugün kapalı**: `IDENTITY_PASSIVE_AUTH_ENABLED` varsayılanı `false` ve production'da tanımlı değil. Bayrak kapalıyken `verifyChipEvidence` hemen `null` döner ve istek gövdesindeki beş beyan alanı (ad, soyad, TCKN, seri no, doğum tarihi) olduğu gibi damgalanır. Checksum'ı geçen herhangi bir TCKN kabul edilir.
 
-**Bunun ne olduğu açıkça yazılmalı: bu bir güvenlik düşüşü.** Önceden kararı sunucu veriyordu, artık istemci veriyor. Uygulamayı değiştiren biri kontrolleri hiç çalıştırmadan uca istek atabilir ve **başkasının TCKN'siyle Iyzico alt üye işyeri açtırabilir** — para o hesaba gider. Üç katmanın cihazda ne kadar iyi olduğu bunu değiştirmez, çünkü sunucu o katmanların çalıştığına dair hiçbir kanıt görmüyor.
+**İstemci tarafı.** Flutter (#59, PR #73) NFC + MRZ ile `sod`/`dg1` (ve varsa DG11/DG15) **gönderebiliyor**; alanlar isteğe bağlı, bayrak kapalıyken yok sayılıyor. Yüz eşleştirme ve canlılık **yok**. Web'de NFC yok (koala-web#18); tarayıcıda çip kanıtı uydurulmaz.
 
-Yine de doğru karar: alternatif, uygulamanın tümüyle ölü kalması. Ama **geçici olduğu unutulmamalı** — kalıcı çözüm Faz 27 (Passive Authentication).
+**Bunun ne olduğu açıkça yazılmalı: kimlik doğrulama bugün beyandır.** Sunucu çip kanıtını zorunlu tutmuyor. Uygulamayı değiştiren biri kontrolleri hiç çalıştırmadan uca istek atabilir ve **başkasının TCKN'siyle Iyzico alt üye işyeri açtırabilir** — para o hesaba gider. Mobilin çip okuması bunu değiştirmez, çünkü sunucu o kanıtı **istemiyor**.
+
+Yine de doğru karar bayrağı bugün açmamak: açılırsa kanıt göndermeyen her istemci `IDENTITY_EVIDENCE_REQUIRED` alır ve kimse doğrulanamaz. Sıra: önce istemci yayında (#59), gerçek kart çıpası (#70), sonra bayrak (#73). Bu geçici; kalıcı çözüm Passive Authentication'ın açılması.
 
 **Passive Authentication'dan sonra kalan artık risk.** Çip doğrulaması "kart gerçek" der, "kartı tutan kişi sahibidir" demez — onu kuran şey yüz eşleştirmesi ve o cihazda. Yani elinde **başkasının gerçek kartı** olan biri, uygulamayı değiştirerek o kimlikle kayıt olabilir. Sonucu iş değil para: alt üye işyeri **kurbanın TCKN'siyle** ama **saldırganın IBAN'ıyla** açılır.
 
