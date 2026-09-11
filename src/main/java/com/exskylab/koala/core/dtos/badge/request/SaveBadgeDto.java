@@ -36,8 +36,9 @@ public class SaveBadgeDto {
     @Size(max = 512)
     private String description;
 
+    @NotNull(message = BadgeMessages.SORT_ORDER_REQUIRED)
     @Min(value = 0, message = BadgeMessages.SORT_ORDER_RANGE)
-    private int sortOrder;
+    private Integer sortOrder;
 
     @NotNull(message = BadgeMessages.RULE_TYPE_REQUIRED)
     private BadgeRuleType ruleType;

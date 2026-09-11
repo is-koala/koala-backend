@@ -20,10 +20,12 @@ public class GalleryImageEntryDto {
     @NotNull(message = GalleryMessages.IMAGE_ID_NOT_NULL)
     private UUID imageId;
 
+    @NotNull(message = GalleryMessages.SORT_ORDER_NOT_NULL)
     @Min(value = 0, message = GalleryMessages.SORT_ORDER_INVALID)
-    private int sortOrder;
+    private Integer sortOrder;
 
-    private boolean cover;
+    @NotNull(message = GalleryMessages.COVER_NOT_NULL)
+    private Boolean cover;
 
     @Size(max = 255, message = GalleryMessages.CAPTION_TOO_LONG)
     private String caption;

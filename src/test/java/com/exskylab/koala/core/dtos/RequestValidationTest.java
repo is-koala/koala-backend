@@ -196,6 +196,7 @@ class RequestValidationTest {
         badge.setFamily(BadgeFamily.OTHER);
         badge.setTier(BadgeTier.BRONZE);
         badge.setName("Yeni");
+        badge.setSortOrder(0);
         badge.setRuleType(BadgeRuleType.COMPLETED_ASSIGNMENTS);
 
         assertTrue(messagesFor(badge).contains("{badge.min.count.required}"));
@@ -211,6 +212,7 @@ class RequestValidationTest {
         badge.setFamily(BadgeFamily.RATING);
         badge.setTier(BadgeTier.GOLD);
         badge.setName("Yüksek puan");
+        badge.setSortOrder(0);
         badge.setRuleType(BadgeRuleType.AVERAGE_RATING_WITH_MINIMUM_REVIEWS);
         badge.setMinAverageRating(new BigDecimal("4.50"));
 
@@ -228,6 +230,7 @@ class RequestValidationTest {
         badge.setFamily(BadgeFamily.IDENTITY);
         badge.setTier(BadgeTier.NONE);
         badge.setName("Kimlik doğrulandı");
+        badge.setSortOrder(0);
         badge.setRuleType(BadgeRuleType.IDENTITY_VERIFIED);
 
         assertTrue(isValid(badge));
@@ -240,6 +243,7 @@ class RequestValidationTest {
         education.setFacultyId(UUID.randomUUID());
         education.setDepartmentId(UUID.randomUUID());
         education.setType(GradeType.values()[0]);
+        education.setGpa(3.2);
         education.setStartDate(LocalDate.of(2021, 1, 1));
         education.setEndDate(LocalDate.of(2020, 1, 1));
 
@@ -253,6 +257,7 @@ class RequestValidationTest {
         education.setFacultyId(UUID.randomUUID());
         education.setDepartmentId(UUID.randomUUID());
         education.setType(GradeType.values()[0]);
+        education.setGpa(3.2);
         education.setStartDate(LocalDate.of(2021, 1, 1));
 
         assertTrue(isValid(education));

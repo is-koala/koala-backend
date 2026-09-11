@@ -6,6 +6,7 @@ public class EducationMessages {
     public static final String FACULTY_REQUIRED = "{education.faculty.required}";
     public static final String DEPARTMENT_REQUIRED = "{education.department.required}";
     public static final String TYPE_REQUIRED = "{education.type.required}";
+    public static final String GPA_REQUIRED = "{education.gpa.required}";
     public static final String GPA_RANGE = "{education.gpa.range}";
     public static final String START_DATE_REQUIRED = "{education.start.date.required}";
     public static final String END_BEFORE_START = "{education.end.before.start}";

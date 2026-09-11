@@ -195,6 +195,7 @@ class BadgeRulesTest {
         request.setFamily(BadgeFamily.GEZGIN);
         request.setTier(BadgeTier.GOLD);
         request.setName("Altin");
+        request.setSortOrder(0);
         request.setRuleType(BadgeRuleType.COMPLETED_ASSIGNMENTS);
         request.setMinCount(10);
 

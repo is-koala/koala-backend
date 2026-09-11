@@ -32,9 +32,10 @@ public class SaveEducationDto {
     @NotNull(message = EducationMessages.TYPE_REQUIRED)
     private GradeType type;
 
+    @NotNull(message = EducationMessages.GPA_REQUIRED)
     @DecimalMin(value = "0.0", message = EducationMessages.GPA_RANGE)
     @DecimalMax(value = "4.0", message = EducationMessages.GPA_RANGE)
-    private double gpa;
+    private Double gpa;
 
     @NotNull(message = EducationMessages.START_DATE_REQUIRED)
     private LocalDate startDate;

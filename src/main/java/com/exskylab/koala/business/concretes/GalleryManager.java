@@ -101,7 +101,7 @@ public class GalleryManager implements GalleryService {
         for (GalleryImageEntryDto entry : requested) {
             CompanyImage existing = byImageId.remove(entry.getImageId());
             existing.setSortOrder(entry.getSortOrder());
-            existing.setCover(entry.isCover());
+            existing.setCover(Boolean.TRUE.equals(entry.getCover()));
             existing.setCaption(entry.getCaption());
             kept.add(existing);
         }
@@ -186,7 +186,7 @@ public class GalleryManager implements GalleryService {
                 entry.setImage(selectable.get(requestedEntry.getImageId()));
             }
             entry.setSortOrder(requestedEntry.getSortOrder());
-            entry.setCover(requestedEntry.isCover());
+            entry.setCover(Boolean.TRUE.equals(requestedEntry.getCover()));
             entry.setCaption(requestedEntry.getCaption());
             kept.add(entry);
         }

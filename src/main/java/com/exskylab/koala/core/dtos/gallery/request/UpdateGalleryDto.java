@@ -38,7 +38,7 @@ public class UpdateGalleryDto {
         if (images == null) {
             return true;
         }
-        return images.stream().filter(GalleryImageEntryDto::isCover).count() <= 1;
+        return images.stream().filter(entry -> Boolean.TRUE.equals(entry.getCover())).count() <= 1;
     }
 
     public List<UUID> imageIds() {
