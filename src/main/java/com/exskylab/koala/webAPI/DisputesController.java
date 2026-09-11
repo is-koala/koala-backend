@@ -2,6 +2,7 @@ package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.core.security.RequiresPermission;
 import com.exskylab.koala.core.security.StaffPrincipal;
+import com.exskylab.koala.entities.DisputeStatus;
 import com.exskylab.koala.entities.StaffPermission;
 import com.exskylab.koala.core.utilities.results.ErrorResult;
 import io.swagger.v3.oas.annotations.Operation;
@@ -49,17 +50,20 @@ public class DisputesController {
         this.signedFileResponses = signedFileResponses;
     }
 
-    @Operation(summary = "Açık uyuşmazlıklar",
-            description = "Sayfalıdır.")
+    @Operation(summary = "Uyuşmazlık kuyruğu",
+            description = "status verilmezse yalnız OPEN ve UNDER_REVIEW döner. "
+                    + "status=RESOLVED kapalı kayıtları (DISMISSED çözümü dahil) sayfalar. "
+                    + "Tutarlar DisputeDto'da yoktur; GET /admin/job-assignments/{id} (payment.read) otoriter kaynaktır.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Uyuşmazlıklar listelendi")
     })
     @RequiresPermission(StaffPermission.DISPUTE_RESOLVE)
     @GetMapping
-    public ResponseEntity<SuccessDataResult<PageDto<DisputeDto>>> pending(
+    public ResponseEntity<SuccessDataResult<PageDto<DisputeDto>>> list(
+            @RequestParam(required = false) DisputeStatus status,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
-        var page = disputeService.getPending(pageable);
+        var page = disputeService.searchForStaff(status, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
                 PageDto.of(page, disputeMapper.toDisputeDtoList(page.getContent())),
                 DisputeMessages.LISTED, HttpStatus.OK));
