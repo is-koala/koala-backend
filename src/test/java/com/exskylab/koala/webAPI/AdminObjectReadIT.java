@@ -73,4 +73,18 @@ class AdminObjectReadIT extends AbstractStaffIntegrationTest {
                         .header("Authorization", "Bearer " + tokenFor("FINANCE_ANALYST")))
                 .andExpect(status().isForbidden());
     }
+
+    @Test
+    void aFinanceOfficerListsPayouts() throws Exception {
+        mockMvc.perform(get("/admin/payouts")
+                        .header("Authorization", "Bearer " + tokenFor("FINANCE_OFFICER")))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void aFinanceAnalystCannotListPayouts() throws Exception {
+        mockMvc.perform(get("/admin/payouts")
+                        .header("Authorization", "Bearer " + tokenFor("FINANCE_ANALYST")))
+                .andExpect(status().isForbidden());
+    }
 }

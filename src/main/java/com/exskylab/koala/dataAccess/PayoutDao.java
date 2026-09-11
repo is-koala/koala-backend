@@ -3,6 +3,8 @@ package com.exskylab.koala.dataAccess;
 import com.exskylab.koala.entities.Payout;
 import com.exskylab.koala.entities.PayoutStatus;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -26,6 +28,9 @@ public interface PayoutDao extends JpaRepository<Payout, UUID> {
     boolean existsByJobAssignmentId(UUID jobAssignmentId);
 
     Optional<Payout> findByJobAssignmentId(UUID jobAssignmentId);
+
+    @EntityGraph(attributePaths = {"jobAssignment"})
+    Page<Payout> findAllByStatusIn(List<PayoutStatus> statuses, Pageable pageable);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Payout p where p.id = :id")

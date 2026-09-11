@@ -3,7 +3,10 @@ package com.exskylab.koala.business.abstracts;
 import com.exskylab.koala.core.dtos.payout.request.ConfirmPayoutSettlementDto;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.Payout;
+import com.exskylab.koala.entities.PayoutStatus;
 import com.exskylab.koala.entities.Refund;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -26,6 +29,8 @@ public interface PayoutService {
     AmountCount completedVolume(Instant fromInclusive, Instant toExclusive, String currency);
 
     AmountCount awaitingVolume(String currency);
+
+    Page<Payout> listForStaff(List<PayoutStatus> statuses, Pageable pageable);
 
     record AmountCount(BigDecimal amount, long count) {
     }

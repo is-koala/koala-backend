@@ -24,6 +24,10 @@ import com.exskylab.koala.business.abstracts.ActivityNotificationService;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +45,9 @@ import java.util.UUID;
 public class PayoutManager implements PayoutService {
 
     private static final String CURRENCY = "TRY";
+    private static final int DEFAULT_PAGE_SIZE = 20;
+    private static final int MAX_PAGE_SIZE = 50;
+    private static final Sort STAFF_LIST_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
 
     private final PayoutDao payoutDao;
     private final RefundDao refundDao;
@@ -252,6 +259,18 @@ public class PayoutManager implements PayoutService {
         List<Object[]> rows = payoutDao.summarizeAwaiting(
                 List.of(PayoutStatus.PENDING, PayoutStatus.PROCESSING), currency);
         return amountCount(rows);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<Payout> listForStaff(List<PayoutStatus> statuses, Pageable requested) {
+        int page = Math.max(requested.getPageNumber(), 0);
+        int size = requested.getPageSize() < 1 ? DEFAULT_PAGE_SIZE
+                : Math.min(requested.getPageSize(), MAX_PAGE_SIZE);
+        List<PayoutStatus> filter = statuses == null || statuses.isEmpty()
+                ? PayoutStatus.AWAITING_SETTLEMENT
+                : List.copyOf(statuses);
+        return payoutDao.findAllByStatusIn(filter, PageRequest.of(page, size, STAFF_LIST_SORT));
     }
 
     private static AmountCount amountCount(List<Object[]> rows) {
