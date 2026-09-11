@@ -5,6 +5,7 @@ import com.exskylab.koala.core.dtos.dispute.response.StaffDisputeEvidenceDto;
 import com.exskylab.koala.entities.Dispute;
 import com.exskylab.koala.entities.DisputeEvidence;
 import com.exskylab.koala.entities.DisputeResolution;
+import com.exskylab.koala.entities.DisputeStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.multipart.MultipartFile;
@@ -20,7 +21,7 @@ public interface DisputeService {
 
     List<Dispute> getForAssignment(UUID jobAssignmentId);
 
-    Page<Dispute> getPending(Pageable pageable);
+    Page<Dispute> searchForStaff(DisputeStatus status, Pageable pageable);
 
     boolean hasActiveDispute(UUID jobAssignmentId);
 
