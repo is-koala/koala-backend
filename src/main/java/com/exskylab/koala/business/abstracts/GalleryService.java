@@ -4,6 +4,7 @@ import com.exskylab.koala.core.dtos.gallery.request.UpdateGalleryDto;
 import com.exskylab.koala.core.dtos.gallery.response.GalleryImageDto;
 import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
 import com.exskylab.koala.entities.Company;
+import com.exskylab.koala.entities.Image;
 import com.exskylab.koala.entities.Job;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -35,4 +36,6 @@ public interface GalleryService {
     void fillJobCovers(List<JobSummaryDto> jobs);
 
     void removeImageEverywhere(UUID imageId);
+
+    Image getCompanyImageForStaffDownload(UUID companyId, UUID imageId);
 }

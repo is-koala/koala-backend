@@ -38,6 +38,7 @@ import com.exskylab.koala.core.dtos.user.response.SafeUserDto;
 import com.exskylab.koala.core.mappers.CompanyMapper;
 import com.exskylab.koala.core.mappers.RoleGrantMapper;
 import com.exskylab.koala.core.mappers.UserMapper;
+import com.exskylab.koala.entities.Image;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.core.constants.GalleryMessages;
 import com.exskylab.koala.core.helpers.SignedFileResponses;
@@ -160,6 +161,22 @@ public class AdminController {
         return ResponseEntity.ok(new SuccessDataResult<>(
                 PageDto.of(page, page.getContent().stream().map(companyMapper::toCompanyReviewDto).toList()),
                 AdminMessages.COMPANIES_LISTED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "Şirket galeri görselini indir",
+            description = "Depo imzalı adres destekliyorsa kısa ömürlü imzalı adrese yönlendirir, desteklemiyorsa baytları akıtır. Kuyruk yanıtı depo anahtarı taşımaz.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Dosya akıtıldı"),
+            @ApiResponse(responseCode = "302", description = "Kısa ömürlü imzalı adrese yönlendirildi",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "Şirket ya da görsel bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(value = StaffPermission.COMPANY_APPROVE, action = "company.image.download")
+    @GetMapping("/companies/{companyId}/images/{imageId}/download")
+    public ResponseEntity<?> downloadCompanyImage(@PathVariable UUID companyId, @PathVariable UUID imageId) {
+        Image image = galleryService.getCompanyImageForStaffDownload(companyId, imageId);
+        return signedFileResponses.attachment(image.getFileUrl(), image.getFileName());
     }
 
     @Operation(summary = "Şirketi onayla",

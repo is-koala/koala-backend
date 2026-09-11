@@ -22,5 +22,6 @@ public interface CompanyImageDao extends JpaRepository<CompanyImage, UUID> {
 
     List<CompanyImage> findAllByImageId(UUID imageId);
 
+    @EntityGraph(attributePaths = {"image"})
     Optional<CompanyImage> findByCompanyIdAndImageId(UUID companyId, UUID imageId);
 }
