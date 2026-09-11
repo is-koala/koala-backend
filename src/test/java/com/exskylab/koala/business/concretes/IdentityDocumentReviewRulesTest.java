@@ -18,6 +18,7 @@ import com.exskylab.koala.dataAccess.IdentityVerificationDao;
 import com.exskylab.koala.entities.IdentityVerification;
 import com.exskylab.koala.entities.StaffPermission;
 import com.exskylab.koala.entities.User;
+import com.exskylab.koala.entities.VerificationDocument;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
@@ -207,6 +208,71 @@ class IdentityDocumentReviewRulesTest {
                 () -> reviews.approve(staff, pending.getId()));
 
         assertEquals("IDENTITY_REVIEW_ALREADY_DECIDED", thrown.getErrorCode());
+    }
+
+    @Test
+    void staffCanDownloadTheFrontAndBackPhotosOfAReview() {
+        IdentityVerification pending = pendingRowWithPhotos();
+        when(identityVerificationDao.findById(pending.getId())).thenReturn(Optional.of(pending));
+
+        assertEquals("images/front-key.jpg",
+                reviews.getDocumentForStaffDownload(pending.getId(), pending.getVerificationDocument().getId())
+                        .getFileUrl());
+        assertEquals("images/back-key.jpg",
+                reviews.getDocumentForStaffDownload(pending.getId(), pending.getBackDocument().getId())
+                        .getFileUrl());
+    }
+
+    @Test
+    void aDocumentThatDoesNotBelongToTheReviewIsConcealed() {
+        IdentityVerification pending = pendingRowWithPhotos();
+        when(identityVerificationDao.findById(pending.getId())).thenReturn(Optional.of(pending));
+
+        ResourceNotFoundException thrown = assertThrows(ResourceNotFoundException.class,
+                () -> reviews.getDocumentForStaffDownload(pending.getId(), UUID.randomUUID()));
+
+        assertEquals("IDENTITY_DOCUMENT_NOT_FOUND", thrown.getErrorCode());
+    }
+
+    @Test
+    void aMissingReviewCannotBeDownloaded() {
+        UUID missing = UUID.randomUUID();
+        when(identityVerificationDao.findById(missing)).thenReturn(Optional.empty());
+
+        ResourceNotFoundException thrown = assertThrows(ResourceNotFoundException.class,
+                () -> reviews.getDocumentForStaffDownload(missing, UUID.randomUUID()));
+
+        assertEquals("IDENTITY_REVIEW_NOT_FOUND", thrown.getErrorCode());
+    }
+
+    @Test
+    void aPhotoWhoseStorageKeyWasClearedCannotBeDownloaded() {
+        IdentityVerification pending = pendingRowWithPhotos();
+        pending.getVerificationDocument().setFileUrl(" ");
+        when(identityVerificationDao.findById(pending.getId())).thenReturn(Optional.of(pending));
+
+        ResourceNotFoundException thrown = assertThrows(ResourceNotFoundException.class,
+                () -> reviews.getDocumentForStaffDownload(
+                        pending.getId(), pending.getVerificationDocument().getId()));
+
+        assertEquals("IDENTITY_DOCUMENT_NOT_FOUND", thrown.getErrorCode());
+    }
+
+    private IdentityVerification pendingRowWithPhotos() {
+        IdentityVerification pending = pendingRow();
+        pending.setVerificationDocument(photoDocument("front.jpg", "images/front-key.jpg"));
+        pending.setBackDocument(photoDocument("back.jpg", "images/back-key.jpg"));
+        return pending;
+    }
+
+    private static VerificationDocument photoDocument(String fileName, String key) {
+        VerificationDocument document = new VerificationDocument();
+        document.setId(UUID.randomUUID());
+        document.setFileName(fileName);
+        document.setFileType("image/jpeg");
+        document.setFileUrl(key);
+        document.setFileSize(3L);
+        return document;
     }
 
     private IdentityVerification pendingRow() {

@@ -4,6 +4,7 @@ import com.exskylab.koala.core.dtos.user.request.VerifyIdentityDto;
 import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.entities.IdentityReviewStatus;
 import com.exskylab.koala.entities.IdentityVerification;
+import com.exskylab.koala.entities.VerificationDocument;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.multipart.MultipartFile;
@@ -21,4 +22,6 @@ public interface IdentityDocumentReviewService {
     Page<IdentityVerification> search(IdentityReviewStatus status, Pageable pageable);
 
     IdentityVerification getById(UUID reviewId);
+
+    VerificationDocument getDocumentForStaffDownload(UUID reviewId, UUID documentId);
 }
