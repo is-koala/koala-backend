@@ -436,7 +436,7 @@ public class UserManager implements UserService {
 
     private PassiveAuthenticationResult verifyChipEvidence(VerifyIdentityDto request) {
         if (!identityVerificationProperties.isEnabled()) {
-            return null;
+            throw new ValidationException(IdentityMessages.DOCUMENT_REVIEW_REQUIRED);
         }
 
         if (request.getSod() == null || request.getSod().isBlank()

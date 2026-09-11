@@ -2337,13 +2337,13 @@ Sıkıştırma yalnızca Swagger için değil: `application/json` de kapsamda, y
 
 Bu hata biçiminin kötülüğü şurada: "senin bilgilerin yanlış" ile "servis ölü" ayırt edilemiyordu. Ve `assertReadyToWork`'ün ilk şartı kimlik olduğu için sonuç **hiç kimsenin hiçbir işe başvuramaması** idi — tek bir ucun bozulması değil, başvuru zincirinin tamamının kopması.
 
-**KPS çağrısı kaldırıldı, `KimlikPaylasimSistemiService` silindi.** Bunun yerine sunucuda Passive Authentication zinciri **yazılı** (`PassiveAuthenticationVerifier`, CSCA çıpa kümesi, challenge ucu) ama **bugün kapalı**: `IDENTITY_PASSIVE_AUTH_ENABLED` varsayılanı `false` ve production'da tanımlı değil. Bayrak kapalıyken `verifyChipEvidence` hemen `null` döner ve istek gövdesindeki beş beyan alanı (ad, soyad, TCKN, seri no, doğum tarihi) olduğu gibi damgalanır. Checksum'ı geçen herhangi bir TCKN kabul edilir.
+**KPS çağrısı kaldırıldı, `KimlikPaylasimSistemiService` silindi.** Bunun yerine sunucuda Passive Authentication zinciri **yazılı** (`PassiveAuthenticationVerifier`, CSCA çıpa kümesi, challenge ucu) ama **bugün kapalı**: `IDENTITY_PASSIVE_AUTH_ENABLED` varsayılanı `false` ve production'da tanımlı değil. Bayrak kapalıyken `verifyChipEvidence` `IDENTITY_DOCUMENT_REVIEW_REQUIRED` fırlatır — beş beyan alanı (ad, soyad, TCKN, seri no, doğum tarihi) damgalanmaz. Ürün yolu TCKK ön/arka fotoğrafı + personel onayı (is-koala/koala-backend#193); çip PA bu issue'da açılmaz.
 
 **İstemci tarafı.** Flutter (#59, PR #73) NFC + MRZ ile `sod`/`dg1` (ve varsa DG11/DG15) **gönderebiliyor**; alanlar isteğe bağlı, bayrak kapalıyken yok sayılıyor. Yüz eşleştirme ve canlılık **yok**. Web'de NFC yok (koala-web#18); tarayıcıda çip kanıtı uydurulmaz.
 
-**Bunun ne olduğu açıkça yazılmalı: kimlik doğrulama bugün beyandır.** Sunucu çip kanıtını zorunlu tutmuyor. Uygulamayı değiştiren biri kontrolleri hiç çalıştırmadan uca istek atabilir ve **başkasının TCKN'siyle Iyzico alt üye işyeri açtırabilir** — para o hesaba gider. Mobilin çip okuması bunu değiştirmez, çünkü sunucu o kanıtı **istemiyor**.
+**Beş alanlık `POST /users/me/identity-verification` ürün yüzeyi değildir.** Bayrak kapalıyken de checksum'ı geçen TCKN damgalanmaz. Çip kanıtı gönderilse bile PA kapalıyken damga yok — o uç yalnız `IDENTITY_PASSIVE_AUTH_ENABLED` açıkken çalışır. Kimlik damgası ya çipten (bayrak açık) ya personelin TCKK fotoğrafını onayından gelir.
 
-Yine de doğru karar bayrağı bugün açmamak: açılırsa kanıt göndermeyen her istemci `IDENTITY_EVIDENCE_REQUIRED` alır ve kimse doğrulanamaz. Sıra: önce istemci yayında (#59), gerçek kart çıpası (#70), sonra bayrak (#73). Bu geçici; kalıcı çözüm Passive Authentication'ın açılması.
+Bayrağı bugün açmamak hâlâ doğru: açılırsa kanıt göndermeyen her istemci `IDENTITY_EVIDENCE_REQUIRED` alır ve belge yolu henüz yokken kimse doğrulanamaz. Sıra: belge yükleme + personel kuyruğu (#193), gerçek kart çıpası (#70), sonra bayrak (#73).
 
 **Passive Authentication'dan sonra kalan artık risk.** Çip doğrulaması "kart gerçek" der, "kartı tutan kişi sahibidir" demez — onu kuran şey yüz eşleştirmesi ve o cihazda. Yani elinde **başkasının gerçek kartı** olan biri, uygulamayı değiştirerek o kimlikle kayıt olabilir. Sonucu iş değil para: alt üye işyeri **kurbanın TCKN'siyle** ama **saldırganın IBAN'ıyla** açılır.
 
@@ -2444,7 +2444,7 @@ Sürüm 1'in doğru kök olduğunun ikinci kanıtı tarihte: karttaki DS sertifi
 
 **`csca-tr-00` ve `csca-tr-03`'ün süresi 2026-07-28'de doldu.** Liste üç ayda bir güncelleniyor; `scripts/fetch-csca-anchors.sh` artık git'te. Geri alma ve tazeleme: `docs/runbooks/identity-passive-authentication.md`.
 
-**Bayrak hâlâ kapalı.** `IDENTITY_PASSIVE_AUTH_ENABLED` açılmıyor: gerçek kart dökümü (#70) ve kanıt gönderen istemci sürümü (koala#59) olmadan her doğrulama ya `UNTRUSTED_DOCUMENT_SIGNER` ya da `EVIDENCE_REQUIRED` ile durur. Test kaynakları da bayrağı açmaz. Açma ve geri alma yolu runbook'ta; geçiş kararı (mevcut `identityVerified` hesapları) hâlâ ürün tarafında, bu yüzden buraya yazılmadı.
+**Bayrak hâlâ kapalı.** `IDENTITY_PASSIVE_AUTH_ENABLED` açılmıyor: gerçek kart dökümü (#70) ve kanıt gönderen istemci sürümü (koala#59) olmadan her doğrulama ya `UNTRUSTED_DOCUMENT_SIGNER` ya da `EVIDENCE_REQUIRED` ile durur. Test kaynakları da bayrağı açmaz. Açma ve geri alma yolu runbook'ta; geçiş kararı (mevcut `identityVerified` hesapları) hâlâ ürün tarafında, bu yüzden buraya yazılmadı. Bayrak kapalıyken ürün yüzeyi belge incelemesidir (`DOCUMENT_REVIEW_REQUIRED`), beş alanlık form değil.
 
 **Gerçek kartın teşhisinden çıkan diğer cevaplar:** erişim kontrolü **BAC** (PACE şart değil), veri grupları **1, 2, 5, 11, 12, 15** (DG11 ve DG15 ikisi de var), **Active Authentication çalışıyor** (imza doğrulandı), Chip Authentication yok, LDS 1.7, bütün DG hash'leri SOD ile eşleşiyor. Yani `sod`/`dg1`/`dg11`/`dg15` zincirinin tamamı gerçek kartta karşılığını buluyor; eksik olan tek şey çıpaydı.
 

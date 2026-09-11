@@ -2,6 +2,7 @@ package com.exskylab.koala.core.constants;
 
 public class IdentityMessages {
     public static final String EVIDENCE_REQUIRED = "{identity.evidence.required}";
+    public static final String DOCUMENT_REVIEW_REQUIRED = "{identity.document.review.required}";
     public static final String NO_TRUST_ANCHORS = "{identity.no.trust.anchors}";
     public static final String SOD_UNREADABLE = "{identity.sod.unreadable}";
     public static final String SIGNATURE_INVALID = "{identity.signature.invalid}";

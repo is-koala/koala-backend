@@ -85,17 +85,24 @@ class IdentityVerificationRulesTest {
     }
 
     @Test
-    void aVerificationNoLongerDependsOnAnyExternalService() {
-        assertDoesNotThrow(() -> manager.verificateIdentityofAuthenticatedUser(request()));
+    void theFiveFieldFormIsNotAProductPathWhilePassiveAuthIsOff() {
+        ValidationException thrown = assertThrows(ValidationException.class,
+                () -> manager.verificateIdentityofAuthenticatedUser(request()));
 
-        assertTrue(current.isIdentityVerified());
-        assertEquals(TCKN, current.getTcIdentityNumber());
-        assertEquals(LocalDate.of(1998, 4, 12), current.getBirthDate());
+        assertEquals("IDENTITY_DOCUMENT_REVIEW_REQUIRED", thrown.getErrorCode());
+        assertFalse(current.isIdentityVerified());
+        verify(userDao, never()).save(any());
+        verifyNoInteractions(trustStore);
     }
 
     @Test
     void theNameIsStillCapitalisedWithTheTurkishLocale() {
-        manager.verificateIdentityofAuthenticatedUser(request());
+        PassiveAuthenticationVerifier verifier = mock(PassiveAuthenticationVerifier.class);
+        when(verifier.verify(any(), any(), any(), any())).thenReturn(new PassiveAuthenticationResult(
+                TCKN, LocalDate.of(1998, 4, 12), chipZone(), null, "CN=DS", "abc123"));
+        enablePassiveAuthentication(verifier);
+
+        manager.verificateIdentityofAuthenticatedUser(requestWithChip());
 
         assertEquals("Yusuf", current.getFirstName());
         assertEquals("Acmaci", current.getLastName());
@@ -103,17 +110,26 @@ class IdentityVerificationRulesTest {
 
     @Test
     void theDocumentNumberIsKeptAsEvidence() {
-        manager.verificateIdentityofAuthenticatedUser(request());
+        PassiveAuthenticationVerifier verifier = mock(PassiveAuthenticationVerifier.class);
+        when(verifier.verify(any(), any(), any(), any())).thenReturn(new PassiveAuthenticationResult(
+                TCKN, LocalDate.of(1998, 4, 12), chipZone(), null, "CN=DS", "abc123"));
+        enablePassiveAuthentication(verifier);
+
+        manager.verificateIdentityofAuthenticatedUser(requestWithChip());
 
         assertEquals(DOCUMENT_NO, current.getTcDocumentNumber());
     }
 
     @Test
     void anIdentityAlreadyClaimedByAnotherAccountIsRefused() {
+        PassiveAuthenticationVerifier verifier = mock(PassiveAuthenticationVerifier.class);
+        when(verifier.verify(any(), any(), any(), any())).thenReturn(new PassiveAuthenticationResult(
+                TCKN, LocalDate.of(1998, 4, 12), chipZone(), null, "CN=DS", "abc123"));
+        enablePassiveAuthentication(verifier);
         when(userDao.existsByTcIdentityNumber(TCKN)).thenReturn(true);
 
         ConflictException thrown = assertThrows(ConflictException.class,
-                () -> manager.verificateIdentityofAuthenticatedUser(request()));
+                () -> manager.verificateIdentityofAuthenticatedUser(requestWithChip()));
 
         assertEquals("TC_IDENTITY_NUMBER_ALREADY_IN_USE", thrown.getErrorCode());
         assertFalse(current.isIdentityVerified());
@@ -130,7 +146,12 @@ class IdentityVerificationRulesTest {
 
     @Test
     void theDownstreamEffectsStillFire() {
-        manager.verificateIdentityofAuthenticatedUser(request());
+        PassiveAuthenticationVerifier verifier = mock(PassiveAuthenticationVerifier.class);
+        when(verifier.verify(any(), any(), any(), any())).thenReturn(new PassiveAuthenticationResult(
+                TCKN, LocalDate.of(1998, 4, 12), chipZone(), null, "CN=DS", "abc123"));
+        enablePassiveAuthentication(verifier);
+
+        manager.verificateIdentityofAuthenticatedUser(requestWithChip());
 
         verify(badgeService).evaluate(current.getId());
         verify(notifications).identityVerified(current);
@@ -162,10 +183,13 @@ class IdentityVerificationRulesTest {
     }
 
     @Test
-    void withThePassiveGateOffTheChipEvidenceIsNotRequired() {
-        assertDoesNotThrow(() -> manager.verificateIdentityofAuthenticatedUser(request()));
+    void withThePassiveGateOffChipEvidenceDoesNotStampIdentityEither() {
+        ValidationException thrown = assertThrows(ValidationException.class,
+                () -> manager.verificateIdentityofAuthenticatedUser(requestWithChip()));
 
-        assertTrue(current.isIdentityVerified());
+        assertEquals("IDENTITY_DOCUMENT_REVIEW_REQUIRED", thrown.getErrorCode());
+        assertFalse(current.isIdentityVerified());
+        verify(userDao, never()).save(any());
         verifyNoInteractions(trustStore);
     }
 
