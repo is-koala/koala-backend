@@ -13,6 +13,7 @@ public class DisputeMessages {
     public static final String OPENED = "{dispute.opened}";
     public static final String RESOLVED = "{dispute.resolved}";
     public static final String LISTED = "{dispute.listed}";
+    public static final String FETCHED = "{dispute.fetched}";
     public static final String EVIDENCE_EMPTY = "{dispute.evidence.empty}";
     public static final String EVIDENCE_TOO_LARGE = "{dispute.evidence.too.large}";
     public static final String EVIDENCE_LIMIT_REACHED = "{dispute.evidence.limit.reached}";
