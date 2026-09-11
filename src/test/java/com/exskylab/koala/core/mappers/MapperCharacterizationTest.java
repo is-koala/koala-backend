@@ -258,6 +258,8 @@ class MapperCharacterizationTest {
         job.setDressCode("Siyah pantolon");
         job.setMinAge(18);
         job.setMaxAge(40);
+        job.setInsuranceRequired(true);
+        job.setExperienceRequired(false);
 
         var dto = jobMapper.toJobDetailDto(job);
 
@@ -266,6 +268,8 @@ class MapperCharacterizationTest {
         assertEquals("Siyah pantolon", dto.getDressCode());
         assertEquals(18, dto.getMinAge());
         assertEquals(40, dto.getMaxAge());
+        assertEquals(Boolean.TRUE, dto.getInsuranceRequired());
+        assertEquals(Boolean.FALSE, dto.getExperienceRequired());
         assertNotNull(dto.getAddress());
         assertEquals("Kadikoy", dto.getAddress().getDistrictName());
         assertNotNull(dto.getCategory());

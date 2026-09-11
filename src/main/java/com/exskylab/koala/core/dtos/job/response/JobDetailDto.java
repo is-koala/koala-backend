@@ -42,10 +42,10 @@ public class JobDetailDto {
     private SalaryType salaryType;
     private BigDecimal salary;
     private PricingBreakdownDto pricing;
-    private int minAge;
-    private int maxAge;
-    private boolean insuranceRequired;
-    private boolean experienceRequired;
+    private Integer minAge;
+    private Integer maxAge;
+    private Boolean insuranceRequired;
+    private Boolean experienceRequired;
     private LocalDateTime startDateTime;
     private LocalDateTime endDateTime;
     private JobStatus status;

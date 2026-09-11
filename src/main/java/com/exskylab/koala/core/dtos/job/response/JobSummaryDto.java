@@ -34,8 +34,8 @@ public class JobSummaryDto {
     private SalaryType salaryType;
     private BigDecimal salary;
     private PricingBreakdownDto pricing;
-    private boolean insuranceRequired;
-    private boolean experienceRequired;
+    private Boolean insuranceRequired;
+    private Boolean experienceRequired;
     private LocalDateTime startDateTime;
     private LocalDateTime endDateTime;
     private JobStatus status;

@@ -45,7 +45,7 @@ public class CompanyJobDto {
 
     private String duties;
 
-    private boolean insuranceRequired;
+    private Boolean insuranceRequired;
 
     private AddressDto address;
 
@@ -63,11 +63,11 @@ public class CompanyJobDto {
 
     private PricingBreakdownDto pricing;
 
-    private int minAge;
+    private Integer minAge;
 
-    private int maxAge;
+    private Integer maxAge;
 
-    private boolean experienceRequired;
+    private Boolean experienceRequired;
 
     private String dressCode;
 
