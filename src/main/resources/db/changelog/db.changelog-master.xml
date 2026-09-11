@@ -85,4 +85,5 @@
     <include file="db/changelog/2026/09/09-02-sitemap-manifest.xml"/>
     <include file="db/changelog/2026/09/09-02-firebase-push-delivery.xml"/>
     <include file="db/changelog/2026/09/09-03-notification-dispatch-outbox.xml"/>
+    <include file="db/changelog/2026/09/11-01-company-field-width.xml"/>
 </databaseChangeLog>

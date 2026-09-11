@@ -877,6 +877,8 @@ değişkenleri `SITEMAP_MANIFEST_*` altındadır.
 
 **ADR-0008 ile bir tutarsızlık kaldı.** ADR metni "yalnız referans verisiyle gelir" listesinde **iş kategorilerini** sayıyor; bu slice o maddeyi geçersiz kılıyor. ADR'ler düzeltilmiyor, üstüne yazılıyor (ADR-0008 de ADR-0001'in seed maddesinin yerine geçmişti) — maddeyi devralacak bir ADR yazılması bekliyor.
 
+**Şirket `website` ve `description` sütunları DTO vaadiyle aynı genişlikte (is-koala/koala-backend#117).** `UpdateCompanyRequestDto` `website`'ı 512, `description`'ı 4000 kabul ediyordu; `companies` sütunları `VARCHAR(255)` idi. Doğrulama geçiyor, `INSERT`/`UPDATE` 500 veriyordu. **Yön (a): sütunlar genişletildi**, çünkü 255 karakterlik bir şirket açıklaması pazaryeri için dar ve DTO zaten 4000 vaat ediyordu; sözleşmeyi küçültmek (b) kırıcı olurdu. `CreateCompanyRequestDto` aynı tavanı taşımıyordu — oluşturma yolu aynı 500'ü üretebilirdi — `@Size` oraya da yazıldı. `CompanyFieldWidthRulesTest` tavanları DTO ve `@Column(length)` üzerinden bağlıyor.
+
 **Profil yüzeyi `/users/me` üzerinden okunur.** Yazılıp geri okunamayan üç alan kapatıldı: `experiences`, `maskedIban` (`TR33***4444` — tam IBAN dönmüyor) ve yeni `cvUrl`. Ayrıca `jobTitle` (meslek/ünvan) eklendi ve `educations` yanıta girdi.
 
 **Telefon değişikliği artık sessizce yutulmuyor.** `patchCurrentUser` içindeki blok boştu, yalnızca bir `//TODO` vardı — istek 200 dönüyor, numara değişmiyordu. Şimdi e-posta ile aynı desende: `phoneVerificationService.startPhoneVerification` çağrılıyor, numara **doğrulama tamamlanana kadar uygulanmıyor**, yanıttaki `pendingVerifications` içine `PHONE` girdisi düşüyor. Aynı numara gönderilirse hiçbir şey başlatılmaz. `UserPatchRulesTest` bunu sabitliyor.

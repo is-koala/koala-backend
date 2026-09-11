@@ -41,10 +41,10 @@ public class Company extends BaseEntity{
     @JoinColumn(name = "logo_id", referencedColumnName = "id")
     private Image logo;
 
-    @Column(name = "website")
+    @Column(name = "website", length = 512)
     private String website;
 
-    @Column(name = "description")
+    @Column(name = "description", length = 4000)
     private String description;
 
     @OneToOne(cascade = CascadeType.ALL, orphanRemoval = true)

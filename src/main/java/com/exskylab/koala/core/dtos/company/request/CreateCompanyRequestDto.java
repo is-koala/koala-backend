@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -34,8 +35,10 @@ public class CreateCompanyRequestDto {
     @NotBlank(message = CompanyMessages.COMPANY_PHONE_NUMBER_NOT_BLANK)
     private String phoneNumber;
 
+    @Size(max = 512)
     private String website;
 
+    @Size(max = 4000)
     private String description;
 
     @NotBlank(message = CompanyMessages.COMPANY_TAX_NUMBER_NOT_BLANK)

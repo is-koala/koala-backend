@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-11-01-company-website-description-width" author="koala">
+        <modifyDataType tableName="companies" columnName="website" newDataType="VARCHAR(512)"/>
+        <modifyDataType tableName="companies" columnName="description" newDataType="VARCHAR(4000)"/>
+        <rollback>
+            <modifyDataType tableName="companies" columnName="website" newDataType="VARCHAR(255)"/>
+            <modifyDataType tableName="companies" columnName="description" newDataType="VARCHAR(255)"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>
