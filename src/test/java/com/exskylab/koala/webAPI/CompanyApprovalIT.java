@@ -77,6 +77,8 @@ class CompanyApprovalIT extends AbstractStaffIntegrationTest {
 
         jdbcTemplate.update("delete from company_contacts where company_id in "
                 + "(select id from companies where tax_number like ?)", TAX_PREFIX + "%");
+        jdbcTemplate.update("delete from company_images where company_id in "
+                + "(select id from companies where tax_number like ?)", TAX_PREFIX + "%");
         jdbcTemplate.update("delete from companies where tax_number like ?", TAX_PREFIX + "%");
         jdbcTemplate.update("delete from notifications where recipient_id = ?", founder.getId());
         jdbcTemplate.update("delete from admin_audit_entries");
@@ -279,5 +281,65 @@ class CompanyApprovalIT extends AbstractStaffIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.approvalStatus").value("REJECTED"))
                 .andExpect(jsonPath("$.data.approvalNote").doesNotExist());
+    }
+
+    @Test
+    void theQueueCarriesTheRegisteredAddressAndGalleryImageIdsNotStorageKeys() throws Exception {
+        Company company = pendingCompany("Adresli Galeri Ltd.", "6200000012");
+        UUID countryId = UUID.randomUUID();
+        UUID cityId = UUID.randomUUID();
+        UUID districtId = UUID.randomUUID();
+        UUID addressId = UUID.randomUUID();
+        UUID imageId = UUID.randomUUID();
+        UUID galleryRowId = UUID.randomUUID();
+        jdbcTemplate.update("insert into countries (id, created_at, is_deleted, name, code) values (?, now(), false, ?, ?)",
+                countryId, "Türkiye", "TR");
+        jdbcTemplate.update("insert into cities (id, created_at, is_deleted, name, country_id) values (?, now(), false, ?, ?)",
+                cityId, "İstanbul", countryId);
+        jdbcTemplate.update("insert into districts (id, created_at, is_deleted, name, city_id) values (?, now(), false, ?, ?)",
+                districtId, "Kadıköy", cityId);
+        jdbcTemplate.update("insert into addresses (id, created_at, is_deleted, country_id, city_id, district_id, "
+                        + "neighborhood, thoroughfare, building_number, canonical_version, needs_review) "
+                        + "values (?, now(), false, ?, ?, ?, ?, ?, ?, 1, false)",
+                addressId, countryId, cityId, districtId, "Moda", "Caferağa Sokak", "12");
+        jdbcTemplate.update("update companies set address_id = ? where id = ?", addressId, company.getId());
+        jdbcTemplate.update("insert into media (id, created_at, media_type, file_name, file_type, file_url, file_size) "
+                        + "values (?, now(), 'IMAGE', 'vitrin.jpg', 'image/jpeg', ?, 2048)",
+                imageId, "companies/" + imageId + ".jpg");
+        jdbcTemplate.update("insert into company_images (id, created_at, is_deleted, company_id, image_id, "
+                        + "sort_order, is_cover) values (?, now(), false, ?, ?, 0, true)",
+                galleryRowId, company.getId(), imageId);
+
+        asOperator(get("/admin/companies").param("query", "6200000012"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content[0].address.cityName").value("İstanbul"))
+                .andExpect(jsonPath("$.data.content[0].address.displayAddress").isNotEmpty())
+                .andExpect(jsonPath("$.data.content[0].galleryImageIds[0]").value(imageId.toString()))
+                .andExpect(jsonPath("$.data.content[0].fileUrl").doesNotExist())
+                .andExpect(jsonPath("$.data.content[0].storageKey").doesNotExist());
+
+        jdbcTemplate.update("delete from company_images where id = ?", galleryRowId);
+        jdbcTemplate.update("delete from media where id = ?", imageId);
+        jdbcTemplate.update("update companies set address_id = null where id = ?", company.getId());
+        jdbcTemplate.update("delete from addresses where id = ?", addressId);
+        jdbcTemplate.update("delete from districts where id = ?", districtId);
+        jdbcTemplate.update("delete from cities where id = ?", cityId);
+        jdbcTemplate.update("delete from countries where id = ?", countryId);
+    }
+
+    @Test
+    void aMissingGalleryImageIsNotFoundAndFinanceCannotDownload() throws Exception {
+        Company company = pendingCompany("İndirilemez Ltd.", "6200000013");
+        UUID missingImage = UUID.randomUUID();
+
+        asOperator(get("/admin/companies/" + company.getId() + "/images/" + missingImage + "/download"))
+                .andExpect(status().isNotFound());
+
+        String financeToken = staffTokenFor("company-approval-finance-" + UUID.randomUUID() + "@iskoala.com",
+                "Finans", "FINANCE_ANALYST");
+        mockMvc.perform(get("/admin/companies/" + company.getId() + "/images/" + missingImage + "/download")
+                        .header("Authorization", "Bearer " + financeToken))
+                .andExpect(status().isForbidden());
     }
 }

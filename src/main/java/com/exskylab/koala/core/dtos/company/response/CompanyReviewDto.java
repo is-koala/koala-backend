@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.dtos.company.response;
 
+import com.exskylab.koala.core.dtos.address.response.AddressDto;
 import com.exskylab.koala.core.dtos.user.response.SafeUserDto;
 import com.exskylab.koala.entities.CompanyApprovalStatus;
 import com.exskylab.koala.entities.CompanyType;
@@ -9,6 +10,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Getter
@@ -40,5 +42,9 @@ public class CompanyReviewDto {
     private Instant createdAt;
 
     private SafeUserDto createdBy;
+
+    private AddressDto address;
+
+    private List<UUID> galleryImageIds;
 
 }

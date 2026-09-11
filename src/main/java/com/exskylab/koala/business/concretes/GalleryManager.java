@@ -258,6 +258,14 @@ public class GalleryManager implements GalleryService {
                 imageId, jobEntries.size(), companyEntries.size());
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public Image getCompanyImageForStaffDownload(UUID companyId, UUID imageId) {
+        CompanyImage entry = companyImageDao.findByCompanyIdAndImageId(companyId, imageId)
+                .orElseThrow(() -> new ResourceNotFoundException(GalleryMessages.IMAGE_NOT_IN_GALLERY));
+        return entry.getImage();
+    }
+
     private List<GalleryImageEntryDto> requestedEntries(UpdateGalleryDto request, Set<UUID> selectableImageIds) {
         List<GalleryImageEntryDto> requested = request.getImages();
 

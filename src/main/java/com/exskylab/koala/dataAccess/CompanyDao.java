@@ -18,7 +18,11 @@ public interface CompanyDao extends JpaRepository<Company, UUID> {
 
     Optional<Company> findById(UUID id);
 
-    @EntityGraph(attributePaths = {"createdBy", "createdBy.profilePicture"})
+    @EntityGraph(attributePaths = {
+            "createdBy", "createdBy.profilePicture", "logo",
+            "address", "address.country", "address.city", "address.district", "address.city.country",
+            "images", "images.image"
+    })
     @Query("""
             select c from Company c
             where c.approvalStatus = :status
