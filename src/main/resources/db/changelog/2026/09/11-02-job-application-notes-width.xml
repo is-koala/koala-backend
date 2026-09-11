@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-11-02-job-application-notes-width" author="koala">
+        <modifyDataType tableName="job_applications" columnName="notes" newDataType="VARCHAR(2000)"/>
+        <rollback>
+            <modifyDataType tableName="job_applications" columnName="notes" newDataType="VARCHAR(255)"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

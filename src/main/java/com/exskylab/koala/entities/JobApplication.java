@@ -40,7 +40,7 @@ public class JobApplication extends BaseEntity{
     @Enumerated(EnumType.STRING)
     private ApplicationStatus status;
 
-    @Column(name = "notes")
+    @Column(name = "notes", length = 2000)
     private String notes;
 
     @Column(name = "rejection_reason")
