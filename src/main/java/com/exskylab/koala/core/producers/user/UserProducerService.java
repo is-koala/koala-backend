@@ -4,7 +4,6 @@ import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.business.abstracts.UserProfileSyncService;
 import com.exskylab.koala.core.helpers.AddressFormatter;
-import com.exskylab.koala.entities.BankAccount;
 import com.exskylab.koala.entities.User;
 import org.springframework.stereotype.Service;
 
@@ -39,9 +38,7 @@ public class UserProducerService {
         eventDto.setEmail(updatedUser.getEmail());
         eventDto.setGsmNumber(updatedUser.getPhoneNumber());
         eventDto.setAddress(fullAddress);
-        eventDto.setIban(bankAccountService.findVerifiedPrimaryAccount(updatedUser.getId())
-                .map(BankAccount::getIban)
-                .orElse(null));
+        eventDto.setIban(bankAccountService.findPrimaryIban(updatedUser.getId()).orElse(null));
         eventDto.setIdentityNumber(updatedUser.getTcIdentityNumber());
         eventDto.setIyzicoSubMerchantKey(updatedUser.getIyzicoSubmerchantKey());
 

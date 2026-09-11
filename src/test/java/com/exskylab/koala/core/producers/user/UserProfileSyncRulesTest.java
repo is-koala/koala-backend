@@ -57,10 +57,10 @@ class UserProfileSyncRulesTest {
     }
 
     @Test
-    void anUnverifiedIbanIsWithheldFromTheProviderQueue() {
+    void anUnverifiedIbanIsSynchronizedToTheProvider() {
         givenPrimaryAccount(unverifiedAccount(VERIFIED_IBAN));
 
-        assertNull(publishProfileUpdate().getIban());
+        assertEquals(VERIFIED_IBAN, publishProfileUpdate().getIban());
     }
 
     @Test
@@ -71,12 +71,12 @@ class UserProfileSyncRulesTest {
     }
 
     @Test
-    void aNewIbanIsWithheldUntilItIsVerifiedItself() {
+    void aNewIbanIsSynchronizedEvenBeforeOwnershipIsProven() {
         BankAccount account = verifiedAccount(VERIFIED_IBAN);
         account.setIban(REPLACEMENT_IBAN);
         givenPrimaryAccount(account);
 
-        assertNull(publishProfileUpdate().getIban());
+        assertEquals(REPLACEMENT_IBAN, publishProfileUpdate().getIban());
     }
 
     @Test
@@ -85,12 +85,12 @@ class UserProfileSyncRulesTest {
     }
 
     @Test
-    void theRestOfTheProfileIsSynchronizedEvenWhenTheIbanIsWithheld() {
+    void theRestOfTheProfileIsSynchronizedAlongsideThePrimaryIban() {
         givenPrimaryAccount(unverifiedAccount(VERIFIED_IBAN));
 
         UserUpdatedEventDto event = publishProfileUpdate();
 
-        assertNull(event.getIban());
+        assertEquals(VERIFIED_IBAN, event.getIban());
         assertProfileFieldsPresent(event);
     }
 
