@@ -3,6 +3,7 @@ package com.exskylab.koala.core.operations;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -60,17 +61,27 @@ class GithubActionsWorkflowContractTest {
     void keepsPullRequestsReadOnlyAndDeploysOnlyVersionTags() throws IOException {
         String workflow = workflow();
         Map<?, ?> jobs = jobs();
+        Map<?, ?> concurrency = concurrency();
 
         assertAll(
                 () -> assertTrue(workflow.contains("pull_request:\n    branches: [main]")),
-                () -> assertEquals("test", job(jobs, "build").get("needs")),
+                () -> assertTrue(workflow.contains("workflow_dispatch:")),
+                () -> assertEquals(
+                        "github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'",
+                        job(jobs, "test").get("if")),
+                () -> assertNull(job(jobs, "build").get("needs")),
                 () -> assertEquals("github.event_name == 'push'", job(jobs, "build").get("if")),
                 () -> assertTrue(workflow.contains("VERSION=main-${GITHUB_SHA::7}")),
                 () -> assertTrue(workflow.contains("refs/tags/v")),
                 () -> assertTrue(workflow.contains("koala:latest")),
                 () -> assertEquals("build", job(jobs, "deploy").get("needs")),
                 () -> assertEquals(
-                        "startsWith(github.ref, 'refs/tags/v')", job(jobs, "deploy").get("if")));
+                        "startsWith(github.ref, 'refs/tags/v')", job(jobs, "deploy").get("if")),
+                () -> assertEquals(
+                        "ci-${{ github.workflow }}-${{ github.ref }}", concurrency.get("group")),
+                () -> assertEquals(
+                        "${{ github.event_name == 'pull_request' }}",
+                        concurrency.get("cancel-in-progress")));
     }
 
     private static String workflow() throws IOException {
@@ -93,9 +104,16 @@ class GithubActionsWorkflowContractTest {
     }
 
     private static Map<?, ?> jobs() throws IOException {
+        return assertInstanceOf(Map.class, root().get("jobs"));
+    }
+
+    private static Map<?, ?> concurrency() throws IOException {
+        return assertInstanceOf(Map.class, root().get("concurrency"));
+    }
+
+    private static Map<?, ?> root() throws IOException {
         try (InputStream input = Files.newInputStream(WORKFLOW)) {
-            Map<?, ?> root = assertInstanceOf(Map.class, new Yaml().load(input));
-            return assertInstanceOf(Map.class, root.get("jobs"));
+            return assertInstanceOf(Map.class, new Yaml().load(input));
         }
     }
 
