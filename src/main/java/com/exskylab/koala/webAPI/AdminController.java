@@ -97,6 +97,21 @@ public class AdminController {
         this.signedFileResponses = signedFileResponses;
     }
 
+    @Operation(summary = "Atama kuyruğu",
+            description = "Son atamaları sayfalar. Yanıt AdminAssignmentDto'dur; UUID bakışı ile aynı SafeUser ve fiyat dökümü. Emanet kuralları değişmez.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Atamalar listelendi")
+    })
+    @RequiresPermission(StaffPermission.PAYMENT_READ)
+    @GetMapping("/job-assignments")
+    public ResponseEntity<SuccessDataResult<PageDto<AdminAssignmentDto>>> assignments(
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
+        var page = jobAssignmentService.listForStaff(pageable);
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                PageDto.of(page, page.getContent()),
+                AdminMessages.ASSIGNMENTS_LISTED, HttpStatus.OK));
+    }
+
     @Operation(summary = "Atama özeti",
             description = "Uyuşmazlık ve emanet ekranlarının ihtiyaç duyduğu okuma: taraflar, atama ve ödeme durumu, fiyat dökümü. Emanetteki tutar finansal veridir; uç payment.read ile korunur.")
     @ApiResponses({
