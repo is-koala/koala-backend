@@ -6,6 +6,7 @@ import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
 @Component
@@ -21,21 +22,25 @@ public class ConfirmedRabbitPublisher {
     }
 
     public void convertAndPublish(String exchange, String routingKey, Object payload) {
+        convertAndPublish(exchange, routingKey, payload, dispatchProperties.getPublisherConfirmTimeout());
+    }
+
+    public void convertAndPublish(String exchange, String routingKey, Object payload, Duration confirmTimeout) {
         CorrelationData correlation = new CorrelationData();
         rabbitTemplate.convertAndSend(exchange, routingKey, payload, correlation);
-        awaitRoutedConfirmation(correlation);
+        awaitRoutedConfirmation(correlation, confirmTimeout);
     }
 
     public void publish(String exchange, String routingKey, Message message) {
         CorrelationData correlation = new CorrelationData();
         rabbitTemplate.send(exchange, routingKey, message, correlation);
-        awaitRoutedConfirmation(correlation);
+        awaitRoutedConfirmation(correlation, dispatchProperties.getPublisherConfirmTimeout());
     }
 
-    private void awaitRoutedConfirmation(CorrelationData correlation) {
+    private void awaitRoutedConfirmation(CorrelationData correlation, Duration confirmTimeout) {
         try {
             CorrelationData.Confirm confirm = correlation.getFuture().get(
-                    dispatchProperties.getPublisherConfirmTimeout().toMillis(), TimeUnit.MILLISECONDS);
+                    confirmTimeout.toMillis(), TimeUnit.MILLISECONDS);
             if (!confirm.ack() || correlation.getReturned() != null) {
                 throw new IllegalStateException("Rabbit publish was not confirmed and routed");
             }

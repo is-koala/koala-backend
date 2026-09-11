@@ -149,6 +149,53 @@ class OperationalRunbookContractTest {
     }
 
     @Test
+    void userProfileSyncBacklogHasABoundedAlertAndDocumentedResponse() throws Exception {
+        String rule = alertRule("KoalaUserProfileSyncBacklog");
+
+        assertAll(
+                () -> assertTrue(rule.contains("expr: max(koala_user_profile_sync_backlog) > 100")),
+                () -> assertTrue(rule.contains("for: 10m")),
+                () -> assertTrue(rule.contains("severity: warning")),
+                () -> assertTrue(rule.contains("owner: payments")));
+
+        String responses = Files.readString(Path.of("docs/runbooks/alerts.md"));
+        assertTrue(responses.contains("`KoalaUserProfileSyncBacklog`"),
+                "Profil senkron backlog alarminin ilk mudahalesi alerts.md'de yazili olmali.");
+    }
+
+    @Test
+    void oldestUserProfileSyncAgeHasABoundedAlertAndDocumentedResponse() throws Exception {
+        String rule = alertRule("KoalaUserProfileSyncOldestAge");
+
+        assertAll(
+                () -> assertTrue(rule.contains(
+                        "expr: max(koala_user_profile_sync_oldest_age_seconds) > 600")),
+                () -> assertTrue(rule.contains("for: 5m")),
+                () -> assertTrue(rule.contains("severity: critical")),
+                () -> assertTrue(rule.contains("owner: payments")));
+
+        String responses = Files.readString(Path.of("docs/runbooks/alerts.md"));
+        assertTrue(responses.contains("`KoalaUserProfileSyncOldestAge`"),
+                "Profil senkron yas alarminin ilk mudahalesi alerts.md'de yazili olmali.");
+    }
+
+    @Test
+    void terminalUserProfileSyncBrokerFailuresHaveAnImmediateAlertAndDocumentedResponse() throws Exception {
+        String rule = alertRule("KoalaUserProfileSyncTerminalBrokerFailure");
+
+        assertAll(
+                () -> assertTrue(rule.contains(
+                        "expr: max(koala_user_profile_sync_terminal_broker_failures) > 0")),
+                () -> assertTrue(rule.contains("for: 1m")),
+                () -> assertTrue(rule.contains("severity: critical")),
+                () -> assertTrue(rule.contains("owner: payments")));
+
+        String responses = Files.readString(Path.of("docs/runbooks/alerts.md"));
+        assertTrue(responses.contains("`KoalaUserProfileSyncTerminalBrokerFailure`"),
+                "Profil senkron terminal broker hatasi alarminin ilk mudahalesi alerts.md'de yazili olmali.");
+    }
+
+    @Test
     void parkedNotificationDeliveriesHaveAnImmediateAlertAndDocumentedResponse() throws Exception {
         String rule = alertRule("KoalaNotificationDeliveryParkingQueue");
 

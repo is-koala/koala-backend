@@ -87,4 +87,5 @@
     <include file="db/changelog/2026/09/09-03-notification-dispatch-outbox.xml"/>
     <include file="db/changelog/2026/09/11-01-company-field-width.xml"/>
     <include file="db/changelog/2026/09/11-02-job-application-notes-width.xml"/>
+    <include file="db/changelog/2026/09/11-03-user-profile-sync-outbox.xml"/>
 </databaseChangeLog>

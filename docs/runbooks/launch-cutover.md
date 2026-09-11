@@ -114,8 +114,9 @@ RabbitMQ producer/consumer'ları ve outbox worker'ları susar. Servisi durdurmad
 önce gerçek topolojideki `email.queue`, `sms.queue`, `push.queue`,
 `user.profile.updated.for.sync.queue` ve `email.queue.dlq` sayılarını kaydet.
 Finansal retry RabbitMQ kuyruğu değildir; `settlement_tasks` database outbox'ının
-bekleyen/işlenen/başarısız satırları ayrıca kaydedilir. `iys_consent_tasks` ve
-`account_media_deletion_outbox` için de durum/satır sayısı kanıta eklenir. Devam
+bekleyen/işlenen/başarısız satırları ayrıca kaydedilir. `iys_consent_tasks`,
+`account_media_deletion_outbox` ve `user_profile_sync_outbox` için de durum/satır
+sayısı kanıta eklenir. Devam
 eden ödeme veya iade varsa geçişi ertele; mesajları purge etme ve yeni vhost'a
 replay etme. Servis durduktan sonra gözlem penceresi boyunca veritabanı audit/WAL
 kanıtında sıfır yeni uygulama yazımı olduğunu doğrula, sonra ayrı bir **legacy
@@ -225,7 +226,7 @@ hedefli ve onaylı bir değişiklik olur.
 | --- | --- |
 | Kapsam | Değişiklik kaydı, kaynak kimlikleri, iki onaylayan, rollback sahibi |
 | Backup/restore | Pre-cutover backup ve restore kanıt kimlikleri, checksum, RPO/RTO, anonim sayımlar |
-| Sessiz nokta | Maintenance zamanı, tam legacy servis duruşu, kuyruk/DLQ ile `settlement_tasks`/`iys_consent_tasks`/`account_media_deletion_outbox` sayıları, sıfır yeni DB yazımı ve legacy quiet-point backup kimliği |
+| Sessiz nokta | Maintenance zamanı, tam legacy servis duruşu, kuyruk/DLQ ile `settlement_tasks`/`iys_consent_tasks`/`account_media_deletion_outbox`/`user_profile_sync_outbox` sayıları, sıfır yeni DB yazımı ve legacy quiet-point backup kimliği |
 | Temiz açılış | Image digest, Liquibase sonucu, yalnız SYSTEM kullanıcısı, seed yokluğu, clean production baseline backup kimliği |
 | SMTP | Allowlist teslimi+bastırma, ayrı UNRESTRICTED onayı+uygulama+teslim kanıtı |
 | iyzico | Live hesap/URL doğrulaması, ayrı ödeme sahibi onayı |
