@@ -103,8 +103,7 @@ class PasswordPolicyTest {
 
     @Test
     void theCatalogsStillDescribeTheRuleTheValidatorEnforces() throws IOException {
-        for (String file : new String[]{"messages.properties", "messages_tr.properties",
-                "messages_en.properties"}) {
+        for (String file : new String[]{"messages_tr.properties", "messages_en.properties"}) {
             String message = load(file).getProperty("user.password.policy");
 
             assertTrue(message != null, file + " icinde user.password.policy yok");

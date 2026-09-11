@@ -3480,18 +3480,20 @@ kırmızıya döndü.
 
 Bu depodaki yapısal korumaların hepsi kaynağı **düz metin** tarıyor, yani her biri yalnızca tanıdığı yazımı koruyor; tanımadığı yazım geriye korunduğu sanılan bir alan bırakır ve bu, hiç koruma olmamasından kötüdür. #72 kapsamında altısı aynı gözle tarandı. **Aşağıdakilerin hiçbiri bugün canlı bir güvenlik ya da veri hatası değil** — mekanizma olarak duruyorlar; düzeltmeleri ayrı issue'lara ait.
 
-| Koruma | Görmediği yazım | Bugün canlı örneği var mı |
+| Koruma | Görmediği yazım (taramada, #88 öncesi) | #88 sonrası |
 |---|---|---|
-| `MessageCatalogTest` | yalnız **kullanılan → var** yönüne bakıyor, **var → kullanılıyor** yönüne bakmıyor | **evet:** `device.not.found.by.user.and.user.agent` üç katalogda da duruyor, koddan çağıranı yok — yerini `DeviceMessages.DEVICE_NOT_FOUND` = `{device.not.found}` almış |
-| `MessageCatalogTest` | `theTwoCatalogsCoverExactlyTheSameKeys` **iki** katalog karşılaştırıyor, oysa üç dosya var: varsayılan `messages.properties` 340 anahtarda kalmış, tr/en 630 | evet ama erişilemez: `AcceptHeaderLocaleResolver` yalnız `en`/`tr` destekliyor ve varsayılanı `tr` — dosya ölü ağırlık |
-| `MessageCatalogTest` | `KEY` deseni yalnız tam literal `"{anahtar}"` biçimini tanıyor; birleştirmeyle kurulan bir anahtar görünmez | hayır — bugün her anahtar literal |
-| `LogPrivacyTest` | `LOG_CALL` yalnız `log.` alıcısını tanıyor; elle `LoggerFactory` ile alınmış bir logger'ın çağrıları görünmez. §1 bunu yasaklıyor ama yasağı zorlayan test yok | hayır |
-| `PageableSortSafetyTest` | imza deseni `)\s*\{` istiyor, yani `throws` yan tümcesi taşıyan sayfalı bir metot hiç taranmaz. Gövde penceresi 900 karakterde sabit ve **sonraki metoda taşabiliyor**: sanitize etmeyen bir metot, pencereye giren başka bir metot sanitize ediyorsa yeşil kalır | hayır (19 sayfalı metot, `throws` yok, taşma yok) |
-| `SoftDeleteCoverageTest` | `theExclusionListStaysHonest` yalnız `HARD_DELETE_BY_DESIGN` listesini denetliyor; `NOT_AUDITED` ve `INHERITS_FROM_ROOT` listeleri denetimsiz | **evet:** `CompanyContact` `NOT_AUDITED` içinde ama bugün `BaseEntity`'yi genişletiyor **ve** `@SQLDelete` taşıyor — muafiyet bayat, üstelik biri `@SQLDelete`'ini silse test bunu göremez |
-| `AggregateBoundaryTest` | sınırı **tip adıyla** buluyor (`\w+Dao`); `EntityManager` üzerinden ya da `Dao` ile bitmeyen bir repository ile başka aggregate'e uzanmak görünmez | hayır — `CompanyManager`'daki `EntityManager` yalnız `flush`/`clear` için |
-| `EagerFetchCoverageIT` | yalnızca **zaten `@EntityGraph` taşıyan** metotları inceliyor; hiç graph'ı olmayan bir koleksiyon sorgusu denetimin görüş alanına hiç girmez, yani denetim ancak gönüllü olana bakıyor | mekanizma: graph'ı olmayan koleksiyon sorguları hiç sayılmıyor, denetim yalnız kendini gösterene bakıyor |
+| `MessageCatalogTest` | yalnız **kullanılan → var**; öksüz `device.not.found.by.user.and.user.agent` | **var → kullanılıyor** yönü `unusedKeysAreReportedAndOnlyTheDocumentedOnesRemain`; öksüz anahtar silindi; kalan dördü allowlist'te (silinmedi) |
+| `MessageCatalogTest` | varsayılan `messages.properties` yarım ve denetlenmiyordu | **kaldırıldı** (seçenek b). `AcceptHeaderLocaleResolver` zaten `tr` varsayılan; üçüncü dil eklenince `messages_xx` yazılır, yarım ROOT katalog açılmaz |
+| `MessageCatalogTest` | `KEY` deseni yalnız tam literal `"{anahtar}"` | aynı — bugün her anahtar literal; kapatılamadı çünkü birleştirmeli anahtar yok, sentetik vaka üretmek üretimi değiştirirdi |
+| `LogPrivacyTest` | `LOG_CALL` yalnız `log.` alıcısı | `accessLog`/`logger`/`LOGGER` de taranıyor; tanınmayan `Logger` alan adı testi kırar; `"..." + email` birleştirmesi argüman |
+| `PageableSortSafetyTest` | `)\s*\{` `throws`'u kaçırır; 900 karakterlik gövde sonraki metoda taşar | imza `throws` kabul eder; gövde eşleşen suslu parantez; iki meta-vaka |
+| `SoftDeleteCoverageTest` | `theExclusionListStaysHonest` yalnız `HARD_DELETE_BY_DESIGN` | üç grup da denetleniyor; `CompanyContact` muafiyetten çıktı; bayat `NOT_AUDITED` sentetik vakası kırmızıya döner |
+| `AggregateBoundaryTest` | yalnız `\w+Dao`; `EntityManager` persist görünmez | `\w+(Dao\|Repository)`; `flush`/`clear` hariç `entityManager.*(` sınır ihlali; iki meta-vaka |
+| `EagerFetchCoverageIT` | yalnız grafı **olan** metotlar | `CollectionQueryWithoutGraphTest` grafı olmayan koleksiyon sorgularını allowlist'e kilitler; IT'nin lazy-companion kuralı aynı |
 
-Öksüz mesaj anahtarları **raporlanıyor, silinmiyor.** Bir anahtar koddan değil `messages_*.properties` içindeki başka bir mesajdan ya da bir DTO anotasyonundan dolaylı çağrılıyor olabilir; present→used taraması bu yüzden önce aday listesi üretmeli. Tek adayın (`device.not.found.by.user.and.user.agent`) temizliği de bu PR'a alınmadı — koruma yönünü eklemek testin kendisini değiştirmek demek ve ayrı bir issue'yu hak ediyor.
+Öksüz mesaj anahtarları **raporlanıyor, silinmiyor** — allowlist `MessageCatalogTest.DOCUMENTED_UNUSED_KEYS`. `device.not.found.by.user.and.user.agent` bunun istisnası: çağıranı yoktu, yerini `{device.not.found}` almıştı, silindi.
+
+**Varsayılan katalog kararı (b).** `messages.properties` ROOT düşümüydü ve tr/en'in yarısıydı. Senkron tutmak (a) her anahtarı üç dosyaya yazdırırdı; yarım bırakmak üçüncü dilde sessizce anahtara düşerdi. Dosya silindi, varsayılan locale zaten `tr` (`MultiLanguageSupportConfig`).
 
 **Faz 11A/11B testleri.** `AutoCompletionRulesTest` (vadesi geleni tamamlar ve emaneti çıkarır, açık uyuşmazlıkta durur, emanette para yoksa dokunmaz, ikinci koşu zararsız, bir atamadaki hata partiyi düşürmez) ve `SettlementRetryTest` (kuyruğa alma idempotan, geri çekilme üstel ve tavanlı, deneme limitinde durur, başarıda `Payout` `PROCESSING`'e geçer).
 
