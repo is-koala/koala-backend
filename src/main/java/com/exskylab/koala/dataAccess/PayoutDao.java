@@ -35,4 +35,26 @@ public interface PayoutDao extends JpaRepository<Payout, UUID> {
             + "and p.processingAt < :threshold order by p.processingAt")
     List<UUID> findIdsAwaitingSettlementSince(@Param("statuses") List<PayoutStatus> statuses,
                                               @Param("threshold") Instant threshold);
+
+    @Query("""
+            select coalesce(sum(p.amount), 0), count(p)
+            from Payout p
+            where p.status = :status
+              and p.currency = :currency
+              and p.completedAt >= :fromInclusive
+              and p.completedAt < :toExclusive
+            """)
+    List<Object[]> summarizeCompleted(@Param("status") PayoutStatus status,
+                                      @Param("currency") String currency,
+                                      @Param("fromInclusive") Instant fromInclusive,
+                                      @Param("toExclusive") Instant toExclusive);
+
+    @Query("""
+            select coalesce(sum(p.amount), 0), count(p)
+            from Payout p
+            where p.status in :statuses
+              and p.currency = :currency
+            """)
+    List<Object[]> summarizeAwaiting(@Param("statuses") List<PayoutStatus> statuses,
+                                     @Param("currency") String currency);
 }

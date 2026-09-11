@@ -238,6 +238,30 @@ public class PayoutManager implements PayoutService {
         return payoutDao.findAllByWorkerIdOrderByCreatedAtDesc(workerId);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public AmountCount completedVolume(Instant fromInclusive, Instant toExclusive, String currency) {
+        List<Object[]> rows = payoutDao.summarizeCompleted(
+                PayoutStatus.COMPLETED, currency, fromInclusive, toExclusive);
+        return amountCount(rows);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AmountCount awaitingVolume(String currency) {
+        List<Object[]> rows = payoutDao.summarizeAwaiting(
+                List.of(PayoutStatus.PENDING, PayoutStatus.PROCESSING), currency);
+        return amountCount(rows);
+    }
+
+    private static AmountCount amountCount(List<Object[]> rows) {
+        Object[] row = rows.isEmpty() ? new Object[]{0, 0L} : rows.getFirst();
+        BigDecimal amount = row[0] == null ? BigDecimal.ZERO
+                : row[0] instanceof BigDecimal value ? value : new BigDecimal(row[0].toString());
+        long count = row[1] == null ? 0L : ((Number) row[1]).longValue();
+        return new AmountCount(amount, count);
+    }
+
     private void rejectMalformedEvidence(ConfirmPayoutSettlementDto evidence) {
         Set<ConstraintViolation<ConfirmPayoutSettlementDto>> violations = validator.validate(evidence);
         violations.stream()
