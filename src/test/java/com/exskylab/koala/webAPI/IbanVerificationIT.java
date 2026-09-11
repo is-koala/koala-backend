@@ -212,6 +212,49 @@ class IbanVerificationIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
+    void staffCanPagePendingVerificationsWithoutTheFullIban() throws Exception {
+        UUID accountId = addAccount(OWN_IBAN);
+        JsonNode verification = startVerification(accountId);
+        String token = staffToken("FINANCE_OFFICER");
+
+        mockMvc.perform(get("/admin/bank-account-verifications")
+                        .param("status", "PENDING")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[*].reference",
+                        org.hamcrest.Matchers.hasItem(verification.get("reference").asString())))
+                .andExpect(jsonPath("$.data.content[*].maskedIban",
+                        org.hamcrest.Matchers.hasItem("TR18***2315")))
+                .andExpect(jsonPath("$.data.content[0].iban").doesNotExist())
+                .andExpect(content().string(not(containsString(OWN_IBAN_NORMALISED))));
+
+        mockMvc.perform(get("/admin/bank-account-verifications")
+                        .param("status", "VERIFIED")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/admin/bank-account-verifications")
+                        .header("Authorization", "Bearer " + staffToken("DISPUTE_HANDLER")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void anExpiredPendingTransferDoesNotAppearOnTheStaffQueue() throws Exception {
+        UUID accountId = addAccount(OWN_IBAN);
+        JsonNode verification = startVerification(accountId);
+        jdbcTemplate.update("update bank_accounts set verification_expires_at = now() - interval '1 hour' "
+                        + "where id = ?",
+                accountId);
+
+        mockMvc.perform(get("/admin/bank-account-verifications")
+                        .header("Authorization", "Bearer " + staffToken("FINANCE_OFFICER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[*].reference",
+                        org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(
+                                verification.get("reference").asString()))));
+    }
+
+    @Test
     void staffWithoutTheFinanceDutyCannotConfirmATransfer() throws Exception {
         UUID accountId = addAccount(OWN_IBAN);
         JsonNode verification = startVerification(accountId);

@@ -1,11 +1,16 @@
 package com.exskylab.koala.dataAccess;
 
 import com.exskylab.koala.entities.BankAccount;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -26,6 +31,16 @@ public interface BankAccountDao extends JpaRepository<BankAccount, UUID> {
     Optional<BankAccount> findByUserIdAndIbanAndActiveTrue(UUID userId, String iban);
 
     Optional<BankAccount> findByVerificationReferenceAndActiveTrue(String verificationReference);
+
+    @Query("""
+            select account from BankAccount account
+            where account.active = true
+              and account.verificationStatus = com.exskylab.koala.entities.BankAccountVerificationStatus.PENDING
+              and account.verificationReference is not null
+              and (account.verificationExpiresAt is null or account.verificationExpiresAt > :now)
+            """)
+    @EntityGraph(attributePaths = {"user", "user.profilePicture"})
+    Page<BankAccount> findAwaitingStaffConfirmation(@Param("now") Instant now, Pageable pageable);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update BankAccount account set account.primaryAccount = false "

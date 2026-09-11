@@ -4,6 +4,8 @@ import com.exskylab.koala.core.dtos.bankAccount.request.ConfirmIbanTransferDto;
 import com.exskylab.koala.core.dtos.bankAccount.request.SaveBankAccountDto;
 import com.exskylab.koala.entities.BankAccount;
 import com.exskylab.koala.entities.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.Optional;
@@ -30,4 +32,6 @@ public interface BankAccountService {
     BankAccount startMyVerification(UUID accountId);
 
     BankAccount confirmVerification(String reference, ConfirmIbanTransferDto observation);
+
+    Page<BankAccount> listPendingForStaff(Pageable pageable);
 }

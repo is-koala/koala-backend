@@ -37,7 +37,8 @@ class UserProfileSyncRulesTest {
         bankAccountDao = mock(BankAccountDao.class);
         syncService = mock(UserProfileSyncService.class);
         producer = new UserProducerService(syncService, new BankAccountManager(
-                bankAccountDao, mock(SecurityService.class), new BankVerificationProperties()));
+                bankAccountDao, mock(SecurityService.class), new BankVerificationProperties(),
+                new com.exskylab.koala.core.helpers.PageableSanitizer()));
 
         Address address = new Address();
         address.setNeighborhood("Kucukbakkalkoy");

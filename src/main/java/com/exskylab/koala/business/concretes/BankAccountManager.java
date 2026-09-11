@@ -9,6 +9,7 @@ import com.exskylab.koala.core.dtos.bankAccount.request.ConfirmIbanTransferDto;
 import com.exskylab.koala.core.dtos.bankAccount.request.SaveBankAccountDto;
 import com.exskylab.koala.core.helpers.BankAccountVerificationPolicy;
 import com.exskylab.koala.core.helpers.IbanValidator;
+import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.properties.BankVerificationProperties;
 import com.exskylab.koala.dataAccess.BankAccountDao;
 import com.exskylab.koala.entities.BankAccount;
@@ -18,6 +19,9 @@ import com.exskylab.koala.core.exceptions.ExternalServiceException;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ConflictException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +31,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -38,16 +43,23 @@ public class BankAccountManager implements BankAccountService {
     private static final int REFERENCE_LENGTH = 8;
     private static final int REFERENCE_ATTEMPTS = 5;
 
+    private static final Set<String> PENDING_SORTABLE = Set.of("createdAt", "verificationStartedAt");
+
+    private static final Sort PENDING_SORT = Sort.by(Sort.Direction.DESC, "verificationStartedAt");
+
     private final BankAccountDao bankAccountDao;
     private final SecurityService securityService;
     private final BankVerificationProperties verificationProperties;
+    private final PageableSanitizer pageableSanitizer;
     private final SecureRandom random = new SecureRandom();
 
     public BankAccountManager(BankAccountDao bankAccountDao, SecurityService securityService,
-                              BankVerificationProperties verificationProperties) {
+                              BankVerificationProperties verificationProperties,
+                              PageableSanitizer pageableSanitizer) {
         this.bankAccountDao = bankAccountDao;
         this.securityService = securityService;
         this.verificationProperties = verificationProperties;
+        this.pageableSanitizer = pageableSanitizer;
     }
 
     @Override
@@ -272,6 +284,14 @@ public class BankAccountManager implements BankAccountService {
         }
         long minorUnits = minimum + (long) random.nextInt((int) (maximum - minimum + 1));
         return BigDecimal.valueOf(minorUnits, 2);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<BankAccount> listPendingForStaff(Pageable requested) {
+        pageableSanitizer.rejectUnknownSort(requested, PENDING_SORTABLE);
+        return bankAccountDao.findAwaitingStaffConfirmation(Instant.now(),
+                pageableSanitizer.sanitize(requested, PENDING_SORTABLE, PENDING_SORT));
     }
 
     private BankAccount requireOwned(UUID accountId, UUID userId) {

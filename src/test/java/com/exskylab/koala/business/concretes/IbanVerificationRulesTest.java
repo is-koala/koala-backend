@@ -52,7 +52,8 @@ class IbanVerificationRulesTest {
         properties = new BankVerificationProperties();
         properties.setCollectionIban("TR330006100519786457841326");
 
-        manager = new BankAccountManager(bankAccountDao, securityService, properties);
+        manager = new BankAccountManager(bankAccountDao, securityService, properties,
+                new com.exskylab.koala.core.helpers.PageableSanitizer());
 
         User user = new User();
         user.setId(userId);

@@ -19,6 +19,8 @@ public final class BankAccountMessages {
     public static final String VERIFICATION_EXPIRED = "{bank.account.verification.expired}";
     public static final String VERIFICATION_AMOUNT_REQUIRED = "{bank.account.verification.amount.required}";
     public static final String VERIFICATION_SENDER_NAME_TOO_LONG = "{bank.account.verification.sender.name.too.long}";
+    public static final String PENDING_LISTED = "{admin.iban.pending.listed}";
+    public static final String PENDING_QUEUE_ONLY = "{admin.iban.pending.only}";
 
     private BankAccountMessages() {
     }
