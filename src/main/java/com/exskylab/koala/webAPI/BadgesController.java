@@ -108,8 +108,6 @@ public class BadgesController {
             @ApiResponse(responseCode = "400", description = "Kural için gereken eşik eksik",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "404", description = "Rozet bulunamadı",
-                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
-            @ApiResponse(responseCode = "413", description = "Tek dosya 10 MiB ya da toplam multipart gövdesi 42 MiB sınırını aşıyor",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @RequiresPermission(value = StaffPermission.BADGE_MANAGE, action = "badge.update")
@@ -129,6 +127,8 @@ public class BadgesController {
             @ApiResponse(responseCode = "400", description = "Dosya desteklenmeyen türde",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "404", description = "Rozet bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "413", description = "Tek dosya 10 MiB ya da toplam multipart gövdesi 42 MiB sınırını aşıyor",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @RequiresPermission(value = StaffPermission.BADGE_MANAGE, action = "badge.icon.set")
