@@ -1,4 +1,4 @@
-package com.exskylab.koala.core.dtos.contact;
+package com.exskylab.koala.entities;
 
 import java.util.Locale;
 
