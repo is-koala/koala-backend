@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MailDeliveryEnvironmentContractTest {
@@ -16,12 +17,15 @@ class MailDeliveryEnvironmentContractTest {
     private static final Path CLAUDE = Path.of("CLAUDE.md");
 
     @Test
-    void stagingDocumentationSaysUnrestrictedMailStopsStartup() throws IOException {
+    void stagingDocumentationSaysUnrestrictedMailWarnsAndStarts() throws IOException {
         String staging = section(ENVIRONMENTS, "## Staging zorunlulukları");
+        String environments = Files.readString(ENVIRONMENTS, StandardCharsets.UTF_8);
 
-        assertTrue(staging.contains("`MAIL_DELIVERY_MODE=ALLOWLIST`"));
-        assertTrue(staging.contains("UNRESTRICTED"));
-        assertTrue(staging.contains("durdurur"));
+        assertTrue(staging.contains("`UNRESTRICTED`"));
+        assertTrue(staging.contains("kabul"));
+        assertTrue(staging.contains("uyarır"));
+        assertFalse(environments.contains("UNRESTRICTED` açılışı durdurur"));
+        assertFalse(environments.contains("UNRESTRICTED` staging açılışını **durdurur**"));
         assertTrue(staging.contains(MailDeliveryEnvironmentGuard.MARKER));
     }
 
@@ -36,7 +40,7 @@ class MailDeliveryEnvironmentContractTest {
         assertTrue(body.contains(MailDeliveryEnvironmentGuard.MARKER));
         assertTrue(body.contains("MAIL_DELIVERY_MODE"));
         assertTrue(body.contains("MAIL_ALLOWED_RECIPIENTS"));
-        assertTrue(body.contains("durdurur"));
+        assertTrue(body.contains("başlatır"));
         assertTrue(body.contains("uyarır"));
         assertTrue(body.lines().noneMatch(line -> line.contains("@") && !line.contains("`MAIL_ALLOWED_RECIPIENTS`")));
     }

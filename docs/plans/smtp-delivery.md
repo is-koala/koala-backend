@@ -7,9 +7,15 @@ Paket 1 SMTP kodu allowlist + ortam kapısı ile depodadır; gerçek mailbox kab
 
 ## Dağıtım öncesi ayarlar
 
-- `MAIL_DELIVERY_MODE=ALLOWLIST` ve `MAIL_ALLOWED_RECIPIENTS` içinde virgülle ayrılmış iki kontrollü QA adresi kullanılır. Adresler Git'e konmaz; yerel hazırlık dosyasında bulunur.
-- Mod belirtilmezse `ALLOWLIST`, liste belirtilmezse boş liste kullanılır: hiçbir e-posta SMTP'ye gitmez. Bu yüzden yeni kodu mevcut ortama çıkarmadan önce iki ayar Dokploy'da hazırlanmalıdır.
-- `UNRESTRICTED` açıkça seçilen kısıtsız moddur. Mevcut test ortamında kullanılmaz; lansman geçişinde ayrıca değerlendirilir.
+- `MAIL_DELIVERY_MODE` açıkça seçilir. Mevcut Dokploy staging ortamı
+  `UNRESTRICTED` kullanır. `ALLOWLIST` seçilirse `MAIL_ALLOWED_RECIPIENTS`
+  içinde virgülle ayrılmış kontrollü adresler kullanılır ve değerler Git'e konmaz.
+- Mod belirtilmezse `ALLOWLIST`, liste belirtilmezse boş liste kullanılır:
+  hiçbir e-posta SMTP'ye gitmez. Bu varsayılan yeni veya eksik yapılandırılmış
+  ortamın yanlışlıkla posta göndermesini önler.
+- `UNRESTRICTED` açıkça seçilen kısıtsız moddur. Staging dahil yerel olmayan
+  ortamlarda başlangıcı durdurmaz; alıcı kapısının kapalı olduğunu
+  `MAIL_DELIVERY_GUARD` uyarısıyla görünür kılar.
 - Hatalı mod veya geçersiz alıcı yapılandırması açılışta reddedilir.
 - `.env.qa.local` otomatik içe aktarılmaz. `MAIL_HOST`, port ve SMTP kimlik bilgileri mevcut gerçek sağlayıcı ayarlarıdır; bu commit bunları değiştirmez.
 
