@@ -1,10 +1,12 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.business.abstracts.IdentityDocumentReviewService;
 import com.exskylab.koala.core.dtos.identity.response.IdentityReviewDto;
 import com.exskylab.koala.core.dtos.user.request.VerifyIdentityDto;
 import com.exskylab.koala.core.helpers.SignedFileResponses;
 import com.exskylab.koala.core.properties.StorageProperties;
 import com.exskylab.koala.core.security.RequiresPermission;
+import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.core.utilities.storage.S3StorageService;
 import com.exskylab.koala.core.utilities.storage.StorageService;
 import com.exskylab.koala.entities.StaffPermission;
@@ -12,6 +14,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -22,9 +26,11 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.lang.reflect.RecordComponent;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -77,6 +83,29 @@ class IdentityDocumentDownloadContractTest {
     }
 
     @Test
+    void approvalCarriesNoClientSuppliedEvidence() throws Exception {
+        Method handler = AdminController.class.getDeclaredMethod(
+                "approveIdentityReview", UUID.class, StaffPrincipal.class);
+        PostMapping mapping = handler.getAnnotation(PostMapping.class);
+
+        assertNotNull(mapping);
+        assertArrayEquals(new String[]{"/identity-verifications/{reviewId}/approve"}, mapping.value());
+        for (Parameter parameter : handler.getParameters()) {
+            assertFalse(parameter.isAnnotationPresent(RequestBody.class),
+                    "Onay ucu gövde okumamalı; dört belgenin varlığı veritabanından yeniden doğrulanır: "
+                            + parameter.getName());
+        }
+
+        List<Method> approveOverloads = Arrays.stream(IdentityDocumentReviewService.class.getMethods())
+                .filter(method -> method.getName().equals("approve"))
+                .toList();
+        assertEquals(1, approveOverloads.size(),
+                "Onay seam'i tek imza taşır; istemciden kanıt alan ikinci bir yol açılmamalı");
+        assertArrayEquals(new Class<?>[]{StaffPrincipal.class, UUID.class},
+                approveOverloads.getFirst().getParameterTypes());
+    }
+
+    @Test
     void submitNamesTheFourPhotoSlots() throws Exception {
         Method method = UsersController.class.getDeclaredMethod(
                 "submitIdentityDocuments",
@@ -85,7 +114,7 @@ class IdentityDocumentDownloadContractTest {
                 MultipartFile.class,
                 MultipartFile.class,
                 MultipartFile.class);
-        String[] parts = java.util.Arrays.stream(method.getParameters())
+        String[] parts = Arrays.stream(method.getParameters())
                 .skip(1)
                 .map(parameter -> parameter.getAnnotation(RequestPart.class).value())
                 .toArray(String[]::new);

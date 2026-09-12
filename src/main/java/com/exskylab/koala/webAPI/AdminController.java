@@ -407,12 +407,17 @@ public class AdminController {
     }
 
     @Operation(summary = "TCKK kimlik incelemesini onayla",
-            description = "Kullanıcının identityVerified damgası çip olmadan konur. TCKN benzersizliği durur.")
+            description = "Kullanıcının identityVerified damgası çip olmadan konur. TCKN benzersizliği durur. "
+                    + "Onay yalnız bekleyen ve dört fotoğrafı (yüz, TCKK ön, TCKK arka, TCKK yüzün altında) "
+                    + "sunucuda kayıtlı olan inceleme için kabul edilir; istek gövdesi okunmaz, kanıt veritabanından "
+                    + "yeniden doğrulanır.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Kimlik onaylandı"),
             @ApiResponse(responseCode = "404", description = "İnceleme bulunamadı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
-            @ApiResponse(responseCode = "409", description = "İnceleme sonuçlanmış ya da TCKN kullanımda",
+            @ApiResponse(responseCode = "409", description = "İnceleme sonuçlanmış (IDENTITY_REVIEW_ALREADY_DECIDED), "
+                    + "dört fotoğraftan biri eksik (IDENTITY_REVIEW_DOCUMENTS_MISSING) ya da TCKN kullanımda "
+                    + "(TC_IDENTITY_NUMBER_ALREADY_IN_USE); ret ucu eksik fotoğrafta açık kalır",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @RequiresPermission(value = StaffPermission.IDENTITY_REVIEW, action = "identity.approve")

@@ -2345,7 +2345,35 @@ Bu hata biçiminin kötülüğü şurada: "senin bilgilerin yanlış" ile "servi
 
 **Beş alanlık `POST /users/me/identity-verification` ürün yüzeyi değildir.** Bayrak kapalıyken de checksum'ı geçen TCKN damgalanmaz. Çip kanıtı gönderilse bile PA kapalıyken damga yok — o uç yalnız `IDENTITY_PASSIVE_AUTH_ENABLED` açıkken çalışır. Kimlik damgası ya çipten (bayrak açık) ya personelin TCKK fotoğrafını onayından gelir.
 
-Bayrağı bugün açmamak hâlâ doğru: açılırsa kanıt göndermeyen her istemci `IDENTITY_EVIDENCE_REQUIRED` alır. Belge yolu #193 ile açık: `POST /users/me/identity-documents` TCKK ön/arka fotoğrafını kuyruğa alır, `IDENTITY_REVIEW` izniyle personel `POST /admin/identity-verifications/{id}/approve` deyince `identityVerified` damgalanır. Fotoğraflar `GET /admin/identity-verifications/{id}/documents/{documentId}/download` ile kısa ömürlü imzalı adresten okunur (uyuşmazlık kanıtı kalıbı); kuyruk DTO'su depo anahtarı taşımaz. TCKN benzersizliği durur. Çip PA bu issue'da açılmaz.
+Bayrağı bugün açmamak hâlâ doğru: açılırsa kanıt göndermeyen her istemci `IDENTITY_EVIDENCE_REQUIRED` alır. Belge yolu #193 ile açık: `POST /users/me/identity-documents` dört TCKK fotoğrafını (yüz, ön, arka, yüzün altında — #220) kuyruğa alır, `IDENTITY_REVIEW` izniyle personel `POST /admin/identity-verifications/{id}/approve` deyince `identityVerified` damgalanır. Fotoğraflar `GET /admin/identity-verifications/{id}/documents/{documentId}/download` ile kısa ömürlü imzalı adresten okunur (uyuşmazlık kanıtı kalıbı); kuyruk DTO'su depo anahtarı taşımaz. TCKN benzersizliği durur. Çip PA bu issue'da açılmaz.
+
+**Onay dört belgeyi sunucuda yeniden doğrular (#232).** #220 dört fotoğraf slotunu sözleşmeye koydu ama
+`approve` belgelere hiç bakmıyordu: eski iki fotoğraflı `PENDING` kayıt ya da depo anahtarı silinmiş bir
+fotoğraf eksik kanıtla onaylanabiliyordu. Bu deponun tekrar eden kusuru (§2d2, §2k2): doğru bir sözleşme,
+onu uygulaması gereken karar noktasında sessizce görmezden geliniyordu. `IdentityVerificationManager.approve`
+artık `requireOpen`'dan hemen sonra `requireFourDocuments` çalıştırıyor: yüz, TCKK ön, TCKK arka ve TCKK
+yüzün altında belgelerinin **dördü de** yoksa `ConflictException` → **409 `IDENTITY_REVIEW_DOCUMENTS_MISSING`**
+(`identity.review.documents.missing`, iki dilde). Karar `IdentityReviewDto`'ya ya da istek gövdesine değil
+veritabanındaki satıra bakıyor; onay ucu gövde okumuyor, yani dört id iddia eden sahte bir admin formu
+sunucudaki kaydı değiştiremiyor. "Belge var" tanımı tek yerde (`isEvidence`: satır **ve** boş olmayan depo
+anahtarı) ve personel indirme ucuyla paylaşılıyor — personelin açamadığı fotoğraf kanıt sayılmaz. **Ret yolu
+eksik belgede açık kalıyor**, çünkü operatörün eksik kaydı kuyruktan düşürmesinin tek yolu o.
+
+**Onay ve ret artık satırı kilitleyerek karar veriyor.** İki karar da `findById` ile kilitsiz okuyordu; onayla
+ret yarışınca ikisi de `PENDING` görüp ikisi de yazıyordu ve `IdentityReviewApprovalIT`'in eşzamanlı testi
+düzeltmeden önce tam bunu ölçtü — reddi bekleyen onay, ret commit olduktan sonra üstüne yazıp başarıyordu.
+`IdentityVerificationDao.findByIdForUpdate` (`PESSIMISTIC_WRITE`, `ReportDao`/`DisputeDao` kalıbı) geldi;
+`approve` ve `reject` durumu kilidin altında yeniden okuyor ve sonradan gelen karar
+`IDENTITY_REVIEW_ALREADY_DECIDED` (409) alıyor. `koala-admin#81` iki kodu ayırt etmeli: `DOCUMENTS_MISSING`
+"reddet ve yeniden yükleme iste" düğmesine, `ALREADY_DECIDED` kuyruğu tazelemeye yönlendirir.
+
+**Sabitleyen testler.** `IdentityDocumentReviewRulesTest`: dört slotun her biri tek tek eksikken onay reddedilir
+ve satır `PENDING` kalır, iki fotoğraflı eski kayıt onaylanamaz ama reddedilebilir, depo anahtarı boşalmış
+fotoğraf kanıt sayılmaz, karar kilitli okumadan geçer (`findById` hiç çağrılmaz), retten sonra gelen onay ve
+onaydan sonra gelen ret fail-closed. `IdentityReviewApprovalIT` aynı kuralları gerçek HTTP ve Postgres'te
+koşuyor — sahte gövde, iki dil, ve kilitte bekleyen onayın ret commit olunca 409 alması dahil.
+`IdentityDocumentDownloadContractTest.approvalCarriesNoClientSuppliedEvidence` onay ucunun `@RequestBody`
+taşımadığını ve servis imzasının yalnız `(StaffPrincipal, UUID)` olduğunu sabitliyor.
 
 **Passive Authentication'dan sonra kalan artık risk.** Çip doğrulaması "kart gerçek" der, "kartı tutan kişi sahibidir" demez — onu kuran şey yüz eşleştirmesi ve o cihazda. Yani elinde **başkasının gerçek kartı** olan biri, uygulamayı değiştirerek o kimlikle kayıt olabilir. Sonucu iş değil para: alt üye işyeri **kurbanın TCKN'siyle** ama **saldırganın IBAN'ıyla** açılır.
 

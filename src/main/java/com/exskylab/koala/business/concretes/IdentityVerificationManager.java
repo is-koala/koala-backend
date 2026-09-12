@@ -106,8 +106,9 @@ public class IdentityVerificationManager implements IdentityDocumentReviewServic
     @Override
     @Transactional
     public IdentityVerification approve(StaffPrincipal actor, UUID reviewId) {
-        IdentityVerification review = getById(reviewId);
+        IdentityVerification review = lockedReview(reviewId);
         requireOpen(review);
+        requireFourDocuments(review);
         User subject = review.getUser();
         if (userService.existsByTcIdentityNumber(review.getTcIdentityNumber())) {
             throw new ConflictException(UserMessages.TC_IDENTITY_NUMBER_ALREADY_IN_USE);
@@ -136,7 +137,7 @@ public class IdentityVerificationManager implements IdentityDocumentReviewServic
         if (reason == null || reason.isBlank()) {
             throw new ValidationException(IdentityMessages.REJECTION_REASON_REQUIRED);
         }
-        IdentityVerification review = getById(reviewId);
+        IdentityVerification review = lockedReview(reviewId);
         requireOpen(review);
         review.setRejectedAt(Instant.now());
         review.setRejectionReason(reason.trim());
@@ -176,10 +177,15 @@ public class IdentityVerificationManager implements IdentityDocumentReviewServic
     public VerificationDocument getDocumentForStaffDownload(UUID reviewId, UUID documentId) {
         IdentityVerification review = getById(reviewId);
         VerificationDocument document = matchingDocument(review, documentId);
-        if (document == null || document.getFileUrl() == null || document.getFileUrl().isBlank()) {
+        if (!isEvidence(document)) {
             throw new ResourceNotFoundException(IdentityMessages.DOCUMENT_NOT_FOUND);
         }
         return document;
+    }
+
+    private IdentityVerification lockedReview(UUID reviewId) {
+        return identityVerificationDao.findByIdForUpdate(reviewId)
+                .orElseThrow(() -> new ResourceNotFoundException(IdentityMessages.REVIEW_NOT_FOUND));
     }
 
     private static VerificationDocument matchingDocument(IdentityVerification review, UUID documentId) {
@@ -202,9 +208,23 @@ public class IdentityVerificationManager implements IdentityDocumentReviewServic
         return document != null && documentId.equals(document.getId());
     }
 
+    private static boolean isEvidence(VerificationDocument document) {
+        return document != null && document.getFileUrl() != null && !document.getFileUrl().isBlank();
+    }
+
     private void requireOpen(IdentityVerification review) {
         if (review.isVerified() || review.getRejectedAt() != null) {
             throw new ConflictException(IdentityMessages.REVIEW_ALREADY_DECIDED);
+        }
+    }
+
+    private void requireFourDocuments(IdentityVerification review) {
+        if (!isEvidence(review.getSelfieDocument())
+                || !isEvidence(review.getVerificationDocument())
+                || !isEvidence(review.getBackDocument())
+                || !isEvidence(review.getTogetherDocument())) {
+            log.warn("Identity review {} refused approval: four TCKK photo slots are not all present", review.getId());
+            throw new ConflictException(IdentityMessages.REVIEW_DOCUMENTS_MISSING);
         }
     }
 
