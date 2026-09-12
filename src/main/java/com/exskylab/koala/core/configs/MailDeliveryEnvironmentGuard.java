@@ -29,8 +29,13 @@ public class MailDeliveryEnvironmentGuard implements InitializingBean {
         }
 
         if (deliveryProperties.getMode() == EmailDeliveryProperties.Mode.UNRESTRICTED) {
-            log.warn("{}: MAIL_DELIVERY_MODE is UNRESTRICTED in {}; outbound marketplace mail is not recipient-gated",
-                    MARKER, deploymentProperties.getDeployment());
+            if (deploymentProperties.getDeployment() == DeploymentProperties.Deployment.STAGING) {
+                log.warn("{}: MAIL_DELIVERY_MODE is UNRESTRICTED in staging; outbound marketplace mail is not recipient-gated",
+                        MARKER);
+            } else {
+                log.warn("{}: MAIL_DELIVERY_MODE is UNRESTRICTED in production; launch-cutover still records SMTP_UNRESTRICTED_APPROVAL_ID before public traffic",
+                        MARKER);
+            }
             return;
         }
 

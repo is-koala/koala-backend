@@ -59,7 +59,8 @@ class MailDeliveryEnvironmentGuardTest {
                     assertNull(context.getStartupFailure());
                     assertTrue(warnedAbout("MAIL_DELIVERY_MODE"), warnings().toString());
                     assertTrue(warnings().stream().anyMatch(message ->
-                            message.contains(MailDeliveryEnvironmentGuard.MARKER)));
+                            message.contains(MailDeliveryEnvironmentGuard.MARKER)
+                                    && message.contains("staging")));
                 });
     }
 
@@ -97,7 +98,8 @@ class MailDeliveryEnvironmentGuardTest {
                     assertNull(context.getStartupFailure());
                     assertTrue(warnedAbout("MAIL_DELIVERY_MODE"), warnings().toString());
                     assertTrue(warnings().stream().anyMatch(message ->
-                            message.contains(MailDeliveryEnvironmentGuard.MARKER)));
+                            message.contains(MailDeliveryEnvironmentGuard.MARKER)
+                                    && message.contains("SMTP_UNRESTRICTED_APPROVAL_ID")));
                 });
     }
 

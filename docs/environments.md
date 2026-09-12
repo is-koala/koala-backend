@@ -19,7 +19,7 @@ ile sabitlenmiştir.
 | Depolama | yerel/test | ayrı bucket veya staging prefix | ayrı production bucket |
 | Ödeme | iyzico Sandbox | iyzico Sandbox | iyzico Live |
 | Adres | geliştirme anahtarı | ayrı kotalı staging anahtarı | ayrı production anahtarı |
-| E-posta | allowlist/yakalama | açıkça seçilmiş `MAIL_DELIVERY_MODE=UNRESTRICTED` | kontrollü canlı teslimat |
+| E-posta | allowlist/yakalama | açıkça seçilmiş `UNRESTRICTED` veya `ALLOWLIST` | kontrollü canlı teslimat |
 
 ## Staging zorunlulukları
 
@@ -29,8 +29,9 @@ ile sabitlenmiştir.
 - `AUTH_LINK_APP_SCHEME=koala-staging`
 - `PAYMENTS_RETURN_BASE_URL=koala-staging://`
 - `IYZICO_BASE_URL=https://sandbox-api.iyzipay.com`
-- `MAIL_DELIVERY_MODE=UNRESTRICTED`; staging başlangıcı bu açık seçimi kabul
-  eder ve alıcı kapısının kapalı olduğunu `MAIL_DELIVERY_GUARD` ile uyarır.
+- `MAIL_DELIVERY_MODE` açıkça seçilir. Mevcut Dokploy staging ortamı
+  `UNRESTRICTED` kullanır; başlangıç bu seçimi kabul eder ve alıcı kapısının
+  kapalı olduğunu `MAIL_DELIVERY_GUARD` ile uyarır.
   `ALLOWLIST` seçilirse liste dışındaki teslimat reddedilir; boş
   `MAIL_ALLOWED_RECIPIENTS` SMTP çağırmaz ve açılış `WARN` yazar. Tanıtım sitesi
   iletişim formu (`POST /public/contact`) `SUPPORT_MAILBOX` (varsayılan
@@ -85,10 +86,9 @@ guard'ın gerçek kural listesinden ayrışmadığını `ProductionConfiguration
 doğruluyor — kuralı olmayan satır da, satırı olmayan kural da testi kırar.
 
 Mail teslimatı bu tabloya **eklenmedi**: CORS kataloğunu bozmamak için ayrı
-`MailDeliveryEnvironmentGuard` (`MAIL_DELIVERY_GUARD`) okur. Staging
-`UNRESTRICTED` açılışı durdurur. Production `UNRESTRICTED` lansman cutover yolu
-olduğu için yalnız `WARN` yazar; boş ALLOWLIST local dışında `WARN` yazar.
-Alıcı adresi loga girmez. Gerekçe `CLAUDE.md` §2ay.
+`MailDeliveryEnvironmentGuard` (`MAIL_DELIVERY_GUARD`) okur. Staging ve
+production `UNRESTRICTED` ile başlar ve `WARN` yazar; boş ALLOWLIST local dışında
+`WARN` yazar. Alıcı adresi loga girmez. Gerekçe `CLAUDE.md` §2ay.
 
 ## STOMP handshake origin'leri
 

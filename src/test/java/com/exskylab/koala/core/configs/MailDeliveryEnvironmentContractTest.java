@@ -19,11 +19,13 @@ class MailDeliveryEnvironmentContractTest {
     @Test
     void stagingDocumentationSaysUnrestrictedMailWarnsAndStarts() throws IOException {
         String staging = section(ENVIRONMENTS, "## Staging zorunlulukları");
+        String environments = Files.readString(ENVIRONMENTS, StandardCharsets.UTF_8);
 
-        assertTrue(staging.contains("`MAIL_DELIVERY_MODE=UNRESTRICTED`"));
+        assertTrue(staging.contains("`UNRESTRICTED`"));
         assertTrue(staging.contains("kabul"));
         assertTrue(staging.contains("uyarır"));
-        assertFalse(staging.contains("UNRESTRICTED` staging açılışını **durdurur**"));
+        assertFalse(environments.contains("UNRESTRICTED` açılışı durdurur"));
+        assertFalse(environments.contains("UNRESTRICTED` staging açılışını **durdurur**"));
         assertTrue(staging.contains(MailDeliveryEnvironmentGuard.MARKER));
     }
 

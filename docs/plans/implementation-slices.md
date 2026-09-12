@@ -23,7 +23,9 @@ Durum: Kullanıcı tarafından onaylandı; GitHub alt işleri ve bağımlılıkl
 
 - [x] Dev/staging/production kimlikleri ile API hedefi uyumludur; eksik seçim internet API'sine sessizce bağlanmaz. (mobil #7 kod dilimi)
 - [x] Mevcut demo bootstrap ve gömülü hesap bilgileri runtime'dan çıkarılır; gerçek login ve token yenileme korunur.
-- [x] Mail alıcı kontrolü SMTP'den önce uygulanır; iki kontrollü adres dışındaki gönderim teslim edilmiş sayılmaz. Staging `UNRESTRICTED` açılışı durur (#191).
+- [x] Mail alıcı kontrolü SMTP'den önce uygulanır; ALLOWLIST seçildiğinde liste
+  dışındaki gönderim teslim edilmiş sayılmaz. #222 ile staging `UNRESTRICTED`
+  çalışır ve başlangıçta uyarı üretir.
 - [x] Şirket ve bireysel işveren akışı korunur; kullanılan doğrulama/reset bağlantısı doğru ortamdaki uygulamaya gider.
 - [ ] Gerçek HTTP giriş/yenileme, bozuk token ve SMTP izinli/engelli alıcı davranışları **iki QA gelen kutusunda** sınanır — insan kabulü (#4 / mobil #7).
 
