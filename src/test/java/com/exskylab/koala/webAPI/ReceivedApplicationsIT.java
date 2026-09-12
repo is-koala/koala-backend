@@ -280,6 +280,7 @@ class ReceivedApplicationsIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.content[0].jobStatus").value("OPEN"))
                 .andExpect(jsonPath("$.data.content[0].companyId").value(companyX.toString()))
                 .andExpect(jsonPath("$.data.content[0].companyName").value("Sirket X"))
+                .andExpect(jsonPath("$.data.content[0].assignmentId").value((Object) null))
                 .andExpect(jsonPath("$.data.content[0].applicant.id").value(workers.get(3).toString()))
                 .andExpect(jsonPath("$.data.content[0].applicant.firstName").value("Aday3"))
                 .andExpect(jsonPath("$.data.content[0].applicant.profilePictureUrl").isString())

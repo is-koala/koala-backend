@@ -17,6 +17,14 @@ import java.util.UUID;
 @Repository
 public interface JobApplicationDao extends JpaRepository<JobApplication, UUID> {
 
+    String RECEIVED_SCOPE = " from JobApplication a "
+            + "where (a.job.creator.id = :viewerId or a.job.company.id in :companyIds) "
+            + "and (:status is null or a.status = :status) "
+            + "and (:jobId is null or a.job.id = :jobId) "
+            + "and (:companyId is null or a.job.company.id = :companyId)";
+
+    String RECEIVED_COUNT = "select count(a)" + RECEIVED_SCOPE;
+
     boolean existsByJobIdAndUserId(UUID jobId, UUID userId);
 
     boolean existsByJobIdAndUserIdAndStatusNot(UUID jobId, UUID userId, ApplicationStatus status);
@@ -45,4 +53,25 @@ public interface JobApplicationDao extends JpaRepository<JobApplication, UUID> {
 
     @EntityGraph(attributePaths = {"job", "job.category", "job.address", "job.company", "assignment"})
     Page<JobApplication> findAllByUserIdAndStatus(UUID userId, ApplicationStatus status, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"user", "user.profilePicture", "job", "job.company", "assignment"})
+    @Query(value = "select a" + RECEIVED_SCOPE
+            + " order by case when a.status = com.exskylab.koala.entities.ApplicationStatus.APPLIED then 0 else 1 end,"
+            + " a.applicationDateTime desc, a.id desc",
+            countQuery = RECEIVED_COUNT)
+    Page<JobApplication> findReceivedPendingFirst(@Param("viewerId") UUID viewerId,
+                                                  @Param("companyIds") Collection<UUID> companyIds,
+                                                  @Param("status") ApplicationStatus status,
+                                                  @Param("jobId") UUID jobId,
+                                                  @Param("companyId") UUID companyId,
+                                                  Pageable pageable);
+
+    @EntityGraph(attributePaths = {"user", "user.profilePicture", "job", "job.company", "assignment"})
+    @Query(value = "select a" + RECEIVED_SCOPE, countQuery = RECEIVED_COUNT)
+    Page<JobApplication> findReceived(@Param("viewerId") UUID viewerId,
+                                      @Param("companyIds") Collection<UUID> companyIds,
+                                      @Param("status") ApplicationStatus status,
+                                      @Param("jobId") UUID jobId,
+                                      @Param("companyId") UUID companyId,
+                                      Pageable pageable);
 }

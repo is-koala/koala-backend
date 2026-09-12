@@ -16,8 +16,10 @@ import com.exskylab.koala.core.mappers.JobApplicationMapper;
 import com.exskylab.koala.dataAccess.JobApplicationDao;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.jobApplication.response.MyApplicationDto;
+import com.exskylab.koala.core.dtos.jobApplication.response.ReceivedApplicationDto;
 import com.exskylab.koala.entities.*;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
@@ -40,6 +42,11 @@ public class JobApplicationManager implements JobApplicationService {
 
     private static final java.util.Set<String> MY_APPLICATIONS_SORTABLE =
             java.util.Set.of("applicationDateTime", "answeredDateTime", "status");
+
+    private static final java.util.Set<String> RECEIVED_APPLICATIONS_SORTABLE =
+            java.util.Set.of("applicationDateTime", "answeredDateTime", "status");
+
+    private static final Sort RECEIVED_TIE_BREAKER = Sort.by(Sort.Direction.DESC, "id");
 
 
     private final JobApplicationDao jobApplicationDao;
@@ -348,6 +355,27 @@ public class JobApplicationManager implements JobApplicationService {
         PageDto<MyApplicationDto> result = PageDto.of(page, summaries);
         galleryService.fillJobCovers(result.content().stream().map(MyApplicationDto::job).toList());
         return result;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageDto<ReceivedApplicationDto> getReceivedApplications(ApplicationStatus status, UUID jobId,
+                                                                   UUID companyId, Pageable requested) {
+        pageableSanitizer.rejectUnknownSort(requested, RECEIVED_APPLICATIONS_SORTABLE);
+        Pageable pageable = pageableSanitizer.sanitize(requested, RECEIVED_APPLICATIONS_SORTABLE, Sort.unsorted());
+
+        UUID viewerId = securityService.getAuthenticatedUserId();
+        List<UUID> companyIds = companyContactService.getCompanyIdsOfContact(viewerId);
+        log.debug("Listing received applications for user {} over {} companies, status={}, jobId={}, companyId={}",
+                viewerId, companyIds.size(), status, jobId, companyId);
+
+        Page<JobApplication> page = pageable.getSort().isUnsorted()
+                ? jobApplicationDao.findReceivedPendingFirst(viewerId, companyIds, status, jobId, companyId, pageable)
+                : jobApplicationDao.findReceived(viewerId, companyIds, status, jobId, companyId,
+                        PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                                pageable.getSort().and(RECEIVED_TIE_BREAKER)));
+
+        return PageDto.of(page, jobApplicationMapper::toReceivedApplicationDto);
     }
 
     @Override
