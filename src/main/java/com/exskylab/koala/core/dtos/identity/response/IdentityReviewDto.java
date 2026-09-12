@@ -25,8 +25,10 @@ public class IdentityReviewDto {
     private Instant rejectedAt;
     private Instant verifiedAt;
     private UUID reviewedByStaffId;
+    private UUID selfieDocumentId;
     private UUID frontDocumentId;
     private UUID backDocumentId;
+    private UUID togetherDocumentId;
     private Instant createdAt;
 
     public static IdentityReviewDto from(IdentityVerification review) {
@@ -51,11 +53,17 @@ public class IdentityReviewDto {
         dto.setRejectedAt(review.getRejectedAt());
         dto.setVerifiedAt(review.getVerifiedAt());
         dto.setReviewedByStaffId(review.getReviewedByStaffId());
+        if (review.getSelfieDocument() != null) {
+            dto.setSelfieDocumentId(review.getSelfieDocument().getId());
+        }
         if (review.getVerificationDocument() != null) {
             dto.setFrontDocumentId(review.getVerificationDocument().getId());
         }
         if (review.getBackDocument() != null) {
             dto.setBackDocumentId(review.getBackDocument().getId());
+        }
+        if (review.getTogetherDocument() != null) {
+            dto.setTogetherDocumentId(review.getTogetherDocument().getId());
         }
         dto.setCreatedAt(review.getCreatedAt());
         return dto;

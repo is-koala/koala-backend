@@ -15,7 +15,7 @@ import java.util.UUID;
 @Repository
 public interface IdentityVerificationDao extends JpaRepository<IdentityVerification, UUID> {
 
-    @EntityGraph(attributePaths = {"user", "verificationDocument", "backDocument"})
+    @EntityGraph(attributePaths = {"user", "verificationDocument", "backDocument", "selfieDocument", "togetherDocument"})
     @Override
     Optional<IdentityVerification> findById(UUID id);
 
@@ -25,15 +25,15 @@ public interface IdentityVerificationDao extends JpaRepository<IdentityVerificat
             """)
     Optional<IdentityVerification> findPendingByUserId(@Param("userId") UUID userId);
 
-    @EntityGraph(attributePaths = {"user", "verificationDocument", "backDocument"})
+    @EntityGraph(attributePaths = {"user", "verificationDocument", "backDocument", "selfieDocument", "togetherDocument"})
     Optional<IdentityVerification> findTopByUser_IdOrderByCreatedAtDesc(UUID userId);
 
-    @EntityGraph(attributePaths = {"user", "verificationDocument", "backDocument"})
+    @EntityGraph(attributePaths = {"user", "verificationDocument", "backDocument", "selfieDocument", "togetherDocument"})
     Page<IdentityVerification> findByVerifiedFalseAndRejectedAtIsNull(Pageable pageable);
 
-    @EntityGraph(attributePaths = {"user", "verificationDocument", "backDocument"})
+    @EntityGraph(attributePaths = {"user", "verificationDocument", "backDocument", "selfieDocument", "togetherDocument"})
     Page<IdentityVerification> findByVerifiedTrue(Pageable pageable);
 
-    @EntityGraph(attributePaths = {"user", "verificationDocument", "backDocument"})
+    @EntityGraph(attributePaths = {"user", "verificationDocument", "backDocument", "selfieDocument", "togetherDocument"})
     Page<IdentityVerification> findByRejectedAtIsNotNull(Pageable pageable);
 }

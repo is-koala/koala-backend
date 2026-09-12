@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-12-01-01-identity-four-photos" author="koala">
+        <addColumn tableName="user_verifications">
+            <column name="selfie_document_id" type="UUID"/>
+            <column name="together_document_id" type="UUID"/>
+        </addColumn>
+
+        <addForeignKeyConstraint baseTableName="user_verifications"
+                                 baseColumnNames="selfie_document_id"
+                                 constraintName="fk_user_verifications_selfie_document"
+                                 referencedTableName="media" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="user_verifications"
+                                 baseColumnNames="together_document_id"
+                                 constraintName="fk_user_verifications_together_document"
+                                 referencedTableName="media" referencedColumnNames="id"/>
+        <addUniqueConstraint tableName="user_verifications" columnNames="selfie_document_id"
+                             constraintName="uc_user_verifications_selfie_document"/>
+        <addUniqueConstraint tableName="user_verifications" columnNames="together_document_id"
+                             constraintName="uc_user_verifications_together_document"/>
+
+        <rollback>
+            <dropUniqueConstraint tableName="user_verifications"
+                                 constraintName="uc_user_verifications_together_document"/>
+            <dropUniqueConstraint tableName="user_verifications"
+                                 constraintName="uc_user_verifications_selfie_document"/>
+            <dropForeignKeyConstraint baseTableName="user_verifications"
+                                      constraintName="fk_user_verifications_together_document"/>
+            <dropForeignKeyConstraint baseTableName="user_verifications"
+                                      constraintName="fk_user_verifications_selfie_document"/>
+            <dropColumn tableName="user_verifications" columnName="together_document_id"/>
+            <dropColumn tableName="user_verifications" columnName="selfie_document_id"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

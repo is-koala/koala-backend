@@ -75,7 +75,11 @@ public class IdentityVerificationManager implements IdentityDocumentReviewServic
 
     @Override
     @Transactional
-    public IdentityVerification submit(VerifyIdentityDto identity, MultipartFile front, MultipartFile back) {
+    public IdentityVerification submit(VerifyIdentityDto identity,
+                                       MultipartFile selfie,
+                                       MultipartFile front,
+                                       MultipartFile back,
+                                       MultipartFile together) {
         User current = securityService.getAuthenticatedUser();
         if (current.isIdentityVerified()) {
             throw new ValidationException(UserMessages.USER_ALREADY_IDENTITY_VERIFIED);
@@ -92,8 +96,10 @@ public class IdentityVerificationManager implements IdentityDocumentReviewServic
         review.setLastName(identity.getLastName());
         review.setBirthDate(identity.getBirthDate());
         review.setTcDocumentNumber(identity.getTcDocumentNumber());
+        review.setSelfieDocument(storePhoto(selfie));
         review.setVerificationDocument(storePhoto(front));
         review.setBackDocument(storePhoto(back));
+        review.setTogetherDocument(storePhoto(together));
         return identityVerificationDao.save(review);
     }
 
@@ -177,11 +183,17 @@ public class IdentityVerificationManager implements IdentityDocumentReviewServic
     }
 
     private static VerificationDocument matchingDocument(IdentityVerification review, UUID documentId) {
+        if (belongsTo(review.getSelfieDocument(), documentId)) {
+            return review.getSelfieDocument();
+        }
         if (belongsTo(review.getVerificationDocument(), documentId)) {
             return review.getVerificationDocument();
         }
         if (belongsTo(review.getBackDocument(), documentId)) {
             return review.getBackDocument();
+        }
+        if (belongsTo(review.getTogetherDocument(), documentId)) {
+            return review.getTogetherDocument();
         }
         return null;
     }
