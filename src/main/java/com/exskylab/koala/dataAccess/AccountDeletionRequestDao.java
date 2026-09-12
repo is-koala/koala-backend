@@ -45,4 +45,8 @@ public interface AccountDeletionRequestDao extends JpaRepository<AccountDeletion
     @EntityGraph(attributePaths = "user")
     @Query("select r from AccountDeletionRequest r where r.id = :id")
     Optional<AccountDeletionRequest> findByIdForUpdate(@Param("id") UUID id);
+
+    @EntityGraph(attributePaths = "user")
+    @Override
+    Optional<AccountDeletionRequest> findById(UUID id);
 }
