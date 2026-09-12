@@ -383,11 +383,16 @@ yapılmaz, çünkü "eşleşmeyen kanıt" ile "transfer olmadı" aynı şey değ
 
    Eşleştirilecek satırlar panelin kuyruğunda: `GET /admin/payouts` (izin
    `payout.reconcile`) `status` verilmezse `PROCESSING` hakedişleri sayfalar ve
-   her satırda `id`, `providerReference`, `recipient` (ad/soyad), `maskedIban`
-   (`TR18***2315` biçiminde; tam IBAN dönmez), `amount` ve `currency` bulunur.
-   Yani `providerReference`, `amount` ve `currency` ekstreden değil kuyruk
-   satırından kopyalanır; elle yazılacak tek şey ekstre referansı ve
-   gerçekleşme anıdır.
+   her satırda `id`, `providerReference`, `recipient` (ad/soyad; hesabını
+   silmiş işçide `null`), `maskedIban` (`TR18***2315` biçiminde; tam IBAN
+   dönmez, hesap silinmişse `null`), `amount` ve `currency` bulunur. Panel
+   satır seçilince `id`, `providerReference`, `amount` ve `currency` alanlarını
+   kuyruk satırından **ön doldurur**; operatör dolan tutar ve para birimini
+   ekstre satırıyla karşılaştırıp doğrular, elle yazdığı tek şey ekstre
+   referansı (`settlementReference`) ve gerçekleşme anıdır (`settledAt`).
+   Sunucu dördünü yine de payout kaydıyla karşılaştırır; ön doldurma kapıyı
+   gevşetmez. Hesabı silinmiş işçinin hakedişi kuyruktan düşmez — para
+   bankaya çıkmış ve hâlâ kanıt bekliyor.
 
    Çağrı idempotenttir: aynı `settlementReference` ikinci kez bildirilirse kayıt
    değişmez ve `completedAt` yeniden damgalanmaz. Farklı bir referansla
