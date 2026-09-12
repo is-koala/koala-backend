@@ -2742,6 +2742,43 @@ E-postadaki bağlantı web uygulamasının `/bildirim-tercihleri/cikis?token=...
 açılışta `POST /notification-preferences/unsubscribe` çağırıyor — parola sıfırlama bağlantısının şekliyle
 aynı. Kullanıcı için hâlâ tek tık ve giriş gerekmiyor.
 
+**Yanıt sözleşmesi iki hata kodu ve veri taşıyan bir başarı zarfı (is-koala/koala-backend#234).** Uç bir süre
+tanınmayan ve süresi dolmuş token'ı aynı `400 NOTIFICATION_UNSUBSCRIBE_TOKEN_INVALID` ile karşılıyor, başarıda da
+verisiz bir `SuccessResult` dönüyordu; koala-web#54'ün dört durumlu sayfası bununla yazılamıyordu. Şimdi
+`UnsubscribeTokenManager.consume` **iki** anahtar atıyor: özeti eşleşen satır yoksa
+`UNSUBSCRIBE_TOKEN_INVALID`, satır var ama `expiresAt` geçmişse `UNSUBSCRIBE_TOKEN_EXPIRED` — ikisi de
+`ValidationException`, yani durum kodu **400 kalıyor**, yalnız `errorCode` ayrışıyor (kayıt token'ının
+`REGISTRATION_TOKEN_EXPIRED` deseni; §2ag'de süresi dolmuş bağlantı için 409'a gidilmedi, çünkü çakışan bir
+durum değil kabul edilemeyen bir girdi). **Süresi dolan token ayırt edilebilir, tanınmayan ile bozulmuş token
+ayırt edilemez (§2d2):** bozulmuş token'ın SHA-256 özeti hiçbir satırla eşleşmediği için "bilinmiyor" dalına
+düşer — aynı durum, aynı kod, aynı mesaj; silinmiş hesabın soft-delete edilmiş token'ı da `@SQLRestriction`
+yüzünden aynı dala düşer ve hesabın var olmuş olduğunu söylemez. Süresi dolmuş token ise **gerçek** bir
+token'dır: kullanıcı onu bizden almıştır, "yeni e-postadaki bağlantıyı kullan" demenin sızdırdığı bir şey yok.
+Ayrım sunucu logunda da var — süresi dolan dal token satırının id'sini ve kullanıcı id'sini `warn` ile yazar,
+ham token hiçbir log satırına ya da hata metnine girmez (`LogPrivacyTest` `rawToken`, `getToken()` ve
+`getTokenDigest()` biçimlerini yakalıyor; `theUnsubscribeTokenCannotReachALogLineInAnyOfItsShapes` bunun
+kırmızıya dönebildiğini gösteriyor). Boş ya da 2048 karakteri aşan token manager'a hiç ulaşmaz:
+`UnsubscribeDto` kendi anahtarlarıyla (`notification.unsubscribe.token.required` / `too.long`) 400
+`VALIDATION_FAILED` + `details[].field=token` döner (§2ah).
+
+Başarı zarfı artık `SuccessDataResult<UnsubscribedChannelDto>`: `category`, `channel` ve `alreadyDisabled`.
+Kategori ve kanal token satırından `NotificationPreferenceMapper` ile eşlenir (manager DTO kurmaz, §2c).
+`alreadyDisabled` idempotanlığın görünür yüzü: manager tercih satırını yazmadan önce çözümlenmiş durumu
+(`enabledFor`) sorar, kanal zaten kapalıysa **hiçbir şey yazmaz** — tercih satırı yeniden `save` edilmez,
+ikinci bir `UNSUBSCRIBE_LINK` rıza kaydı açılmaz, İYS kuyruğuna ikinci bir çekilme girmez — ve `true` döner.
+Bu yüzden aynı bağlantıya ikinci tık aynı kategori/kanalla 200 alır; token'ın `lastUsedAt` damgası her tıkta
+yenilenir, o tercih değil kullanım izidir. Hiç satırı olmayan ticari kanal (varsayılanı kapalı) da "zaten
+kapalı" sayılır: satır açmak override modelini bozar, çekilecek bir izin de yoktur. Kullanıcı arada tercih
+merkezinden kanalı yeniden açmışsa bağlantı onu yine kapatır ve o kararı kaydeder. Sabitleyen testler:
+`NotificationUnsubscribeRulesTest` (iki kod, aynı durum, bozulmuş = bilinmeyen, süresi dolan kullanılmış
+sayılmaz, hata metni token taşımaz), `NotificationPreferenceRulesTest` (DTO kategori+kanalı taşır, ikinci tık
+`save`/rıza/İYS çağırmaz, satırsız ticari kanal `alreadyDisabled`, varsayılanı açık alarm kanalı kapanır ve
+kapalı kalır), `RequestValidationTest` (DTO anahtarları), `NotificationPreferenceIT` (HTTP üzerinden ikinci tık
+tek rıza satırı ve değişmeyen `updated_at`; JDBC ile geçmişe yazılmış `expires_at` → `..._EXPIRED`; bozulmuş
+ile uydurma token'ın gövdeleri `timeStamp`/`requestId` düşülünce birebir aynı; `Accept-Language: en` metni;
+boş token `details[0].field=token`), `OpenApiDocumentIT` (400 açıklaması iki kodu adlandırır, 200 şeması
+`UnsubscribedChannelDto`'ya `$ref` verir, uç güvenliksiz).
+
 **Ticari ileti izni `consent_records`'a yazılmıyor, kendi tablosunda.** `ConsentRecord` bir
 `AgreementVersion`'a **zorunlu** olarak bağlı; ADR-0008 sonrası boş veritabanında hiç sözleşme satırı yok ve
 tercih ekranını sözleşme kataloğunun kurulmuş olmasına bağlamak kırılgan olurdu. `commercial_message_consents`
