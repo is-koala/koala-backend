@@ -205,7 +205,7 @@ class PassiveAuthenticationTest {
 
     @Test
     void aDataGroup11WithoutAFullNameFieldIsIgnoredRatherThanFatal() throws Exception {
-        byte[] dg11 = new byte[]{0x6C, 0x03, 0x5C, 0x01, 0x0E};
+        byte[] dg11 = new byte[]{(byte) DataGroupTags.DG11, 0x03, 0x5C, 0x01, 0x0E};
         byte[] sod = turkey.securityObjectWithDg11(dg1, dg11);
 
         PassiveAuthenticationResult result = verifierTrusting(turkey).verify(sod, dg1, dg11);

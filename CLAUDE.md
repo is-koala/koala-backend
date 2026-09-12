@@ -2430,6 +2430,8 @@ GROUP BY tc_identity_number HAVING count(*) > 1;
 6. DG1'den MRZ çıkarılır (TD1, üç satır × 30 karakter): TCKN, doğum tarihi ve ad soyad okunur
 7. Üçü de istek gövdesindeki değerlerle karşılaştırılır
 
+**DG11 dış etiketi `0x6B` (ICAO 9303 Part 10); `0x6C` DG12'nindir.** Eski parser ve üç fixture `0x6C` kullanıyordu, yani testler kendi yanlışlarını yeşile boyuyordu. Gerçek TCKK DG11 dosyası `0x6B` ile başlar; etiket uyuşmazsa `AdditionalPersonalDetails.parse` ad döndürmez ve PA sessizce istekteki ada düşer. SOD hash'i ham baytlara baktığı için bu sapma hash doğrulamasını kırmaz, yalnız adı kör eder. Etiketler `DataGroupTags` tablosunda (DG1 `0x61`, DG11 `0x6B`, DG12 `0x6C`, DG15 `0x6F`). `IDENTITY_PASSIVE_AUTH_ENABLED` varsayılanı kapalı kalır; bu not bayrağı açmaz.
+
 **TCKN MRZ'nin neresinde:** ICAO 9303 Part 5'e göre TD1 üst satırında 16-30. karakterler "optional data" ve Türk kimlik kartında TCKN oraya yazılıyor. Ayırıcı `<` ile başlayan da başlamayan da kabul ediliyor; dolgu karakterleri atıldıktan sonra alanın **tam 11 hane** kalması şart.
 
 **Not (j) tuzağı.** Belge numarası 9 karakterden uzunsa ICAO, kontrol hanesinin yerine dolgu koyup numaranın devamını **optional data'nın başına** yazdırıyor. O durumda alan TCKN gibi görünen haneler içerebilir. Bu yüzden ayrıştırıcı önce 15. karakteri kontrol ediyor: dolgu ise alan TCKN taşımıyor demektir ve okuma reddediliyor. Türk kimlik kartında belge numarası 9 karakter, yani bu durum oluşmuyor — ama kanonik ICAO örneği tam olarak bu şekilde ve yanlış okumak başkasının belge numarasını TCKN sanmak olurdu.
