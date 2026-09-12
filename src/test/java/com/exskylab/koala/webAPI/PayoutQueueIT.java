@@ -280,25 +280,37 @@ class PayoutQueueIT extends AbstractStaffIntegrationTest {
     void theQueueIsBuiltWithoutAQueryPerRecipientOrBankAccount() {
         seedProcessingPayout("Mehmet", "Deneme", "TR330006100519786457841326", "iyz-transaction-4712");
         seedProcessingPayout("Zeynep", "Deneme", "TR560006200000000000000012", "iyz-transaction-4713");
+        seedProcessingPayout("Ali", "Deneme", "TR120006200000000000000045", "iyz-transaction-4714");
+        seedProcessingPayout("Elif", "Deneme", "TR450006200000000000000078", "iyz-transaction-4715");
+        seedProcessingPayout("Can", "Deneme", "TR780006200000000000000091", "iyz-transaction-4716");
 
         Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
         boolean wasEnabled = statistics.isStatisticsEnabled();
         statistics.setStatisticsEnabled(true);
-        statistics.clear();
         try {
-            List<StaffPayoutDto> rows = transactionTemplate.execute(status ->
-                    payoutService.listForStaff(null, PageRequest.of(0, 20)).content());
+            statistics.clear();
+            List<StaffPayoutDto> oneRow = transactionTemplate.execute(status ->
+                    payoutService.listForStaff(null, PageRequest.of(0, 1)).content());
+            long statementsForOneRow = statistics.getPrepareStatementCount();
 
-            assertEquals(3, rows.size());
-            assertFalse(rows.stream().map(StaffPayoutDto::maskedIban).toList().contains(null),
+            statistics.clear();
+            List<StaffPayoutDto> fiveRows = transactionTemplate.execute(status ->
+                    payoutService.listForStaff(null, PageRequest.of(0, 5)).content());
+            long statementsForFiveRows = statistics.getPrepareStatementCount();
+
+            assertEquals(1, oneRow.size());
+            assertEquals(5, fiveRows.size());
+            assertFalse(fiveRows.stream().map(StaffPayoutDto::maskedIban).toList().contains(null),
                     "her satir kendi hesabinin maskeli IBAN'ini tasimali");
-            assertFalse(rows.stream().map(StaffPayoutDto::recipient).toList().contains(null),
+            assertFalse(fiveRows.stream().map(StaffPayoutDto::recipient).toList().contains(null),
                     "her satir kendi alicisini tasimali");
             assertEquals(0, statistics.getEntityFetchCount(),
                     "alici ya da banka hesabi satir basina ayri sorguyla yuklendi");
-            assertEquals(2, statistics.getPrepareStatementCount(),
-                    "kuyruk sayfasi iki SELECT ile kurulmali: hakedisler + banka hesaplari, sonra sayfanin "
-                            + "alicilari tek toplu sorguyla");
+            assertEquals(statementsForOneRow, statementsForFiveRows,
+                    "Sorgu sayisi satir sayisiyla buyumemeli. Iki sayfa da dolu (6 tohum satir, size=1 ve "
+                            + "size=5), yani ikisi de hakedisler+banka hesaplari SELECT'i, Spring Data'nin "
+                            + "count sorgusu ve alicilarin tek toplu SELECT'i olmak uzere 3 statement kurmali; "
+                            + "sayfa dolmasaydi count atlanir ve sayi 2 olurdu.");
         } finally {
             statistics.setStatisticsEnabled(wasEnabled);
         }
