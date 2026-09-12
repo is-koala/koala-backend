@@ -13,6 +13,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -209,6 +210,39 @@ class LogPrivacyTest {
 
         assertTrue(violationsIn(source).stream().anyMatch(v -> v.contains("email")),
                 "accessLog alicisi PII taramasinin disinda kaldi.");
+    }
+
+    @Test
+    void theUnsubscribeTokenCannotReachALogLineInAnyOfItsShapes() {
+        String source = """
+                class Example {
+                    void f(String rawToken, UnsubscribeDto request, UnsubscribeToken token) {
+                        log.warn("unknown unsubscribe token {}", rawToken);
+                        log.warn("unknown unsubscribe token {}", request.getToken());
+                        log.warn("unsubscribe digest {}", token.getTokenDigest());
+                        log.warn("unsubscribe token {} expired", token.getId());
+                    }
+                }
+                """;
+
+        List<String> violations = new ArrayList<>();
+        Matcher matcher = LOG_CALL.matcher(source);
+        while (matcher.find()) {
+            String call = matcher.group(1);
+            Matcher accessor = FORBIDDEN_TOKEN_ACCESSOR.matcher(call);
+            while (accessor.find()) {
+                violations.add(accessor.group());
+            }
+            for (String argument : argumentsOf(call)) {
+                Matcher variable = PII_VARIABLE_TOKEN.matcher(argument);
+                while (variable.find()) {
+                    violations.add(variable.group());
+                }
+            }
+        }
+
+        assertEquals(List.of("rawToken", "getToken()", "getTokenDigest()"), violations,
+                "ham token, DTO alicisi ve ozet alicisi yakalanmali; token satirinin id'si serbest kalmali");
     }
 
     @Test

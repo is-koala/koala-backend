@@ -109,6 +109,33 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void theUnsubscribeEndpointDocumentsItsAnswerAndBothTokenRefusals() throws Exception {
+        String endpoint = "$.paths['/notification-preferences/unsubscribe'].post";
+
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(endpoint + ".security").doesNotExist())
+                .andExpect(jsonPath(endpoint + ".responses.200.content['*/*'].schema.$ref")
+                        .value("#/components/schemas/SuccessDataResultUnsubscribedChannelDto"))
+                .andExpect(jsonPath(endpoint + ".responses.400.description")
+                        .value(containsString("NOTIFICATION_UNSUBSCRIBE_TOKEN_INVALID")))
+                .andExpect(jsonPath(endpoint + ".responses.400.description")
+                        .value(containsString("NOTIFICATION_UNSUBSCRIBE_TOKEN_EXPIRED")))
+                .andExpect(jsonPath(endpoint + ".responses.400.content['*/*'].schema.$ref")
+                        .value("#/components/schemas/ErrorResult"))
+                .andExpect(jsonPath(endpoint + ".responses.401").doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.SuccessDataResultUnsubscribedChannelDto.properties.data.$ref")
+                        .value("#/components/schemas/UnsubscribedChannelDto"))
+                .andExpect(jsonPath("$.components.schemas.UnsubscribedChannelDto.properties.category.enum")
+                        .value(hasItems("NEWSLETTER", "MARKETINGS", "JOB_ALERTS")))
+                .andExpect(jsonPath("$.components.schemas.UnsubscribedChannelDto.properties.channel.enum")
+                        .value(hasItems("EMAIL", "PUSH")))
+                .andExpect(jsonPath("$.components.schemas.UnsubscribedChannelDto.properties.alreadyDisabled.type")
+                        .value("boolean"))
+                .andExpect(jsonPath("$.components.schemas.UnsubscribedChannelDto.properties.length()").value(3));
+    }
+
+    @Test
     void theErrorEnvelopeIsPartOfTheSchemaCatalogue() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(jsonPath("$.components.schemas.ErrorResult.properties.errorCategory").exists())
