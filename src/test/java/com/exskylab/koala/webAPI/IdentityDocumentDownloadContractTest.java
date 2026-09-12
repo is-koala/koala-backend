@@ -74,6 +74,15 @@ class IdentityDocumentDownloadContractTest {
     }
 
     @Test
+    void theOwnerReadsTheLatestReviewOnTheSamePathAsUpload() throws Exception {
+        Method method = UsersController.class.getDeclaredMethod("currentIdentityDocuments");
+        GetMapping mapping = method.getAnnotation(GetMapping.class);
+
+        assertNotNull(mapping);
+        assertArrayEquals(new String[]{"/me/identity-documents"}, mapping.value());
+    }
+
+    @Test
     void aSignedDownloadAddressExpiresWithinTheConfiguredWindow() {
         StorageProperties properties = new StorageProperties();
         properties.setBucket("koala-identity");

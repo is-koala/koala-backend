@@ -35,6 +35,7 @@ public class UserMessages {
     public static final String IDENTITY_VERIFICATION_FAILED = "{user.identity.verification.failed}";
     public static final String USER_IDENTITY_VERIFICATED_SUCCESSFULLY = "{user.identity.verificated.successfully}";
     public static final String USER_IDENTITY_DOCUMENTS_SUBMITTED = "{user.identity.documents.submitted}";
+    public static final String USER_IDENTITY_DOCUMENTS_RETRIEVED = "{user.identity.documents.retrieved}";
     public static final String JOB_CREATED_SUCCESSFULLY = "{job.created.successfully}";
     public static final String USER_ADDRESS_UPDATED_SUCCESSFULLY = "{user.address.updated.successfully}";
     public static final String INVALID_IBAN = "{user.invalid.iban}";

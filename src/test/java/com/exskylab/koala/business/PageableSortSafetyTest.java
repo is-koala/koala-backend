@@ -38,7 +38,9 @@ class PageableSortSafetyTest {
             new Exemption("JobManager", "getJobsOfCurrentUser",
                     "saf devretme; sayfalama ortak listJobs yardimcisinda dogrulaniyor"),
             new Exemption("JobManager", "getJobsOfCompany",
-                    "saf devretme; sayfalama ortak listJobs yardimcisinda dogrulaniyor"));
+                    "saf devretme; sayfalama ortak listJobs yardimcisinda dogrulaniyor"),
+            new Exemption("PayoutManager", "listForStaff",
+                    "istemci sort'u yok sayiliyor; kuyruk sabit createdAt DESC kullanir"));
 
     @Test
     void everyPagedQuerySanitisesTheRequestedSort() throws IOException {

@@ -211,6 +211,30 @@ class IdentityDocumentReviewRulesTest {
     }
 
     @Test
+    void theCurrentUserCanReadTheirLatestReviewIncludingARejection() {
+        IdentityVerification rejected = pendingRow();
+        rejected.setRejectionReason("Fotoğraflar okunaksız");
+        when(identityVerificationDao.findTopByUser_IdOrderByCreatedAtDesc(current.getId()))
+                .thenReturn(Optional.of(rejected));
+
+        IdentityVerification latest = reviews.latestForCurrentUser();
+
+        assertEquals(rejected.getId(), latest.getId());
+        assertEquals("Fotoğraflar okunaksız", latest.getRejectionReason());
+    }
+
+    @Test
+    void aUserWithoutDocumentsCannotReadAReview() {
+        when(identityVerificationDao.findTopByUser_IdOrderByCreatedAtDesc(current.getId()))
+                .thenReturn(Optional.empty());
+
+        ResourceNotFoundException thrown = assertThrows(ResourceNotFoundException.class,
+                reviews::latestForCurrentUser);
+
+        assertEquals("IDENTITY_DOCUMENTS_NOT_FOUND", thrown.getErrorCode());
+    }
+
+    @Test
     void staffCanDownloadTheFrontAndBackPhotosOfAReview() {
         IdentityVerification pending = pendingRowWithPhotos();
         when(identityVerificationDao.findById(pending.getId())).thenReturn(Optional.of(pending));
