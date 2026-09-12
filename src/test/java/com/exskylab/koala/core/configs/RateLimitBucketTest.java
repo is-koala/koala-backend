@@ -117,6 +117,15 @@ class RateLimitBucketTest {
     }
 
     @Test
+    void companyLogoUsesTheUploadAllowance() throws Exception {
+        properties.getUpload().setMaxAttempts(1);
+        properties.getWrite().setMaxAttempts(5);
+
+        assertEquals(1, passing("PUT", "/companies/" + UUID.randomUUID() + "/logo", "10.0.0.14", 3));
+        assertEquals(5, passing("POST", "/reports", "10.0.0.14", 5));
+    }
+
+    @Test
     void writesAndUploadsDoNotDrainEachOther() throws Exception {
         properties.getUpload().setMaxAttempts(1);
         properties.getWrite().setMaxAttempts(5);

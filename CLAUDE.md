@@ -121,6 +121,8 @@ Birim testleri `*Test.java` (Surefire, Docker gerektirmez), entegrasyon testleri
 
 **Testcontainers sürümü elle yönetiliyor.** Boot 4 Testcontainers'ı BOM'una almıyor; `testcontainers-bom` import'u `dependencyManagement` içinde duruyor, silinirse test bağımlılıkları sürümsüz kalır.
 
+**Failsafe entegrasyon testleri iki yeniden kullanılan JVM'e bölünür; `IdentityMultipartBudgetIT` ayrı ve yeniden kullanılmayan tek JVM'de çalışır.** Tek uzun JVM bütün Spring context'lerini biriktirerek Raspberry Pi CI makinesinin heap'ini tüketiyordu. İki normal fork toplam bellek tüketimini 8 GiB makinenin sınırında tutarken test süresini kısaltır. Gerçek 40–43 MiB gövdeler üreten `IdentityMultipartBudgetIT` ana paketten hariç tutulur ve yalnız kendi execution'ında bir kez çalışır; include/exclude ayrımı kaldırılırsa test ya iki kez koşar ya da CI yeniden bellek taşmasına döner.
+
 ## 2b. Spring Boot 4 geçişinde neyin nereye taşındığı
 
 Boot 4 auto-configuration'ı teknoloji başına ayrı modüllere böldü. Bir sınıf "kayboldu" gibi görünüyorsa büyük ihtimalle modülü eksik:

@@ -321,7 +321,6 @@
                             <goal>verify</goal>
                         </goals>
                         <configuration>
-                            <!-- Pi'de tek uzun JVM Spring context'lerini biriktirip heap'i tüketiyordu. -->
                             <forkCount>2</forkCount>
                             <excludes>
                                 <exclude>**/IdentityMultipartBudgetIT.java</exclude>
