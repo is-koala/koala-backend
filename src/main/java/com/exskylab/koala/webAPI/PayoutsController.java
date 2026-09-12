@@ -94,6 +94,7 @@ public class PayoutsController {
             description = "status verilmezse yalnız PROCESSING (banka mutabakatı bekleyen) döner. "
                     + "Her satır ekstre eşleştirmesi için kayıtlı sağlayıcı referansını, alıcı özetini ve "
                     + "maskeli IBAN'ı (ilk 4 + son 4) taşır; tam IBAN dönmez. Tutar ondalık metindir. "
+                    + "İşçi hesabını silmişse satır kuyrukta kalır, recipient ve maskedIban null döner. "
                     + "Onay mevcut reconcile ucundan yapılır; bu GET yalnız okur.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Hakedişler listelendi")
