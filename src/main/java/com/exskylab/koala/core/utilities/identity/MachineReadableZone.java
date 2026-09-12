@@ -94,7 +94,7 @@ public final class MachineReadableZone {
         }
 
         int index = 0;
-        if ((dataGroup1[0] & 0xFF) == 0x61) {
+        if ((dataGroup1[0] & 0xFF) == DataGroupTags.DG1) {
             index = skipTagAndLength(dataGroup1, 0, 1);
             if (index < 0) {
                 return Optional.empty();

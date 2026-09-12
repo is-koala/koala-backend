@@ -12,6 +12,7 @@ import com.exskylab.koala.dataAccess.UserDao;
 import com.exskylab.koala.core.properties.IdentityVerificationProperties;
 import com.exskylab.koala.core.utilities.identity.AdditionalPersonalDetails;
 import com.exskylab.koala.core.utilities.identity.CscaTrustStore;
+import com.exskylab.koala.core.utilities.identity.DataGroupTags;
 import com.exskylab.koala.core.utilities.identity.MachineReadableZone;
 import com.exskylab.koala.core.utilities.identity.PassiveAuthenticationException;
 import com.exskylab.koala.core.utilities.identity.PassiveAuthenticationResult;
@@ -343,7 +344,7 @@ class IdentityVerificationRulesTest {
         inner[0] = 0x5F; inner[1] = 0x0E; inner[2] = (byte) name.length;
         System.arraycopy(name, 0, inner, 3, name.length);
         byte[] outer = new byte[2 + inner.length];
-        outer[0] = 0x6C; outer[1] = (byte) inner.length;
+        outer[0] = (byte) DataGroupTags.DG11; outer[1] = (byte) inner.length;
         System.arraycopy(inner, 0, outer, 2, inner.length);
         return outer;
     }

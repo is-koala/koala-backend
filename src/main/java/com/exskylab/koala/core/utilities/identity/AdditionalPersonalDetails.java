@@ -6,7 +6,6 @@ import java.util.Optional;
 
 public final class AdditionalPersonalDetails {
 
-    private static final int DG11_TAG = 0x6C;
     private static final int FULL_NAME_TAG = 0x5F0E;
 
     private final String surname;
@@ -53,7 +52,7 @@ public final class AdditionalPersonalDetails {
         }
 
         int index = 0;
-        if ((bytes[0] & 0xFF) == DG11_TAG) {
+        if ((bytes[0] & 0xFF) == DataGroupTags.DG11) {
             index = contentStart(bytes, 0, 1);
             if (index < 0) {
                 return Optional.empty();

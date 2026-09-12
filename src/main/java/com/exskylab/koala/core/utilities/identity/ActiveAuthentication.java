@@ -109,7 +109,7 @@ public final class ActiveAuthentication {
     }
 
     private static byte[] unwrapDataGroup15(byte[] dataGroup15) {
-        if (dataGroup15.length > 2 && (dataGroup15[0] & 0xFF) == 0x6F) {
+        if (dataGroup15.length > 2 && (dataGroup15[0] & 0xFF) == DataGroupTags.DG15) {
             int first = dataGroup15[1] & 0xFF;
             int offset = first < 0x80 ? 2 : 2 + (first & 0x7F);
             byte[] unwrapped = new byte[dataGroup15.length - offset];

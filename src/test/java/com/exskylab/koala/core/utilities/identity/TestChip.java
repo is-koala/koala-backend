@@ -97,7 +97,7 @@ final class TestChip {
         System.arraycopy(mrz, 0, inner, 3, mrz.length);
 
         byte[] outer = new byte[2 + inner.length];
-        outer[0] = 0x61;
+        outer[0] = (byte) DataGroupTags.DG1;
         outer[1] = (byte) inner.length;
         System.arraycopy(inner, 0, outer, 2, inner.length);
 
@@ -171,7 +171,7 @@ final class TestChip {
         System.arraycopy(name, 0, inner, 3, name.length);
 
         byte[] outer = new byte[2 + inner.length];
-        outer[0] = 0x6C;
+        outer[0] = (byte) DataGroupTags.DG11;
         outer[1] = (byte) inner.length;
         System.arraycopy(inner, 0, outer, 2, inner.length);
         return outer;
@@ -192,7 +192,7 @@ final class TestChip {
         byte[] key = generator.generateKeyPair().getPublic().getEncoded();
 
         byte[] wrapped = new byte[key.length + 4];
-        wrapped[0] = 0x6F;
+        wrapped[0] = (byte) DataGroupTags.DG15;
         wrapped[1] = (byte) 0x82;
         wrapped[2] = (byte) (key.length >> 8);
         wrapped[3] = (byte) (key.length & 0xFF);
