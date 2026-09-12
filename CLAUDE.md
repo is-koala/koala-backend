@@ -2356,6 +2356,74 @@ Sıkıştırma yalnızca Swagger için değil: `application/json` de kapsamda, y
 
 **`PUT/DELETE /companies/{companyId}/logo`** profil fotoğrafıyla aynı kalıpta; logo yalnızca şirket kurulurken verilebiliyordu, sonradan hiç değiştirilemiyordu.
 
+### Gelen başvurular — ilanlar arası gelen kutusu (#233)
+
+İşveren başvuruları yalnız ilan bazında (`GET /jobs/{jobId}/applications`) görebiliyordu; on ilanı olan
+işveren on ekran geziyordu. `GET /users/me/received-applications` sahibi olduğun bireysel ilanlar ile
+yetkilisi olduğun şirketlerin ilanlarına gelen başvuruları **tek sayfalı** listeliyor. Uç
+`EmployerToolsController`'da (`/users/me` altındaki işveren araçları), kuralı `SecurityConfig`'in "employer
+tool endpoints" bloğunda.
+
+**Ad neden `received-applications`.** `/users/me/applications` **gönderdiğin** başvurular (§2s); işverenin
+gelen kutusu onunla karıştırılamayacak bir ad taşımalı. `/users/me/jobs/applications` reddedildi: `/users/me/jobs`
+yalnız ilanı **açanın** listesi (`findAllByCreatorId`, §2ap), gelen kutusu ise açmadığın şirket ilanlarını da
+kapsıyor — iç içelik yalan söylerdi (§0b). Kardeşleri `saved-jobs`, `followed-companies`, `job-templates` ile
+aynı biçim.
+
+**Kapsam yeni bir kural değil, `requireJobEditor`'un sorgu hâli.** Tekil uçlar "ilanın sahibi **ya da**
+şirketinin yetkilisi" diye soruyor (`JobManager.requireJobEditor`, `assertCurrentUserIsEmployerOf`) ve yetkili
+tanımı her yerde `CompanyContactService.isUserAContactOfCompany` = `company_contacts`'ta silinmemiş bir satır,
+rol ayrımı yok. Sayfalı sorgu aynı tanımı kümeye çevirmek zorunda: `CompanyContactService.getCompanyIdsOfContact`
+(`CompanyContactDao.findCompanyIdsByUserId`) kullanıcının şirket kimliklerini **aynı entity** üzerinden veriyor —
+`@SQLRestriction` çıkarılmış yetkiliyi düşürüyor — ve `JobApplicationDao` yalnız
+`a.job.creator.id = :viewerId or a.job.company.id in :companyIds` diyor. Üyelik tanımı böylece
+`CompanyContact` aggregate'inde tek yerde kalıyor; `JobApplicationDao` `company_contacts`'ı hiç tanımıyor.
+Hiç şirketi olmayan kullanıcıda liste boş gidiyor ve Hibernate 7 boş `in` listesini `1=0` olarak çiziyor —
+varsayılmadı, `aStrangerSeesNothing` ile gerçek Postgres'te ölçüldü.
+
+**Kapsam dışı `jobId`/`companyId` süzgeci 404 değil boş sayfa döndürür ve var olmayan kimlikle aynı yanıttır.**
+Süzgeçler kapsam yükleminin **içinde** `and` ile bağlı; ayrı bir "bu ilan senin mi" dalı yok, dolayısıyla
+gizlenecek bir bit de yok (§2s2'nin liste ucu gerekçesi, §2d2). `aJobOutsideTheScopeIsIndistinguishableFromAJobThatDoesNotExist`
+iki gövdeyi `timeStamp`/`requestId` düşüldükten sonra birebir karşılaştırıyor. Şirket varlığı zaten herkese
+açık (§2ap) ama bu uçta onu doğrulayan bir dal açmak yalnız ikinci bir sorgu ve ikinci bir yanıt şekli katardı.
+
+**Varsayılan sıra bekleyenleri öne alır ve kararlıdır:** `APPLIED` önce, sonra `applicationDateTime desc`,
+eşitlikte `id desc`. Bu sıra `Sort` ile ifade edilemez (durum alfabetik sıralandığında `ACCEPTED` `APPLIED`'ın
+önüne geçer), o yüzden `findReceivedPendingFirst` `order by case when a.status = APPLIED then 0 else 1 end, …`
+taşıyor. İstemci `sort` verirse (`applicationDateTime`, `answeredDateTime`, `status` — `MY_APPLICATIONS_SORTABLE`
+ile aynı küme) varsayılan **tümüyle** yerini bırakıyor ve `findReceived`'e `id desc` eklenmiş sıra gidiyor;
+bilinmeyen alan 400 (`PageableSanitizer`, §2l). İki DAO metodu olmasının sebebi Spring Data: `@Query` zaten
+`order by` taşıyorsa `Pageable`'ın sırasını **onun arkasına** ekliyor, yani tek sorguda istemci sırası hep
+ikincil kalırdı. İki metot **tek** `RECEIVED_SCOPE` sabitini paylaşıyor — kapsam yüklemi iki yerde ayrışamaz
+(bu deponun baskın kusur sınıfı, §2ap `listJobs` gerekçesinin aynısı).
+
+**Satır şekli `ReceivedApplicationDto`:** `id`, `status`, `applicationDateTime`, `answeredDateTime`, `notes`,
+`applicant` (`SafeUserDto` — `JobApplicantDto` ile aynı iç DTO, kişisel veri genişletilmedi), `jobId`,
+`jobTitle`, `jobStatus`, `companyId`/`companyName` (bireysel ilanda `null`), `assignmentId`. `jobId` + `id`
+mevcut başvuru inceleme ekranına, `companyId` şirket bağlamına derin bağlantı için (is-koala/koala-web#147).
+`cvUrl` bilerek yok: inceleme ekranı zaten veriyor ve gelen kutusu için `user.cv` join'i boşuna olurdu.
+
+**N+1 ölçüldü, varsayılmadı.** Graf `user`, `user.profilePicture`, `job`, `job.company`, `assignment`. Sonuncusu
+ilk sürümde yoktu ve `theNumberOfStatementsDoesNotGrowWithTheNumberOfRows` onu yakaladı: bir satırlık sayfa 5,
+beş satırlık sayfa 9 sorgu — `JobApplication.assignment` ters yönlü `@OneToOne(mappedBy)` olduğu için Hibernate
+null olup olmadığını öğrenmek üzere satır başına `job_assignments` okuyor (`findAllByJobId`'nin `assignment`
+taşımasının sebebi de bu). Şimdi istek başına **üç** sorgu (üyelik kimlikleri, sayfa, sayım) ve satır sayısından
+bağımsız; test Hibernate `Statistics` ile 1 ve 5 satırlık sayfayı karşılaştırıyor. `EagerFetchCoverageIT`
+muafiyeti: DTO şirketten yalnız kimlik ve ad çiziyor, `logo` gerekmiyor.
+
+**Sabitleyen testler.** `ReceivedApplicationsAuthorizationTest` (7) manager'ın sözleşmesini tutuyor: kapsam
+yalnız oturum sahibi + `CompanyContactService`'in verdiği küme, şirketsiz kullanıcı boş kümeyle gider, şirket
+süzgeci kapsamı genişletmez, süzgeçler sorguya değişmeden ulaşır, sortsuz istek bekleyen-önce sorgusuna sıralanmamış
+gider, istemci sırası tie-breaker alır, bilinmeyen sort sorgu koşmadan reddedilir. `ReceivedApplicationsIT` (17)
+gerçek Postgres'te: yaratıcı kendi bireysel ve şirket ilanlarının hepsini görür, ilan açmamış yetkili şirketin
+başvurularını görür, **çıkarılmış yetkili** ve yabancı hiçbir şey görmez, diğer işveren yalnız kendininkini
+görür, üç süzgeç ve bileşimi, kapsam dışı ilan/şirket süzgecinin bilinmeyenle özdeş boş sayfası, varsayılan sıra
+eşitlik dahil, istemci sırası iki yönde, bilinmeyen sort 400, sayfa üstverisi, satır alanları (e-posta ve telefon
+**yok**), ve sorgu sayısının satır sayısından bağımsızlığı.
+
+**`GET /jobs/{jobId}/applications`'ın 400/404 kusuru (§2ar3) buraya taşınmadı** — bu uç hiçbir dalda 404
+üretmiyor, gizlenecek bir varlık kararı yok.
+
 ## 2aq. Kimlik doğrulama — sunucu artık doğrulamıyor
 
 **NVİ KPS kapandı.** `https://tckimlik.nvi.gov.tr/service/kpspublicv2.asmx` bugün 302 ile hata sayfasına yönlendiriyor, o da 404. `RestTemplate` yönlendirmeyi takip ettiği için `postForObject` 404 HTML'ini string olarak döndürüyordu; içinde başarı işareti olmadığından `isVerified=false` çıkıyor ve **her kullanıcıya `IDENTITY_VERIFICATION_FAILED` (400)** dönüyordu.
