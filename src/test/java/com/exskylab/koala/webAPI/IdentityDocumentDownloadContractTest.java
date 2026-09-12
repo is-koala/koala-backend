@@ -30,6 +30,7 @@ import java.lang.reflect.Parameter;
 import java.lang.reflect.RecordComponent;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -95,8 +96,13 @@ class IdentityDocumentDownloadContractTest {
                             + parameter.getName());
         }
 
-        Method seam = IdentityDocumentReviewService.class.getMethod("approve", StaffPrincipal.class, UUID.class);
-        assertEquals(2, seam.getParameterCount());
+        List<Method> approveOverloads = Arrays.stream(IdentityDocumentReviewService.class.getMethods())
+                .filter(method -> method.getName().equals("approve"))
+                .toList();
+        assertEquals(1, approveOverloads.size(),
+                "Onay seam'i tek imza taşır; istemciden kanıt alan ikinci bir yol açılmamalı");
+        assertArrayEquals(new Class<?>[]{StaffPrincipal.class, UUID.class},
+                approveOverloads.getFirst().getParameterTypes());
     }
 
     @Test
@@ -108,7 +114,7 @@ class IdentityDocumentDownloadContractTest {
                 MultipartFile.class,
                 MultipartFile.class,
                 MultipartFile.class);
-        String[] parts = java.util.Arrays.stream(method.getParameters())
+        String[] parts = Arrays.stream(method.getParameters())
                 .skip(1)
                 .map(parameter -> parameter.getAnnotation(RequestPart.class).value())
                 .toArray(String[]::new);
