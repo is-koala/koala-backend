@@ -1,0 +1,164 @@
+package com.exskylab.koala.core.mappers;
+
+import com.exskylab.koala.core.dtos.payout.response.PayoutDto;
+import com.exskylab.koala.core.dtos.payout.response.StaffPayoutDto;
+import com.exskylab.koala.core.helpers.MediaUrlResolver;
+import com.exskylab.koala.core.helpers.StorageUrlResolver;
+import com.exskylab.koala.core.properties.AppProperties;
+import com.exskylab.koala.core.properties.StorageProperties;
+import com.exskylab.koala.entities.BankAccount;
+import com.exskylab.koala.entities.JobAssignment;
+import com.exskylab.koala.entities.Payout;
+import com.exskylab.koala.entities.PayoutStatus;
+import com.exskylab.koala.entities.User;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+
+class StaffPayoutMappingTest {
+
+    private static final String FULL_IBAN = "TR180006200119000006672315";
+
+    private final ObjectMapper json = new ObjectMapper();
+
+    private PayoutMapper mapper;
+
+    private final UUID payoutId = UUID.randomUUID();
+    private final UUID assignmentId = UUID.randomUUID();
+    private final UUID workerId = UUID.randomUUID();
+
+    @BeforeEach
+    void setUp() {
+        StorageProperties storage = new StorageProperties();
+        storage.setPublicUrl("https://cdn.example.com");
+        MediaUrlResolver urls = new MediaUrlResolver(new StorageUrlResolver(storage,
+                new AppProperties("http://localhost:8080", "http://localhost:3000")));
+        UserMapper userMapper = new UserMapperImpl(urls, new AddressMapperImpl(),
+                new EducationMapperImpl(), new ExperienceMapperImpl());
+
+        mapper = new PayoutMapperImpl(userMapper);
+    }
+
+    private Payout processingPayout(BankAccount destination) {
+        User worker = new User();
+        worker.setId(workerId);
+        worker.setFirstName("Ayşe");
+        worker.setLastName("Deneme");
+
+        JobAssignment assignment = new JobAssignment();
+        assignment.setId(assignmentId);
+
+        Payout payout = new Payout();
+        payout.setId(payoutId);
+        payout.setJobAssignment(assignment);
+        payout.setWorker(worker);
+        payout.setBankAccount(destination);
+        payout.setAmount(new BigDecimal("1000.00"));
+        payout.setCurrency("TRY");
+        payout.setStatus(PayoutStatus.PROCESSING);
+        payout.setProviderReference("iyz-transaction-4711");
+        payout.setProcessingAt(Instant.parse("2026-09-10T08:00:00Z"));
+        return payout;
+    }
+
+    private BankAccount account(String iban) {
+        BankAccount account = new BankAccount();
+        account.setId(UUID.randomUUID());
+        account.setIban(iban);
+        account.setAccountHolderName("Ayşe Deneme");
+        return account;
+    }
+
+    @Test
+    void theQueueRowCarriesTheEvidenceAnOperatorMatchesAgainstTheStatement() {
+        StaffPayoutDto row = mapper.toStaffPayoutDto(processingPayout(account(FULL_IBAN)));
+
+        assertEquals(payoutId, row.id());
+        assertEquals(assignmentId, row.jobAssignmentId());
+        assertEquals("iyz-transaction-4711", row.providerReference());
+        assertEquals("1000.00", row.amount());
+        assertEquals("TRY", row.currency());
+        assertEquals(PayoutStatus.PROCESSING, row.status());
+        assertEquals(workerId, row.recipient().getId());
+        assertEquals("Ayşe", row.recipient().getFirstName());
+        assertEquals("Deneme", row.recipient().getLastName());
+        assertEquals(Instant.parse("2026-09-10T08:00:00Z"), row.processingAt());
+    }
+
+    @Test
+    void theIbanKeepsOnlyItsPrefixAndSuffixOnTheQueueRow() {
+        StaffPayoutDto row = mapper.toStaffPayoutDto(processingPayout(account(FULL_IBAN)));
+
+        assertEquals("TR18***2315", row.maskedIban());
+        String serialized = json.writeValueAsString(row);
+        assertFalse(serialized.contains(FULL_IBAN), "tam IBAN yanıt gövdesine sızdı: " + serialized);
+        assertFalse(serialized.contains("620011900000"), "IBAN gövdesi yanıta sızdı: " + serialized);
+        assertFalse(row.toString().contains(FULL_IBAN), "tam IBAN toString üzerinden loga sızabilir");
+    }
+
+    @Test
+    void aPayoutWithoutADestinationAccountRendersNoIbanAtAll() {
+        StaffPayoutDto row = mapper.toStaffPayoutDto(processingPayout(null));
+
+        assertNull(row.maskedIban());
+        assertEquals("iyz-transaction-4711", row.providerReference());
+    }
+
+    @Test
+    void amountStaysAPlainDecimalStringOnTheQueueRow() {
+        Payout payout = processingPayout(account(FULL_IBAN));
+        payout.setAmount(new BigDecimal("1E+10"));
+
+        assertEquals("10000000000", mapper.toStaffPayoutDto(payout).amount());
+    }
+
+    @Test
+    void theStaffRowContractIsPinnedFieldByField() {
+        JsonNode row = json.valueToTree(mapper.toStaffPayoutDto(processingPayout(account(FULL_IBAN))));
+
+        assertEquals(Set.of("id", "jobAssignmentId", "recipient", "maskedIban", "providerReference",
+                        "settlementReference", "amount", "currency", "status", "failureReason",
+                        "processingAt", "completedAt", "createdAt"),
+                fieldNames(row));
+        assertEquals(Set.of("id", "firstName", "lastName", "username", "profilePictureUrl"),
+                fieldNames(row.get("recipient")));
+        assertEquals("1000.00", row.get("amount").asText());
+        assertEquals("TRY", row.get("currency").asText());
+    }
+
+    @Test
+    void theWorkerFacingPayoutNeverGainsTheStaffEvidence() {
+        PayoutDto mine = mapper.toPayoutDto(processingPayout(account(FULL_IBAN)));
+        JsonNode row = json.valueToTree(mine);
+
+        assertEquals(Set.of("id", "jobAssignmentId", "amount", "currency", "status", "failureReason",
+                "completedAt", "createdAt"), fieldNames(row));
+        assertFalse(json.writeValueAsString(mine).contains("4711"),
+                "sağlayıcı referansı işçiye açılan DTO'ya sızdı");
+    }
+
+    @Test
+    void theListMapsEveryRow() {
+        List<StaffPayoutDto> rows = mapper.toStaffPayoutDtoList(
+                List.of(processingPayout(account(FULL_IBAN)), processingPayout(null)));
+
+        assertEquals(2, rows.size());
+        assertEquals("TR18***2315", rows.get(0).maskedIban());
+        assertNull(rows.get(1).maskedIban());
+    }
+
+    private static Set<String> fieldNames(JsonNode node) {
+        return Set.copyOf(node.propertyNames());
+    }
+}
