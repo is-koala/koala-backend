@@ -2,6 +2,7 @@ package com.exskylab.koala.business.abstracts;
 
 import com.exskylab.koala.core.dtos.notificationPreference.request.UpdateNotificationPreferencesDto;
 import com.exskylab.koala.core.dtos.notificationPreference.response.NotificationPreferenceDto;
+import com.exskylab.koala.core.dtos.notificationPreference.response.UnsubscribedChannelDto;
 import com.exskylab.koala.core.helpers.ClientContext;
 import com.exskylab.koala.entities.NotificationCategory;
 import com.exskylab.koala.entities.NotificationChannel;
@@ -19,7 +20,7 @@ public interface NotificationPreferenceService {
 
     List<NotificationPreferenceDto> updateMyPreferences(UpdateNotificationPreferencesDto request, ClientContext client);
 
-    void unsubscribe(String rawToken, ClientContext client);
+    UnsubscribedChannelDto unsubscribe(String rawToken, ClientContext client);
 
     void applyIysWithdrawal(User user, NotificationChannel channel, Instant recordedAt);
 }

@@ -6,7 +6,9 @@ import com.exskylab.koala.business.abstracts.UnsubscribeTokenService;
 import com.exskylab.koala.core.dtos.notificationPreference.request.NotificationPreferenceEntryDto;
 import com.exskylab.koala.core.dtos.notificationPreference.request.UpdateNotificationPreferencesDto;
 import com.exskylab.koala.core.dtos.notificationPreference.response.NotificationPreferenceDto;
+import com.exskylab.koala.core.dtos.notificationPreference.response.UnsubscribedChannelDto;
 import com.exskylab.koala.core.helpers.ClientContext;
+import com.exskylab.koala.core.mappers.NotificationPreferenceMapperImpl;
 import com.exskylab.koala.dataAccess.CommercialMessageConsentDao;
 import com.exskylab.koala.dataAccess.NotificationPreferenceDao;
 import com.exskylab.koala.entities.CommercialConsentSource;
@@ -32,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -72,7 +75,7 @@ class NotificationPreferenceRulesTest {
         iysService = mock(IysService.class);
 
         manager = new NotificationPreferenceManager(preferenceDao, consentDao, unsubscribeTokenService,
-                securityService, iysService);
+                securityService, iysService, new NotificationPreferenceMapperImpl());
     }
 
     private void storedRow(NotificationCategory category, NotificationChannel channel, boolean enabled) {
@@ -251,6 +254,7 @@ class NotificationPreferenceRulesTest {
     void unsubscribingFromACommercialMessageIsRecordedAsAWithdrawnConsent() {
         when(unsubscribeTokenService.consume("gecerli-token"))
                 .thenReturn(token(NotificationCategory.MARKETINGS, NotificationChannel.EMAIL));
+        optedIn(NotificationCategory.MARKETINGS, NotificationChannel.EMAIL);
 
         manager.unsubscribe("gecerli-token", client);
 
@@ -258,6 +262,85 @@ class NotificationPreferenceRulesTest {
         assertEquals(NotificationChannel.EMAIL, recordedConsent().getChannel());
         assertEquals("203.0.113.7", recordedConsent().getIpAddress());
         assertEquals(CommercialConsentSource.UNSUBSCRIBE_LINK, recordedConsent().getSource());
+    }
+
+    @Test
+    void theUnsubscribeAnswerNamesTheCategoryAndChannelThatWereSwitchedOff() {
+        when(unsubscribeTokenService.consume("gecerli-token"))
+                .thenReturn(token(NotificationCategory.NEWSLETTER, NotificationChannel.EMAIL));
+        optedIn(NotificationCategory.NEWSLETTER, NotificationChannel.EMAIL);
+
+        UnsubscribedChannelDto answer = manager.unsubscribe("gecerli-token", client);
+
+        assertEquals(NotificationCategory.NEWSLETTER, answer.category());
+        assertEquals(NotificationChannel.EMAIL, answer.channel());
+        assertFalse(answer.alreadyDisabled());
+    }
+
+    @Test
+    void aSecondClickOnTheSameLinkAnswersTheSameChannelWithoutRewritingAnything() {
+        when(unsubscribeTokenService.consume("gecerli-token"))
+                .thenReturn(token(NotificationCategory.NEWSLETTER, NotificationChannel.EMAIL));
+        optedIn(NotificationCategory.NEWSLETTER, NotificationChannel.EMAIL);
+
+        UnsubscribedChannelDto first = manager.unsubscribe("gecerli-token", client);
+        UnsubscribedChannelDto second = manager.unsubscribe("gecerli-token", client);
+
+        assertEquals(first.category(), second.category());
+        assertEquals(first.channel(), second.channel());
+        assertFalse(first.alreadyDisabled());
+        assertTrue(second.alreadyDisabled());
+        verify(preferenceDao, org.mockito.Mockito.times(1)).save(any());
+        verify(consentDao, org.mockito.Mockito.times(1)).save(any());
+        verify(iysService, org.mockito.Mockito.times(1)).enqueue(any(), any(), any(), eq(false), any());
+    }
+
+    @Test
+    void aLinkForAChannelThatWasNeverOpenedInLeavesNoRowAndNoConsentBehind() {
+        when(unsubscribeTokenService.consume("gecerli-token"))
+                .thenReturn(token(NotificationCategory.MARKETINGS, NotificationChannel.EMAIL));
+
+        UnsubscribedChannelDto answer = manager.unsubscribe("gecerli-token", client);
+
+        assertTrue(answer.alreadyDisabled());
+        assertEquals(NotificationCategory.MARKETINGS, answer.category());
+        verify(preferenceDao, never()).save(any());
+        verifyNoInteractions(consentDao, iysService);
+    }
+
+    @Test
+    void anAlertChannelThatIsOnByDefaultIsSwitchedOffByItsLinkAndStaysOffOnTheSecondClick() {
+        when(unsubscribeTokenService.consume("gecerli-token"))
+                .thenReturn(token(NotificationCategory.JOB_ALERTS, NotificationChannel.EMAIL));
+        List<NotificationPreference> rows = new ArrayList<>();
+        when(preferenceDao.findAllByUserId(userId)).thenReturn(rows);
+        when(preferenceDao.save(any())).thenAnswer(call -> {
+            NotificationPreference row = call.getArgument(0);
+            if (!rows.contains(row)) {
+                rows.add(row);
+            }
+            return row;
+        });
+
+        UnsubscribedChannelDto first = manager.unsubscribe("gecerli-token", client);
+        UnsubscribedChannelDto second = manager.unsubscribe("gecerli-token", client);
+
+        assertFalse(first.alreadyDisabled());
+        assertTrue(second.alreadyDisabled());
+        assertEquals(1, rows.size());
+        assertFalse(rows.getFirst().isEnabled());
+        verify(preferenceDao, org.mockito.Mockito.times(1)).save(any());
+    }
+
+    private void optedIn(NotificationCategory category, NotificationChannel channel) {
+        NotificationPreference preference = new NotificationPreference();
+        preference.setUser(user);
+        preference.setCategory(category);
+        preference.setChannel(channel);
+        preference.setEnabled(true);
+        List<NotificationPreference> rows = new ArrayList<>();
+        rows.add(preference);
+        when(preferenceDao.findAllByUserId(userId)).thenReturn(rows);
     }
 
     private UnsubscribeToken token(NotificationCategory category, NotificationChannel channel) {
