@@ -89,7 +89,8 @@ public class EmailConsumer {
             context.setVariable("trackingUrl", trackingUrl);
             String htmlBody = templateEngine.process("emails/"+emailTaskDto.templateName(), context);
 
-            sendHtmlEmail(emailTaskDto.to(), emailTaskDto.subject(), htmlBody);
+            sendHtmlEmail(emailTaskDto.to(), emailTaskDto.subject(), htmlBody,
+                    replyToOf(emailTaskDto));
         }catch (Exception e){
             log.error("Email task could not be sent for id: {}", emailTaskDto.id(), e);
             notificationService.releaseDeliveryForRetry(emailTaskDto.id(), NotificationChannel.EMAIL, claimId,
@@ -103,12 +104,29 @@ public class EmailConsumer {
         log.info("Email task sent for id: {}", emailTaskDto.id());
     }
 
-    private void sendHtmlEmail(String to, String subject, String htmlBody) throws MessagingException {
+    private void sendHtmlEmail(String to, String subject, String htmlBody, String replyTo)
+            throws MessagingException {
         MimeMessage mimeMessage = javaMailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
         helper.setTo(to);
         helper.setSubject(subject);
         helper.setText(htmlBody, true);
+        if (replyTo != null && !replyTo.isBlank()
+                && replyTo.indexOf('\r') < 0 && replyTo.indexOf('\n') < 0) {
+            helper.setReplyTo(replyTo);
+        }
         javaMailSender.send(mimeMessage);
+    }
+
+    /**
+     * Destek formu ziyaretçi adresini şablon parametresinde taşır. Ayrı bir
+     * EmailTaskDto alanı kuyruktaki eski JSON'u kırmasın diye.
+     */
+    private static String replyToOf(EmailTaskDto task) {
+        if (task.templateParameters() == null) {
+            return null;
+        }
+        Object replyTo = task.templateParameters().get("replyTo");
+        return replyTo instanceof String address ? address : null;
     }
 }

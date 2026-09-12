@@ -53,6 +53,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             "/auth/refresh-token",
             "/auth/forgot-password",
             "/auth/reset-password",
+            "/public/contact",
             "/users/me/identity-verification",
             "/admin/auth/login",
             "/admin/auth/refresh",

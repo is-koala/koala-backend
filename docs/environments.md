@@ -32,7 +32,9 @@ ile sabitlenmiştir.
 - `MAIL_DELIVERY_MODE=ALLOWLIST`; allowlist dışındaki teslimat reddedilir.
   `UNRESTRICTED` staging açılışını **durdurur** (`MAIL_DELIVERY_GUARD`).
   Boş `MAIL_ALLOWED_RECIPIENTS` SMTP çağırmaz; açılış `WARN` yazar, alıcı
-  adresini loga koymaz.
+  adresini loga koymaz. Tanıtım sitesi iletişim formu (`POST /public/contact`)
+  `SUPPORT_MAILBOX` (varsayılan `info@iskoala.com`) adresine düşer; ALLOWLIST
+  iken o adres bu listede olmalıdır.
 - `STOMP_STAGING_ORIGIN=https://staging.iskoala.com`
 - DB, RabbitMQ, S3 ve Google anahtarları production ile ortak olamaz
 

@@ -130,6 +130,7 @@ public class SecurityConfig {
 
 
                         //legal endpoints
+                        .requestMatchers(HttpMethod.POST, "/public/contact").permitAll()
                         .requestMatchers(HttpMethod.GET, "/legal/agreements").permitAll()
                         .requestMatchers(HttpMethod.GET, "/legal/consents/me").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/legal/consents").hasAnyRole("USER", "ADMIN")

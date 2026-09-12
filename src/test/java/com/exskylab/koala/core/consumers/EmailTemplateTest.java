@@ -100,6 +100,9 @@ class EmailTemplateTest {
                 Map.entry("invitedUserFirstName", "Ayse"),
                 Map.entry("invitedUserLastName", "Yilmaz"),
                 Map.entry("role", "ADMIN"),
+                Map.entry("topic", "KVKK"),
+                Map.entry("name", "Ada Yılmaz"),
+                Map.entry("message", "Verilerimin silinmesini istiyorum."),
                 Map.entry("trackingUrl", "https://api.iskoala.com/notification-tracking/x.png")));
 
         List<String> broken = new ArrayList<>();

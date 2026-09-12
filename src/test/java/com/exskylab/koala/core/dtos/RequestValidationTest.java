@@ -72,6 +72,28 @@ class RequestValidationTest {
     }
 
     @Test
+    void aContactFormRequiresTopicNameEmailMessageAndConsent() {
+        com.exskylab.koala.core.dtos.contact.request.ContactRequestDto request =
+                new com.exskylab.koala.core.dtos.contact.request.ContactRequestDto();
+
+        assertTrue(messagesFor(request).contains("{contact.topic.required}"));
+        assertTrue(messagesFor(request).contains("{contact.name.required}"));
+        assertTrue(messagesFor(request).contains("{contact.email.required}"));
+        assertTrue(messagesFor(request).contains("{contact.message.required}"));
+        assertTrue(messagesFor(request).contains("{contact.consent.required}"));
+
+        request.setTopic("destek");
+        request.setName("Ada Yılmaz");
+        request.setEmail("ada@example.test");
+        request.setMessage("Hesap silme talebim görünmüyor.");
+        request.setConsent(true);
+        assertTrue(isValid(request), "geçerli iletişim formu: " + messagesFor(request));
+
+        request.setTopic("not-a-topic");
+        assertTrue(messagesFor(request).contains("{contact.topic.required}"));
+    }
+
+    @Test
     void aContactInvitationNeverAsksForAThirdPartyNationalId() {
         List<String> fields = Arrays.stream(InviteContactToCompanyDto.class.getDeclaredFields())
                 .map(Field::getName)

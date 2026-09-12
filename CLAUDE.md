@@ -3408,7 +3408,7 @@ Marketplace seed geri gelmez (ADR-0008). Gelen kutu kabulü #4'te insan işi.
 - `jwt.secret` — `JwtService` açılışta Base64 çözülmüş anahtarı HS256 için en az 32 bayt bekliyor, kısa anahtarda context düşer.
 - ~~`r2.*`~~ — **artık gerekmiyor.** `storage.type=local` varsayılanı sayesinde testler hiçbir bulut ayarı istemiyor (§2ab).
 - `app.api-url` / `app.web-base-url` ve `payments.return-base-url` — doğrulanmış yapılandırmalardır, boş bırakılamaz.
-- `spring.mail.*` — `EmailConsumer` constructor'ında `JavaMailSender` istiyor. Bu değerler yoksa Boot mail bean'ini hiç oluşturmaz ve context "No qualifying bean of type JavaMailSender" ile düşer. Testlerde gerçek SMTP'ye bağlanılmaz.
+- `spring.mail.*` — `EmailConsumer` constructor'ında `JavaMailSender` istiyor. Bu değerler yoksa Boot mail bean'ini hiç oluşturmaz ve context "No qualifying bean of type JavaMailSender" ile düşer. Testlerde gerçek SMTP'ye bağlanılmaz. Tanıtım sitesi iletişim formu (`POST /public/contact`) aynı kuyruğu kullanır; alıcı `SUPPORT_MAILBOX` (varsayılan `info@iskoala.com`). Next.js SMTP tutmaz.
 - `spring.rabbitmq.listener.*.auto-startup=false` — testlerde RabbitMQ'ya bağlanılmıyor.
 - `spring.datasource.hikari.maximum-pool-size=4`, `minimum-idle=0`, `idle-timeout=10000` — aşağıdaki bağlantı bütçesi.
 
@@ -3652,7 +3652,7 @@ cp .env.example .env
    GHA cache yazımı yok sayılır, imaj yine basılır.
 3. **deploy** — yalnızca `v*` tag'inde Dokploy webhook'unu tetikler.
 
-Sürümleme: `v1.2.3` tag'i → `ghcr.io/<owner>/koala:1.2.3` ve `:latest`. main'e push → `ghcr.io/<owner>/koala:main-<sha7>`, `latest` etiketi güncellenmez. Maven `pom.xml` sürümü git tag'iyle aynı semver'dir (`0.9.9` ↔ `v0.9.9`); `build-info` ve `info.app.version` / ECS `SERVICE_VERSION` (boşsa) buradan okunur. Dokploy'da `SERVICE_VERSION` hâlâ `0.0.1` ise o satır imaj varsayılanını ezer — boşaltın veya tag'le eşleyin.
+Sürümleme: `v1.2.3` tag'i → `ghcr.io/<owner>/koala:1.2.3` ve `:latest`. main'e push → `ghcr.io/<owner>/koala:main-<sha7>`, `latest` etiketi güncellenmez. Maven `pom.xml` sürümü git tag'iyle aynı semver'dir (`0.9.10` ↔ `v0.9.10`); `build-info` ve `info.app.version` / ECS `SERVICE_VERSION` (boşsa) buradan okunur. Dokploy'da `SERVICE_VERSION` hâlâ `0.0.1` ise o satır imaj varsayılanını ezer — boşaltın veya tag'le eşleyin.
 
 Uygulama root olmayan `koala` kullanıcısıyla, JRE tabanlı imajda çalışıyor. Sağlık kontrolü `/actuator/health/readiness` üzerinden; `/actuator/health/**` herkese açık, kalan actuator uçları ADMIN rolü istiyor.
 
