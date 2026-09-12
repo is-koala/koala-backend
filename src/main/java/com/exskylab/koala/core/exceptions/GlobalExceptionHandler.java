@@ -28,6 +28,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.List;
@@ -79,6 +80,14 @@ public class GlobalExceptionHandler {
         log.warn("Govdesi okunamayan istek [type=HttpMessageNotReadableException, "
                 + "errorCode=REQUEST_MALFORMED, requestId={}]", MDC.get(LogContext.REQUEST_ID));
         return build(HttpStatus.BAD_REQUEST, "{request.body.unreadable}", null, ErrorCategory.REQUEST_MALFORMED, null);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Result> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException ex) {
+        log.warn("Boyut sinirini asan multipart istek [errorCode=REQUEST_BODY_TOO_LARGE, requestId={}]",
+                MDC.get(LogContext.REQUEST_ID));
+        return build(HttpStatus.PAYLOAD_TOO_LARGE, "{request.body.too.large}", "REQUEST_BODY_TOO_LARGE",
+                ErrorCategory.REQUEST_MALFORMED, null);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

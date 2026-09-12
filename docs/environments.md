@@ -107,6 +107,20 @@ Origin başlığı taşımayan native (mobil) bağlantılar bu listeden etkilenm
 Soket `wss://` üzerinden servis edilmeli; TLS reverse proxy'de sonlanır ve kod
 bunu zorlayamaz (CLAUDE.md §2ai).
 
+## Multipart yükleme bütçesi
+
+`MAX_FILE_SIZE=10MB` tek dosyanın taşıma sınırıdır ve `UploadValidator` içindeki
+dosya türüne özgü 10 MiB iş kuralını gevşetmez. `MAX_REQUEST_SIZE=42MB`, dört
+zorunlu kimlik fotoğrafının toplam 40 MiB bütçesine multipart üstbilgi payı
+ekler. Bu global taşıma tavanı diğer uçların iş kuralını büyütmez: logo, galeri,
+CV ve uyuşmazlık kanıtı kendi tek-dosya doğrulamasından geçmeye devam eder.
+
+`MAX_SWALLOW_SIZE=50MB` kabul bütçesi değildir. Tomcat'in 42 MiB sınırını aşan
+olağan bir isteğin kalanını sınırlı biçimde tüketip bağlantıyı yarıda kesmek
+yerine standart `413` / `REQUEST_BODY_TOO_LARGE` zarfını dönebilmesini sağlar.
+Reverse proxy gövde sınırı da en az 42 MiB olmalıdır; daha düşük bir proxy sınırı
+uygulamaya ulaşmadan sağlayıcının kendi 413 yanıtını üretir.
+
 Staging web `X-Robots-Tag: noindex, nofollow, noarchive` ile tümden kapatılır ve
 Dokploy proxy katmanında HTTP Basic Auth arkasında tutulur. Parola ve anahtarlar
 yalnız Dokploy secret store'da yaşar; issue, log veya repoya yazılmaz.

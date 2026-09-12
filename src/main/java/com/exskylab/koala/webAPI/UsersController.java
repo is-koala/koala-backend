@@ -232,6 +232,8 @@ public class UsersController {
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "İnceleme kuyruğa alındı"),
             @ApiResponse(responseCode = "400", description = "Dosya eksik, zaten doğrulanmış ya da bekleyen inceleme var",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "413", description = "Multipart istek gövdesi 42 MiB sınırını aşıyor",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping(value = "/me/identity-documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

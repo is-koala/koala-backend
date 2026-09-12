@@ -58,11 +58,15 @@ spring:
   servlet:
     multipart:
       max-file-size: ${MAX_FILE_SIZE:10MB}
-      max-request-size: ${MAX_REQUEST_SIZE:10MB}
+      max-request-size: ${MAX_REQUEST_SIZE:42MB}
 
 server:
   port: ${SERVER_PORT:8080}
   forward-headers-strategy: none
+  tomcat:
+    # İstek sınırı aşıldığında standart JSON 413 yanıtı dönebilmek için gövdenin
+    # kalanını sınırlı biçimde tüketir; bu değer kabul edilen yükleme sınırı değildir.
+    max-swallow-size: ${MAX_SWALLOW_SIZE:50MB}
   compression:
     enabled: ${SERVER_COMPRESSION_ENABLED:true}
     mime-types: application/json,application/javascript,text/javascript,text/css,text/html,text/plain
