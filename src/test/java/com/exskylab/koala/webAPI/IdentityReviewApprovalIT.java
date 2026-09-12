@@ -123,7 +123,7 @@ class IdentityReviewApprovalIT extends AbstractStaffIntegrationTest {
                 .andExpect(jsonPath("$.errorCategory").value("DATA_CONFLICT"))
                 .andExpect(jsonPath("$.message").value(
                         "Onay için dört fotoğraf da gerekli: yüz, TCKK ön, TCKK arka ve TCKK yüzün altında. "
-                                + "Eksik kanıtla onaylanamaz; incelemeyi reddedip yeniden yükleme isteyin."));
+                                + "Eksik kanıtla onaylanamaz; incelemeyi reddedin, kullanıcı dört fotoğrafı tekrar yüklesin."));
 
         mockMvc.perform(post("/admin/identity-verifications/" + reviewId + "/approve")
                         .header("Authorization", "Bearer " + trustLeadToken)
