@@ -90,6 +90,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/users/me/identity-verification").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/users/me/identity-verification/challenge").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/users/me/identity-documents").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/users/me/identity-documents").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/users/me/jobs").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/users/me/address").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/users/me/applications").hasAnyRole("USER", "ADMIN")

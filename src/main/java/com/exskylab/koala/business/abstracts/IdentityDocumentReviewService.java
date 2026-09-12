@@ -23,5 +23,7 @@ public interface IdentityDocumentReviewService {
 
     IdentityVerification getById(UUID reviewId);
 
+    IdentityVerification latestForCurrentUser();
+
     VerificationDocument getDocumentForStaffDownload(UUID reviewId, UUID documentId);
 }

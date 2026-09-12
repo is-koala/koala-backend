@@ -159,6 +159,14 @@ public class IdentityVerificationManager implements IdentityDocumentReviewServic
 
     @Override
     @Transactional(readOnly = true)
+    public IdentityVerification latestForCurrentUser() {
+        User current = securityService.getAuthenticatedUser();
+        return identityVerificationDao.findTopByUser_IdOrderByCreatedAtDesc(current.getId())
+                .orElseThrow(() -> new ResourceNotFoundException(IdentityMessages.DOCUMENTS_NOT_FOUND));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public VerificationDocument getDocumentForStaffDownload(UUID reviewId, UUID documentId) {
         IdentityVerification review = getById(reviewId);
         VerificationDocument document = matchingDocument(review, documentId);

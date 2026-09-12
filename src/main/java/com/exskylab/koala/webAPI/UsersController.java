@@ -210,6 +210,22 @@ public class UsersController {
                 UserMessages.IDENTITY_CHALLENGE_CREATED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Oturum sahibinin son TCKK incelemesi",
+            description = "Bekleyen, onaylanan veya reddedilmiş son inceleme. Hiç belge yoksa 404. "
+                    + "Personel onayı olmadan identityVerified damgalanmaz.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Son inceleme döndürüldü"),
+            @ApiResponse(responseCode = "404", description = "Henüz belge gönderilmedi",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @GetMapping("/me/identity-documents")
+    public ResponseEntity<SuccessDataResult<IdentityReviewDto>> currentIdentityDocuments() {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                IdentityReviewDto.from(identityDocumentReviewService.latestForCurrentUser()),
+                UserMessages.USER_IDENTITY_DOCUMENTS_RETRIEVED,
+                HttpStatus.OK));
+    }
+
     @Operation(summary = "TCKK fotoğrafı ile kimlik incelemesi başlat",
             description = "Ön ve arka TCKK fotoğrafı personel kuyruğuna düşer. Çip kanıtı bu uçta yoktur; "
                     + "kimlik personel onayından sonra damgalanır.")

@@ -26,6 +26,9 @@ public interface IdentityVerificationDao extends JpaRepository<IdentityVerificat
     Optional<IdentityVerification> findPendingByUserId(@Param("userId") UUID userId);
 
     @EntityGraph(attributePaths = {"user", "verificationDocument", "backDocument"})
+    Optional<IdentityVerification> findTopByUser_IdOrderByCreatedAtDesc(UUID userId);
+
+    @EntityGraph(attributePaths = {"user", "verificationDocument", "backDocument"})
     Page<IdentityVerification> findByVerifiedFalseAndRejectedAtIsNull(Pageable pageable);
 
     @EntityGraph(attributePaths = {"user", "verificationDocument", "backDocument"})
