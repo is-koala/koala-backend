@@ -181,6 +181,13 @@ public class LegalManager implements LegalService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public AccountDeletionRequest getDeletionRequest(UUID requestId) {
+        return accountDeletionRequestDao.findById(requestId)
+                .orElseThrow(() -> new ResourceNotFoundException(LegalMessages.DELETION_NOT_FOUND));
+    }
+
+    @Override
     @Transactional
     public AccountDeletionRequest rejectDeletionRequest(UUID requestId, String reason) {
         AccountDeletionRequest request = lockedRequest(requestId);

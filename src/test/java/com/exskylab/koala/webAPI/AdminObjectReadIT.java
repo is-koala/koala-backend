@@ -87,4 +87,32 @@ class AdminObjectReadIT extends AbstractStaffIntegrationTest {
                         .header("Authorization", "Bearer " + tokenFor("FINANCE_ANALYST")))
                 .andExpect(status().isForbidden());
     }
+
+    @Test
+    void aTrustLeadReachesAMissingIdentityReview() throws Exception {
+        mockMvc.perform(get("/admin/identity-verifications/" + UUID.randomUUID())
+                        .header("Authorization", "Bearer " + tokenFor("TRUST_LEAD")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void aCompanyApproverCannotReadAnIdentityReview() throws Exception {
+        mockMvc.perform(get("/admin/identity-verifications/" + UUID.randomUUID())
+                        .header("Authorization", "Bearer " + tokenFor("COMPANY_APPROVER")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void aTrustLeadReachesAMissingAccountDeletion() throws Exception {
+        mockMvc.perform(get("/admin/account-deletions/" + UUID.randomUUID())
+                        .header("Authorization", "Bearer " + tokenFor("TRUST_LEAD")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void aSupportAgentCannotReadAnAccountDeletion() throws Exception {
+        mockMvc.perform(get("/admin/account-deletions/" + UUID.randomUUID())
+                        .header("Authorization", "Bearer " + tokenFor("SUPPORT_AGENT")))
+                .andExpect(status().isForbidden());
+    }
 }

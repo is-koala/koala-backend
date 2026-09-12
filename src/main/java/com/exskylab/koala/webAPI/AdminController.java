@@ -391,6 +391,21 @@ public class AdminController {
                 AdminMessages.IDENTITY_REVIEWS_LISTED, HttpStatus.OK));
     }
 
+    @Operation(summary = "TCKK kimlik incelemesi",
+            description = "Kuyruk satırıyla aynı IdentityReviewDto. Onay ve red ayrı uçlardan; bu GET yalnız okur.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "İnceleme getirildi"),
+            @ApiResponse(responseCode = "404", description = "İnceleme bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(StaffPermission.IDENTITY_REVIEW)
+    @GetMapping("/identity-verifications/{reviewId}")
+    public ResponseEntity<SuccessDataResult<IdentityReviewDto>> identityReview(@PathVariable UUID reviewId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                IdentityReviewDto.from(identityDocumentReviewService.getById(reviewId)),
+                AdminMessages.IDENTITY_REVIEW_FETCHED, HttpStatus.OK));
+    }
+
     @Operation(summary = "TCKK kimlik incelemesini onayla",
             description = "Kullanıcının identityVerified damgası çip olmadan konur. TCKN benzersizliği durur.")
     @ApiResponses({

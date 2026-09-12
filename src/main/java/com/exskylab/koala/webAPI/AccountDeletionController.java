@@ -63,6 +63,21 @@ public class AccountDeletionController {
                 LegalMessages.DELETIONS_LISTED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Hesap silme talebi",
+            description = "Kuyruk satırıyla aynı AccountDeletionDto. Ret ayrı uçtan; bu GET yalnız okur.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Hesap silme talebi getirildi"),
+            @ApiResponse(responseCode = "404", description = "Hesap silme talebi bulunamadı")
+    })
+    @GetMapping("/{requestId}")
+    @RequiresPermission(StaffPermission.USER_READ_PII)
+    public ResponseEntity<SuccessDataResult<AccountDeletionDto>> get(
+            @PathVariable UUID requestId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                legalMapper.toAccountDeletionDto(legalService.getDeletionRequest(requestId), messageResolver),
+                LegalMessages.DELETION_FETCHED, HttpStatus.OK));
+    }
+
     @Operation(summary = "Hesap silme talebini gerekçeyle reddet")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Hesap silme talebi reddedildi"),

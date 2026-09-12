@@ -16,4 +16,5 @@ public class LegalMessages {
     public static final String DELETION_ALREADY_PROCESSED = "{legal.deletion.already.processed}";
     public static final String DELETION_REJECTED = "{legal.deletion.rejected}";
     public static final String DELETIONS_LISTED = "{legal.deletions.listed}";
+    public static final String DELETION_FETCHED = "{legal.deletion.fetched}";
 }
