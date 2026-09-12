@@ -1,6 +1,7 @@
 package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.core.dtos.identity.response.IdentityReviewDto;
+import com.exskylab.koala.core.dtos.user.request.VerifyIdentityDto;
 import com.exskylab.koala.core.helpers.SignedFileResponses;
 import com.exskylab.koala.core.properties.StorageProperties;
 import com.exskylab.koala.core.security.RequiresPermission;
@@ -11,6 +12,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
@@ -71,6 +74,23 @@ class IdentityDocumentDownloadContractTest {
                 mapping.value());
         assertEquals(StaffPermission.IDENTITY_REVIEW, permission.value()[0]);
         assertEquals("identity.document.download", permission.action());
+    }
+
+    @Test
+    void submitNamesTheFourPhotoSlots() throws Exception {
+        Method method = UsersController.class.getDeclaredMethod(
+                "submitIdentityDocuments",
+                VerifyIdentityDto.class,
+                MultipartFile.class,
+                MultipartFile.class,
+                MultipartFile.class,
+                MultipartFile.class);
+        String[] parts = java.util.Arrays.stream(method.getParameters())
+                .skip(1)
+                .map(parameter -> parameter.getAnnotation(RequestPart.class).value())
+                .toArray(String[]::new);
+
+        assertArrayEquals(new String[]{"selfie", "front", "back", "together"}, parts);
     }
 
     @Test

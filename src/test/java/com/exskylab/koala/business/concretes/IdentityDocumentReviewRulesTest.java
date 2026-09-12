@@ -6,6 +6,7 @@ import com.exskylab.koala.business.abstracts.IdentityDocumentReviewService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
+import com.exskylab.koala.core.dtos.identity.response.IdentityReviewDto;
 import com.exskylab.koala.core.dtos.user.request.VerifyIdentityDto;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
@@ -68,7 +69,8 @@ class IdentityDocumentReviewRulesTest {
         when(security.getAuthenticatedUser()).thenReturn(current);
 
         StorageService storage = mock(StorageService.class);
-        when(storage.uploadFile(any(), any(), any(), any())).thenReturn("front-key", "back-key");
+        when(storage.uploadFile(any(), any(), any(), any()))
+                .thenReturn("selfie-key", "front-key", "back-key", "together-key");
 
         reviews = new IdentityVerificationManager(
                 identityVerificationDao, userService, security, mock(UploadValidator.class), storage,
@@ -103,18 +105,34 @@ class IdentityDocumentReviewRulesTest {
     }
 
     @Test
-    void submittingFrontAndBackCreatesAPendingReviewWithoutStampingIdentity() {
-        IdentityVerification pending = reviews.submit(declared(), photo("front"), photo("back"));
+    void submittingFourPhotosCreatesAPendingReviewWithoutStampingIdentity() {
+        IdentityVerification pending = submitFour();
 
         assertFalse(pending.isVerified());
         assertFalse(current.isIdentityVerified());
         assertEquals(TCKN, pending.getTcIdentityNumber());
+        assertNotNull(pending.getSelfieDocument());
         assertNotNull(pending.getVerificationDocument());
         assertNotNull(pending.getBackDocument());
+        assertNotNull(pending.getTogetherDocument());
+        assertEquals("selfie-key", pending.getSelfieDocument().getFileUrl());
         assertEquals("front-key", pending.getVerificationDocument().getFileUrl());
         assertEquals("back-key", pending.getBackDocument().getFileUrl());
+        assertEquals("together-key", pending.getTogetherDocument().getFileUrl());
         verify(userService, never()).save(any());
         verify(badgeService, never()).evaluate(any());
+    }
+
+    @Test
+    void theReviewDtoNamesTheFourPhotoSlots() {
+        IdentityVerification pending = pendingRowWithPhotos();
+
+        IdentityReviewDto dto = IdentityReviewDto.from(pending);
+
+        assertEquals(pending.getSelfieDocument().getId(), dto.getSelfieDocumentId());
+        assertEquals(pending.getVerificationDocument().getId(), dto.getFrontDocumentId());
+        assertEquals(pending.getBackDocument().getId(), dto.getBackDocumentId());
+        assertEquals(pending.getTogetherDocument().getId(), dto.getTogetherDocumentId());
     }
 
     @Test
@@ -122,8 +140,7 @@ class IdentityDocumentReviewRulesTest {
         when(identityVerificationDao.findPendingByUserId(current.getId()))
                 .thenReturn(Optional.of(new IdentityVerification()));
 
-        ValidationException thrown = assertThrows(ValidationException.class,
-                () -> reviews.submit(declared(), photo("front"), photo("back")));
+        ValidationException thrown = assertThrows(ValidationException.class, this::submitFour);
 
         assertEquals("IDENTITY_DOCUMENTS_ALREADY_PENDING", thrown.getErrorCode());
         verify(identityVerificationDao, never()).save(any());
@@ -133,8 +150,7 @@ class IdentityDocumentReviewRulesTest {
     void anAlreadyVerifiedAccountCannotSubmitPhotos() {
         current.setIdentityVerified(true);
 
-        ValidationException thrown = assertThrows(ValidationException.class,
-                () -> reviews.submit(declared(), photo("front"), photo("back")));
+        ValidationException thrown = assertThrows(ValidationException.class, this::submitFour);
 
         assertEquals("USER_ALREADY_IDENTITY_VERIFIED", thrown.getErrorCode());
     }
@@ -235,15 +251,21 @@ class IdentityDocumentReviewRulesTest {
     }
 
     @Test
-    void staffCanDownloadTheFrontAndBackPhotosOfAReview() {
+    void staffCanDownloadAllFourPhotosOfAReview() {
         IdentityVerification pending = pendingRowWithPhotos();
         when(identityVerificationDao.findById(pending.getId())).thenReturn(Optional.of(pending));
 
+        assertEquals("images/selfie-key.jpg",
+                reviews.getDocumentForStaffDownload(pending.getId(), pending.getSelfieDocument().getId())
+                        .getFileUrl());
         assertEquals("images/front-key.jpg",
                 reviews.getDocumentForStaffDownload(pending.getId(), pending.getVerificationDocument().getId())
                         .getFileUrl());
         assertEquals("images/back-key.jpg",
                 reviews.getDocumentForStaffDownload(pending.getId(), pending.getBackDocument().getId())
+                        .getFileUrl());
+        assertEquals("images/together-key.jpg",
+                reviews.getDocumentForStaffDownload(pending.getId(), pending.getTogetherDocument().getId())
                         .getFileUrl());
     }
 
@@ -282,10 +304,16 @@ class IdentityDocumentReviewRulesTest {
         assertEquals("IDENTITY_DOCUMENT_NOT_FOUND", thrown.getErrorCode());
     }
 
+    private IdentityVerification submitFour() {
+        return reviews.submit(declared(), photo("selfie"), photo("front"), photo("back"), photo("together"));
+    }
+
     private IdentityVerification pendingRowWithPhotos() {
         IdentityVerification pending = pendingRow();
+        pending.setSelfieDocument(photoDocument("selfie.jpg", "images/selfie-key.jpg"));
         pending.setVerificationDocument(photoDocument("front.jpg", "images/front-key.jpg"));
         pending.setBackDocument(photoDocument("back.jpg", "images/back-key.jpg"));
+        pending.setTogetherDocument(photoDocument("together.jpg", "images/together-key.jpg"));
         return pending;
     }
 

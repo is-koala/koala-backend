@@ -13,7 +13,11 @@ import java.util.UUID;
 
 public interface IdentityDocumentReviewService {
 
-    IdentityVerification submit(VerifyIdentityDto identity, MultipartFile front, MultipartFile back);
+    IdentityVerification submit(VerifyIdentityDto identity,
+                                MultipartFile selfie,
+                                MultipartFile front,
+                                MultipartFile back,
+                                MultipartFile together);
 
     IdentityVerification approve(StaffPrincipal actor, UUID reviewId);
 

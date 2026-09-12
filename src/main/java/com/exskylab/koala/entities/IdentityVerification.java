@@ -51,4 +51,12 @@ public class IdentityVerification extends UserVerification {
     @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JoinColumn(name = "back_document_id")
     private VerificationDocument backDocument;
+
+    @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JoinColumn(name = "selfie_document_id")
+    private VerificationDocument selfieDocument;
+
+    @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JoinColumn(name = "together_document_id")
+    private VerificationDocument togetherDocument;
 }

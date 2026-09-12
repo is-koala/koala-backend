@@ -227,8 +227,8 @@ public class UsersController {
     }
 
     @Operation(summary = "TCKK fotoğrafı ile kimlik incelemesi başlat",
-            description = "Ön ve arka TCKK fotoğrafı personel kuyruğuna düşer. Çip kanıtı bu uçta yoktur; "
-                    + "kimlik personel onayından sonra damgalanır.")
+            description = "Yüz, TCKK ön, TCKK arka ve TCKK yüzün altında (aynı kare) fotoğrafları personel "
+                    + "kuyruğuna düşer. Çip kanıtı bu uçta yoktur; kimlik personel onayından sonra damgalanır.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "İnceleme kuyruğa alındı"),
             @ApiResponse(responseCode = "400", description = "Dosya eksik, zaten doğrulanmış ya da bekleyen inceleme var",
@@ -237,11 +237,13 @@ public class UsersController {
     @PostMapping(value = "/me/identity-documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<SuccessDataResult<IdentityReviewDto>> submitIdentityDocuments(
             @RequestPart("identity") @Valid VerifyIdentityDto identity,
+            @RequestPart("selfie") MultipartFile selfie,
             @RequestPart("front") MultipartFile front,
-            @RequestPart("back") MultipartFile back) {
+            @RequestPart("back") MultipartFile back,
+            @RequestPart("together") MultipartFile together) {
 
         return ResponseEntity.status(HttpStatus.CREATED).body(new SuccessDataResult<>(
-                IdentityReviewDto.from(identityDocumentReviewService.submit(identity, front, back)),
+                IdentityReviewDto.from(identityDocumentReviewService.submit(identity, selfie, front, back, together)),
                 UserMessages.USER_IDENTITY_DOCUMENTS_SUBMITTED,
                 HttpStatus.CREATED));
     }
