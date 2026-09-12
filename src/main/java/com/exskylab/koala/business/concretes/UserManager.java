@@ -43,6 +43,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -132,6 +133,12 @@ public class UserManager implements UserService {
     @Override
     public List<User> getAll() {
         return userDao.findAll();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<User> getAllByIdIn(Collection<UUID> ids) {
+        return ids.isEmpty() ? List.of() : userDao.findAllByIdIn(ids);
     }
 
     @Override

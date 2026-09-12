@@ -2,6 +2,7 @@ package com.exskylab.koala.dataAccess;
 
 import com.exskylab.koala.core.constants.SystemUser;
 import com.exskylab.koala.entities.User;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -11,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -77,4 +79,7 @@ public interface UserDao extends JpaRepository<User, UUID> {
     @Query(value = "select count(*) from authorities "
             + "where role = :role and user_id <> '" + SystemUser.ID_TEXT + "'", nativeQuery = true)
     long countUsersWithRole(@Param("role") String role);
+
+    @EntityGraph(attributePaths = {"profilePicture"})
+    List<User> findAllByIdIn(Collection<UUID> ids);
 }

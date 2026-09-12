@@ -4,7 +4,8 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.exskylab.koala.business.abstracts.PayoutService;
-import com.exskylab.koala.core.mappers.PayoutMapper;
+import com.exskylab.koala.core.dtos.payout.response.StaffPayoutDto;
+import com.exskylab.koala.core.privacy.AccountAnonymizer;
 import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
@@ -30,6 +31,7 @@ import java.util.UUID;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -55,14 +57,15 @@ class PayoutQueueIT extends AbstractStaffIntegrationTest {
     private PayoutService payoutService;
 
     @Autowired
-    private PayoutMapper payoutMapper;
-
-    @Autowired
     private EntityManagerFactory entityManagerFactory;
 
     @Autowired
     private TransactionTemplate transactionTemplate;
 
+    @Autowired
+    private AccountAnonymizer accountAnonymizer;
+
+    private final List<UUID> deletionRequests = new ArrayList<>();
     private final List<UUID> workers = new ArrayList<>();
     private final List<UUID> jobs = new ArrayList<>();
     private final List<UUID> assignments = new ArrayList<>();
@@ -81,6 +84,10 @@ class PayoutQueueIT extends AbstractStaffIntegrationTest {
     void tearDown() {
         jdbcTemplate.update("delete from admin_audit_entries");
         jdbcTemplate.update("delete from staff_members where email like 'payout-queue-%@iskoala.com'");
+        for (UUID request : deletionRequests) {
+            jdbcTemplate.update("delete from account_anonymization_audit where request_id = ?", request);
+            jdbcTemplate.update("delete from account_deletion_requests where id = ?", request);
+        }
         for (UUID assignment : assignments) {
             jdbcTemplate.update("delete from payouts where job_assignment_id = ?", assignment);
             jdbcTemplate.update("delete from job_assignments where id = ?", assignment);
@@ -137,6 +144,17 @@ class PayoutQueueIT extends AbstractStaffIntegrationTest {
         assignments.add(assignment);
         payouts.add(payout);
         return user;
+    }
+
+    private void deleteTheAccountOf(UUID user) {
+        UUID request = UUID.randomUUID();
+        jdbcTemplate.update("""
+                insert into account_deletion_requests
+                    (id, user_id, subject_id, status, requested_at, created_at, is_deleted)
+                values (?, ?, ?, 'REQUESTED', now(), now(), false)
+                """, request, user, user);
+        deletionRequests.add(request);
+        transactionTemplate.executeWithoutResult(status -> accountAnonymizer.anonymize(user, request));
     }
 
     private String staffToken(String... roles) {
@@ -198,6 +216,43 @@ class PayoutQueueIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
+    void aPayoutWhoseWorkerDeletedTheirAccountStaysOnTheQueueWithItsEvidence() throws Exception {
+        deleteTheAccountOf(worker);
+
+        mockMvc.perform(get("/admin/payouts")
+                        .header("Authorization", "Bearer " + staffToken("FINANCE_OFFICER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content", hasSize(1)))
+                .andExpect(jsonPath("$.data.content[0].id").value(payoutId.toString()))
+                .andExpect(jsonPath("$.data.content[0].providerReference").value(PROVIDER_REFERENCE))
+                .andExpect(jsonPath("$.data.content[0].amount").value("1000.00"))
+                .andExpect(jsonPath("$.data.content[0].currency").value("TRY"))
+                .andExpect(jsonPath("$.data.content[0].status").value("PROCESSING"))
+                .andExpect(jsonPath("$.data.content[0].processingAt").exists())
+                .andExpect(jsonPath("$.data.content[0].recipient").value(nullValue()))
+                .andExpect(jsonPath("$.data.content[0].maskedIban").value(nullValue()))
+                .andExpect(content().string(not(containsString("Ayşe"))))
+                .andExpect(content().string(not(containsString(FULL_IBAN))));
+    }
+
+    @Test
+    void aPayoutWhoseWorkerRowWasSoftDeletedKeepsItsBankEvidence() throws Exception {
+        jdbcTemplate.update("update users set is_deleted = true, deleted_at = now() where id = ?", worker);
+
+        mockMvc.perform(get("/admin/payouts")
+                        .header("Authorization", "Bearer " + staffToken("FINANCE_OFFICER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content", hasSize(1)))
+                .andExpect(jsonPath("$.data.content[0].id").value(payoutId.toString()))
+                .andExpect(jsonPath("$.data.content[0].providerReference").value(PROVIDER_REFERENCE))
+                .andExpect(jsonPath("$.data.content[0].maskedIban").value("TR18***2315"))
+                .andExpect(jsonPath("$.data.content[0].amount").value("1000.00"))
+                .andExpect(jsonPath("$.data.content[0].currency").value("TRY"))
+                .andExpect(jsonPath("$.data.content[0].recipient").value(nullValue()))
+                .andExpect(content().string(not(containsString(FULL_IBAN))));
+    }
+
+    @Test
     void servingTheQueueNeverWritesTheFullIbanToAnyLogLine() throws Exception {
         Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
         ListAppender<ILoggingEvent> appender = new ListAppender<>();
@@ -231,18 +286,19 @@ class PayoutQueueIT extends AbstractStaffIntegrationTest {
         statistics.setStatisticsEnabled(true);
         statistics.clear();
         try {
-            List<String> maskedIbans = transactionTemplate.execute(status -> payoutMapper
-                    .toStaffPayoutDtoList(payoutService.listForStaff(null, PageRequest.of(0, 20)).getContent())
-                    .stream()
-                    .map(row -> row.maskedIban())
-                    .toList());
+            List<StaffPayoutDto> rows = transactionTemplate.execute(status ->
+                    payoutService.listForStaff(null, PageRequest.of(0, 20)).content());
 
-            assertEquals(3, maskedIbans.size());
-            assertFalse(maskedIbans.contains(null), "her satir kendi hesabinin maskeli IBAN'ini tasimali");
+            assertEquals(3, rows.size());
+            assertFalse(rows.stream().map(StaffPayoutDto::maskedIban).toList().contains(null),
+                    "her satir kendi hesabinin maskeli IBAN'ini tasimali");
+            assertFalse(rows.stream().map(StaffPayoutDto::recipient).toList().contains(null),
+                    "her satir kendi alicisini tasimali");
             assertEquals(0, statistics.getEntityFetchCount(),
                     "alici ya da banka hesabi satir basina ayri sorguyla yuklendi");
-            assertEquals(1, statistics.getPrepareStatementCount(),
-                    "kuyruk sayfasi tek SELECT ile kurulmali");
+            assertEquals(2, statistics.getPrepareStatementCount(),
+                    "kuyruk sayfasi iki SELECT ile kurulmali: hakedisler + banka hesaplari, sonra sayfanin "
+                            + "alicilari tek toplu sorguyla");
         } finally {
             statistics.setStatisticsEnabled(wasEnabled);
         }

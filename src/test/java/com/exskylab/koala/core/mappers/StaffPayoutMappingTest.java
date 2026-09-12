@@ -18,7 +18,6 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -50,11 +49,16 @@ class StaffPayoutMappingTest {
         mapper = new PayoutMapperImpl(userMapper);
     }
 
-    private Payout processingPayout(BankAccount destination) {
+    private User worker() {
         User worker = new User();
         worker.setId(workerId);
         worker.setFirstName("Ayşe");
         worker.setLastName("Deneme");
+        return worker;
+    }
+
+    private Payout processingPayout(BankAccount destination) {
+        User worker = worker();
 
         JobAssignment assignment = new JobAssignment();
         assignment.setId(assignmentId);
@@ -82,7 +86,7 @@ class StaffPayoutMappingTest {
 
     @Test
     void theQueueRowCarriesTheEvidenceAnOperatorMatchesAgainstTheStatement() {
-        StaffPayoutDto row = mapper.toStaffPayoutDto(processingPayout(account(FULL_IBAN)));
+        StaffPayoutDto row = mapper.toStaffPayoutDto(processingPayout(account(FULL_IBAN)), worker());
 
         assertEquals(payoutId, row.id());
         assertEquals(assignmentId, row.jobAssignmentId());
@@ -98,7 +102,7 @@ class StaffPayoutMappingTest {
 
     @Test
     void theIbanKeepsOnlyItsPrefixAndSuffixOnTheQueueRow() {
-        StaffPayoutDto row = mapper.toStaffPayoutDto(processingPayout(account(FULL_IBAN)));
+        StaffPayoutDto row = mapper.toStaffPayoutDto(processingPayout(account(FULL_IBAN)), worker());
 
         assertEquals("TR18***2315", row.maskedIban());
         String serialized = json.writeValueAsString(row);
@@ -109,7 +113,7 @@ class StaffPayoutMappingTest {
 
     @Test
     void aPayoutWithoutADestinationAccountRendersNoIbanAtAll() {
-        StaffPayoutDto row = mapper.toStaffPayoutDto(processingPayout(null));
+        StaffPayoutDto row = mapper.toStaffPayoutDto(processingPayout(null), worker());
 
         assertNull(row.maskedIban());
         assertEquals("iyz-transaction-4711", row.providerReference());
@@ -120,12 +124,12 @@ class StaffPayoutMappingTest {
         Payout payout = processingPayout(account(FULL_IBAN));
         payout.setAmount(new BigDecimal("1E+10"));
 
-        assertEquals("10000000000", mapper.toStaffPayoutDto(payout).amount());
+        assertEquals("10000000000", mapper.toStaffPayoutDto(payout, worker()).amount());
     }
 
     @Test
     void theStaffRowContractIsPinnedFieldByField() {
-        JsonNode row = json.valueToTree(mapper.toStaffPayoutDto(processingPayout(account(FULL_IBAN))));
+        JsonNode row = json.valueToTree(mapper.toStaffPayoutDto(processingPayout(account(FULL_IBAN)), worker()));
 
         assertEquals(Set.of("id", "jobAssignmentId", "recipient", "maskedIban", "providerReference",
                         "settlementReference", "amount", "currency", "status", "failureReason",
@@ -149,13 +153,14 @@ class StaffPayoutMappingTest {
     }
 
     @Test
-    void theListMapsEveryRow() {
-        List<StaffPayoutDto> rows = mapper.toStaffPayoutDtoList(
-                List.of(processingPayout(account(FULL_IBAN)), processingPayout(null)));
+    void aRecipientWhoseAccountIsGoneLeavesTheEvidenceIntactAndTheIdentityEmpty() {
+        StaffPayoutDto row = mapper.toStaffPayoutDto(processingPayout(account(FULL_IBAN)), null);
 
-        assertEquals(2, rows.size());
-        assertEquals("TR18***2315", rows.get(0).maskedIban());
-        assertNull(rows.get(1).maskedIban());
+        assertNull(row.recipient());
+        assertEquals(payoutId, row.id());
+        assertEquals("iyz-transaction-4711", row.providerReference());
+        assertEquals("TR18***2315", row.maskedIban());
+        assertEquals("1000.00", row.amount());
     }
 
     private static Set<String> fieldNames(JsonNode node) {

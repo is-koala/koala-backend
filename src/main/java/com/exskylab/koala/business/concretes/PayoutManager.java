@@ -8,7 +8,10 @@ import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.business.abstracts.SettlementService;
 import com.exskylab.koala.core.constants.DisputeMessages;
 import com.exskylab.koala.core.constants.PayoutMessages;
+import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.payout.request.ConfirmPayoutSettlementDto;
+import com.exskylab.koala.core.dtos.payout.response.StaffPayoutDto;
+import com.exskylab.koala.core.mappers.PayoutMapper;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.monitoring.PaymentMetrics;
 import com.exskylab.koala.core.helpers.ConstraintViolations;
@@ -21,6 +24,7 @@ import com.exskylab.koala.entities.*;
 import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.business.abstracts.PaymentService;
 import com.exskylab.koala.business.abstracts.ActivityNotificationService;
+import com.exskylab.koala.business.abstracts.UserService;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -37,8 +41,11 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -60,13 +67,16 @@ public class PayoutManager implements PayoutService {
     private final ActivityNotificationService activityNotificationService;
     private final PaymentMetrics paymentMetrics;
     private final Validator validator;
+    private final UserService userService;
+    private final PayoutMapper payoutMapper;
 
     public PayoutManager(PayoutDao payoutDao, RefundDao refundDao, PaymentService paymentService,
                          JobAssignmentDao jobAssignmentDao, BankAccountService bankAccountService,
                          DisputeDao disputeDao, PaymentStateMachine stateMachine,
                          SettlementService settlementService,
                          ActivityNotificationService activityNotificationService,
-                         PaymentMetrics paymentMetrics, Validator validator) {
+                         PaymentMetrics paymentMetrics, Validator validator,
+                         UserService userService, PayoutMapper payoutMapper) {
         this.payoutDao = payoutDao;
         this.refundDao = refundDao;
         this.paymentService = paymentService;
@@ -78,6 +88,8 @@ public class PayoutManager implements PayoutService {
         this.activityNotificationService = activityNotificationService;
         this.paymentMetrics = paymentMetrics;
         this.validator = validator;
+        this.userService = userService;
+        this.payoutMapper = payoutMapper;
     }
 
     @Override
@@ -263,14 +275,23 @@ public class PayoutManager implements PayoutService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Payout> listForStaff(List<PayoutStatus> statuses, Pageable requested) {
+    public PageDto<StaffPayoutDto> listForStaff(List<PayoutStatus> statuses, Pageable requested) {
         int page = Math.max(requested.getPageNumber(), 0);
         int size = requested.getPageSize() < 1 ? DEFAULT_PAGE_SIZE
                 : Math.min(requested.getPageSize(), MAX_PAGE_SIZE);
         List<PayoutStatus> filter = statuses == null || statuses.isEmpty()
                 ? PayoutStatus.AWAITING_SETTLEMENT
                 : List.copyOf(statuses);
-        return payoutDao.findAllByStatusIn(filter, PageRequest.of(page, size, STAFF_LIST_SORT));
+        Page<Payout> payouts = payoutDao.findAllByStatusIn(filter, PageRequest.of(page, size, STAFF_LIST_SORT));
+
+        Set<UUID> workerIds = payouts.getContent().stream()
+                .map(payout -> payout.getWorker().getId())
+                .collect(Collectors.toSet());
+        Map<UUID, User> recipients = userService.getAllByIdIn(workerIds).stream()
+                .collect(Collectors.toMap(User::getId, Function.identity()));
+
+        return PageDto.of(payouts, payout -> payoutMapper.toStaffPayoutDto(
+                payout, recipients.get(payout.getWorker().getId())));
     }
 
     private static AmountCount amountCount(List<Object[]> rows) {

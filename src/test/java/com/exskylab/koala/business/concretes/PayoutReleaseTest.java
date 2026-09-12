@@ -18,6 +18,8 @@ import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.business.abstracts.DisputeService;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.PaymentService;
+import com.exskylab.koala.business.abstracts.UserService;
+import com.exskylab.koala.core.mappers.PayoutMapper;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -40,6 +42,8 @@ class PayoutReleaseTest {
     private JobAssignmentDao jobAssignmentDao;
     private DisputeDao disputeDao;
     private SettlementService settlementService;
+    private UserService userService;
+    private PayoutMapper payoutMapper;
     private BankAccountService bankAccountService;
     private PayoutManager payoutManager;
 
@@ -54,13 +58,16 @@ class PayoutReleaseTest {
         bankAccountService = mock(BankAccountService.class);
         disputeDao = mock(DisputeDao.class);
         settlementService = mock(SettlementService.class);
+        userService = mock(UserService.class);
+        payoutMapper = mock(PayoutMapper.class);
 
         payoutManager = new PayoutManager(payoutDao, refundDao, paymentService, jobAssignmentDao,
                 bankAccountService, disputeDao, new PaymentStateMachine(), settlementService,
                 mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class),
                 new com.exskylab.koala.core.monitoring.PaymentMetrics(
                         new io.micrometer.core.instrument.simple.SimpleMeterRegistry()),
-                jakarta.validation.Validation.buildDefaultValidatorFactory().getValidator());
+                jakarta.validation.Validation.buildDefaultValidatorFactory().getValidator(),
+                userService, payoutMapper);
 
         when(payoutDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(refundDao.save(any())).thenAnswer(i -> i.getArgument(0));
@@ -340,6 +347,28 @@ class PayoutReleaseTest {
 
         verify(settlementService).enqueueRefund(eq(payment), eq(assignment), eq(new BigDecimal("537.50")));
         verify(settlementService).enqueue(eq(payment), eq(assignment), eq(SettlementOperation.DISAPPROVE));
+    }
+
+    @Test
+    void theQueueLooksRecipientsUpOnceForThePageAndLeavesAGoneAccountEmpty() {
+        User visible = new User();
+        visible.setId(UUID.randomUUID());
+        User departed = new User();
+        departed.setId(UUID.randomUUID());
+        Payout ofVisible = new Payout();
+        ofVisible.setWorker(visible);
+        Payout ofDeparted = new Payout();
+        ofDeparted.setWorker(departed);
+        when(payoutDao.findAllByStatusIn(eq(PayoutStatus.AWAITING_SETTLEMENT), any(Pageable.class)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(ofVisible, ofDeparted)));
+        when(userService.getAllByIdIn(java.util.Set.of(visible.getId(), departed.getId())))
+                .thenReturn(List.of(visible));
+
+        payoutManager.listForStaff(null, org.springframework.data.domain.PageRequest.of(0, 20));
+
+        verify(userService, times(1)).getAllByIdIn(any());
+        verify(payoutMapper).toStaffPayoutDto(ofVisible, visible);
+        verify(payoutMapper).toStaffPayoutDto(ofDeparted, null);
     }
 
     @Test

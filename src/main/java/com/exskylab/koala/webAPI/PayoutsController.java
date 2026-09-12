@@ -105,9 +105,8 @@ public class PayoutsController {
             @ParameterObject @PageableDefault(size = 20) Pageable pageable,
             @AuthenticationPrincipal StaffPrincipal actor) {
 
-        var page = staffPayoutService.listForStaff(actor, status, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
-                PageDto.of(page, payoutMapper.toStaffPayoutDtoList(page.getContent())),
+                staffPayoutService.listForStaff(actor, status, pageable),
                 PayoutMessages.LISTED, HttpStatus.OK));
     }
 

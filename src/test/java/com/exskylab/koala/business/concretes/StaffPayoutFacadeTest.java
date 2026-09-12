@@ -1,6 +1,8 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.PayoutService;
+import com.exskylab.koala.core.dtos.common.PageDto;
+import com.exskylab.koala.core.dtos.payout.response.StaffPayoutDto;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.entities.Payout;
@@ -125,12 +127,12 @@ class StaffPayoutFacadeTest {
 
     @Test
     void staffHoldingTheReconcilePermissionReadsTheQueueThroughTheInnerService() {
-        Page<Payout> queue = Page.empty();
+        PageDto<StaffPayoutDto> queue = PageDto.of(Page.empty(), List.of());
         Pageable requested = PageRequest.of(0, 20);
         List<PayoutStatus> statuses = List.of(PayoutStatus.PROCESSING);
         when(payoutService.listForStaff(statuses, requested)).thenReturn(queue);
 
-        Page<Payout> result = facade.listForStaff(staff(StaffPermission.PAYOUT_RECONCILE), statuses, requested);
+        PageDto<StaffPayoutDto> result = facade.listForStaff(staff(StaffPermission.PAYOUT_RECONCILE), statuses, requested);
 
         assertSame(queue, result);
         verify(payoutService, times(1)).listForStaff(statuses, requested);

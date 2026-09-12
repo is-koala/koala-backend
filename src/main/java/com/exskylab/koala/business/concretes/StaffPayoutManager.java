@@ -3,7 +3,9 @@ package com.exskylab.koala.business.concretes;
 import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.business.abstracts.StaffPayoutService;
 import com.exskylab.koala.core.constants.StaffMessages;
+import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.payout.request.ConfirmPayoutSettlementDto;
+import com.exskylab.koala.core.dtos.payout.response.StaffPayoutDto;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.entities.Payout;
@@ -11,7 +13,6 @@ import com.exskylab.koala.entities.PayoutStatus;
 import com.exskylab.koala.entities.Refund;
 import com.exskylab.koala.entities.StaffPermission;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
@@ -49,9 +50,9 @@ public class StaffPayoutManager implements StaffPayoutService {
     }
 
     @Override
-    public Page<Payout> listForStaff(StaffPrincipal actor, List<PayoutStatus> statuses, Pageable pageable) {
+    public PageDto<StaffPayoutDto> listForStaff(StaffPrincipal actor, List<PayoutStatus> statuses, Pageable pageable) {
         if (lacks(actor, StaffPermission.PAYOUT_RECONCILE)) {
-            log.warn("Personel izni olmadan hakediş kuyruğu okunamadı: izin={} durumlar={}",
+            log.warn("Payout queue read refused without staff permission: permission={} statuses={}",
                     StaffPermission.PAYOUT_RECONCILE.getCode(), statuses);
             throw new ForbiddenException(StaffMessages.PERMISSION_DENIED);
         }

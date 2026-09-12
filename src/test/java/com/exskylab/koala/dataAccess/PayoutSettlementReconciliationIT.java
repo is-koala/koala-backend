@@ -2,6 +2,7 @@ package com.exskylab.koala.dataAccess;
 
 import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.core.dtos.payout.request.ConfirmPayoutSettlementDto;
+import com.exskylab.koala.core.dtos.payout.response.StaffPayoutDto;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.entities.Payout;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -25,6 +27,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -56,6 +59,7 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
 
     private final List<UUID> jobs = new ArrayList<>();
     private final List<UUID> assignments = new ArrayList<>();
+    private final List<UUID> workers = new ArrayList<>();
 
     @AfterEach
     void cleanUp() {
@@ -66,8 +70,12 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
         for (UUID jobId : jobs) {
             jdbcTemplate.update("delete from jobs where id = ?", jobId);
         }
+        for (UUID workerId : workers) {
+            jdbcTemplate.update("delete from users where id = ?", workerId);
+        }
         assignments.clear();
         jobs.clear();
+        workers.clear();
     }
 
     @Test
@@ -105,7 +113,7 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
         UUID payoutId = UUID.randomUUID();
         UUID jobId = UUID.randomUUID();
         UUID assignmentId = UUID.randomUUID();
-        seedAssignment(jobId, assignmentId);
+        seedAssignment(jobId, assignmentId, WORKER);
 
         assertThrows(DataIntegrityViolationException.class, () -> jdbcTemplate.update("""
                         insert into payouts (id, created_at, is_deleted, job_assignment_id, worker_id,
@@ -290,6 +298,39 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void theStaffQueueListsEveryRowTheGaugeAndTheRunbookCountEvenWhenItsNeighboursAreGone() {
+        UUID overdue = seedPayout("PROCESSING", Instant.now().minus(10, ChronoUnit.DAYS), PROVIDER_REFERENCE);
+        UUID departedWorker = seedWorker();
+        UUID orphaned = seedPayout("PROCESSING", Instant.now().minus(4, ChronoUnit.DAYS), PROVIDER_REFERENCE,
+                departedWorker);
+        jdbcTemplate.update("update users set is_deleted = true, deleted_at = now() where id = ?", departedWorker);
+        UUID withoutAssignment = seedPayout("PROCESSING", Instant.now().minus(5, ChronoUnit.DAYS),
+                PROVIDER_REFERENCE);
+        jdbcTemplate.update("update job_assignments set is_deleted = true, deleted_at = now() "
+                + "where id = (select job_assignment_id from payouts where id = ?)", withoutAssignment);
+        Set<UUID> seeded = Set.of(overdue, orphaned, withoutAssignment);
+
+        Set<UUID> listed = onlySeeded(payoutService
+                .listForStaff(List.of(PayoutStatus.PROCESSING), PageRequest.of(0, 50))
+                .content().stream()
+                .map(StaffPayoutDto::id)
+                .toList(), seeded);
+        Set<UUID> queue = onlySeeded(idsReturnedByTheRunbookQuery(), seeded);
+        Set<UUID> gauged = onlySeeded(payoutService.findPayoutsAwaitingSettlementLongerThan(Duration.ofDays(3)),
+                seeded);
+
+        assertEquals(seeded, queue, "runbook kuyrugu iki satiri da gostermeli");
+        assertEquals(seeded, gauged, "gosterge iki satiri da saymali");
+        assertEquals(queue, listed,
+                "Personel kuyrugu, alarmin saydigi ve runbook sorgusunun dondurdugu satirlarin aynisini "
+                        + "gostermeli; hesabini silen iscinin hakedisi bankaya cikmis parayi beklemeye devam eder "
+                        + "ve kuyruktan dusemez. kuyruk=" + queue + " liste=" + listed);
+        assertTrue(listed.contains(orphaned), "isci soft-delete edilince satir listeden kayboldu: " + listed);
+        assertTrue(listed.contains(withoutAssignment),
+                "atama soft-delete edilince satir listeden kayboldu: " + listed);
+    }
+
+    @Test
     void theSecondTierSelectsOnlyTheRowsTheFirstEscalationDidNotClose() {
         UUID stalled = seedPayout("PROCESSING", Instant.now().minus(20, ChronoUnit.DAYS), PROVIDER_REFERENCE);
         UUID onlyOverdue = seedPayout("PROCESSING", Instant.now().minus(4, ChronoUnit.DAYS), PROVIDER_REFERENCE);
@@ -381,24 +422,44 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
         return matching.getFirst();
     }
 
+    private static Set<UUID> onlySeeded(List<UUID> ids, Set<UUID> seeded) {
+        Set<UUID> retained = new HashSet<>(ids);
+        retained.retainAll(seeded);
+        return retained;
+    }
+
+    private UUID seedWorker() {
+        UUID workerId = UUID.randomUUID();
+        jdbcTemplate.update("insert into users (id, created_at, is_deleted, email, password, first_name, last_name, "
+                        + "is_employer, email_verified, phone_verified, identity_verified) "
+                        + "values (?, now(), false, ?, 'test', 'Giden', 'Isci', false, true, false, true)",
+                workerId, workerId + "@example.com");
+        workers.add(workerId);
+        return workerId;
+    }
+
     private UUID seedPayout(String status, Instant processingAt, String providerReference) {
+        return seedPayout(status, processingAt, providerReference, WORKER);
+    }
+
+    private UUID seedPayout(String status, Instant processingAt, String providerReference, UUID workerId) {
         UUID jobId = UUID.randomUUID();
         UUID assignmentId = UUID.randomUUID();
         UUID payoutId = UUID.randomUUID();
-        seedAssignment(jobId, assignmentId);
+        seedAssignment(jobId, assignmentId, workerId);
 
         jdbcTemplate.update("""
                 insert into payouts (id, created_at, is_deleted, job_assignment_id, worker_id,
                                      amount, currency, status, provider_reference, processing_at)
                 values (?, ?, false, ?, ?, 1000.00, 'TRY', ?::varchar, ?, ?)
-                """, payoutId, java.sql.Timestamp.from(processingAt), assignmentId, WORKER, status,
+                """, payoutId, java.sql.Timestamp.from(processingAt), assignmentId, workerId, status,
                 providerReference,
                 "PROCESSING".equals(status) ? java.sql.Timestamp.from(processingAt) : null);
 
         return payoutId;
     }
 
-    private void seedAssignment(UUID jobId, UUID assignmentId) {
+    private void seedAssignment(UUID jobId, UUID assignmentId, UUID workerId) {
         jdbcTemplate.update("""
                 insert into jobs (id, created_at, is_deleted, title, status, employer_type,
                                   experience_required, insurance_required, min_age, max_age,
@@ -413,7 +474,7 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
                      worker_payout, commission_rate, commission_amount, total_charged, work_hours)
                 values (?, now(), false, ?, ?, 'COMPLETED', 'RELEASED_TO_WORKER', '2026-09-v1', 'TRY',
                         1000.00, 0.0750, 75.00, 1075.00, 0)
-                """, assignmentId, jobId, WORKER);
+                """, assignmentId, jobId, workerId);
 
         jobs.add(jobId);
         assignments.add(assignmentId);

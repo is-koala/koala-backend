@@ -1,12 +1,13 @@
 package com.exskylab.koala.business.abstracts;
 
+import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.payout.request.ConfirmPayoutSettlementDto;
+import com.exskylab.koala.core.dtos.payout.response.StaffPayoutDto;
 import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.entities.Payout;
 import com.exskylab.koala.entities.PayoutStatus;
 import com.exskylab.koala.entities.Refund;
 import com.exskylab.koala.entities.StaffPermission;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
@@ -21,7 +22,7 @@ public interface StaffPayoutService {
 
     Payout confirmSettlement(StaffPrincipal actor, UUID payoutId, ConfirmPayoutSettlementDto evidence);
 
-    Page<Payout> listForStaff(StaffPrincipal actor, List<PayoutStatus> statuses, Pageable pageable);
+    PageDto<StaffPayoutDto> listForStaff(StaffPrincipal actor, List<PayoutStatus> statuses, Pageable pageable);
 
     void requirePermission(StaffPrincipal actor, StaffPermission permission, UUID jobAssignmentId);
 }
