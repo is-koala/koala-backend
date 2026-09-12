@@ -1,5 +1,9 @@
 package com.exskylab.koala.core.mappers;
 
+import com.exskylab.koala.core.helpers.MediaUrlResolver;
+import com.exskylab.koala.core.helpers.StorageUrlResolver;
+import com.exskylab.koala.core.properties.AppProperties;
+import com.exskylab.koala.core.properties.StorageProperties;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.Payout;
 import org.junit.jupiter.api.Test;
@@ -11,7 +15,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class PayoutMapperTest {
 
-    private final PayoutMapper mapper = new PayoutMapperImpl();
+    private final PayoutMapper mapper = new PayoutMapperImpl(new UserMapperImpl(
+            new MediaUrlResolver(new StorageUrlResolver(new StorageProperties(),
+                    new AppProperties("http://localhost:8080", "http://localhost:3000"))),
+            new AddressMapperImpl(), new EducationMapperImpl(), new ExperienceMapperImpl()));
 
     @Test
     void amountRemainsAnExactPlainDecimalStringAtTheApiBoundary() {

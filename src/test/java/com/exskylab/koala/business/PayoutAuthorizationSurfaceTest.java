@@ -41,5 +41,9 @@ class PayoutAuthorizationSurfaceTest {
                 "/admin release ucu PayoutService'i doğrudan çağıramaz");
         assertFalse(controller.contains("payoutService.refundEmployer("),
                 "/admin refund ucu PayoutService'i doğrudan çağıramaz");
+        assertTrue(controller.contains("staffPayoutService.listForStaff(actor,"),
+                "/admin/payouts kuyruğu aktörü StaffPayoutService'e vermeli");
+        assertFalse(controller.contains("payoutService.listForStaff("),
+                "/admin/payouts kuyruğu PayoutService'i doğrudan çağıramaz");
     }
 }

@@ -7,12 +7,16 @@ import com.exskylab.koala.core.dtos.payout.request.ConfirmPayoutSettlementDto;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.entities.Payout;
+import com.exskylab.koala.entities.PayoutStatus;
 import com.exskylab.koala.entities.Refund;
 import com.exskylab.koala.entities.StaffPermission;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -45,18 +49,32 @@ public class StaffPayoutManager implements StaffPayoutService {
     }
 
     @Override
+    public Page<Payout> listForStaff(StaffPrincipal actor, List<PayoutStatus> statuses, Pageable pageable) {
+        if (lacks(actor, StaffPermission.PAYOUT_RECONCILE)) {
+            log.warn("Personel izni olmadan hakediş kuyruğu okunamadı: izin={} durumlar={}",
+                    StaffPermission.PAYOUT_RECONCILE.getCode(), statuses);
+            throw new ForbiddenException(StaffMessages.PERMISSION_DENIED);
+        }
+        return payoutService.listForStaff(statuses, pageable);
+    }
+
+    @Override
     public void requirePermission(StaffPrincipal actor, StaffPermission permission, UUID jobAssignmentId) {
         requirePermission(actor, permission, jobAssignmentId, null, null);
     }
 
     private void requirePermission(StaffPrincipal actor, StaffPermission permission, UUID jobAssignmentId,
                                    BigDecimal amount, String reason) {
-        if (actor == null || !actor.isRegistered() || !actor.holds(permission)) {
+        if (lacks(actor, permission)) {
             log.warn("Money movement refused without staff permission: permission={} assignment={} amount={} reason={}",
                     permission.getCode(), jobAssignmentId,
                     amount == null ? "full escrow" : amount,
                     reason == null || reason.isBlank() ? "not specified" : reason);
             throw new ForbiddenException(StaffMessages.PERMISSION_DENIED);
         }
+    }
+
+    private static boolean lacks(StaffPrincipal actor, StaffPermission permission) {
+        return actor == null || !actor.isRegistered() || !actor.holds(permission);
     }
 }
