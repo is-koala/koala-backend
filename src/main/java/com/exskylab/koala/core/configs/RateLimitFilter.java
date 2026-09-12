@@ -65,6 +65,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             PARSER.parse("/users/me/profile-picture"),
             PARSER.parse("/users/me/identity-documents"),
             PARSER.parse("/companies"),
+            PARSER.parse("/companies/{companyId}/logo"),
             PARSER.parse("/companies/{companyId}/images"),
             PARSER.parse("/jobs/{jobId}/images"),
             PARSER.parse("/admin/badges/{badgeId}/icon"),

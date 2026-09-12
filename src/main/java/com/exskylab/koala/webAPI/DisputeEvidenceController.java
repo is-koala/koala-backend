@@ -53,6 +53,8 @@ public class DisputeEvidenceController {
             @ApiResponse(responseCode = "404", description = "Uyuşmazlık bulunamadı ya da tarafı değilsiniz",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "409", description = "Uyuşmazlık sonuçlanmış ya da kanıt sınırı dolmuş",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "413", description = "Tek dosya 10 MiB ya da toplam multipart gövdesi 42 MiB sınırını aşıyor",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping(value = "/{disputeId}/evidence", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
