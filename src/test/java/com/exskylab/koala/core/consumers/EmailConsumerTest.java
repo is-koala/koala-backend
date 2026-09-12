@@ -219,4 +219,35 @@ class EmailConsumerTest {
         verify(notifications, org.mockito.Mockito.never()).claimForDelivery(id, NotificationChannel.EMAIL);
         verifyNoInteractions(mailSender);
     }
+
+    @Test
+    void aContactFormReplyToIsCopiedOntoTheMimeMessage() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID claimId = UUID.randomUUID();
+        Notification notification = new Notification();
+        notification.setId(id);
+        notification.setStatus(NotificationStatus.QUEUED);
+        notification.setDestinationEmail("info@iskoala.com");
+        NotificationService notifications = mock(NotificationService.class);
+        JavaMailSender mailSender = mock(JavaMailSender.class);
+        SpringTemplateEngine templates = mock(SpringTemplateEngine.class);
+        AppProperties properties = mock(AppProperties.class);
+        MimeMessage mimeMessage = new MimeMessage(Session.getInstance(new Properties()));
+
+        when(notifications.getById(id)).thenReturn(notification);
+        when(notifications.claimForDelivery(id, NotificationChannel.EMAIL)).thenReturn(Optional.of(claimId));
+        when(properties.apiUrl()).thenReturn("https://api.example.test");
+        when(templates.process(org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any())).thenReturn("<p>Koala</p>");
+        when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
+
+        EmailDeliveryProperties delivery = new EmailDeliveryProperties();
+        delivery.setAllowedRecipients(Set.of("info@iskoala.com"));
+        EmailConsumer consumer = new EmailConsumer(notifications, mailSender, templates, properties, delivery);
+        consumer.handleEmailTask(new EmailTaskDto(id, "info@iskoala.com", "Konu", "contact-form-template",
+                Map.of("replyTo", "ada@example.test")));
+
+        verify(mailSender).send(mimeMessage);
+        assertEquals("ada@example.test", mimeMessage.getReplyTo()[0].toString());
+    }
 }

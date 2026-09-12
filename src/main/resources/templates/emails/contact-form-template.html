@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="tr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Koala</title>
+</head>
+<body th:replace="~{emails/layout :: page(~{::content})}">
+<div th:fragment="content">
+    <h1 style='font-family: "DM Sans", sans-serif; font-size: 28px; font-weight: 600; color: #282828; margin: 0 0 20px 0;'>Yeni iletişim formu</h1>
+    <p style='font-family: "DM Sans", sans-serif; font-size: 18px; font-weight: 400; color: #4D4D4D; line-height: 1.5; margin: 0 0 12px 0;'>Konu: <span th:text="${topic}">Destek</span></p>
+    <p style='font-family: "DM Sans", sans-serif; font-size: 18px; font-weight: 400; color: #4D4D4D; line-height: 1.5; margin: 0 0 12px 0;'>Ad: <span th:text="${name}">[Ad]</span></p>
+    <p style='font-family: "DM Sans", sans-serif; font-size: 18px; font-weight: 400; color: #4D4D4D; line-height: 1.5; margin: 0 0 20px 0;'>E-posta: <span th:text="${email}">[E-posta]</span></p>
+    <p style='font-family: "DM Sans", sans-serif; font-size: 18px; font-weight: 400; color: #4D4D4D; line-height: 1.5; margin: 0; white-space: pre-wrap;' th:text="${message}">[Mesaj]</p>
+</div>
+</body>
+</html>

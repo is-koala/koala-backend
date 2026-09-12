@@ -156,6 +156,7 @@ class RateLimitBucketTest {
 
         assertEquals(2, passing("POST", "/auth/login", "10.0.0.6", 5));
         assertEquals(2, passing("POST", "/auth/forgot-password", "10.0.0.6", 5));
+        assertEquals(2, passing("POST", "/public/contact", "10.0.0.6", 5));
     }
 
     @Test

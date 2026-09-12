@@ -156,6 +156,8 @@ email:
   delivery:
     mode: ${MAIL_DELIVERY_MODE:ALLOWLIST}
     allowed-recipients: ${MAIL_ALLOWED_RECIPIENTS:}
+  support:
+    mailbox: ${SUPPORT_MAILBOX:info@iskoala.com}
 
 push:
   firebase:
