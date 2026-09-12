@@ -60,11 +60,14 @@ public class UnsubscribeTokenManager implements UnsubscribeTokenService {
         UnsubscribeToken token = unsubscribeTokenDao.findByTokenDigest(TokenDigest.of(rawToken))
                 .orElseThrow(this::invalidToken);
 
-        if (token.getExpiresAt().isBefore(Instant.now())) {
-            throw invalidToken();
+        Instant now = Instant.now();
+        if (token.getExpiresAt().isBefore(now)) {
+            log.warn("Unsubscribe link {} for user {} expired at {}",
+                    token.getId(), token.getUser().getId(), token.getExpiresAt());
+            throw new ValidationException(NotificationPreferenceMessages.UNSUBSCRIBE_TOKEN_EXPIRED);
         }
 
-        token.setLastUsedAt(Instant.now());
+        token.setLastUsedAt(now);
         return token;
     }
 

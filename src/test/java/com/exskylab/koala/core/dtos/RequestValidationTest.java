@@ -13,6 +13,7 @@ import com.exskylab.koala.core.dtos.experience.request.SaveExperienceDto;
 import com.exskylab.koala.core.dtos.identity.request.RejectIdentityReviewDto;
 import com.exskylab.koala.core.dtos.jobAlert.request.SaveJobAlertDto;
 import com.exskylab.koala.core.dtos.notificationPreference.request.NotificationPreferenceEntryDto;
+import com.exskylab.koala.core.dtos.notificationPreference.request.UnsubscribeDto;
 import com.exskylab.koala.core.dtos.notificationPreference.request.UpdateNotificationPreferencesDto;
 import com.exskylab.koala.core.dtos.report.request.CreateReportDto;
 import com.exskylab.koala.core.dtos.report.request.ReviewReportDto;
@@ -400,6 +401,15 @@ class RequestValidationTest {
         entry.setChannel(channel);
         entry.setEnabled(enabled);
         return entry;
+    }
+
+    @Test
+    void aBlankOrOversizedUnsubscribeTokenIsStoppedAtTheDtoWithAResolvableKey() {
+        assertEquals(Set.of("{notification.unsubscribe.token.required}"), messagesFor(new UnsubscribeDto("   ")));
+        assertEquals(Set.of("{notification.unsubscribe.token.required}"), messagesFor(new UnsubscribeDto(null)));
+        assertEquals(Set.of("{notification.unsubscribe.token.too.long}"),
+                messagesFor(new UnsubscribeDto("a".repeat(2049))));
+        assertTrue(isValid(new UnsubscribeDto("8Wm7QpVw2Zt5Yb1Nc9Ke3Lf6Rh0Sj4Ud8Xa2Bg5Cq0")));
     }
 
     @Test
