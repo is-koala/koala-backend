@@ -381,6 +381,14 @@ yapılmaz, çünkü "eşleşmeyen kanıt" ile "transfer olmadı" aynı şey değ
      "settledAt":           "<transferin gerçekleştiği an, ISO-8601>" }
    ```
 
+   Eşleştirilecek satırlar panelin kuyruğunda: `GET /admin/payouts` (izin
+   `payout.reconcile`) `status` verilmezse `PROCESSING` hakedişleri sayfalar ve
+   her satırda `id`, `providerReference`, `recipient` (ad/soyad), `maskedIban`
+   (`TR18***2315` biçiminde; tam IBAN dönmez), `amount` ve `currency` bulunur.
+   Yani `providerReference`, `amount` ve `currency` ekstreden değil kuyruk
+   satırından kopyalanır; elle yazılacak tek şey ekstre referansı ve
+   gerçekleşme anıdır.
+
    Çağrı idempotenttir: aynı `settlementReference` ikinci kez bildirilirse kayıt
    değişmez ve `completedAt` yeniden damgalanmaz. Farklı bir referansla
    tamamlanmış bir hakedişe ikinci satır işlenmek istenirse 409 alırsın —
