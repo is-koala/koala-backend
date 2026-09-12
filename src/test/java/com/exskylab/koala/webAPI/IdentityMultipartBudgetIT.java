@@ -12,19 +12,28 @@ import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.entities.Session;
 import com.exskylab.koala.entities.User;
 import com.exskylab.koala.support.AbstractIntegrationTest;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpHeaders;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -34,10 +43,12 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IdentityMultipartBudgetIT extends AbstractIntegrationTest {
 
     private static final int MEBIBYTE = 1024 * 1024;
@@ -60,6 +71,9 @@ class IdentityMultipartBudgetIT extends AbstractIntegrationTest {
 
     @MockitoBean
     private IdentityDocumentReviewService identityDocumentReviewService;
+
+    @TempDir
+    private Path tempDir;
 
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
@@ -109,6 +123,11 @@ class IdentityMultipartBudgetIT extends AbstractIntegrationTest {
                 .thenReturn(pending);
     }
 
+    @AfterEach
+    void releaseMultipartArgumentsRetainedByMockito() {
+        clearInvocations(identityDocumentReviewService);
+    }
+
     @Test
     void fourMaximumSizedPhotosFitInsideTheIdentityRequestBudget() throws Exception {
         HttpResponse<String> response = sendIdentityRequest(10 * MEBIBYTE, 0);
@@ -133,12 +152,12 @@ class IdentityMultipartBudgetIT extends AbstractIntegrationTest {
         List<HttpRequest.BodyPublisher> publishers = new ArrayList<>();
         addIdentityPart(publishers, boundary);
 
-        byte[] photo = new byte[bytesPerPhoto];
+        Path photo = sparseFile("photo-" + bytesPerPhoto, bytesPerPhoto);
         for (String part : PHOTO_PARTS) {
             addBinaryPart(publishers, boundary, part, photo);
         }
         if (paddingBytes > 0) {
-            addBinaryPart(publishers, boundary, "padding", new byte[paddingBytes]);
+            addBinaryPart(publishers, boundary, "padding", sparseFile("padding-" + paddingBytes, paddingBytes));
         }
         publishers.add(text("--" + boundary + "--\r\n"));
 
@@ -166,12 +185,23 @@ class IdentityMultipartBudgetIT extends AbstractIntegrationTest {
     }
 
     private static void addBinaryPart(List<HttpRequest.BodyPublisher> publishers, String boundary,
-                                      String part, byte[] content) {
+                                      String part, Path content) throws IOException {
         publishers.add(text("--" + boundary + "\r\n"
                 + "Content-Disposition: form-data; name=\"" + part + "\"; filename=\"" + part + ".jpg\"\r\n"
                 + "Content-Type: image/jpeg\r\n\r\n"));
-        publishers.add(HttpRequest.BodyPublishers.ofByteArray(content));
+        publishers.add(HttpRequest.BodyPublishers.ofFile(content));
         publishers.add(text("\r\n"));
+    }
+
+    private Path sparseFile(String name, int size) throws IOException {
+        Path path = tempDir.resolve(name);
+        if (Files.notExists(path)) {
+            try (FileChannel channel = FileChannel.open(path, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
+                channel.position(size - 1L);
+                channel.write(ByteBuffer.wrap(new byte[]{0}));
+            }
+        }
+        return path;
     }
 
     private static HttpRequest.BodyPublisher text(String value) {
