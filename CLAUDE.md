@@ -3381,20 +3381,20 @@ bozmak, o yardımcıyı kullanan bağlamanın korunduğunu kanıtlamaz:
 sabit `local` yapıldığında on test, catch-all proxy kuralı etkisizleştirildiğinde
 üç test, `CorsProperties`'ten `@Validated` düşürüldüğünde dokuz test düşüyor.
 
-## 2ay. SMTP ortam kapısı — staging UNRESTRICTED durdurur
+## 2ay. SMTP ortam gözlemi — staging UNRESTRICTED çalışır
 
-Paket 1 alıcı allowlist'i SMTP'den önce `SUPPRESSED` işaretliyor; ortam adı ile
-modun çelişmesi ise #191'e kadar açılışı düşürmüyordu. `docs/environments.md`
-staging için `MAIL_DELIVERY_MODE=ALLOWLIST` diyor. `MailDeliveryEnvironmentGuard`
-aynı `app.deployment` bean'ini okur (`ProductionConfigurationGuard` gibi ödeme
-prefix'ine bağlanmaz) ve local'i olduğu gibi bırakır — mevcut IT'ler
-`UNRESTRICTED` kullanır.
+Paket 1 alıcı allowlist'i SMTP'den önce `SUPPRESSED` işaretliyor. #222 ürün
+kararıyla staging ortamında da açıkça seçilmiş `UNRESTRICTED` modu çalışır;
+başlangıç koruması bunu engellemek yerine görünür bir uyarı üretir.
+`MailDeliveryEnvironmentGuard` aynı `app.deployment` bean'ini okur
+(`ProductionConfigurationGuard` gibi ödeme prefix'ine bağlanmaz) ve local'i
+olduğu gibi bırakır — mevcut IT'ler `UNRESTRICTED` kullanır.
 
 | Kural | Karar | Neden |
 |---|---|---|
-| staging + `MAIL_DELIVERY_MODE=UNRESTRICTED` | **durdurur** | Staging marketplace postası internete kısıtsız çıkmamalı. Yanlış değer, boş allowlist'ten kötü. |
+| staging + `MAIL_DELIVERY_MODE=UNRESTRICTED` | **uyarır ve başlatır** | Ürün staging'de gerçek posta akışını kullanır; kısıtsız seçim logda görünür kalır. |
 | staging/production + ALLOWLIST + boş `MAIL_ALLOWED_RECIPIENTS` | **uyarır** | Teslimat zaten fail-closed; sessiz "mail çalışıyor" yalanı olmasın. Alıcı adresi loga yazılmaz. |
-| production + `MAIL_DELIVERY_MODE=UNRESTRICTED` | **uyarır** | Lansman cutover'ın ikinci SMTP onayı bu modu açar (`SMTP_UNRESTRICTED_APPROVAL_ID`). Durdurmak o yordamı kod değişikliğine bağlardı. |
+| production + `MAIL_DELIVERY_MODE=UNRESTRICTED` | **uyarır ve başlatır** | Kısıtsız teslimat bilinçli bir ortam seçimidir; servis kullanılabilir kalır. |
 
 İşaret: `MAIL_DELIVERY_GUARD`. Sözleşme `MailDeliveryEnvironmentContractTest`.
 Marketplace seed geri gelmez (ADR-0008). Gelen kutu kabulü #4'te insan işi.

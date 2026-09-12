@@ -26,7 +26,9 @@ Spam: OWASP, herkese açık yazma uçlarında hız sınırı ve gizli alan (hone
 2. BFF doğrular, honeypot'u yerelde yutar, sonra `POST /public/contact` çağırır. SMTP yok.
 3. Backend alanları yeniden doğrular, honeypot'u yine yutar, `RateLimitFilter` AUTH kovasına koyar, kuyruğa yazar.
 4. `EmailConsumer` `SUPPORT_MAILBOX`'a (varsayılan `info@iskoala.com`) gönderir; `Reply-To` ziyaretçinin e-postasıdır.
-5. Teslimat `MAIL_DELIVERY_MODE` / `MAIL_ALLOWED_RECIPIENTS` kurallarına bağlıdır. Staging ALLOWLIST'te `info@iskoala.com` listede yoksa SMTP çağrılmaz (`docs/environments.md`).
+5. Teslimat `MAIL_DELIVERY_MODE` kurallarına bağlıdır. Staging `UNRESTRICTED`
+   çalıştırabilir; `ALLOWLIST` seçilmişse `info@iskoala.com` listede yokken
+   SMTP çağrılmaz (`docs/environments.md`).
 
 ## Yusuf'un `info@` kutusu
 
@@ -34,7 +36,7 @@ Spam: OWASP, herkese açık yazma uçlarında hız sınırı ve gizli alan (hone
 | --- | --- | --- |
 | `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD` | backend Dokploy | Mevcut `JavaMailSender`. Next'te kopyası yok. |
 | `SUPPORT_MAILBOX` | backend, varsayılan `info@iskoala.com` | Formun **alıcısı**. SMTP kullanıcısı olmak zorunda değil. |
-| `MAIL_DELIVERY_MODE` | backend | Production cutover'da `UNRESTRICTED`; staging `ALLOWLIST`. |
+| `MAIL_DELIVERY_MODE` | backend | `UNRESTRICTED` staging ve production'da çalışır; `ALLOWLIST` isteğe bağlı alıcı kapısıdır. |
 | `MAIL_ALLOWED_RECIPIENTS` | backend | ALLOWLIST iken `info@iskoala.com` bu listede olmalı, yoksa kuyruk `SUPPRESSED` olur. |
 
 Next `.env.local` içinden `SMTP_*` ve `SUPPORT_MAILBOX` kaldırılır.

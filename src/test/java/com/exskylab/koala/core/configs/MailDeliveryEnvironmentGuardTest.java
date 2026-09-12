@@ -18,7 +18,6 @@ import org.springframework.context.annotation.Import;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -52,14 +51,15 @@ class MailDeliveryEnvironmentGuardTest {
     }
 
     @Test
-    void stagingUnrestrictedMailStopsStartup() {
+    void stagingUnrestrictedMailWarnsAndStarts() {
         contextRunner.withPropertyValues(
                         "app.deployment=staging",
                         "email.delivery.mode=UNRESTRICTED")
                 .run(context -> {
-                    assertNotNull(context.getStartupFailure());
-                    assertTrue(rootMessage(context.getStartupFailure()).contains("MAIL_DELIVERY_MODE"));
-                    assertFalse(rootMessage(context.getStartupFailure()).contains("@"));
+                    assertNull(context.getStartupFailure());
+                    assertTrue(warnedAbout("MAIL_DELIVERY_MODE"), warnings().toString());
+                    assertTrue(warnings().stream().anyMatch(message ->
+                            message.contains(MailDeliveryEnvironmentGuard.MARKER)));
                 });
     }
 
@@ -125,14 +125,6 @@ class MailDeliveryEnvironmentGuardTest {
 
     private List<String> messages() {
         return appender.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
-    }
-
-    private static String rootMessage(Throwable failure) {
-        Throwable current = failure;
-        while (current.getCause() != null && current.getCause() != current) {
-            current = current.getCause();
-        }
-        return current.getMessage() == null ? "" : current.getMessage();
     }
 
     @Configuration(proxyBeanMethods = false)

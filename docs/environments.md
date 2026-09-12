@@ -19,7 +19,7 @@ ile sabitlenmiştir.
 | Depolama | yerel/test | ayrı bucket veya staging prefix | ayrı production bucket |
 | Ödeme | iyzico Sandbox | iyzico Sandbox | iyzico Live |
 | Adres | geliştirme anahtarı | ayrı kotalı staging anahtarı | ayrı production anahtarı |
-| E-posta | allowlist/yakalama | `MAIL_DELIVERY_MODE=ALLOWLIST` | kontrollü canlı teslimat |
+| E-posta | allowlist/yakalama | açıkça seçilmiş `MAIL_DELIVERY_MODE=UNRESTRICTED` | kontrollü canlı teslimat |
 
 ## Staging zorunlulukları
 
@@ -29,12 +29,12 @@ ile sabitlenmiştir.
 - `AUTH_LINK_APP_SCHEME=koala-staging`
 - `PAYMENTS_RETURN_BASE_URL=koala-staging://`
 - `IYZICO_BASE_URL=https://sandbox-api.iyzipay.com`
-- `MAIL_DELIVERY_MODE=ALLOWLIST`; allowlist dışındaki teslimat reddedilir.
-  `UNRESTRICTED` staging açılışını **durdurur** (`MAIL_DELIVERY_GUARD`).
-  Boş `MAIL_ALLOWED_RECIPIENTS` SMTP çağırmaz; açılış `WARN` yazar, alıcı
-  adresini loga koymaz. Tanıtım sitesi iletişim formu (`POST /public/contact`)
-  `SUPPORT_MAILBOX` (varsayılan `info@iskoala.com`) adresine düşer; ALLOWLIST
-  iken o adres bu listede olmalıdır.
+- `MAIL_DELIVERY_MODE=UNRESTRICTED`; staging başlangıcı bu açık seçimi kabul
+  eder ve alıcı kapısının kapalı olduğunu `MAIL_DELIVERY_GUARD` ile uyarır.
+  `ALLOWLIST` seçilirse liste dışındaki teslimat reddedilir; boş
+  `MAIL_ALLOWED_RECIPIENTS` SMTP çağırmaz ve açılış `WARN` yazar. Tanıtım sitesi
+  iletişim formu (`POST /public/contact`) `SUPPORT_MAILBOX` (varsayılan
+  `info@iskoala.com`) adresine düşer.
 - `STOMP_STAGING_ORIGIN=https://staging.iskoala.com`
 - DB, RabbitMQ, S3 ve Google anahtarları production ile ortak olamaz
 
