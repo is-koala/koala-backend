@@ -22,8 +22,11 @@ import com.exskylab.koala.entities.User;
 import com.exskylab.koala.entities.VerificationDocument;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.mock.web.MockMultipartFile;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Optional;
 import java.util.Set;
@@ -32,6 +35,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -157,8 +161,8 @@ class IdentityDocumentReviewRulesTest {
 
     @Test
     void staffApprovalStampsIdentityWithoutChipEvidence() {
-        IdentityVerification pending = pendingRow();
-        when(identityVerificationDao.findById(pending.getId())).thenReturn(Optional.of(pending));
+        IdentityVerification pending = pendingRowWithPhotos();
+        stored(pending);
 
         IdentityVerification approved = reviews.approve(staff, pending.getId());
 
@@ -177,8 +181,8 @@ class IdentityDocumentReviewRulesTest {
 
     @Test
     void approvalRefusesATcIdentityNumberAlreadyClaimed() {
-        IdentityVerification pending = pendingRow();
-        when(identityVerificationDao.findById(pending.getId())).thenReturn(Optional.of(pending));
+        IdentityVerification pending = pendingRowWithPhotos();
+        stored(pending);
         when(userService.existsByTcIdentityNumber(TCKN)).thenReturn(true);
 
         ConflictException thrown = assertThrows(ConflictException.class,
@@ -191,8 +195,8 @@ class IdentityDocumentReviewRulesTest {
 
     @Test
     void staffRejectionKeepsIdentityUnverifiedAndRecordsTheReason() {
-        IdentityVerification pending = pendingRow();
-        when(identityVerificationDao.findById(pending.getId())).thenReturn(Optional.of(pending));
+        IdentityVerification pending = pendingRowWithPhotos();
+        stored(pending);
 
         IdentityVerification rejected = reviews.reject(staff, pending.getId(), "Fotoğraflar okunaksız");
 
@@ -207,7 +211,7 @@ class IdentityDocumentReviewRulesTest {
     @Test
     void aMissingReviewCannotBeDecided() {
         UUID missing = UUID.randomUUID();
-        when(identityVerificationDao.findById(missing)).thenReturn(Optional.empty());
+        when(identityVerificationDao.findByIdForUpdate(missing)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> reviews.approve(staff, missing));
         assertThrows(ResourceNotFoundException.class,
@@ -216,14 +220,117 @@ class IdentityDocumentReviewRulesTest {
 
     @Test
     void anAlreadyDecidedReviewCannotBeApprovedAgain() {
-        IdentityVerification pending = pendingRow();
+        IdentityVerification pending = pendingRowWithPhotos();
         pending.setVerified(true);
-        when(identityVerificationDao.findById(pending.getId())).thenReturn(Optional.of(pending));
+        stored(pending);
 
         ConflictException thrown = assertThrows(ConflictException.class,
                 () -> reviews.approve(staff, pending.getId()));
 
         assertEquals("IDENTITY_REVIEW_ALREADY_DECIDED", thrown.getErrorCode());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"selfie", "front", "back", "together"})
+    void approvalRefusesAPendingReviewMissingAnyOfTheFourDocuments(String missingSlot) {
+        IdentityVerification pending = pendingRowWithPhotos();
+        clearSlot(pending, missingSlot);
+        stored(pending);
+
+        ConflictException thrown = assertThrows(ConflictException.class,
+                () -> reviews.approve(staff, pending.getId()));
+
+        assertEquals("IDENTITY_REVIEW_DOCUMENTS_MISSING", thrown.getErrorCode());
+        assertFalse(pending.isVerified());
+        assertNull(pending.getRejectedAt());
+        assertFalse(current.isIdentityVerified());
+        verify(userService, never()).save(any());
+        verify(identityVerificationDao, never()).save(any());
+        verify(badgeService, never()).evaluate(any());
+    }
+
+    @Test
+    void aLegacyTwoPhotoReviewCannotBeApproved() {
+        IdentityVerification legacy = legacyTwoPhotoRow();
+        stored(legacy);
+
+        ConflictException thrown = assertThrows(ConflictException.class,
+                () -> reviews.approve(staff, legacy.getId()));
+
+        assertEquals("IDENTITY_REVIEW_DOCUMENTS_MISSING", thrown.getErrorCode());
+        assertFalse(legacy.isVerified());
+        assertFalse(current.isIdentityVerified());
+        verify(userService, never()).save(any());
+        verify(identityVerificationDao, never()).save(any());
+    }
+
+    @Test
+    void aLegacyTwoPhotoReviewCanStillBeRejected() {
+        IdentityVerification legacy = legacyTwoPhotoRow();
+        stored(legacy);
+
+        IdentityVerification rejected = reviews.reject(staff, legacy.getId(), "Yüz ve birlikte fotoğrafı eksik");
+
+        assertNotNull(rejected.getRejectedAt());
+        assertEquals("Yüz ve birlikte fotoğrafı eksik", rejected.getRejectionReason());
+        assertFalse(current.isIdentityVerified());
+    }
+
+    @Test
+    void aDocumentWhoseStorageKeyWasClearedDoesNotCountAsEvidence() {
+        IdentityVerification pending = pendingRowWithPhotos();
+        pending.getTogetherDocument().setFileUrl(" ");
+        stored(pending);
+
+        ConflictException thrown = assertThrows(ConflictException.class,
+                () -> reviews.approve(staff, pending.getId()));
+
+        assertEquals("IDENTITY_REVIEW_DOCUMENTS_MISSING", thrown.getErrorCode());
+        assertFalse(current.isIdentityVerified());
+    }
+
+    @Test
+    void approvalDecidesOnTheRowLockedForUpdateNotOnAnUnlockedRead() {
+        IdentityVerification pending = pendingRowWithPhotos();
+        when(identityVerificationDao.findById(pending.getId())).thenReturn(Optional.of(pending));
+        when(identityVerificationDao.findByIdForUpdate(pending.getId())).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> reviews.approve(staff, pending.getId()));
+        assertThrows(ResourceNotFoundException.class, () -> reviews.reject(staff, pending.getId(), "okunaksız"));
+
+        assertFalse(current.isIdentityVerified());
+        verify(identityVerificationDao, never()).findById(any());
+    }
+
+    @Test
+    void anApprovalThatLandsAfterARejectionFailsClosed() {
+        IdentityVerification decided = pendingRowWithPhotos();
+        decided.setRejectedAt(Instant.now());
+        decided.setRejectionReason("Önce reddedildi");
+        stored(decided);
+
+        ConflictException thrown = assertThrows(ConflictException.class,
+                () -> reviews.approve(staff, decided.getId()));
+
+        assertEquals("IDENTITY_REVIEW_ALREADY_DECIDED", thrown.getErrorCode());
+        assertFalse(decided.isVerified());
+        assertFalse(current.isIdentityVerified());
+        verify(userService, never()).save(any());
+    }
+
+    @Test
+    void aRejectionThatLandsAfterAnApprovalFailsClosed() {
+        IdentityVerification decided = pendingRowWithPhotos();
+        decided.setVerified(true);
+        stored(decided);
+
+        ConflictException thrown = assertThrows(ConflictException.class,
+                () -> reviews.reject(staff, decided.getId(), "geç kalan ret"));
+
+        assertEquals("IDENTITY_REVIEW_ALREADY_DECIDED", thrown.getErrorCode());
+        assertTrue(decided.isVerified());
+        assertNull(decided.getRejectedAt());
+        verify(identityVerificationDao, never()).save(any());
     }
 
     @Test
@@ -315,6 +422,28 @@ class IdentityDocumentReviewRulesTest {
         pending.setBackDocument(photoDocument("back.jpg", "images/back-key.jpg"));
         pending.setTogetherDocument(photoDocument("together.jpg", "images/together-key.jpg"));
         return pending;
+    }
+
+    private void stored(IdentityVerification row) {
+        when(identityVerificationDao.findById(row.getId())).thenReturn(Optional.of(row));
+        when(identityVerificationDao.findByIdForUpdate(row.getId())).thenReturn(Optional.of(row));
+    }
+
+    private IdentityVerification legacyTwoPhotoRow() {
+        IdentityVerification legacy = pendingRow();
+        legacy.setVerificationDocument(photoDocument("front.jpg", "images/front-key.jpg"));
+        legacy.setBackDocument(photoDocument("back.jpg", "images/back-key.jpg"));
+        return legacy;
+    }
+
+    private static void clearSlot(IdentityVerification review, String slot) {
+        switch (slot) {
+            case "selfie" -> review.setSelfieDocument(null);
+            case "front" -> review.setVerificationDocument(null);
+            case "back" -> review.setBackDocument(null);
+            case "together" -> review.setTogetherDocument(null);
+            default -> throw new IllegalArgumentException(slot);
+        }
     }
 
     private static VerificationDocument photoDocument(String fileName, String key) {
