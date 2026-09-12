@@ -111,7 +111,7 @@ class IdentityMultipartBudgetIT extends AbstractIntegrationTest {
 
     @Test
     void fourMaximumSizedPhotosFitInsideTheIdentityRequestBudget() throws Exception {
-        HttpResponse<String> response = sendIdentityRequest(10 * MEBIBYTE);
+        HttpResponse<String> response = sendIdentityRequest(10 * MEBIBYTE, 0);
 
         assertEquals(201, response.statusCode(), response.body());
         verify(identityDocumentReviewService).submit(any(), any(), any(), any(), any());
@@ -119,7 +119,7 @@ class IdentityMultipartBudgetIT extends AbstractIntegrationTest {
 
     @Test
     void aMultipartRequestBeyondTheTransportBudgetUsesTheStableErrorEnvelope() throws Exception {
-        HttpResponse<String> response = sendIdentityRequest(11 * MEBIBYTE);
+        HttpResponse<String> response = sendIdentityRequest(10 * MEBIBYTE, 3 * MEBIBYTE);
 
         assertEquals(413, response.statusCode(), response.body());
         org.assertj.core.api.Assertions.assertThat(response.body())
@@ -128,14 +128,17 @@ class IdentityMultipartBudgetIT extends AbstractIntegrationTest {
                 .contains("İstek gövdesi izin verilen boyutu aşıyor.");
     }
 
-    private HttpResponse<String> sendIdentityRequest(int bytesPerPhoto) throws Exception {
+    private HttpResponse<String> sendIdentityRequest(int bytesPerPhoto, int paddingBytes) throws Exception {
         String boundary = "koala-identity-" + UUID.randomUUID();
         List<HttpRequest.BodyPublisher> publishers = new ArrayList<>();
         addIdentityPart(publishers, boundary);
 
         byte[] photo = new byte[bytesPerPhoto];
         for (String part : PHOTO_PARTS) {
-            addPhotoPart(publishers, boundary, part, photo);
+            addBinaryPart(publishers, boundary, part, photo);
+        }
+        if (paddingBytes > 0) {
+            addBinaryPart(publishers, boundary, "padding", new byte[paddingBytes]);
         }
         publishers.add(text("--" + boundary + "--\r\n"));
 
@@ -162,8 +165,8 @@ class IdentityMultipartBudgetIT extends AbstractIntegrationTest {
                 + "\"tcDocumentNumber\":\"A12B34567\"}\r\n"));
     }
 
-    private static void addPhotoPart(List<HttpRequest.BodyPublisher> publishers, String boundary,
-                                     String part, byte[] content) {
+    private static void addBinaryPart(List<HttpRequest.BodyPublisher> publishers, String boundary,
+                                      String part, byte[] content) {
         publishers.add(text("--" + boundary + "\r\n"
                 + "Content-Disposition: form-data; name=\"" + part + "\"; filename=\"" + part + ".jpg\"\r\n"
                 + "Content-Type: image/jpeg\r\n\r\n"));

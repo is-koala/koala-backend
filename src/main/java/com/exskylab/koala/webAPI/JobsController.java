@@ -153,6 +153,8 @@ public class JobsController {
             @ApiResponse(responseCode = "404", description = "İlan bulunamadı ya da yetki yok",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "409", description = "Galeri sınırı aşıldı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "413", description = "Tek dosya 10 MiB ya da toplam multipart gövdesi 42 MiB sınırını aşıyor",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping(value = "/{jobId}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

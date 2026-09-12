@@ -112,8 +112,12 @@ bunu zorlayamaz (CLAUDE.md §2ai).
 `MAX_FILE_SIZE=10MB` tek dosyanın taşıma sınırıdır ve `UploadValidator` içindeki
 dosya türüne özgü 10 MiB iş kuralını gevşetmez. `MAX_REQUEST_SIZE=42MB`, dört
 zorunlu kimlik fotoğrafının toplam 40 MiB bütçesine multipart üstbilgi payı
-ekler. Bu global taşıma tavanı diğer uçların iş kuralını büyütmez: logo, galeri,
-CV ve uyuşmazlık kanıtı kendi tek-dosya doğrulamasından geçmeye devam eder.
+ekler. Servlet multipart sınırı uç bazında ayrılamadığı ve gövde controller'dan
+önce çözümlendiği için bu, diğer yükleme uçlarının istek başına taşıma/ayrıştırma
+maliyetini bilinçli olarak 10 MiB'den 42 MiB'ye çıkarır. Gevşeme sınırlıdır:
+bütün yükleme uçları kimlik doğrulaması ve `UPLOAD` hız kovası arkasındadır,
+global istek tavanı 42 MiB'de kalır; logo, galeri, CV ve uyuşmazlık kanıtı da
+kendi 10 MiB tek-dosya iş kuralından geçmeye devam eder.
 
 `MAX_SWALLOW_SIZE=50MB` kabul bütçesi değildir. Tomcat'in 42 MiB sınırını aşan
 olağan bir isteğin kalanını sınırlı biçimde tüketip bağlantıyı yarıda kesmek

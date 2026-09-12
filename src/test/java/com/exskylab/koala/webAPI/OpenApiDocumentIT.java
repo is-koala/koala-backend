@@ -227,6 +227,21 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void multipartEndpointsDocumentTheirTransportLimitFailure() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath("$.paths['/images'].post.responses.413").exists())
+                .andExpect(jsonPath("$.paths['/users/me/cv'].put.responses.413").exists())
+                .andExpect(jsonPath("$.paths['/users/me/profile-picture'].put.responses.413").exists())
+                .andExpect(jsonPath("$.paths['/users/me/identity-documents'].post.responses.413").exists())
+                .andExpect(jsonPath("$.paths['/companies'].post.responses.413").exists())
+                .andExpect(jsonPath("$.paths['/companies/{companyId}/logo'].put.responses.413").exists())
+                .andExpect(jsonPath("$.paths['/companies/{companyId}/images'].post.responses.413").exists())
+                .andExpect(jsonPath("$.paths['/jobs/{jobId}/images'].post.responses.413").exists())
+                .andExpect(jsonPath("$.paths['/admin/badges/{badgeId}/icon'].put.responses.413").exists())
+                .andExpect(jsonPath("$.paths['/disputes/{disputeId}/evidence'].post.responses.413").exists());
+    }
+
+    @Test
     void addressWritesExposeOnlyTheCanonicalV2Contract() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(jsonPath("$.components.schemas.AddressWriteV2.properties.countryId").exists())

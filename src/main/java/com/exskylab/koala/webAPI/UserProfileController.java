@@ -162,7 +162,9 @@ public class UserProfileController {
             description = "Yalnızca PDF ve Word kabul edilir. Nesne özel kalır; dönen adres kimlik doğrulaması ister ve kısa ömürlü imzalı adrese yönlendirir, CDN üzerinden servis edilmez.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Özgeçmiş yüklendi"),
-            @ApiResponse(responseCode = "400", description = "Dosya boş, çok büyük ya da desteklenmeyen türde",
+            @ApiResponse(responseCode = "400", description = "Dosya boş ya da desteklenmeyen türde",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "413", description = "Tek dosya 10 MiB ya da toplam multipart gövdesi 42 MiB sınırını aşıyor",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PutMapping("/cv")

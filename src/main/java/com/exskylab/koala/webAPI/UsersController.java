@@ -180,7 +180,9 @@ public class UsersController {
             description = "Görsel metadata temizlenerek depoya yazılır. İzin verilen uzantılar ve boyut sınırı upload ayarlarından gelir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Fotoğraf güncellendi"),
-            @ApiResponse(responseCode = "400", description = "Dosya boş, çok büyük ya da desteklenmeyen türde",
+            @ApiResponse(responseCode = "400", description = "Dosya boş ya da desteklenmeyen türde",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "413", description = "Tek dosya 10 MiB ya da toplam multipart gövdesi 42 MiB sınırını aşıyor",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PutMapping(value = "/me/profile-picture", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -233,7 +235,7 @@ public class UsersController {
             @ApiResponse(responseCode = "201", description = "İnceleme kuyruğa alındı"),
             @ApiResponse(responseCode = "400", description = "Dosya eksik, zaten doğrulanmış ya da bekleyen inceleme var",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
-            @ApiResponse(responseCode = "413", description = "Multipart istek gövdesi 42 MiB sınırını aşıyor",
+            @ApiResponse(responseCode = "413", description = "Tek dosya 10 MiB ya da toplam multipart gövdesi 42 MiB sınırını aşıyor",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping(value = "/me/identity-documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
