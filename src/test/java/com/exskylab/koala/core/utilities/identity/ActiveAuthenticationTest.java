@@ -1,5 +1,13 @@
 package com.exskylab.koala.core.utilities.identity;
 
+import org.bouncycastle.asn1.ASN1ObjectIdentifier;
+import org.bouncycastle.asn1.bsi.BSIObjectIdentifiers;
+import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
+import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
+import org.bouncycastle.asn1.x9.ECNamedCurveTable;
+import org.bouncycastle.asn1.x9.X962Parameters;
+import org.bouncycastle.asn1.x9.X9ECParameters;
+import org.bouncycastle.asn1.x9.X9ObjectIdentifiers;
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
 import org.bouncycastle.crypto.digests.SHA1Digest;
 import org.bouncycastle.crypto.engines.RSAEngine;
@@ -10,6 +18,8 @@ import org.bouncycastle.crypto.util.SubjectPublicKeyInfoFactory;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.math.BigInteger;
 import java.security.KeyPair;
@@ -18,6 +28,8 @@ import java.security.SecureRandom;
 import java.security.Security;
 import java.security.Signature;
 import java.security.spec.ECGenParameterSpec;
+import java.util.Base64;
+import java.util.HexFormat;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -132,5 +144,327 @@ class ActiveAuthenticationTest {
 
         assertThrows(PassiveAuthenticationException.class,
                 () -> ActiveAuthentication.verify(rsaDg15, CHALLENGE, signature));
+    }
+
+    private static KeyPair ecKeys(String curve) throws Exception {
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("EC", BouncyCastleProvider.PROVIDER_NAME);
+        generator.initialize(new ECGenParameterSpec(curve));
+        return generator.generateKeyPair();
+    }
+
+    private static byte[] sign(KeyPair keys, String algorithm, byte[] challenge) throws Exception {
+        Signature signature = Signature.getInstance(algorithm, BouncyCastleProvider.PROVIDER_NAME);
+        signature.initSign(keys.getPrivate());
+        signature.update(challenge);
+        return signature.sign();
+    }
+
+    private static byte[] explicitParameterDg15(KeyPair keys, String curve) throws Exception {
+        X9ECParameters parameters = ECNamedCurveTable.getByName(curve);
+        byte[] point = ((org.bouncycastle.jce.interfaces.ECPublicKey) keys.getPublic()).getQ().getEncoded(false);
+        SubjectPublicKeyInfo info = new SubjectPublicKeyInfo(
+                new AlgorithmIdentifier(X9ObjectIdentifiers.id_ecPublicKey, new X962Parameters(parameters)), point);
+        return wrap(info.getEncoded("DER"));
+    }
+
+    private static byte[] wrapWithLengthForm(byte[] key, int lengthOctets) {
+        byte[] wrapped = new byte[key.length + 2 + lengthOctets];
+        wrapped[0] = 0x6F;
+        if (lengthOctets == 0) {
+            wrapped[1] = (byte) key.length;
+        } else {
+            wrapped[1] = (byte) (0x80 | lengthOctets);
+            for (int i = 0; i < lengthOctets; i++) {
+                wrapped[2 + i] = (byte) (key.length >> (8 * (lengthOctets - 1 - i)));
+            }
+        }
+        System.arraycopy(key, 0, wrapped, 2 + lengthOctets, key.length);
+        return wrapped;
+    }
+
+    @Test
+    void aBrainpoolChipSigningWithSha256PlainProvesItself() throws Exception {
+        KeyPair keys = ecKeys("brainpoolP256r1");
+        byte[] dg15 = wrap(keys.getPublic().getEncoded());
+
+        assertDoesNotThrow(() -> ActiveAuthentication.verify(dg15, CHALLENGE,
+                sign(keys, "SHA256withPLAIN-ECDSA", CHALLENGE)));
+    }
+
+    @Test
+    void aSecp384ChipSigningWithSha384PlainProvesItself() throws Exception {
+        KeyPair keys = ecKeys("secp384r1");
+        byte[] dg15 = wrap(keys.getPublic().getEncoded());
+
+        assertDoesNotThrow(() -> ActiveAuthentication.verify(dg15, CHALLENGE,
+                sign(keys, "SHA384withPLAIN-ECDSA", CHALLENGE)));
+    }
+
+    @Test
+    void aSecp384ChipSigningWithSha384DerProvesItself() throws Exception {
+        KeyPair keys = ecKeys("secp384r1");
+        byte[] dg15 = wrap(keys.getPublic().getEncoded());
+
+        assertDoesNotThrow(() -> ActiveAuthentication.verify(dg15, CHALLENGE,
+                sign(keys, "SHA384withECDSA", CHALLENGE)));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "SHA1withPLAIN-ECDSA", "SHA224withPLAIN-ECDSA", "SHA256withPLAIN-ECDSA",
+            "SHA384withPLAIN-ECDSA", "SHA512withPLAIN-ECDSA",
+            "SHA1withECDSA", "SHA224withECDSA", "SHA256withECDSA", "SHA384withECDSA", "SHA512withECDSA"})
+    void everyEcdsaHashAndEncodingInTheSpectrumVerifiesWithoutDataGroup14(String algorithm) throws Exception {
+        KeyPair keys = ecKeys("brainpoolP256r1");
+        byte[] dg15 = wrap(keys.getPublic().getEncoded());
+
+        assertDoesNotThrow(() -> ActiveAuthentication.verify(dg15, CHALLENGE, sign(keys, algorithm, CHALLENGE)));
+    }
+
+    @Test
+    void aSecp384SignatureOverAnotherChallengeIsRefused() throws Exception {
+        KeyPair keys = ecKeys("secp384r1");
+        byte[] dg15 = wrap(keys.getPublic().getEncoded());
+        byte[] signature = sign(keys, "SHA384withPLAIN-ECDSA", new byte[]{9, 9, 9, 9, 9, 9, 9, 9});
+
+        PassiveAuthenticationException thrown = assertThrows(PassiveAuthenticationException.class,
+                () -> ActiveAuthentication.verify(dg15, CHALLENGE, signature));
+
+        assertEquals("{identity.chip.not.present}", thrown.getMessageKey());
+    }
+
+    @Test
+    void aChipKeyWithExplicitCurveParametersIsReadAndVerified() throws Exception {
+        KeyPair keys = ecKeys("brainpoolP256r1");
+        byte[] dg15 = explicitParameterDg15(keys, "brainpoolP256r1");
+
+        assertDoesNotThrow(() -> ActiveAuthentication.verify(dg15, CHALLENGE,
+                sign(keys, "SHA256withPLAIN-ECDSA", CHALLENGE)));
+
+        PassiveAuthenticationException thrown = assertThrows(PassiveAuthenticationException.class,
+                () -> ActiveAuthentication.verify(dg15, CHALLENGE, sign(keys, "SHA256withPLAIN-ECDSA",
+                        new byte[]{9, 9, 9, 9, 9, 9, 9, 9})));
+
+        assertTrue(thrown.getMessage().contains("curve=explicit(brainpoolP256r1)"), thrown.getMessage());
+    }
+
+    @Test
+    void theAlgorithmDeclaredInDataGroup14IsHonouredEvenOutsideTheDefaultSpectrum() throws Exception {
+        KeyPair keys = ecKeys("brainpoolP256r1");
+        byte[] dg15 = wrap(keys.getPublic().getEncoded());
+        byte[] dg14 = TestChip.dataGroup14(BSIObjectIdentifiers.ecdsa_plain_RIPEMD160);
+        byte[] signature = sign(keys, "RIPEMD160withPLAIN-ECDSA", CHALLENGE);
+
+        assertDoesNotThrow(() -> ActiveAuthentication.verify(dg15, dg14, CHALLENGE, signature));
+        assertThrows(PassiveAuthenticationException.class,
+                () -> ActiveAuthentication.verify(dg15, null, CHALLENGE, signature),
+                "DG14 olmadan RIPEMD160 yelpazede yok, yani reddedilmeli");
+    }
+
+    @Test
+    void aDataGroup14DeclaringSha384DerIsUsedForASecp384Chip() throws Exception {
+        KeyPair keys = ecKeys("secp384r1");
+        byte[] dg15 = wrap(keys.getPublic().getEncoded());
+        byte[] dg14 = TestChip.dataGroup14(X9ObjectIdentifiers.ecdsa_with_SHA384);
+
+        assertDoesNotThrow(() -> ActiveAuthentication.verify(dg15, dg14, CHALLENGE,
+                sign(keys, "SHA384withECDSA", CHALLENGE)));
+    }
+
+    @Test
+    void anUnrecognisedDataGroup14AlgorithmFallsBackToTheSpectrum() throws Exception {
+        KeyPair keys = ecKeys("brainpoolP256r1");
+        byte[] dg15 = wrap(keys.getPublic().getEncoded());
+        byte[] dg14 = TestChip.dataGroup14(new ASN1ObjectIdentifier("1.2.3.4.5"));
+
+        assertDoesNotThrow(() -> ActiveAuthentication.verify(dg15, dg14, CHALLENGE,
+                sign(keys, "SHA256withPLAIN-ECDSA", CHALLENGE)));
+
+        PassiveAuthenticationException thrown = assertThrows(PassiveAuthenticationException.class,
+                () -> ActiveAuthentication.verify(dg15, dg14, CHALLENGE, new byte[64]));
+
+        assertTrue(thrown.getMessage().contains("dg14=1.2.3.4.5 (unrecognised)"), thrown.getMessage());
+        assertTrue(thrown.getMessage().contains("attempted=10"), thrown.getMessage());
+    }
+
+    @Test
+    void anUnreadableDataGroup14DoesNotBlockVerification() throws Exception {
+        KeyPair keys = ecKeys("brainpoolP256r1");
+        byte[] dg15 = wrap(keys.getPublic().getEncoded());
+        byte[] dg14 = "bu dg14 degil".getBytes();
+
+        assertDoesNotThrow(() -> ActiveAuthentication.verify(dg15, dg14, CHALLENGE,
+                sign(keys, "SHA256withPLAIN-ECDSA", CHALLENGE)));
+
+        PassiveAuthenticationException thrown = assertThrows(PassiveAuthenticationException.class,
+                () -> ActiveAuthentication.verify(dg15, dg14, CHALLENGE, new byte[64]));
+
+        assertTrue(thrown.getMessage().contains("dg14=unreadable"), thrown.getMessage());
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1, 2, 3})
+    void theChipKeyIsReadWhateverBerLengthFormWrapsIt(int lengthOctets) throws Exception {
+        KeyPair keys = ecKeys("brainpoolP256r1");
+        byte[] dg15 = wrapWithLengthForm(keys.getPublic().getEncoded(), lengthOctets);
+
+        assertDoesNotThrow(() -> ActiveAuthentication.verify(dg15, CHALLENGE,
+                sign(keys, "SHA256withPLAIN-ECDSA", CHALLENGE)));
+    }
+
+    @Test
+    void anRsaChipKeyWrappedWithAThreeByteLengthIsRead() throws Exception {
+        byte[] key = SubjectPublicKeyInfoFactory.createSubjectPublicKeyInfo(rsaChipKeys.getPublic()).getEncoded("DER");
+        byte[] dg15 = wrapWithLengthForm(key, 3);
+
+        assertDoesNotThrow(() -> ActiveAuthentication.verify(dg15, CHALLENGE, chipSignsRsa(CHALLENGE)));
+    }
+
+    @Test
+    void paddingAfterTheDeclaredDataGroup15LengthDoesNotHideTheKey() throws Exception {
+        KeyPair keys = ecKeys("brainpoolP256r1");
+        byte[] wrapped = wrap(keys.getPublic().getEncoded());
+        byte[] padded = java.util.Arrays.copyOf(wrapped, wrapped.length + 4);
+
+        assertDoesNotThrow(() -> ActiveAuthentication.verify(padded, CHALLENGE,
+                sign(keys, "SHA256withPLAIN-ECDSA", CHALLENGE)));
+    }
+
+    @Test
+    void aDataGroup15DeclaringMoreBytesThanItCarriesIsUnreadable() throws Exception {
+        KeyPair keys = ecKeys("brainpoolP256r1");
+        byte[] wrapped = wrap(keys.getPublic().getEncoded());
+        byte[] truncated = java.util.Arrays.copyOf(wrapped, wrapped.length - 10);
+
+        PassiveAuthenticationException thrown = assertThrows(PassiveAuthenticationException.class,
+                () -> ActiveAuthentication.verify(truncated, CHALLENGE, new byte[64]));
+
+        assertEquals("{identity.chip.key.unreadable}", thrown.getMessageKey());
+        assertTrue(thrown.getMessage().contains("dg14=absent"), thrown.getMessage());
+    }
+
+    @Test
+    void aFailedEcVerificationExplainsItselfWithoutLeakingTheChallengeOrSignature() throws Exception {
+        KeyPair keys = ecKeys("brainpoolP256r1");
+        byte[] dg15 = wrap(keys.getPublic().getEncoded());
+        byte[] signature = sign(keys, "SHA256withPLAIN-ECDSA", new byte[]{9, 9, 9, 9, 9, 9, 9, 9});
+
+        PassiveAuthenticationException thrown = assertThrows(PassiveAuthenticationException.class,
+                () -> ActiveAuthentication.verify(dg15, CHALLENGE, signature));
+
+        String detail = thrown.getMessage();
+        assertTrue(detail.contains("key=EC"), detail);
+        assertTrue(detail.contains("curve=brainpoolP256r1"), detail);
+        assertTrue(detail.contains("bits=256"), detail);
+        assertTrue(detail.contains("signatureBytes=64"), detail);
+        assertTrue(detail.contains("dg14=absent"), detail);
+        assertTrue(detail.contains("attempted=10"), detail);
+        assertFalse(detail.contains(HexFormat.of().formatHex(signature)), detail);
+        assertFalse(detail.contains(Base64.getEncoder().encodeToString(signature)), detail);
+        assertFalse(detail.contains(HexFormat.of().formatHex(CHALLENGE)), detail);
+        assertFalse(detail.contains(Base64.getEncoder().encodeToString(CHALLENGE)), detail);
+        assertFalse(detail.contains(HexFormat.of().formatHex(dg15)), detail);
+    }
+
+    @Test
+    void aFailedRsaVerificationNamesTheKeySizeAndTheAttempts() throws Exception {
+        byte[] signature = chipSignsRsa(new byte[]{9, 9, 9, 9, 9, 9, 9, 9});
+
+        PassiveAuthenticationException thrown = assertThrows(PassiveAuthenticationException.class,
+                () -> ActiveAuthentication.verify(rsaDg15, CHALLENGE, signature));
+
+        String detail = thrown.getMessage();
+        assertTrue(detail.contains("key=RSA"), detail);
+        assertTrue(detail.contains("bits=2048"), detail);
+        assertTrue(detail.contains("signatureBytes=256"), detail);
+        assertTrue(detail.contains("attempted=10"), detail);
+    }
+
+    @Test
+    void anRsaChipThatRecoversANonceBesideTheChallengeIsVerified() throws Exception {
+        ISO9796d2Signer signer = new ISO9796d2Signer(new RSAEngine(), new SHA1Digest(), true);
+        signer.init(true, rsaChipKeys.getPrivate());
+        byte[] nonce = new byte[256 - 20 - 2];
+        java.util.Arrays.fill(nonce, (byte) 0x5A);
+        signer.update(nonce, 0, nonce.length);
+        signer.update(CHALLENGE, 0, CHALLENGE.length);
+        byte[] signature = signer.generateSignature();
+
+        assertDoesNotThrow(() -> ActiveAuthentication.verify(rsaDg15, CHALLENGE, signature));
+        assertThrows(PassiveAuthenticationException.class,
+                () -> ActiveAuthentication.verify(rsaDg15, new byte[]{8, 7, 6, 5, 4, 3, 2, 1}, signature));
+    }
+
+    private static org.bouncycastle.crypto.Digest digestNamed(String name) {
+        return switch (name) {
+            case "SHA-1" -> new SHA1Digest();
+            case "SHA-224" -> new org.bouncycastle.crypto.digests.SHA224Digest();
+            case "SHA-256" -> new org.bouncycastle.crypto.digests.SHA256Digest();
+            case "SHA-384" -> new org.bouncycastle.crypto.digests.SHA384Digest();
+            case "SHA-512" -> new org.bouncycastle.crypto.digests.SHA512Digest();
+            default -> throw new IllegalArgumentException(name);
+        };
+    }
+
+    private static byte[] rsaChipSignsWithNonce(org.bouncycastle.crypto.Digest digest, boolean implicitTrailer,
+                                                int nonceLength, byte[] challenge) throws Exception {
+        ISO9796d2Signer signer = new ISO9796d2Signer(new RSAEngine(), digest, implicitTrailer);
+        signer.init(true, rsaChipKeys.getPrivate());
+        byte[] nonce = new byte[nonceLength];
+        java.util.Arrays.fill(nonce, (byte) 0x5A);
+        signer.update(nonce, 0, nonce.length);
+        signer.update(challenge, 0, challenge.length);
+        return signer.generateSignature();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"SHA-224", "SHA-256", "SHA-384", "SHA-512"})
+    void anRsaChipUsingAnExplicitTrailerWithAnIcaoLengthNonceIsVerified(String digestName) throws Exception {
+        org.bouncycastle.crypto.Digest digest = digestNamed(digestName);
+        int icaoNonceLength = 256 - digest.getDigestSize() - 3;
+        byte[] signature = rsaChipSignsWithNonce(digest, false, icaoNonceLength, CHALLENGE);
+
+        assertDoesNotThrow(() -> ActiveAuthentication.verify(rsaDg15, CHALLENGE, signature));
+        assertThrows(PassiveAuthenticationException.class,
+                () -> ActiveAuthentication.verify(rsaDg15, new byte[]{8, 7, 6, 5, 4, 3, 2, 1}, signature));
+    }
+
+    @Test
+    void anRsaChipUsingSha1WithTheImplicitTrailerAndAnIcaoLengthNonceIsVerified() throws Exception {
+        byte[] signature = rsaChipSignsWithNonce(new SHA1Digest(), true, 256 - 20 - 2, CHALLENGE);
+
+        assertDoesNotThrow(() -> ActiveAuthentication.verify(rsaDg15, CHALLENGE, signature));
+    }
+
+    @Test
+    void anRsaChipUsingSha1WithAnExplicitTrailerIsVerified() throws Exception {
+        byte[] signature = rsaChipSignsWithNonce(new SHA1Digest(), false, 256 - 20 - 3, CHALLENGE);
+
+        assertDoesNotThrow(() -> ActiveAuthentication.verify(rsaDg15, CHALLENGE, signature));
+    }
+
+    @Test
+    void anRsaChipWhoseShortNonceLeavesTheWholeMessageRecoverableIsVerified() throws Exception {
+        byte[] signature = rsaChipSignsWithNonce(new SHA1Digest(), true, 100, CHALLENGE);
+
+        assertDoesNotThrow(() -> ActiveAuthentication.verify(rsaDg15, CHALLENGE, signature));
+        assertThrows(PassiveAuthenticationException.class,
+                () -> ActiveAuthentication.verify(rsaDg15, new byte[]{8, 7, 6, 5, 4, 3, 2, 1}, signature));
+    }
+
+    @Test
+    void aPlainEcdsaSignatureMustBeExactlyTwiceTheOrderLength() throws Exception {
+        KeyPair keys = ecKeys("brainpoolP256r1");
+        byte[] dg15 = wrap(keys.getPublic().getEncoded());
+        byte[] signature = sign(keys, "SHA256withPLAIN-ECDSA", CHALLENGE);
+
+        byte[] widened = new byte[66];
+        System.arraycopy(signature, 0, widened, 1, 32);
+        System.arraycopy(signature, 32, widened, 34, 32);
+
+        assertDoesNotThrow(() -> ActiveAuthentication.verify(dg15, CHALLENGE, signature));
+        assertThrows(PassiveAuthenticationException.class,
+                () -> ActiveAuthentication.verify(dg15, CHALLENGE, widened),
+                "sifir dolgulu 33+33 baytlik r||s duz kodlama degildir, kabul edilmemeli");
     }
 }

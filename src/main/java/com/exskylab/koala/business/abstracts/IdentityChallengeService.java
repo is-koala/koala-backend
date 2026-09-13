@@ -6,5 +6,5 @@ public interface IdentityChallengeService {
 
     String issue(User user);
 
-    void consume(User user, String challenge, byte[] dataGroup15, byte[] signature);
+    void consume(User user, String challenge, byte[] dataGroup15, byte[] dataGroup14, byte[] signature);
 }

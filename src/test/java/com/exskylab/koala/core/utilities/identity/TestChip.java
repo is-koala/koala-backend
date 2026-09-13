@@ -5,6 +5,7 @@ import org.bouncycastle.asn1.ASN1Integer;
 import org.bouncycastle.asn1.ASN1ObjectIdentifier;
 import org.bouncycastle.asn1.DEROctetString;
 import org.bouncycastle.asn1.DERSequence;
+import org.bouncycastle.asn1.DERSet;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.asn1.x509.BasicConstraints;
@@ -118,6 +119,11 @@ final class TestChip {
 
     byte[] securityObjectForHashes(byte[] dataGroup1Hash, byte[] dataGroup11Hash,
                                    byte[] dataGroup15Hash) throws Exception {
+        return securityObjectForHashes(dataGroup1Hash, dataGroup11Hash, null, dataGroup15Hash);
+    }
+
+    byte[] securityObjectForHashes(byte[] dataGroup1Hash, byte[] dataGroup11Hash,
+                                   byte[] dataGroup14Hash, byte[] dataGroup15Hash) throws Exception {
         ASN1EncodableVector hashEntry = new ASN1EncodableVector();
         hashEntry.add(new ASN1Integer(1));
         hashEntry.add(new DEROctetString(dataGroup1Hash));
@@ -130,6 +136,13 @@ final class TestChip {
             entry11.add(new ASN1Integer(11));
             entry11.add(new DEROctetString(dataGroup11Hash));
             hashes.add(new DERSequence(entry11));
+        }
+
+        if (dataGroup14Hash != null) {
+            ASN1EncodableVector entry14 = new ASN1EncodableVector();
+            entry14.add(new ASN1Integer(14));
+            entry14.add(new DEROctetString(dataGroup14Hash));
+            hashes.add(new DERSequence(entry14));
         }
 
         if (dataGroup15Hash != null) {
@@ -183,6 +196,25 @@ final class TestChip {
 
     byte[] securityObjectWithDg15(byte[] dg1, byte[] dg15) throws Exception {
         return securityObjectForHashes(sha256(dg1), null, sha256(dg15));
+    }
+
+    byte[] securityObjectWithDg14(byte[] dg1, byte[] dg14) throws Exception {
+        return securityObjectForHashes(sha256(dg1), null, sha256(dg14), null);
+    }
+
+    static byte[] dataGroup14(ASN1ObjectIdentifier signatureAlgorithm) throws Exception {
+        ASN1EncodableVector info = new ASN1EncodableVector();
+        info.add(ActiveAuthenticationInfo.PROTOCOL);
+        info.add(new ASN1Integer(1));
+        info.add(signatureAlgorithm);
+
+        byte[] securityInfos = new DERSet(new DERSequence(info)).getEncoded("DER");
+
+        byte[] wrapped = new byte[securityInfos.length + 2];
+        wrapped[0] = (byte) DataGroupTags.DG14;
+        wrapped[1] = (byte) securityInfos.length;
+        System.arraycopy(securityInfos, 0, wrapped, 2, securityInfos.length);
+        return wrapped;
     }
 
     static byte[] dataGroup15() throws Exception {

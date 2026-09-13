@@ -53,7 +53,7 @@ public class IdentityChallengeManager implements IdentityChallengeService {
 
     @Override
     @Transactional
-    public void consume(User user, String challenge, byte[] dataGroup15, byte[] signature) {
+    public void consume(User user, String challenge, byte[] dataGroup15, byte[] dataGroup14, byte[] signature) {
         IdentityChallenge record = identityChallengeDao
                 .findByUserIdAndChallengeAndConsumedAtIsNull(user.getId(), challenge)
                 .orElseThrow(() -> new ValidationException(IdentityMessages.CHALLENGE_INVALID));
@@ -70,7 +70,7 @@ public class IdentityChallengeManager implements IdentityChallengeService {
         }
 
         try {
-            ActiveAuthentication.verify(dataGroup15, challengeBytes, signature);
+            ActiveAuthentication.verify(dataGroup15, dataGroup14, challengeBytes, signature);
         } catch (PassiveAuthenticationException e) {
             log.warn("Active authentication failed for user {}: {}", user.getId(), e.getMessage());
             throw new ValidationException(e.getMessageKey());
