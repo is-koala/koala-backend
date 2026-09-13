@@ -15,6 +15,7 @@ import com.exskylab.koala.entities.NotificationChannel;
 import com.exskylab.koala.entities.NotificationStatus;
 import com.exskylab.koala.entities.User;
 import com.exskylab.koala.support.AbstractIntegrationTest;
+import com.exskylab.koala.support.TestRabbit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,7 +34,6 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.testcontainers.containers.GenericContainer;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Clock;
@@ -74,21 +74,10 @@ import static org.mockito.Mockito.verifyNoInteractions;
 class NotificationOutboxRabbitIT extends AbstractIntegrationTest {
 
     private static final Instant NOW = Instant.parse("2026-09-09T12:00:00Z");
-    private static final GenericContainer<?> RABBIT = new GenericContainer<>("rabbitmq:4.1.3-management")
-            .withExposedPorts(5672)
-            .withEnv("RABBITMQ_DEFAULT_USER", "koala-test")
-            .withEnv("RABBITMQ_DEFAULT_PASS", "test-only");
-
-    static {
-        RABBIT.start();
-    }
 
     @DynamicPropertySource
     static void rabbitProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.rabbitmq.host", RABBIT::getHost);
-        registry.add("spring.rabbitmq.port", () -> RABBIT.getMappedPort(5672));
-        registry.add("spring.rabbitmq.username", () -> "koala-test");
-        registry.add("spring.rabbitmq.password", () -> "test-only");
+        TestRabbit.register(registry);
     }
 
     @Autowired private NotificationDispatchService dispatchService;

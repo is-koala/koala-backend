@@ -29,7 +29,8 @@ public final class OverlappingWrites {
 
     public void meet() {
         try {
-            bothInsideTheirTransaction.await(15, TimeUnit.SECONDS);
+            bothInsideTheirTransaction.await(
+                    TestLatches.progressTimeout().toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException | BrokenBarrierException | TimeoutException waiting) {
             barrierFailures.add(waiting.getClass().getSimpleName());
             throw new IllegalStateException("the two writes never overlapped", waiting);
@@ -41,7 +42,8 @@ public final class OverlappingWrites {
             Future<String> one = executor.submit(first);
             Future<String> two = executor.submit(second);
             try {
-                List<String> outcomes = List.of(one.get(30, TimeUnit.SECONDS), two.get(30, TimeUnit.SECONDS));
+                List<String> outcomes = List.of(
+                        TestLatches.getProgress(one), TestLatches.getProgress(two));
                 assertOverlapped();
                 return outcomes;
             } catch (ExecutionException failed) {

@@ -2,6 +2,7 @@ package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.support.AbstractIntegrationTest;
 import com.exskylab.koala.support.OverlappingWrites;
+import com.exskylab.koala.support.TestLatches;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.DeviceService;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
@@ -138,15 +139,15 @@ class PushDeliveryClaimIT extends AbstractIntegrationTest {
                 deletionUpdated.countDown();
                 await(allowDeletionCommit);
             }));
-            assertTrue(deletionUpdated.await(5, TimeUnit.SECONDS));
+            TestLatches.awaitProgress(deletionUpdated);
             Future<?> registration = executor.submit(() -> transaction.executeWithoutResult(status ->
                     deviceManager.savePushToken("Dart/3.9 (dart:io)", clientDeviceId, "new-fcm-token")));
             assertThrows(TimeoutException.class, () -> registration.get(250, TimeUnit.MILLISECONDS));
 
             allowDeletionCommit.countDown();
-            deletion.get(5, TimeUnit.SECONDS);
+            TestLatches.getProgress(deletion);
             ExecutionException failure = assertThrows(ExecutionException.class,
-                    () -> registration.get(5, TimeUnit.SECONDS));
+                    () -> TestLatches.getProgress(registration));
             assertTrue(failure.getCause() instanceof ResourceNotFoundException);
             assertEquals("true:", jdbcTemplate.queryForObject("""
                     select is_deleted::text || ':' || coalesce(push_token, '') from devices where id = ?
@@ -271,14 +272,14 @@ class PushDeliveryClaimIT extends AbstractIntegrationTest {
 
         try {
             Future<?> firstDelivery = executor.submit(() -> manager.deliver(notificationId));
-            assertTrue(providerEntered.await(5, TimeUnit.SECONDS));
+            TestLatches.awaitProgress(providerEntered);
             now.set(claimedAt.plus(Duration.ofSeconds(505)));
 
             int recovered = manager.recoverStaleClaims();
             Future<?> possibleDuplicate = executor.submit(() -> manager.deliver(notificationId));
             releaseProvider.countDown();
-            firstDelivery.get(5, TimeUnit.SECONDS);
-            possibleDuplicate.get(5, TimeUnit.SECONDS);
+            TestLatches.getProgress(firstDelivery);
+            TestLatches.getProgress(possibleDuplicate);
 
             assertEquals(0, recovered);
             assertEquals(1, providerCalls.get());
@@ -315,10 +316,10 @@ class PushDeliveryClaimIT extends AbstractIntegrationTest {
                         await(releaseLock);
                         return "prior-delivery";
                     }));
-            assertTrue(lockHeld.await(5, TimeUnit.SECONDS));
+            TestLatches.awaitProgress(lockHeld);
 
             Future<?> contendedDelivery = executor.submit(() -> manager.deliver(notificationId));
-            contendedDelivery.get(5, TimeUnit.SECONDS);
+            TestLatches.getProgress(contendedDelivery);
             assertEquals("QUEUED:0:TOKEN_SERIALIZATION_BUSY", jdbcTemplate.queryForObject("""
                     select status || ':' || push_attempt_count || ':' || failure_reason
                       from notifications where id = ?
@@ -328,7 +329,7 @@ class PushDeliveryClaimIT extends AbstractIntegrationTest {
             now.set(startedAt.plus(Duration.ofMinutes(11)));
             assertEquals(0, manager.recoverStaleClaims());
             releaseLock.countDown();
-            holder.get(5, TimeUnit.SECONDS);
+            TestLatches.getProgress(holder);
 
             manager.deliver(notificationId);
             assertEquals(1, providerCalls.get());
@@ -376,7 +377,7 @@ class PushDeliveryClaimIT extends AbstractIntegrationTest {
                         await(releaseDelivery);
                         return "sent";
                     }));
-            assertTrue(deliveryEntered.await(5, TimeUnit.SECONDS));
+            TestLatches.awaitProgress(deliveryEntered);
             Future<?> mutation = executor.submit(() -> {
                 mutationStarted.countDown();
                 transaction.executeWithoutResult(status -> {
@@ -387,12 +388,12 @@ class PushDeliveryClaimIT extends AbstractIntegrationTest {
                     }
                 });
             });
-            assertTrue(mutationStarted.await(5, TimeUnit.SECONDS));
+            TestLatches.awaitProgress(mutationStarted);
             assertThrows(TimeoutException.class, () -> mutation.get(250, TimeUnit.MILLISECONDS));
 
             releaseDelivery.countDown();
-            assertTrue(delivery.get(5, TimeUnit.SECONDS).currentOwner());
-            mutation.get(5, TimeUnit.SECONDS);
+            assertTrue(TestLatches.getProgress(delivery).currentOwner());
+            TestLatches.getProgress(mutation);
 
             assertEquals(replacementToken, jdbcTemplate.queryForObject(
                     "select push_token from devices where id = ?", String.class, deviceId));
@@ -419,20 +420,20 @@ class PushDeliveryClaimIT extends AbstractIntegrationTest {
                 metadataUpdated.countDown();
                 await(allowMetadataCommit);
             }));
-            assertTrue(metadataUpdated.await(5, TimeUnit.SECONDS));
+            TestLatches.awaitProgress(metadataUpdated);
 
             Future<Boolean> invalidTokenCleanup = executor.submit(() -> {
                 cleanupStarted.countDown();
                 return transaction.execute(status -> deviceManager.clearPushTokenIfMatches(
                         SYSTEM_USER_ID, deviceId, "invalid-fcm-token"));
             });
-            assertTrue(cleanupStarted.await(5, TimeUnit.SECONDS));
+            TestLatches.awaitProgress(cleanupStarted);
             assertThrows(TimeoutException.class,
                     () -> invalidTokenCleanup.get(250, TimeUnit.MILLISECONDS));
 
             allowMetadataCommit.countDown();
-            metadataUpdate.get(5, TimeUnit.SECONDS);
-            assertTrue(invalidTokenCleanup.get(5, TimeUnit.SECONDS));
+            TestLatches.getProgress(metadataUpdate);
+            assertTrue(TestLatches.getProgress(invalidTokenCleanup));
             assertEquals(":true", jdbcTemplate.queryForObject("""
                     select coalesce(push_token, '') || ':' || (last_seen_at is not null)::text
                       from devices where id = ?
@@ -508,12 +509,12 @@ class PushDeliveryClaimIT extends AbstractIntegrationTest {
             Future<?> metadataUpdate = executor.submit(() -> transaction.executeWithoutResult(status ->
                     metadataManager.findOrCreateDevice(
                             systemUser(), "192.0.2.31", userAgent, clientDeviceId, ClientPlatform.ANDROID)));
-            assertTrue(metadataReadToken.await(5, TimeUnit.SECONDS));
+            TestLatches.awaitProgress(metadataReadToken);
 
             transaction.executeWithoutResult(status -> transferManager.savePushToken(
                     "Dart/3.9 (dart:io)", newOwnerClientDeviceId, token));
             allowMetadataTokenLock.countDown();
-            metadataUpdate.get(5, TimeUnit.SECONDS);
+            TestLatches.getProgress(metadataUpdate);
 
             assertEquals(":true", jdbcTemplate.queryForObject("""
                     select coalesce(push_token, '') || ':' || (last_seen_at is not null)::text
@@ -551,14 +552,7 @@ class PushDeliveryClaimIT extends AbstractIntegrationTest {
     }
 
     private void await(CountDownLatch latch) {
-        try {
-            if (!latch.await(5, TimeUnit.SECONDS)) {
-                throw new IllegalStateException("Timed out waiting for the test delivery release");
-            }
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while waiting for the test delivery release", exception);
-        }
+        TestLatches.awaitHold(latch);
     }
 
     private void seed(UUID deviceId, UUID notificationId) {

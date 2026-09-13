@@ -9,6 +9,7 @@ import com.exskylab.koala.entities.NotificationCategory;
 import com.exskylab.koala.entities.NotificationChannel;
 import com.exskylab.koala.entities.NotificationStatus;
 import com.exskylab.koala.support.AbstractIntegrationTest;
+import com.exskylab.koala.support.TestRabbit;
 import jakarta.mail.Session;
 import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.Test;
@@ -27,7 +28,6 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.testcontainers.containers.GenericContainer;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
@@ -48,31 +48,13 @@ import static org.mockito.Mockito.*;
 })
 class EmailRetryIT extends AbstractIntegrationTest {
 
-    private static final GenericContainer<?> RABBIT = new GenericContainer<>("rabbitmq:4.1.3-management")
-            .withExposedPorts(5672)
-            .withEnv("RABBITMQ_DEFAULT_USER", "koala-test")
-            .withEnv("RABBITMQ_DEFAULT_PASS", "test-only");
-
     static {
-        RABBIT.start();
-        var connectionFactory = new com.rabbitmq.client.ConnectionFactory();
-        connectionFactory.setHost(RABBIT.getHost());
-        connectionFactory.setPort(RABBIT.getMappedPort(5672));
-        connectionFactory.setUsername("koala-test");
-        connectionFactory.setPassword("test-only");
-        try (var connection = connectionFactory.newConnection(); var channel = connection.createChannel()) {
-            channel.queueDeclare(RabbitMQConfig.EMAIL_QUEUE, true, false, false, Map.of());
-        } catch (Exception exception) {
-            throw new IllegalStateException("Cannot prepare the existing email queue", exception);
-        }
+        TestRabbit.declareDurableQueue(RabbitMQConfig.EMAIL_QUEUE);
     }
 
     @DynamicPropertySource
     static void rabbitProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.rabbitmq.host", RABBIT::getHost);
-        registry.add("spring.rabbitmq.port", () -> RABBIT.getMappedPort(5672));
-        registry.add("spring.rabbitmq.username", () -> "koala-test");
-        registry.add("spring.rabbitmq.password", () -> "test-only");
+        TestRabbit.register(registry);
     }
 
     @Autowired private RabbitTemplate rabbit;

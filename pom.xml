@@ -324,6 +324,10 @@
                             <forkCount>2</forkCount>
                             <excludes>
                                 <exclude>**/IdentityMultipartBudgetIT.java</exclude>
+                                <exclude>**/EmailRetryIT.java</exclude>
+                                <exclude>**/RabbitLogContextIT.java</exclude>
+                                <exclude>**/NotificationOutboxRabbitIT.java</exclude>
+                                <exclude>**/UserProfileSyncOutboxRabbitIT.java</exclude>
                             </excludes>
                         </configuration>
                     </execution>
@@ -339,6 +343,22 @@
                             </includes>
                             <forkCount>1</forkCount>
                             <reuseForks>false</reuseForks>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>rabbit-broker</id>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                        <configuration>
+                            <includes>
+                                <include>**/EmailRetryIT.java</include>
+                                <include>**/RabbitLogContextIT.java</include>
+                                <include>**/NotificationOutboxRabbitIT.java</include>
+                                <include>**/UserProfileSyncOutboxRabbitIT.java</include>
+                            </includes>
+                            <forkCount>1</forkCount>
                         </configuration>
                     </execution>
                 </executions>
