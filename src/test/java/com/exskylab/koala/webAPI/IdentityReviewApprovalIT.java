@@ -7,6 +7,7 @@ import com.exskylab.koala.dataAccess.IdentityVerificationDao;
 import com.exskylab.koala.entities.IdentityVerification;
 import com.exskylab.koala.entities.StaffPermission;
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
+import com.exskylab.koala.support.TestLatches;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,7 +36,6 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -220,20 +220,20 @@ class IdentityReviewApprovalIT extends AbstractStaffIntegrationTest {
                 rejectionHoldsTheRow.countDown();
                 await(releaseRejection);
             }));
-            assertTrue(rejectionHoldsTheRow.await(10, TimeUnit.SECONDS));
+            TestLatches.awaitProgress(rejectionHoldsTheRow);
 
             var approval = executor.submit(() -> {
                 approvalStarted.countDown();
                 return identityDocumentReviewService.approve(actor, reviewId);
             });
-            assertTrue(approvalStarted.await(10, TimeUnit.SECONDS));
+            TestLatches.awaitProgress(approvalStarted);
             assertThrows(TimeoutException.class, () -> approval.get(250, TimeUnit.MILLISECONDS));
 
             releaseRejection.countDown();
-            rejection.get(10, TimeUnit.SECONDS);
+            TestLatches.getProgress(rejection);
 
             ExecutionException failure = assertThrows(ExecutionException.class,
-                    () -> approval.get(10, TimeUnit.SECONDS));
+                    () -> TestLatches.getProgress(approval));
             ConflictException conflict = assertInstanceOf(ConflictException.class, failure.getCause());
             assertEquals("IDENTITY_REVIEW_ALREADY_DECIDED", conflict.getErrorCode());
         } finally {
@@ -284,13 +284,6 @@ class IdentityReviewApprovalIT extends AbstractStaffIntegrationTest {
     }
 
     private static void await(CountDownLatch latch) {
-        try {
-            if (!latch.await(10, TimeUnit.SECONDS)) {
-                throw new IllegalStateException("identity review lock test timed out");
-            }
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("identity review lock test interrupted", exception);
-        }
+        TestLatches.awaitProgress(latch);
     }
 }

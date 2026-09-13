@@ -1,6 +1,7 @@
 package com.exskylab.koala.support;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -16,8 +17,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TestLatchesTest {
 
+    @BeforeEach
     @AfterEach
-    void clearOverride() {
+    void isolateFromCiBudget() {
         System.clearProperty(TestLatches.PROPERTY);
     }
 
@@ -55,6 +57,7 @@ class TestLatchesTest {
         List<Path> sources = List.of(
                 Path.of("src/test/java/com/exskylab/koala/business/concretes/PushDeliveryClaimIT.java"),
                 Path.of("src/test/java/com/exskylab/koala/dataAccess/ReportLockIT.java"),
+                Path.of("src/test/java/com/exskylab/koala/webAPI/IdentityReviewApprovalIT.java"),
                 Path.of("src/test/java/com/exskylab/koala/dataAccess/ActivePaymentAttemptConstraintIT.java"),
                 Path.of("src/test/java/com/exskylab/koala/dataAccess/PayoutSettlementReconciliationIT.java"),
                 Path.of("src/test/java/com/exskylab/koala/support/OverlappingWrites.java"));
@@ -62,8 +65,10 @@ class TestLatchesTest {
             String text = Files.readString(source);
             assertTrue(
                     !text.contains("await(5, TimeUnit.SECONDS)")
-                            && !text.contains("get(5, TimeUnit.SECONDS)"),
-                    source + " still hard-codes a 5s progress wait");
+                            && !text.contains("get(5, TimeUnit.SECONDS)")
+                            && !text.contains("await(10, TimeUnit.SECONDS)")
+                            && !text.contains("get(10, TimeUnit.SECONDS)"),
+                    source + " still hard-codes a progress wait");
         }
     }
 }
