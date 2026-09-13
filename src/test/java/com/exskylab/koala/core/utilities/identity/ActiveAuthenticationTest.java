@@ -394,4 +394,77 @@ class ActiveAuthenticationTest {
         assertThrows(PassiveAuthenticationException.class,
                 () -> ActiveAuthentication.verify(rsaDg15, new byte[]{8, 7, 6, 5, 4, 3, 2, 1}, signature));
     }
+
+    private static org.bouncycastle.crypto.Digest digestNamed(String name) {
+        return switch (name) {
+            case "SHA-1" -> new SHA1Digest();
+            case "SHA-224" -> new org.bouncycastle.crypto.digests.SHA224Digest();
+            case "SHA-256" -> new org.bouncycastle.crypto.digests.SHA256Digest();
+            case "SHA-384" -> new org.bouncycastle.crypto.digests.SHA384Digest();
+            case "SHA-512" -> new org.bouncycastle.crypto.digests.SHA512Digest();
+            default -> throw new IllegalArgumentException(name);
+        };
+    }
+
+    private static byte[] rsaChipSignsWithNonce(org.bouncycastle.crypto.Digest digest, boolean implicitTrailer,
+                                                int nonceLength, byte[] challenge) throws Exception {
+        ISO9796d2Signer signer = new ISO9796d2Signer(new RSAEngine(), digest, implicitTrailer);
+        signer.init(true, rsaChipKeys.getPrivate());
+        byte[] nonce = new byte[nonceLength];
+        java.util.Arrays.fill(nonce, (byte) 0x5A);
+        signer.update(nonce, 0, nonce.length);
+        signer.update(challenge, 0, challenge.length);
+        return signer.generateSignature();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"SHA-224", "SHA-256", "SHA-384", "SHA-512"})
+    void anRsaChipUsingAnExplicitTrailerWithAnIcaoLengthNonceIsVerified(String digestName) throws Exception {
+        org.bouncycastle.crypto.Digest digest = digestNamed(digestName);
+        int icaoNonceLength = 256 - digest.getDigestSize() - 3;
+        byte[] signature = rsaChipSignsWithNonce(digest, false, icaoNonceLength, CHALLENGE);
+
+        assertDoesNotThrow(() -> ActiveAuthentication.verify(rsaDg15, CHALLENGE, signature));
+        assertThrows(PassiveAuthenticationException.class,
+                () -> ActiveAuthentication.verify(rsaDg15, new byte[]{8, 7, 6, 5, 4, 3, 2, 1}, signature));
+    }
+
+    @Test
+    void anRsaChipUsingSha1WithTheImplicitTrailerAndAnIcaoLengthNonceIsVerified() throws Exception {
+        byte[] signature = rsaChipSignsWithNonce(new SHA1Digest(), true, 256 - 20 - 2, CHALLENGE);
+
+        assertDoesNotThrow(() -> ActiveAuthentication.verify(rsaDg15, CHALLENGE, signature));
+    }
+
+    @Test
+    void anRsaChipUsingSha1WithAnExplicitTrailerIsVerified() throws Exception {
+        byte[] signature = rsaChipSignsWithNonce(new SHA1Digest(), false, 256 - 20 - 3, CHALLENGE);
+
+        assertDoesNotThrow(() -> ActiveAuthentication.verify(rsaDg15, CHALLENGE, signature));
+    }
+
+    @Test
+    void anRsaChipWhoseShortNonceLeavesTheWholeMessageRecoverableIsVerified() throws Exception {
+        byte[] signature = rsaChipSignsWithNonce(new SHA1Digest(), true, 100, CHALLENGE);
+
+        assertDoesNotThrow(() -> ActiveAuthentication.verify(rsaDg15, CHALLENGE, signature));
+        assertThrows(PassiveAuthenticationException.class,
+                () -> ActiveAuthentication.verify(rsaDg15, new byte[]{8, 7, 6, 5, 4, 3, 2, 1}, signature));
+    }
+
+    @Test
+    void aPlainEcdsaSignatureMustBeExactlyTwiceTheOrderLength() throws Exception {
+        KeyPair keys = ecKeys("brainpoolP256r1");
+        byte[] dg15 = wrap(keys.getPublic().getEncoded());
+        byte[] signature = sign(keys, "SHA256withPLAIN-ECDSA", CHALLENGE);
+
+        byte[] widened = new byte[66];
+        System.arraycopy(signature, 0, widened, 1, 32);
+        System.arraycopy(signature, 32, widened, 34, 32);
+
+        assertDoesNotThrow(() -> ActiveAuthentication.verify(dg15, CHALLENGE, signature));
+        assertThrows(PassiveAuthenticationException.class,
+                () -> ActiveAuthentication.verify(dg15, CHALLENGE, widened),
+                "sifir dolgulu 33+33 baytlik r||s duz kodlama degildir, kabul edilmemeli");
+    }
 }

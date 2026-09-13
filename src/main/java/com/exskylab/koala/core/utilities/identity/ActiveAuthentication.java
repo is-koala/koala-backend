@@ -28,6 +28,7 @@ import org.bouncycastle.crypto.signers.ISO9796d2Signer;
 import org.bouncycastle.crypto.util.PublicKeyFactory;
 
 import java.math.BigInteger;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Enumeration;
@@ -133,10 +134,8 @@ public final class ActiveAuthentication {
         private static List<Candidate> rsaCandidates(RSAKeyParameters rsa) {
             List<Candidate> candidates = new ArrayList<>();
             for (Hash hash : HASHES) {
-                candidates.add((challenge, signature) -> verifyRsaPartialRecovery(rsa, hash, challenge, signature));
-            }
-            for (Hash hash : HASHES) {
-                candidates.add((challenge, signature) -> verifyRsaFullRecovery(rsa, hash, challenge, signature));
+                candidates.add((challenge, signature) -> verifyRsa(rsa, hash, false, challenge, signature));
+                candidates.add((challenge, signature) -> verifyRsa(rsa, hash, true, challenge, signature));
             }
             return candidates;
         }
@@ -166,11 +165,15 @@ public final class ActiveAuthentication {
         }
     }
 
-    private static boolean verifyRsaFullRecovery(RSAKeyParameters key, Hash hash, byte[] challenge,
-                                                 byte[] signature) {
+    private static boolean verifyRsa(RSAKeyParameters key, Hash hash, boolean implicitTrailer, byte[] challenge,
+                                     byte[] signature) {
         try {
-            ISO9796d2Signer signer = new ISO9796d2Signer(new RSAEngine(), hash.newDigest(), true);
+            ISO9796d2Signer signer = new ISO9796d2Signer(new RSAEngine(), hash.newDigest(), implicitTrailer);
             signer.init(false, key);
+            signer.updateWithRecoveredMessage(signature);
+            if (signer.hasFullMessage()) {
+                return endsWith(signer.getRecoveredMessage(), challenge) && signer.verifySignature(signature);
+            }
             signer.update(challenge, 0, challenge.length);
             return signer.verifySignature(signature);
         } catch (Exception e) {
@@ -178,17 +181,9 @@ public final class ActiveAuthentication {
         }
     }
 
-    private static boolean verifyRsaPartialRecovery(RSAKeyParameters key, Hash hash, byte[] challenge,
-                                                    byte[] signature) {
-        try {
-            ISO9796d2Signer signer = new ISO9796d2Signer(new RSAEngine(), hash.newDigest(), true);
-            signer.init(false, key);
-            signer.updateWithRecoveredMessage(signature);
-            signer.update(challenge, 0, challenge.length);
-            return signer.verifySignature(signature);
-        } catch (Exception e) {
-            return false;
-        }
+    private static boolean endsWith(byte[] message, byte[] suffix) {
+        return message.length >= suffix.length && MessageDigest.isEqual(
+                Arrays.copyOfRange(message, message.length - suffix.length, message.length), suffix);
     }
 
     private static String curveName(ECDomainParameters domain) {
@@ -249,7 +244,7 @@ public final class ActiveAuthentication {
         }
 
         boolean verifies(ECPublicKeyParameters key, byte[] challenge, byte[] signature) {
-            BigInteger[] rs = encoding == Encoding.PLAIN ? plain(signature) : der(signature);
+            BigInteger[] rs = encoding == Encoding.PLAIN ? plain(key, signature) : der(signature);
             if (rs == null) {
                 return false;
             }
@@ -262,11 +257,11 @@ public final class ActiveAuthentication {
             }
         }
 
-        private static BigInteger[] plain(byte[] signature) {
-            if (signature.length == 0 || signature.length % 2 != 0) {
+        private static BigInteger[] plain(ECPublicKeyParameters key, byte[] signature) {
+            int half = (key.getParameters().getN().bitLength() + 7) / 8;
+            if (signature.length != 2 * half) {
                 return null;
             }
-            int half = signature.length / 2;
             return new BigInteger[]{
                     new BigInteger(1, Arrays.copyOfRange(signature, 0, half)),
                     new BigInteger(1, Arrays.copyOfRange(signature, half, signature.length))};

@@ -5,7 +5,7 @@ import java.util.Arrays;
 public final class LdsFiles {
 
     private static final int LONG_FORM = 0x80;
-    private static final int MAX_LENGTH_OCTETS = 4;
+    private static final int MAX_LENGTH_OCTETS = 3;
 
     private LdsFiles() {
     }
@@ -34,7 +34,7 @@ public final class LdsFiles {
             offset = 2 + octets;
         }
 
-        if (length < 0 || offset + length > file.length) {
+        if (length < 0 || length > file.length - offset) {
             throw new IllegalArgumentException("BER length " + length + " exceeds the " + file.length + " byte file");
         }
 

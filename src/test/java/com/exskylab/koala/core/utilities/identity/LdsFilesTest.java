@@ -55,10 +55,32 @@ class LdsFilesTest {
         assertThrows(IllegalArgumentException.class, () -> LdsFiles.unwrap(file, 0x6F));
     }
 
+    @Test
+    void aThreeByteLengthLongerThanTheFileIsRefused() {
+        byte[] file = concat(new byte[]{0x6F, (byte) 0x83, 0x00, 0x10, 0x00}, CONTENT);
+
+        assertThrows(IllegalArgumentException.class, () -> LdsFiles.unwrap(file, 0x6F));
+    }
+
     @ParameterizedTest
-    @ValueSource(ints = {0x80, 0x85, 0xFF})
+    @ValueSource(ints = {0x80, 0x84, 0x85, 0xFF})
     void indefiniteAndOversizedLengthFormsAreRefused(int lengthOctet) {
         byte[] file = concat(new byte[]{0x6F, (byte) lengthOctet, 0, 0, 0, 0, 0}, CONTENT);
+
+        assertThrows(IllegalArgumentException.class, () -> LdsFiles.unwrap(file, 0x6F));
+    }
+
+    @Test
+    void aFourByteLengthThatWouldOverflowAnIntIsRefusedWithoutAllocating() {
+        byte[] file = concat(new byte[]{0x6F, (byte) 0x84, 0x7F, (byte) 0xFF, (byte) 0xFF, (byte) 0xFA}, CONTENT);
+
+        assertThrows(IllegalArgumentException.class, () -> LdsFiles.unwrap(file, 0x6F),
+                "0x84 + 0x7FFFFFFA int'te offset+length toplamini negatife sarar; guard gecmemeli, OOM olmamali");
+    }
+
+    @Test
+    void aThreeByteLengthNearTheIntLimitIsRefusedWithoutAllocating() {
+        byte[] file = concat(new byte[]{0x6F, (byte) 0x83, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF}, CONTENT);
 
         assertThrows(IllegalArgumentException.class, () -> LdsFiles.unwrap(file, 0x6F));
     }
