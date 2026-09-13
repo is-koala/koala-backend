@@ -51,12 +51,14 @@ class ReceivedApplicationsIT extends AbstractIntegrationTest {
     private final UUID officerO = UUID.randomUUID();
     private final UUID formerF = UUID.randomUUID();
     private final UUID employerB = UUID.randomUUID();
+    private final UUID officerZ = UUID.randomUUID();
     private final UUID strangerS = UUID.randomUUID();
     private final List<UUID> workers = new ArrayList<>();
     private final List<UUID> pictures = new ArrayList<>();
 
     private final UUID companyX = UUID.randomUUID();
     private final UUID companyY = UUID.randomUUID();
+    private final UUID companyZ = UUID.randomUUID();
     private final UUID countryId = UUID.randomUUID();
     private final UUID cityId = UUID.randomUUID();
     private final UUID districtId = UUID.randomUUID();
@@ -67,6 +69,8 @@ class ReceivedApplicationsIT extends AbstractIntegrationTest {
     private final UUID jobC1 = UUID.randomUUID();
     private final UUID jobB1 = UUID.randomUUID();
     private final UUID jobY1 = UUID.randomUUID();
+    private final UUID jobZ1 = UUID.randomUUID();
+    private final UUID jobF1 = UUID.randomUUID();
 
     private final UUID tieBase = UUID.randomUUID();
     private final UUID app1 = UUID.randomUUID();
@@ -76,15 +80,17 @@ class ReceivedApplicationsIT extends AbstractIntegrationTest {
     private final UUID app5 = UUID.randomUUID();
     private final UUID app6 = UUID.randomUUID();
     private final UUID app7 = UUID.randomUUID();
+    private final UUID app8 = UUID.randomUUID();
+    private final UUID app9 = UUID.randomUUID();
 
     private final Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
 
     @BeforeEach
     void setUp() {
-        for (UUID id : List.of(employerA, officerO, formerF, employerB, strangerS)) {
+        for (UUID id : List.of(employerA, officerO, formerF, employerB, officerZ, strangerS)) {
             insertUser(id, true);
         }
-        for (int i = 0; i < 7; i++) {
+        for (int i = 0; i < 9; i++) {
             UUID workerId = UUID.randomUUID();
             UUID pictureId = UUID.randomUUID();
             workers.add(workerId);
@@ -99,10 +105,13 @@ class ReceivedApplicationsIT extends AbstractIntegrationTest {
 
         insertCompany(companyX, "Sirket X");
         insertCompany(companyY, "Sirket Y");
+        insertCompany(companyZ, "Sirket Z");
         insertContact(companyX, employerA, "ADMIN", false);
         insertContact(companyX, officerO, "STAFF", false);
         insertContact(companyX, formerF, "ADMIN", true);
         insertContact(companyY, employerB, "ADMIN", false);
+        insertContact(companyZ, formerF, "ADMIN", true);
+        insertContact(companyZ, officerZ, "ADMIN", false);
 
         jdbc.update("insert into countries (id, created_at, is_deleted, name, code) values (?, now(), false, ?, ?)",
                 countryId, "Türkiye", "TR");
@@ -121,6 +130,8 @@ class ReceivedApplicationsIT extends AbstractIntegrationTest {
         insertJob(jobC1, employerA, companyX, "Sirket X C1");
         insertJob(jobB1, employerB, null, "Bireysel B1");
         insertJob(jobY1, employerB, companyY, "Sirket Y Y1");
+        insertJob(jobZ1, formerF, companyZ, "Sirket Z Z1");
+        insertJob(jobF1, formerF, null, "Bireysel F1");
 
         insertApplication(app1, jobA1, workers.get(0), "APPLIED", now.minus(3, ChronoUnit.HOURS), null);
         insertApplication(app2, jobA1, workers.get(1), "REJECTED", now.minus(1, ChronoUnit.HOURS),
@@ -131,20 +142,23 @@ class ReceivedApplicationsIT extends AbstractIntegrationTest {
                 now.minus(3, ChronoUnit.HOURS));
         insertApplication(app6, jobB1, workers.get(5), "APPLIED", now.minus(1, ChronoUnit.HOURS), null);
         insertApplication(app7, jobY1, workers.get(6), "APPLIED", now.minus(1, ChronoUnit.HOURS), null);
+        insertApplication(app8, jobZ1, workers.get(7), "APPLIED", now.minus(1, ChronoUnit.HOURS), null);
+        insertApplication(app9, jobF1, workers.get(8), "APPLIED", now.minus(1, ChronoUnit.HOURS), null);
     }
 
     @AfterEach
     void tearDown() {
-        jdbc.update("delete from job_applications where job_id in (?, ?, ?, ?)", jobA1, jobC1, jobB1, jobY1);
-        jdbc.update("delete from jobs where id in (?, ?, ?, ?)", jobA1, jobC1, jobB1, jobY1);
+        jdbc.update("delete from job_applications where job_id in (?, ?, ?, ?, ?, ?)",
+                jobA1, jobC1, jobB1, jobY1, jobZ1, jobF1);
+        jdbc.update("delete from jobs where id in (?, ?, ?, ?, ?, ?)", jobA1, jobC1, jobB1, jobY1, jobZ1, jobF1);
         jdbc.update("delete from job_categories where id = ?", categoryId);
         jdbc.update("delete from addresses where id = ?", addressId);
         jdbc.update("delete from districts where id = ?", districtId);
         jdbc.update("delete from cities where id = ?", cityId);
         jdbc.update("delete from countries where id = ?", countryId);
-        jdbc.update("delete from company_contacts where company_id in (?, ?)", companyX, companyY);
-        jdbc.update("delete from companies where id in (?, ?)", companyX, companyY);
-        List<UUID> everyone = new ArrayList<>(List.of(employerA, officerO, formerF, employerB, strangerS));
+        jdbc.update("delete from company_contacts where company_id in (?, ?, ?)", companyX, companyY, companyZ);
+        jdbc.update("delete from companies where id in (?, ?, ?)", companyX, companyY, companyZ);
+        List<UUID> everyone = new ArrayList<>(List.of(employerA, officerO, formerF, employerB, officerZ, strangerS));
         everyone.addAll(workers);
         String placeholders = String.join(", ", java.util.Collections.nCopies(everyone.size(), "?"));
         Object[] ids = everyone.toArray();
@@ -165,8 +179,17 @@ class ReceivedApplicationsIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void aFormerOfficerSeesNothing() throws Exception {
-        assertEmptyPage(inboxAs(formerF, INBOX));
+    void aFormerContactLosesTheCompanyJobHeOpenedAndKeepsHisIndividualJobs() throws Exception {
+        assertEquals(Set.of(app9), Set.copyOf(idsSeenBy(formerF, INBOX)));
+        assertEmptyPage(inboxAs(formerF, INBOX + "?jobId=" + jobZ1));
+        assertEmptyPage(inboxAs(formerF, INBOX + "?companyId=" + companyZ));
+        mockMvc.perform(get("/jobs/" + jobZ1 + "/applications").with(user(principal(formerF))))
+                .andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    void theCompanysCurrentContactSeesTheJobAFormerContactOpened() throws Exception {
+        assertEquals(Set.of(app8), Set.copyOf(idsSeenBy(officerZ, INBOX)));
     }
 
     @Test

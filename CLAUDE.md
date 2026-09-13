@@ -2370,16 +2370,27 @@ yalnız ilanı **açanın** listesi (`findAllByCreatorId`, §2ap), gelen kutusu 
 kapsıyor — iç içelik yalan söylerdi (§0b). Kardeşleri `saved-jobs`, `followed-companies`, `job-templates` ile
 aynı biçim.
 
-**Kapsam yeni bir kural değil, `requireJobEditor`'un sorgu hâli.** Tekil uçlar "ilanın sahibi **ya da**
-şirketinin yetkilisi" diye soruyor (`JobManager.requireJobEditor`, `assertCurrentUserIsEmployerOf`) ve yetkili
-tanımı her yerde `CompanyContactService.isUserAContactOfCompany` = `company_contacts`'ta silinmemiş bir satır,
-rol ayrımı yok. Sayfalı sorgu aynı tanımı kümeye çevirmek zorunda: `CompanyContactService.getCompanyIdsOfContact`
-(`CompanyContactDao.findCompanyIdsByUserId`) kullanıcının şirket kimliklerini **aynı entity** üzerinden veriyor —
-`@SQLRestriction` çıkarılmış yetkiliyi düşürüyor — ve `JobApplicationDao` yalnız
-`a.job.creator.id = :viewerId or a.job.company.id in :companyIds` diyor. Üyelik tanımı böylece
-`CompanyContact` aggregate'inde tek yerde kalıyor; `JobApplicationDao` `company_contacts`'ı hiç tanımıyor.
-Hiç şirketi olmayan kullanıcıda liste boş gidiyor ve Hibernate 7 boş `in` listesini `1=0` olarak çiziyor —
-varsayılmadı, `aStrangerSeesNothing` ile gerçek Postgres'te ölçüldü.
+**Kapsam yeni bir kural değil, başvuru uçlarının ilan başına kuralının sorgu hâli.** Başvuruyu gösteren ve
+cevaplayan uçlar (`getJobApplicationsByIdJobId`, `assertCurrentUserIsEmployerOf`) ilan tipine göre **tek** soru
+soruyor: şirket ilanında "şirketin yetkilisi misin", bireysel ilanda "ilanı sen mi açtın" — şirket ilanında
+yaratıcıya hiç bakılmıyor. Yetkili tanımı her yerde `CompanyContactService.isUserAContactOfCompany` =
+`company_contacts`'ta silinmemiş bir satır, rol ayrımı yok. "Sahibi **ya da** yetkilisi" diyen tek kural
+`JobManager.requireJobEditor` ve o ilanı **düzenlemeyi** yönetiyor, başvuruların görünürlüğünü değil. İlk sürüm
+gelen kutusunu ona göre yazmıştı ve ölçülen kusur şuydu: şirket ilanını açıp sonra `company_contacts`'tan
+çıkarılan kullanıcı gelen kutusunda o ilanın adaylarını görmeye devam ederken derin bağlantı verilen inceleme
+ekranı (`GET /jobs/{jobId}/applications`) 400, `respond` 404 veriyordu — aynı kaynak hakkında iki uç iki farklı
+şey söylüyordu (§2ap'nin kusur tanımı). Sayfalı sorgu bu yüzden ilan başına kuralı birebir taşıyor:
+`CompanyContactService.getCompanyIdsOfContact` (`CompanyContactDao.findCompanyIdsByUserId`) kullanıcının şirket
+kimliklerini **aynı entity** üzerinden veriyor — `@SQLRestriction` çıkarılmış yetkiliyi düşürüyor — ve
+`JobApplicationDao.RECEIVED_SCOPE` `(a.job.company is null and a.job.creator.id = :viewerId) or
+(a.job.company is not null and a.job.company.id in :companyIds)` diyor. Üyelik tanımı böylece `CompanyContact`
+aggregate'inde tek yerde kalıyor; `JobApplicationDao` `company_contacts`'ı hiç tanımıyor. Hiç şirketi olmayan
+kullanıcıda liste boş gidiyor ve Hibernate 7 boş `in` listesini `1=0` olarak çiziyor — varsayılmadı,
+`aStrangerSeesNothing` ile gerçek Postgres'te ölçüldü. Yüklemin biçimini
+`theScopePredicateGrantsCreatorsOnlyIndividualJobsAndContactsOnlyCompanyJobs` birim düzeyinde, davranışını
+`aFormerContactLosesTheCompanyJobHeOpenedAndKeepsHisIndividualJobs` gerçek Postgres'te sabitliyor: çıkarılmış
+yaratıcı bireysel ilanının adaylarını görür, açtığı şirket ilanınınkileri görmez ve aynı ilanda inceleme ekranı
+da onu reddeder; şirketin güncel yetkilisi o ilanı görür.
 
 **Kapsam dışı `jobId`/`companyId` süzgeci 404 değil boş sayfa döndürür ve var olmayan kimlikle aynı yanıttır.**
 Süzgeçler kapsam yükleminin **içinde** `and` ile bağlı; ayrı bir "bu ilan senin mi" dalı yok, dolayısıyla
@@ -2395,7 +2406,8 @@ ile aynı küme) varsayılan **tümüyle** yerini bırakıyor ve `findReceived`'
 bilinmeyen alan 400 (`PageableSanitizer`, §2l). İki DAO metodu olmasının sebebi Spring Data: `@Query` zaten
 `order by` taşıyorsa `Pageable`'ın sırasını **onun arkasına** ekliyor, yani tek sorguda istemci sırası hep
 ikincil kalırdı. İki metot **tek** `RECEIVED_SCOPE` sabitini paylaşıyor — kapsam yüklemi iki yerde ayrışamaz
-(bu deponun baskın kusur sınıfı, §2ap `listJobs` gerekçesinin aynısı).
+(bu deponun baskın kusur sınıfı, §2ap `listJobs` gerekçesinin aynısı); `bothPageQueriesShareTheOneScopePredicate`
+bunu iki metodun `@Query` anotasyonundan okuyor.
 
 **Satır şekli `ReceivedApplicationDto`:** `id`, `status`, `applicationDateTime`, `answeredDateTime`, `notes`,
 `applicant` (`SafeUserDto` — `JobApplicantDto` ile aynı iç DTO, kişisel veri genişletilmedi), `jobId`,

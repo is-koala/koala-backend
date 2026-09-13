@@ -18,7 +18,8 @@ import java.util.UUID;
 public interface JobApplicationDao extends JpaRepository<JobApplication, UUID> {
 
     String RECEIVED_SCOPE = " from JobApplication a "
-            + "where (a.job.creator.id = :viewerId or a.job.company.id in :companyIds) "
+            + "where ((a.job.company is null and a.job.creator.id = :viewerId) "
+            + "or (a.job.company is not null and a.job.company.id in :companyIds)) "
             + "and (:status is null or a.status = :status) "
             + "and (:jobId is null or a.job.id = :jobId) "
             + "and (:companyId is null or a.job.company.id = :companyId)";

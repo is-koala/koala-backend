@@ -18,6 +18,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.repository.Query;
 
 import java.time.Clock;
 import java.util.Collection;
@@ -84,6 +85,27 @@ class ReceivedApplicationsAuthorizationTest {
         verify(jobApplicationDao).findReceivedPendingFirst(eq(viewerId), companies.capture(),
                 eq(null), eq(null), eq(null), any());
         assertEquals(List.of(ownedCompanyId, officerCompanyId), List.copyOf(companies.getValue()));
+    }
+
+    @Test
+    void theScopePredicateGrantsCreatorsOnlyIndividualJobsAndContactsOnlyCompanyJobs() {
+        String scope = JobApplicationDao.RECEIVED_SCOPE.replaceAll("\\s+", " ");
+
+        assertTrue(scope.contains("(a.job.company is null and a.job.creator.id = :viewerId)"), scope);
+        assertTrue(scope.contains("(a.job.company is not null and a.job.company.id in :companyIds)"), scope);
+    }
+
+    @Test
+    void bothPageQueriesShareTheOneScopePredicate() throws NoSuchMethodException {
+        for (String name : List.of("findReceived", "findReceivedPendingFirst")) {
+            Query query = JobApplicationDao.class
+                    .getMethod(name, UUID.class, Collection.class, ApplicationStatus.class, UUID.class, UUID.class,
+                            Pageable.class)
+                    .getAnnotation(Query.class);
+
+            assertTrue(query.value().contains(JobApplicationDao.RECEIVED_SCOPE), name);
+            assertEquals(JobApplicationDao.RECEIVED_COUNT, query.countQuery(), name);
+        }
     }
 
     @Test
