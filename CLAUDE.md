@@ -3688,7 +3688,7 @@ cp .env.example .env
    GHA cache yazımı yok sayılır, imaj yine basılır.
 3. **deploy** — yalnızca `v*` tag'inde Dokploy webhook'unu tetikler.
 
-Sürümleme: `v1.2.3` tag'i → `ghcr.io/<owner>/koala:1.2.3` ve `:latest`. main'e push → `ghcr.io/<owner>/koala:main-<sha7>`, `latest` etiketi güncellenmez. Maven `pom.xml` sürümü git tag'iyle aynı semver'dir (`0.9.13` ↔ `v0.9.13`); `build-info` ve `info.app.version` / ECS `SERVICE_VERSION` (boşsa) buradan okunur. Dokploy'da `SERVICE_VERSION` hâlâ `0.0.1` ise o satır imaj varsayılanını ezer — boşaltın veya tag'le eşleyin.
+Sürümleme: `v1.2.3` tag'i → `ghcr.io/<owner>/koala:1.2.3` ve `:latest`. main'e push → `ghcr.io/<owner>/koala:main-<sha7>`, `latest` etiketi güncellenmez. Maven `pom.xml` sürümü git tag'iyle aynı semver'dir (`0.9.14` ↔ `v0.9.14`); `build-info` ve `info.app.version` / ECS `SERVICE_VERSION` (boşsa) buradan okunur. Dokploy'da `SERVICE_VERSION` hâlâ `0.0.1` ise o satır imaj varsayılanını ezer — boşaltın veya tag'le eşleyin.
 
 Uygulama root olmayan `koala` kullanıcısıyla, JRE tabanlı imajda çalışıyor. Sağlık kontrolü `/actuator/health/readiness` üzerinden; `/actuator/health/**` herkese açık, kalan actuator uçları ADMIN rolü istiyor.
 
