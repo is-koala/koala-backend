@@ -7,9 +7,11 @@ import com.exskylab.koala.business.abstracts.UnsubscribeTokenService;
 import com.exskylab.koala.core.dtos.notificationPreference.request.NotificationPreferenceEntryDto;
 import com.exskylab.koala.core.dtos.notificationPreference.request.UpdateNotificationPreferencesDto;
 import com.exskylab.koala.core.dtos.notificationPreference.response.NotificationPreferenceDto;
+import com.exskylab.koala.core.dtos.notificationPreference.response.UnsubscribedChannelDto;
 import com.exskylab.koala.core.constants.IysMessages;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.helpers.ClientContext;
+import com.exskylab.koala.core.mappers.NotificationPreferenceMapper;
 import com.exskylab.koala.dataAccess.CommercialMessageConsentDao;
 import com.exskylab.koala.dataAccess.NotificationPreferenceDao;
 import com.exskylab.koala.entities.CommercialConsentSource;
@@ -41,17 +43,20 @@ public class NotificationPreferenceManager implements NotificationPreferenceServ
     private final UnsubscribeTokenService unsubscribeTokenService;
     private final SecurityService securityService;
     private final IysService iysService;
+    private final NotificationPreferenceMapper notificationPreferenceMapper;
 
     public NotificationPreferenceManager(NotificationPreferenceDao notificationPreferenceDao,
                                          CommercialMessageConsentDao commercialMessageConsentDao,
                                          UnsubscribeTokenService unsubscribeTokenService,
                                          SecurityService securityService,
-                                         IysService iysService) {
+                                         IysService iysService,
+                                         NotificationPreferenceMapper notificationPreferenceMapper) {
         this.notificationPreferenceDao = notificationPreferenceDao;
         this.commercialMessageConsentDao = commercialMessageConsentDao;
         this.unsubscribeTokenService = unsubscribeTokenService;
         this.securityService = securityService;
         this.iysService = iysService;
+        this.notificationPreferenceMapper = notificationPreferenceMapper;
     }
 
     @Override
@@ -105,17 +110,27 @@ public class NotificationPreferenceManager implements NotificationPreferenceServ
 
     @Override
     @Transactional
-    public void unsubscribe(String rawToken, ClientContext client) {
+    public UnsubscribedChannelDto unsubscribe(String rawToken, ClientContext client) {
         UnsubscribeToken token = unsubscribeTokenService.consume(rawToken);
         User owner = token.getUser();
+        NotificationCategory category = token.getCategory();
+        NotificationChannel channel = token.getChannel();
 
         Map<String, NotificationPreference> stored = storedRowsOf(owner.getId());
-        apply(owner, token.getCategory(), token.getChannel(), false, stored);
-        recordCommercialDecision(owner, token.getCategory(), token.getChannel(), false,
+        boolean alreadyDisabled = !enabledFor(category, stored.get(keyOf(category, channel)));
+
+        if (alreadyDisabled) {
+            log.info("Unsubscribe link found {} already off on {} for user {}; nothing rewritten",
+                    category, channel, owner.getId());
+            return notificationPreferenceMapper.toUnsubscribedChannelDto(token, true);
+        }
+
+        apply(owner, category, channel, false, stored);
+        recordCommercialDecision(owner, category, channel, false,
                 CommercialConsentSource.UNSUBSCRIBE_LINK, client, stored);
 
-        log.info("Unsubscribe link switched {} off on {} for user {}",
-                token.getCategory(), token.getChannel(), owner.getId());
+        log.info("Unsubscribe link switched {} off on {} for user {}", category, channel, owner.getId());
+        return notificationPreferenceMapper.toUnsubscribedChannelDto(token, false);
     }
 
     @Override

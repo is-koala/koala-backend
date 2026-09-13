@@ -5,12 +5,11 @@ import com.exskylab.koala.core.constants.NotificationPreferenceMessages;
 import com.exskylab.koala.core.dtos.notificationPreference.request.UnsubscribeDto;
 import com.exskylab.koala.core.dtos.notificationPreference.request.UpdateNotificationPreferencesDto;
 import com.exskylab.koala.core.dtos.notificationPreference.response.NotificationPreferenceDto;
+import com.exskylab.koala.core.dtos.notificationPreference.response.UnsubscribedChannelDto;
 import com.exskylab.koala.core.helpers.ClientContext;
 import com.exskylab.koala.core.helpers.ClientIpResolver;
 import com.exskylab.koala.core.utilities.results.ErrorResult;
-import com.exskylab.koala.core.utilities.results.Result;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
-import com.exskylab.koala.core.utilities.results.SuccessResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -81,20 +80,25 @@ public class NotificationPreferencesController {
     @Operation(summary = "Abonelikten çık",
             description = "E-postadaki tek tıklık bağlantı bu ucu çağırır; **giriş gerektirmez**. İmzalı token "
                     + "yalnızca kendi taşıdığı kategori ve kanalı kapatır, başka hiçbir tercihe dokunamaz ve "
-                    + "hiçbir kanalı açamaz. Aynı bağlantıya ikinci kez tıklamak zararsızdır.")
+                    + "hiçbir kanalı açamaz. Yanıt kapatılan kategori ve kanalı döndürür. Token tek kullanımlık "
+                    + "değil sürelidir: aynı bağlantıya ikinci kez tıklamak hata değildir, aynı kategori ve kanal "
+                    + "`alreadyDisabled=true` ile döner ve hiçbir satır yeniden yazılmaz.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "İlgili kanal kapatıldı"),
-            @ApiResponse(responseCode = "400", description = "Token geçersiz ya da süresi dolmuş",
+            @ApiResponse(responseCode = "200", description = "İlgili kanal kapatıldı ya da zaten kapalıydı; "
+                    + "`data` kapatılan kategori, kanal ve `alreadyDisabled` bayrağını taşır"),
+            @ApiResponse(responseCode = "400", description = "Token boş ya da çok uzun (VALIDATION_FAILED, "
+                    + "`details[].field=token`), tanınmıyor ya da bozulmuş (NOTIFICATION_UNSUBSCRIBE_TOKEN_INVALID) "
+                    + "ya da süresi dolmuş (NOTIFICATION_UNSUBSCRIBE_TOKEN_EXPIRED); tanınmayan ve bozulmuş token "
+                    + "bilerek ayırt edilmez, süresi dolan token gerçek olduğu için ayrı kodla döner",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping("/notification-preferences/unsubscribe")
-    public ResponseEntity<Result> unsubscribe(@RequestBody @Valid UnsubscribeDto request,
-                                              HttpServletRequest httpRequest) {
+    public ResponseEntity<SuccessDataResult<UnsubscribedChannelDto>> unsubscribe(
+            @RequestBody @Valid UnsubscribeDto request, HttpServletRequest httpRequest) {
 
-        notificationPreferenceService.unsubscribe(
-                request.getToken(), ClientContext.from(httpRequest, clientIpResolver));
-
-        return ResponseEntity.ok(new SuccessResult(
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                notificationPreferenceService.unsubscribe(
+                        request.getToken(), ClientContext.from(httpRequest, clientIpResolver)),
                 NotificationPreferenceMessages.UNSUBSCRIBED, HttpStatus.OK));
     }
 }

@@ -1,8 +1,10 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.AuthLinkService;
+import com.exskylab.koala.core.constants.NotificationPreferenceMessages;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.security.PasswordResetTokenGenerator;
+import com.exskylab.koala.core.security.TokenDigest;
 import com.exskylab.koala.dataAccess.UnsubscribeTokenDao;
 import com.exskylab.koala.entities.NotificationCategory;
 import com.exskylab.koala.entities.NotificationChannel;
@@ -18,10 +20,13 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class NotificationUnsubscribeRulesTest {
@@ -78,24 +83,78 @@ class NotificationUnsubscribeRulesTest {
     }
 
     @Test
-    void anUnknownTokenIsRefused() {
-        assertThrows(ValidationException.class, () -> manager.consume("baska-bir-token"));
+    void anUnknownTokenIsRefusedWithTheInvalidCode() {
+        ValidationException refusal = assertThrows(ValidationException.class,
+                () -> manager.consume("baska-bir-token"));
+
+        assertEquals(NotificationPreferenceMessages.UNSUBSCRIBE_TOKEN_INVALID, refusal.getMessage());
+        assertEquals("NOTIFICATION_UNSUBSCRIBE_TOKEN_INVALID", refusal.getErrorCode());
     }
 
     @Test
-    void anExpiredLinkNoLongerWorks() {
+    void aTamperedTokenIsIndistinguishableFromAnUnknownOne() {
+        UnsubscribeToken live = tokenFor(Instant.now().plusSeconds(600));
+        when(tokenDao.findByTokenDigest(TokenDigest.of(RAW_TOKEN))).thenReturn(Optional.of(live));
+
+        ValidationException tampered = assertThrows(ValidationException.class,
+                () -> manager.consume(RAW_TOKEN.substring(1) + "x"));
+        ValidationException unknown = assertThrows(ValidationException.class,
+                () -> manager.consume("baska-bir-token"));
+
+        assertEquals(unknown.getMessage(), tampered.getMessage());
+        assertEquals(unknown.getErrorCode(), tampered.getErrorCode());
+        assertEquals(unknown.getHttpStatus(), tampered.getHttpStatus());
+    }
+
+    @Test
+    void anExpiredLinkIsRefusedWithItsOwnCodeAndStatusStaysTheSame() {
+        UnsubscribeToken expired = tokenFor(Instant.now().minusSeconds(1));
+        when(tokenDao.findByTokenDigest(any())).thenReturn(Optional.of(expired));
+
+        ValidationException refusal = assertThrows(ValidationException.class, () -> manager.consume(RAW_TOKEN));
+        ValidationException unknown = assertThrows(ValidationException.class,
+                () -> manager.consume("baska-bir-token"));
+
+        assertEquals(NotificationPreferenceMessages.UNSUBSCRIBE_TOKEN_EXPIRED, refusal.getMessage());
+        assertEquals("NOTIFICATION_UNSUBSCRIBE_TOKEN_EXPIRED", refusal.getErrorCode());
+        assertEquals(unknown.getHttpStatus(), refusal.getHttpStatus());
+    }
+
+    @Test
+    void anExpiredLinkIsNotStampedAsUsed() {
         UnsubscribeToken expired = tokenFor(Instant.now().minusSeconds(1));
         when(tokenDao.findByTokenDigest(any())).thenReturn(Optional.of(expired));
 
         assertThrows(ValidationException.class, () -> manager.consume(RAW_TOKEN));
+
+        assertEquals(null, expired.getLastUsedAt());
+        verify(tokenDao, never()).save(any());
     }
 
     @Test
-    void aLiveLinkResolvesToItsTarget() {
+    void neitherRefusalEchoesTheRawToken() {
+        UnsubscribeToken expired = tokenFor(Instant.now().minusSeconds(1));
+        when(tokenDao.findByTokenDigest(TokenDigest.of(RAW_TOKEN))).thenReturn(Optional.of(expired));
+
+        ValidationException expiredRefusal = assertThrows(ValidationException.class,
+                () -> manager.consume(RAW_TOKEN));
+        ValidationException unknownRefusal = assertThrows(ValidationException.class,
+                () -> manager.consume("baska-bir-token"));
+
+        assertFalse(expiredRefusal.getMessage().contains(RAW_TOKEN), expiredRefusal.getMessage());
+        assertFalse(unknownRefusal.getMessage().contains("baska-bir-token"), unknownRefusal.getMessage());
+    }
+
+    @Test
+    void aLiveLinkResolvesToItsTargetAndIsStampedAsUsed() {
         UnsubscribeToken live = tokenFor(Instant.now().plusSeconds(600));
         when(tokenDao.findByTokenDigest(any())).thenReturn(Optional.of(live));
+        Instant before = Instant.now();
 
         assertEquals(live, manager.consume(RAW_TOKEN));
+
+        assertNotNull(live.getLastUsedAt(), "canli baglanti kullanildi diye damgalanmali");
+        assertFalse(live.getLastUsedAt().isBefore(before));
     }
 
     @Test
