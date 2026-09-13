@@ -18,6 +18,7 @@ Bu dosya projeyi konu konu anlatır: mimari, alınmış kararlar ve gerekçeleri
 - Koda **yorum satırı yazma** (bkz. §1). Gerekçe buraya yazılır.
 - Her değişiklikten sonra test yazılır; düzeltmeden **önce** kırmızıya döndüğü görülür.
 - Ana kodda imza değiştirdiysen `rm -rf target/test-classes` — Maven bayat test sınıfını yeniden derlemez, `NoSuchMethodError` alırsın.
+- Ajanın kendi `./mvnw verify` kapısı Yusuf'un Mac'inde koşar (Docker açık, Temurin 25). GitHub kuyruğunu bekleme. Mac org runner kaydedilmez. GHCR `linux/amd64` imajı yalnız Hetzner native runner'dan basılır; PR yeşil tiki `self-hosted` Hetzner'de kalır.
 
 **Prod durumu (30.08.2026):** Dokploy üzerinde Postgres 17, RabbitMQ ve uygulama ayakta. `api.iskoala.com`. Son etiket `v0.4.9` — kimlik doğrulama, SMS/push tüketicileri, sürüm kapısı ve çip doğrulaması dahil. Ayrıntı §9'da.
 
@@ -3675,8 +3676,10 @@ cp .env.example .env
 
 ## 6. Deployment ve sürümleme
 
-`.github/workflows/ci.yml` üç aşamalı; self-hosted Raspberry Pi üzerinde koşar
-(is-koala/koala-backend#91). Pi bakımı `docs/runbooks/self-hosted-runner.md`.
+`.github/workflows/ci.yml` üç aşamalı; org `self-hosted` runner Hetzner x86_64
+üzerinde koşar (eskiden Raspberry Pi, is-koala/koala-backend#91). Ajan
+doğrulaması bu Mac'tedir; Mac runner değildir. Runner bakımı
+`docs/runbooks/self-hosted-runner.md`.
 
 1. **test** — yalnız `pull_request` ve `workflow_dispatch` üzerinde `./mvnw verify`.
    `main` push'unda tekrarlanmaz (#174): aynı commit PR'da zaten geçti, ikinci

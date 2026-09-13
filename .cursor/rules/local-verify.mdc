@@ -1,0 +1,10 @@
+---
+description: Doğrula bu Mac'te; imaj Hetzner'de; Mac GitHub runner değil
+alwaysApply: true
+---
+
+# Yerel doğrulama
+
+Ajanın kendi kapısı Yusuf'un Mac'inde: Docker açık, Temurin 25, `./mvnw verify`. GitHub kuyruğunu bekleme.
+
+Mac'i org GitHub Actions runner kaydetme. Üretim imajını Mac'ten basma — GHCR `linux/amd64`, Hetzner native. PR yeşil tiki `self-hosted` Hetzner'de kalır.
