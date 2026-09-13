@@ -284,6 +284,6 @@ class IdentityReviewApprovalIT extends AbstractStaffIntegrationTest {
     }
 
     private static void await(CountDownLatch latch) {
-        TestLatches.awaitProgress(latch);
+        TestLatches.awaitHold(latch);
     }
 }

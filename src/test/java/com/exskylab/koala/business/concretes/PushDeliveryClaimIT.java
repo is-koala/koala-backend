@@ -552,7 +552,7 @@ class PushDeliveryClaimIT extends AbstractIntegrationTest {
     }
 
     private void await(CountDownLatch latch) {
-        TestLatches.awaitProgress(latch);
+        TestLatches.awaitHold(latch);
     }
 
     private void seed(UUID deviceId, UUID notificationId) {

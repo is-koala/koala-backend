@@ -45,6 +45,23 @@ class TestLatchesTest {
     }
 
     @Test
+    void awaitHoldIgnoresTheProgressBudget() throws InterruptedException {
+        System.setProperty(TestLatches.PROPERTY, "1");
+        CountDownLatch hold = new CountDownLatch(1);
+        Thread releaser = new Thread(() -> {
+            try {
+                Thread.sleep(1_200);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+            hold.countDown();
+        });
+        releaser.start();
+        TestLatches.awaitHold(hold);
+        releaser.join();
+    }
+
+    @Test
     void ciWorkflowPassesAWiderBudget() throws Exception {
         String workflow = Files.readString(Path.of(".github", "workflows", "ci.yml"));
         assertTrue(
@@ -69,6 +86,12 @@ class TestLatchesTest {
                             && !text.contains("await(10, TimeUnit.SECONDS)")
                             && !text.contains("get(10, TimeUnit.SECONDS)"),
                     source + " still hard-codes a progress wait");
+            if (text.contains("private static void await(CountDownLatch latch)")
+                    || text.contains("private void await(CountDownLatch latch)")) {
+                assertTrue(
+                        text.contains("TestLatches.awaitHold(latch)"),
+                        source + " still shares the progress budget with a hold latch");
+            }
         }
     }
 }

@@ -39,6 +39,21 @@ public final class TestLatches {
         }
     }
 
+    /**
+     * Tutma latch'i: test {@code countDown} edene kadar bekler. İlerleme
+     * bütçesiyle aynı saati paylaşmaz; aksi halde işçi, yavaş bir
+     * {@code mutationStarted} el sıkışmasından önce düşer ve "bitmedi"
+     * iddiası yanlış kırmızıya döner.
+     */
+    public static void awaitHold(CountDownLatch latch) {
+        try {
+            latch.await();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("interrupted while holding a test latch", interrupted);
+        }
+    }
+
     public static <T> T getProgress(Future<T> future)
             throws InterruptedException, ExecutionException, TimeoutException {
         return future.get(progressTimeout().toMillis(), TimeUnit.MILLISECONDS);
