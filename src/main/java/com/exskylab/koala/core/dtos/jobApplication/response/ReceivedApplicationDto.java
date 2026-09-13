@@ -9,6 +9,6 @@ import java.util.UUID;
 
 public record ReceivedApplicationDto(UUID id, ApplicationStatus status, Instant applicationDateTime,
                                      Instant answeredDateTime, String notes, SafeUserDto applicant,
-                                     UUID jobId, String jobTitle, JobStatus jobStatus,
+                                     UUID jobId, String postingTitle, JobStatus jobStatus,
                                      UUID companyId, String companyName, UUID assignmentId) {
 }

@@ -40,7 +40,7 @@ public interface JobApplicationMapper {
 
     @Mapping(target = "applicant", source = "user")
     @Mapping(target = "jobId", source = "job.id")
-    @Mapping(target = "jobTitle", source = "job.title")
+    @Mapping(target = "postingTitle", source = "job.title")
     @Mapping(target = "jobStatus", source = "job.status")
     @Mapping(target = "companyId", source = "job.company.id")
     @Mapping(target = "companyName", source = "job.company.name")

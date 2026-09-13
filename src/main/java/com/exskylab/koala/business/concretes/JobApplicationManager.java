@@ -40,10 +40,7 @@ public class JobApplicationManager implements JobApplicationService {
             java.util.EnumSet.of(AssignmentStatus.PENDING_CONFIRMATION, AssignmentStatus.CONFIRMED,
                     AssignmentStatus.IN_PROGRESS);
 
-    private static final java.util.Set<String> MY_APPLICATIONS_SORTABLE =
-            java.util.Set.of("applicationDateTime", "answeredDateTime", "status");
-
-    private static final java.util.Set<String> RECEIVED_APPLICATIONS_SORTABLE =
+    private static final java.util.Set<String> APPLICATION_SORTABLE =
             java.util.Set.of("applicationDateTime", "answeredDateTime", "status");
 
     private static final Sort RECEIVED_TIE_BREAKER = Sort.by(Sort.Direction.DESC, "id");
@@ -336,8 +333,8 @@ public class JobApplicationManager implements JobApplicationService {
     @Override
     @Transactional(readOnly = true)
     public PageDto<MyApplicationDto> getMyApplications(ApplicationStatus status, Pageable requested) {
-        pageableSanitizer.rejectUnknownSort(requested, MY_APPLICATIONS_SORTABLE);
-        Pageable pageable = pageableSanitizer.sanitize(requested, MY_APPLICATIONS_SORTABLE,
+        pageableSanitizer.rejectUnknownSort(requested, APPLICATION_SORTABLE);
+        Pageable pageable = pageableSanitizer.sanitize(requested, APPLICATION_SORTABLE,
                 Sort.by(Sort.Direction.DESC, "applicationDateTime"));
 
         UUID userId = securityService.getAuthenticatedUserId();
@@ -361,8 +358,8 @@ public class JobApplicationManager implements JobApplicationService {
     @Transactional(readOnly = true)
     public PageDto<ReceivedApplicationDto> getReceivedApplications(ApplicationStatus status, UUID jobId,
                                                                    UUID companyId, Pageable requested) {
-        pageableSanitizer.rejectUnknownSort(requested, RECEIVED_APPLICATIONS_SORTABLE);
-        Pageable pageable = pageableSanitizer.sanitize(requested, RECEIVED_APPLICATIONS_SORTABLE, Sort.unsorted());
+        pageableSanitizer.rejectUnknownSort(requested, APPLICATION_SORTABLE);
+        Pageable pageable = pageableSanitizer.sanitize(requested, APPLICATION_SORTABLE, Sort.unsorted());
 
         UUID viewerId = securityService.getAuthenticatedUserId();
         List<UUID> companyIds = companyContactService.getCompanyIdsOfContact(viewerId);

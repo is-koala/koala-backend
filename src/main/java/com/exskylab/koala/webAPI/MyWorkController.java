@@ -85,7 +85,8 @@ public class MyWorkController {
     }
 
     @Operation(summary = "Başvurularım",
-            description = "status parametresiyle süzülebilir. Sayfalıdır.")
+            description = "Gönderdiğiniz başvurular; status parametresiyle süzülebilir. Sayfalıdır. "
+                    + "İlanlarınıza gelen başvurular için GET /users/me/received-applications kullanılır.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Başvurular listelendi"),
             @ApiResponse(responseCode = "400", description = "Sıralama alanı desteklenmiyor",

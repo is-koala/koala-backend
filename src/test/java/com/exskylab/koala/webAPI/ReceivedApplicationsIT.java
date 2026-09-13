@@ -299,7 +299,7 @@ class ReceivedApplicationsIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.content[0].applicationDateTime").exists())
                 .andExpect(jsonPath("$.data.content[0].answeredDateTime").value((Object) null))
                 .andExpect(jsonPath("$.data.content[0].jobId").value(jobC1.toString()))
-                .andExpect(jsonPath("$.data.content[0].jobTitle").value("Sirket X C1"))
+                .andExpect(jsonPath("$.data.content[0].postingTitle").value("Sirket X C1"))
                 .andExpect(jsonPath("$.data.content[0].jobStatus").value("OPEN"))
                 .andExpect(jsonPath("$.data.content[0].companyId").value(companyX.toString()))
                 .andExpect(jsonPath("$.data.content[0].companyName").value("Sirket X"))
