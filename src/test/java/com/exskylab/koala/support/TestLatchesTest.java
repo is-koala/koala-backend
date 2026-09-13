@@ -62,11 +62,13 @@ class TestLatchesTest {
     }
 
     @Test
-    void ciWorkflowPassesAWiderBudget() throws Exception {
-        String workflow = Files.readString(Path.of(".github", "workflows", "ci.yml"));
+    void localVerifyPassesAWiderBudget() throws Exception {
+        String localVerify = Files.readString(Path.of(".cursor", "rules", "local-verify.mdc"));
+        String claude = Files.readString(Path.of("CLAUDE.md"));
         assertTrue(
-                workflow.contains("-Dkoala.test.latch-timeout="),
-                "Pi verify must pass -Dkoala.test.latch-timeout so 5s progress awaits do not flake");
+                localVerify.contains("-Dkoala.test.latch-timeout=30")
+                        && claude.contains("-Dkoala.test.latch-timeout=30"),
+                "Mac verify must pass -Dkoala.test.latch-timeout so 5s progress awaits do not flake");
     }
 
     @Test

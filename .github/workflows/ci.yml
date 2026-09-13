@@ -1,139 +1,22 @@
 name: koala ci
 
-# push: [main] üzerindeki test tekrarı kaldırıldı (is-koala/koala-backend#91).
-# PR yeşil olmadan birleşmiyor; birleşen commit'i Pi'de bir kez daha
-# `./mvnw verify` etmek, birkaç dakika önce geçmiş zinciri ikinci kez
-# koşturup diğer depoların kuyruğunu tıkıyordu. main ve etiket push'u
-# yalnız imaj basıyor — dağıtım hâlâ o imaja bağlı.
-#
-# workflow_dispatch, birleştirme sonucunu elle doğrulamak için duruyor.
+# Verify and the GHCR image run on Yusuf's Mac. GitHub only curls the
+# Dokploy webhook after a v* tag, and only after that image is already on
+# GHCR. ubuntu-latest is seconds of hosted minutes, not a runner queue.
 on:
   push:
-    branches: [main]
     tags: ['v*']
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
-# Aynı PR'a arka arkaya push atılırsa önceki çalışmayı iptal et.
-# main iptal edilmiyor: imaj basımı yarıda kesilmesin.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 jobs:
-  test:
-    name: test
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-    runs-on: self-hosted
-    # Pi tek işçi; takılan bir verify diğer depoların kuyruğunu sonsuza
-    # kilitlemesin. Ölçülen PR verify ~12–24 dk; kuyruk süresi buna dahil değil.
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '25'
-          cache: maven
-
-      - name: Run tests
-        run: ./mvnw -B verify -Dkoala.test.latch-timeout=30
-
-      # Kota dolduğunda CreateArtifact kırmızısı verify yeşilini eziyordu.
-      # Kapı Surefire/Failsafe çıkış kodu; rapor yüklemesi isteğe bağlı.
-      # JaCoCo HTML sitesi kota tüketicisiydi, XML raporları yeter.
-      - name: Publish test report
-        if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-results
-          path: |
-            target/surefire-reports/
-            target/failsafe-reports/
-          if-no-files-found: ignore
-          retention-days: 3
-
-  build:
-    name: build and push
-    # PR zaten test işinde doğrulandı; main/etiket push'unda verify
-    # tekrarlanmıyor (#91). needs: test olsaydı atlanan test işi imaj
-    # basımını da atlatırdı.
-    if: github.event_name == 'push'
-    runs-on: self-hosted
-    # QEMU amd64 basımı ölçülen ~21 dk; 2 saatlik duvar saati kuyruktan.
-    timeout-minutes: 60
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Resolve version
-        id: version
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
-          else
-            echo "VERSION=main-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          fi
-
-      # Çalışma katmanındaki iki kabuk komutu hedef mimaride koşuyor; runner ARM64,
-      # hedef amd64 olduğu için emülasyon gerekiyor. Maven derlemesi bunun dışında.
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          # Dağıtım hedefi amd64 (Hetzner x86_64); runner ise ARM64 bir Pi.
-          # Platform verilmediğinde imaj runner'ın mimarisinde basılıyordu ve
-          # hedefte "no matching manifest" ile hiç açılmazdı.
-          #
-          # TEK platform, bilinçli: iki platform basıldığında ortaya bir OCI
-          # indeksi çıkıyor ve GHCR o indeksin alt manifest'lerini servis
-          # etmedi — Dokploy `latest`i çözebildi ama içindeki
-          # sha256:2aada4...'ı 404 aldı ve imajı hiç çekemedi. Tek platformda
-          # indeks hiç oluşmuyor, etiket doğrudan tek manifest'i gösteriyor.
-          # ARM bir sunucuya geçilirse buraya linux/arm64 yazılır; ikisi
-          # birden gerekiyorsa önce o çözülmeli.
-          platforms: linux/amd64
-          # Attestation kapalı, bilinçli: build-push-action provenance'ı
-          # varsayılan olarak üretiyor ve attestation ayrı bir manifest olarak
-          # indeksin içine giriyor. Yani tek platformda bile indeks oluşmak
-          # zorunda kalıyor — indeksin taşıması gereken iki şey var. GHCR o
-          # indeksin alt manifest'lerini servis etmedi ve Dokploy imajı hiç
-          # çekemedi. Kapatınca tek platformda düz manifest basılıyor: etiket
-          # doğrudan imajı gösteriyor, çözülecek ikinci katman kalmıyor.
-          provenance: false
-          sbom: false
-          push: true
-          cache-from: type=gha
-          # ignore-error: GHA cache/artifact kotası dolduğunda imaj yine
-          # basılsın. Kota CreateArtifact uyarısı imajı kırmızıya çekmesin.
-          cache-to: type=gha,mode=max,ignore-error=true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/koala:${{ steps.version.outputs.VERSION }}
-            ${{ startsWith(github.ref, 'refs/tags/v') && format('ghcr.io/{0}/koala:latest', github.repository_owner) || '' }}
-
   deploy:
     name: deploy
-    needs: build
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Trigger Dokploy deploy

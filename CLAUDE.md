@@ -18,6 +18,7 @@ Bu dosya projeyi konu konu anlatır: mimari, alınmış kararlar ve gerekçeleri
 - Koda **yorum satırı yazma** (bkz. §1). Gerekçe buraya yazılır.
 - Her değişiklikten sonra test yazılır; düzeltmeden **önce** kırmızıya döndüğü görülür.
 - Ana kodda imza değiştirdiysen `rm -rf target/test-classes` — Maven bayat test sınıfını yeniden derlemez, `NoSuchMethodError` alırsın.
+- Ajanın kapısı bu Mac: Docker, Temurin 25, `./mvnw verify -Dkoala.test.latch-timeout=30`. GitHub kuyruğunu bekleme. Mac org runner değil. Üretim imajı `scripts/publish-ghcr-image.sh --latest`. GitHub yalnız `v*` etikette `ubuntu-latest` ile Dokploy webhook atar.
 
 **Prod durumu (30.08.2026):** Dokploy üzerinde Postgres 17, RabbitMQ ve uygulama ayakta. `api.iskoala.com`. Son etiket `v0.4.9` — kimlik doğrulama, SMS/push tüketicileri, sürüm kapısı ve çip doğrulaması dahil. Ayrıntı §9'da.
 
@@ -3675,20 +3676,15 @@ cp .env.example .env
 
 ## 6. Deployment ve sürümleme
 
-`.github/workflows/ci.yml` üç aşamalı; self-hosted Raspberry Pi üzerinde koşar
-(is-koala/koala-backend#91). Pi bakımı `docs/runbooks/self-hosted-runner.md`.
+Doğrulama ve GHCR imajı Yusuf'un Mac'inde. GitHub Actions `./mvnw verify`
+koşmaz ve imaj basmaz. `v*` etikette tek iş `ubuntu-latest` üzerinde Dokploy
+webhook'udur. Sıra `docs/runbooks/self-hosted-runner.md`.
 
-1. **test** — yalnız `pull_request` ve `workflow_dispatch` üzerinde `./mvnw verify`.
-   `main` push'unda tekrarlanmaz (#174): aynı commit PR'da zaten geçti, ikinci
-   verify diğer depoların kuyruğunu tıkıyordu. Artifact kotası dolduğunda rapor
-   yüklemesi işi kırmızıya çekmez; kapı Maven çıkış kodudur. JaCoCo HTML sitesi
-   yüklenmez.
-2. **build** — `push` (main ve `v*` etiket) üzerinde GHCR'ye imaj basar.
-   `needs: test` yok; atlanan test işi imajı da atlatmasın diye. Kota dolduğunda
-   GHA cache yazımı yok sayılır, imaj yine basılır.
-3. **deploy** — yalnızca `v*` tag'inde Dokploy webhook'unu tetikler.
+1. **verify** — `./mvnw verify -Dkoala.test.latch-timeout=30` (Docker, Temurin 25).
+2. **image** — `scripts/publish-ghcr-image.sh --latest` → `ghcr.io/yustyy/koala:<pom>` ve `:latest`, tek `linux/amd64` manifest (`provenance`/`sbom` kapalı).
+3. **deploy** — annotated `v*` etiket push'u GitHub'dan webhook atar. İmaj GHCR'de yokken etiket basılmaz.
 
-Sürümleme: `v1.2.3` tag'i → `ghcr.io/<owner>/koala:1.2.3` ve `:latest`. main'e push → `ghcr.io/<owner>/koala:main-<sha7>`, `latest` etiketi güncellenmez. Maven `pom.xml` sürümü git tag'iyle aynı semver'dir (`0.9.13` ↔ `v0.9.13`); `build-info` ve `info.app.version` / ECS `SERVICE_VERSION` (boşsa) buradan okunur. Dokploy'da `SERVICE_VERSION` hâlâ `0.0.1` ise o satır imaj varsayılanını ezer — boşaltın veya tag'le eşleyin.
+Sürümleme: `v1.2.3` tag'i Dokploy'un çektiği `:latest` ile aynı digest'i varsayar. `main` push imaj basmaz. Maven `pom.xml` sürümü git tag'iyle aynı semver'dir (`0.9.14` ↔ `v0.9.14`); `build-info` ve `info.app.version` / ECS `SERVICE_VERSION` (boşsa) buradan okunur. Dokploy'da `SERVICE_VERSION` hâlâ `0.0.1` ise o satır imaj varsayılanını ezer — boşaltın veya tag'le eşleyin.
 
 Uygulama root olmayan `koala` kullanıcısıyla, JRE tabanlı imajda çalışıyor. Sağlık kontrolü `/actuator/health/readiness` üzerinden; `/actuator/health/**` herkese açık, kalan actuator uçları ADMIN rolü istiyor.
 
@@ -3835,7 +3831,7 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 
 **Portlar dışarı açılmaz.** Ne 5432 ne 5672 ne 15672. Yönetim arayüzüne SSH tüneliyle bakılır.
 
-**Sürümleme etiketle.** `v1.2.3` → `ghcr.io/<owner>/koala:1.2.3` ve `:latest`; Dokploy `:latest` çeker, CI `deploy` job'ı webhook'u tetikler. main'e push yalnızca `main-<sha7>` üretir, `latest`'i güncellemez.
+**Sürümleme etiketle.** Mac `ghcr.io/yustyy/koala:1.2.3` ve `:latest` basar; `v1.2.3` push'u Dokploy webhook'unu tetikler. `main` push imaj basmaz.
 
 **İlk production geçişi deploy değildir.** `docs/runbooks/launch-cutover.md`, mevcut
 pre-production kaynaklarını temiz production'a çeviren bir defalık insan yordamıdır;
