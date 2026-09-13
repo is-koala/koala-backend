@@ -26,6 +26,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.mock.web.MockMultipartFile;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Optional;
@@ -191,6 +194,22 @@ class IdentityDocumentReviewRulesTest {
         assertEquals("TC_IDENTITY_NUMBER_ALREADY_IN_USE", thrown.getErrorCode());
         assertFalse(current.isIdentityVerified());
         verify(userService, never()).save(any());
+    }
+
+    @Test
+    void rejectionReasonBlanknessIsNotRecheckedInTheManager() throws Exception {
+        String source = Files.readString(
+                Path.of("src/main/java/com/exskylab/koala/business/concretes/IdentityVerificationManager.java"),
+                StandardCharsets.UTF_8);
+        int start = source.indexOf("public IdentityVerification reject(");
+        int end = source.indexOf("\n    @Override", start + 1);
+
+        assertTrue(start >= 0, "reject metodu bulunamadi");
+        String reject = source.substring(start, end);
+        assertFalse(reject.contains("isBlank()"),
+                "Red gerekcesi DTO @NotBlank ile kapanir; manager ikinci bir null/blank kapisi tasiyamaz.");
+        assertFalse(reject.contains("reason == null"),
+                "Red gerekcesi DTO @NotBlank ile kapanir; manager ikinci bir null/blank kapisi tasiyamaz.");
     }
 
     @Test

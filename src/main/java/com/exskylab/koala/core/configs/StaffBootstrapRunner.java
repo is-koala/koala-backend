@@ -34,16 +34,16 @@ public class StaffBootstrapRunner implements ApplicationRunner {
                     staffAccountService.bootstrapOwner(email, properties.getOwnerPassword());
 
             if (result.created()) {
-                log.info("BOOTSTRAP_OWNER_EMAIL ile ilk OWNER personeli yaratıldı: {}. "
-                                + "Parola ilk girişte değiştirilecek; BOOTSTRAP_OWNER_PASSWORD artık silinmelidir.",
+                log.info("First OWNER staff member created via BOOTSTRAP_OWNER_EMAIL: {}. "
+                                + "Password must change on first login; BOOTSTRAP_OWNER_PASSWORD should now be removed.",
                         LogMasks.email(email));
             } else {
-                log.warn("Personel bootstrap atlandı, {} personel var: tablo boş değilken hiçbir kayıt "
-                                + "ezilmez. BOOTSTRAP_OWNER_EMAIL ve BOOTSTRAP_OWNER_PASSWORD kaldırılmalıdır.",
+                log.warn("Staff bootstrap skipped, {} staff members exist: no row is overwritten while the table "
+                                + "is not empty. BOOTSTRAP_OWNER_EMAIL and BOOTSTRAP_OWNER_PASSWORD should be removed.",
                         result.existingMembers());
             }
         } catch (RuntimeException exception) {
-            log.error("Personel bootstrap çalıştırılamadı: {}", LogMasks.email(email), exception);
+            log.error("Staff bootstrap could not run: {}", LogMasks.email(email), exception);
         }
     }
 }

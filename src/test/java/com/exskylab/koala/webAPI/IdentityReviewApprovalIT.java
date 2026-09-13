@@ -168,6 +168,21 @@ class IdentityReviewApprovalIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
+    void aBlankRejectionReasonIsRefusedByTheRequestContract() throws Exception {
+        UUID reviewId = pendingReview(photo("selfie"), photo("front"), photo("back"), photo("together"));
+
+        mockMvc.perform(post("/admin/identity-verifications/" + reviewId + "/reject")
+                        .header("Authorization", "Bearer " + trustLeadToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"   \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.details[0].field").value("reason"));
+
+        assertStillPending(reviewId);
+    }
+
+    @Test
     void aLegacyTwoPhotoReviewCanStillBeRejected() throws Exception {
         UUID reviewId = pendingReview(null, photo("front"), photo("back"), null);
 

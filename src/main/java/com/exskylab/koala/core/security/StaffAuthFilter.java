@@ -61,7 +61,7 @@ public class StaffAuthFilter extends OncePerRequestFilter {
                     staffAccountService.principalOf(identity.staffId(), identity.tokenVersion());
 
             if (principal.isEmpty()) {
-                log.warn("Personel token'ı geçerli ama oturum artık tanınmıyor: staffId={}", identity.staffId());
+                log.warn("Staff token is valid but the session is no longer recognized: staffId={}", identity.staffId());
                 exceptionResolver.resolveException(request, response, null,
                         new UnauthorizedException(StaffMessages.SESSION_ENDED));
                 return;
@@ -73,7 +73,7 @@ public class StaffAuthFilter extends OncePerRequestFilter {
             LogContext.put(LogContext.USER_ID, staff.staffId());
 
         } catch (JwtException | IllegalArgumentException exception) {
-            log.warn("Personel token'ı doğrulanamadı: {}", exception.getMessage());
+            log.warn("Staff token could not be verified: {}", exception.getMessage());
             exceptionResolver.resolveException(request, response, null,
                     new UnauthorizedException(StaffMessages.TOKEN_INVALID));
             return;

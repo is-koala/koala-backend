@@ -14,6 +14,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class IdentityMessageSurfaceTest {
 
+    private static final String[] DOCUMENT_UPLOAD_KEYS = {
+            "identity.document.review.required",
+            "identity.documents.required",
+            "identity.documents.not.found"
+    };
+
+    private static final String FOUR_PHOTOS_TR =
+            "yüz, TCKK ön, TCKK arka ve TCKK yüzün altında";
+    private static final String FOUR_PHOTOS_EN =
+            "selfie, TCKK front, TCKK back and TCKK under the face";
+
     @Test
     void everyIdentityMessageKeyHasTurkishAndEnglishCopy() throws Exception {
         Properties tr = load("messages_tr.properties");
@@ -54,6 +65,21 @@ class IdentityMessageSurfaceTest {
             String value = tr.getProperty(key);
             assertTrue(tellsTheUserWhatToDo(value),
                     key + " kullaniciya sonraki adimi soylemiyor: " + value);
+        }
+    }
+
+    @Test
+    void documentUploadMessagesNameAllFourPhotosInBothCatalogues() throws IOException {
+        Properties tr = load("messages_tr.properties");
+        Properties en = load("messages_en.properties");
+
+        for (String key : DOCUMENT_UPLOAD_KEYS) {
+            String turkish = tr.getProperty(key);
+            String english = en.getProperty(key);
+            assertTrue(turkish.contains(FOUR_PHOTOS_TR),
+                    key + " TR dort fotografi adlandirmiyor: " + turkish);
+            assertTrue(english.contains(FOUR_PHOTOS_EN),
+                    key + " EN dort fotografi adlandirmiyor: " + english);
         }
     }
 

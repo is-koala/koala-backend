@@ -8,7 +8,9 @@ import com.exskylab.koala.core.dtos.address.request.ConfirmedPositionSource;
 import com.exskylab.koala.core.dtos.badge.request.SaveBadgeDto;
 import com.exskylab.koala.core.dtos.companyContact.request.InviteContactToCompanyDto;
 import com.exskylab.koala.core.dtos.education.request.SaveEducationDto;
+import com.exskylab.koala.core.constants.IdentityMessages;
 import com.exskylab.koala.core.dtos.experience.request.SaveExperienceDto;
+import com.exskylab.koala.core.dtos.identity.request.RejectIdentityReviewDto;
 import com.exskylab.koala.core.dtos.jobAlert.request.SaveJobAlertDto;
 import com.exskylab.koala.core.dtos.notificationPreference.request.NotificationPreferenceEntryDto;
 import com.exskylab.koala.core.dtos.notificationPreference.request.UpdateNotificationPreferencesDto;
@@ -208,6 +210,21 @@ class RequestValidationTest {
                 "Yalnizca bosluktan olusan gerekce de bos sayilmali.");
 
         blank.setNote("Hesap askiya alindi.");
+        assertTrue(isValid(blank));
+    }
+
+    @Test
+    void anIdentityReviewCannotBeRejectedWithoutAReason() {
+        RejectIdentityReviewDto blank = new RejectIdentityReviewDto();
+
+        assertTrue(messagesFor(blank).contains(IdentityMessages.REJECTION_REASON_REQUIRED),
+                "Red gerekcesi DTO'da zorunlu; manager ikinci bir null/blank kapisi tasiyamaz.");
+
+        blank.setReason("   ");
+        assertTrue(messagesFor(blank).contains(IdentityMessages.REJECTION_REASON_REQUIRED),
+                "Yalnizca bosluktan olusan gerekce de bos sayilmali.");
+
+        blank.setReason("Fotoğraflar okunaksız");
         assertTrue(isValid(blank));
     }
 
