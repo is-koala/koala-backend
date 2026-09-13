@@ -4,6 +4,7 @@ import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationDetail
 import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicantDto;
 import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationDto;
 import com.exskylab.koala.core.dtos.jobApplication.response.MyApplicationDto;
+import com.exskylab.koala.core.dtos.jobApplication.response.ReceivedApplicationDto;
 import com.exskylab.koala.core.helpers.MediaUrlResolver;
 import com.exskylab.koala.entities.JobApplication;
 import org.mapstruct.InjectionStrategy;
@@ -36,4 +37,13 @@ public interface JobApplicationMapper {
     MyApplicationDto toMyApplicationDto(JobApplication jobApplication);
 
     List<MyApplicationDto> toMyApplicationDtoList(List<JobApplication> jobApplications);
+
+    @Mapping(target = "applicant", source = "user")
+    @Mapping(target = "jobId", source = "job.id")
+    @Mapping(target = "postingTitle", source = "job.title")
+    @Mapping(target = "jobStatus", source = "job.status")
+    @Mapping(target = "companyId", source = "job.company.id")
+    @Mapping(target = "companyName", source = "job.company.name")
+    @Mapping(target = "assignmentId", source = "assignment.id")
+    ReceivedApplicationDto toReceivedApplicationDto(JobApplication jobApplication);
 }

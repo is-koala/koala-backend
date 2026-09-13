@@ -188,6 +188,7 @@ public class SecurityConfig {
                         //employer tool endpoints
                         .requestMatchers("/users/me/talent-pool/**", "/users/me/talent-pool").hasAnyRole("USER", "ADMIN")
                         .requestMatchers("/users/me/job-templates/**", "/users/me/job-templates").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/users/me/received-applications").hasAnyRole("USER", "ADMIN")
 
                         //storage endpoints
                         .requestMatchers(HttpMethod.GET, "/uploads/images/**").permitAll()

@@ -8,11 +8,14 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
+import com.exskylab.koala.business.abstracts.JobApplicationService;
 import com.exskylab.koala.business.abstracts.JobTemplateService;
 import com.exskylab.koala.business.abstracts.TalentPoolService;
+import com.exskylab.koala.core.constants.JobApplicationMessages;
 import com.exskylab.koala.core.constants.JobTemplateMessages;
 import com.exskylab.koala.core.constants.TalentPoolMessages;
 import com.exskylab.koala.core.dtos.common.PageDto;
+import com.exskylab.koala.core.dtos.jobApplication.response.ReceivedApplicationDto;
 import com.exskylab.koala.core.dtos.jobTemplate.request.CreateJobTemplateDto;
 import com.exskylab.koala.core.dtos.jobTemplate.response.JobTemplateDto;
 import com.exskylab.koala.core.dtos.talent.request.SaveTalentPoolEntryDto;
@@ -22,6 +25,7 @@ import com.exskylab.koala.core.mappers.TalentPoolMapper;
 import com.exskylab.koala.core.utilities.results.Result;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.core.utilities.results.SuccessResult;
+import com.exskylab.koala.entities.ApplicationStatus;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springdoc.core.annotations.ParameterObject;
@@ -33,22 +37,51 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.UUID;
 
-@Tag(name = "İşveren araçları", description = "Yetenek havuzu ve ilan şablonları.")
+@Tag(name = "İşveren araçları", description = "Yetenek havuzu, ilan şablonları ve gelen başvurular.")
 @RestController
 @RequestMapping("/users/me")
 public class EmployerToolsController {
 
     private final TalentPoolService talentPoolService;
     private final JobTemplateService jobTemplateService;
+    private final JobApplicationService jobApplicationService;
     private final TalentPoolMapper talentPoolMapper;
     private final JobTemplateMapper jobTemplateMapper;
 
     public EmployerToolsController(TalentPoolService talentPoolService, JobTemplateService jobTemplateService,
+                                   JobApplicationService jobApplicationService,
                                    TalentPoolMapper talentPoolMapper, JobTemplateMapper jobTemplateMapper) {
         this.talentPoolService = talentPoolService;
         this.jobTemplateService = jobTemplateService;
+        this.jobApplicationService = jobApplicationService;
         this.talentPoolMapper = talentPoolMapper;
         this.jobTemplateMapper = jobTemplateMapper;
+    }
+
+    @Operation(summary = "Gelen başvurular",
+            description = "Sahibi olduğunuz bireysel ilanlar ile yetkilisi olduğunuz şirketlerin ilanlarına gelen "
+                    + "başvuruları tek sayfalı gelen kutusunda listeler. Kapsam dışındaki bir ilan ya da şirket "
+                    + "kimliğiyle süzmek hata değil boş sayfa döndürür; var olmayan kimlikle aynı yanıttır. "
+                    + "Varsayılan sıra bekleyen (APPLIED) başvuruları öne alır, sonra başvuru tarihine göre "
+                    + "yeniden eskiye gider; eşitlikte kimlik azalan sıradadır. sort verildiğinde varsayılan "
+                    + "sıra tümüyle değişir; izin verilen alanlar applicationDateTime, answeredDateTime ve status. "
+                    + "Her satır başvuru inceleme ekranına bağlanmak için başvuru, ilan ve varsa şirket "
+                    + "kimliğini taşır. Gönderdiğiniz başvurular için GET /users/me/applications kullanılır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Başvurular listelendi"),
+            @ApiResponse(responseCode = "400", description = "Sıralama alanı desteklenmiyor ya da süzgeç değeri geçersiz",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @GetMapping("/received-applications")
+    public ResponseEntity<SuccessDataResult<PageDto<ReceivedApplicationDto>>> receivedApplications(
+            @RequestParam(required = false) ApplicationStatus status,
+            @RequestParam(required = false) UUID jobId,
+            @RequestParam(required = false) UUID companyId,
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
+
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                jobApplicationService.getReceivedApplications(status, jobId, companyId, pageable),
+                JobApplicationMessages.JOB_APPLICATIONS_RETRIEVED_SUCCESS, HttpStatus.OK));
     }
 
     @Operation(summary = "Yetenek havuzum")

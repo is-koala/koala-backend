@@ -56,6 +56,14 @@ public class CompanyContactManager implements CompanyContactService {
 
     @Override
     @Transactional(readOnly = true)
+    public java.util.List<UUID> getCompanyIdsOfContact(UUID userId) {
+        java.util.List<UUID> companyIds = companyContactDao.findCompanyIdsByUserId(userId);
+        log.debug("User {} is a contact of {} companies", userId, companyIds.size());
+        return companyIds;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public java.util.List<CompanyContact> getContactsOfCompany(UUID companyId) {
         return companyContactDao.findAllByCompanyId(companyId);
     }

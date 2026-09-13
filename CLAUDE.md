@@ -2356,6 +2356,101 @@ Sıkıştırma yalnızca Swagger için değil: `application/json` de kapsamda, y
 
 **`PUT/DELETE /companies/{companyId}/logo`** profil fotoğrafıyla aynı kalıpta; logo yalnızca şirket kurulurken verilebiliyordu, sonradan hiç değiştirilemiyordu.
 
+### Gelen başvurular — ilanlar arası gelen kutusu (#233)
+
+İşveren başvuruları yalnız ilan bazında (`GET /jobs/{jobId}/applications`) görebiliyordu; on ilanı olan
+işveren on ekran geziyordu. `GET /users/me/received-applications` sahibi olduğun bireysel ilanlar ile
+yetkilisi olduğun şirketlerin ilanlarına gelen başvuruları **tek sayfalı** listeliyor. Uç
+`EmployerToolsController`'da (`/users/me` altındaki işveren araçları), kuralı `SecurityConfig`'in "employer
+tool endpoints" bloğunda.
+
+**Ad neden `received-applications`.** `/users/me/applications` **gönderdiğin** başvurular (§2s); işverenin
+gelen kutusu onunla karıştırılamayacak bir ad taşımalı. `/users/me/jobs/applications` reddedildi: `/users/me/jobs`
+yalnız ilanı **açanın** listesi (`findAllByCreatorId`, §2ap), gelen kutusu ise açmadığın şirket ilanlarını da
+kapsıyor — iç içelik yalan söylerdi (§0b). Kardeşleri `saved-jobs`, `followed-companies`, `job-templates` ile
+aynı biçim. İki ucun OpenAPI açıklaması birbirine işaret ediyor (gönderilen ↔ gelen), Swagger'da yan yana duran
+iki "başvurular" ucu karıştırılmasın diye.
+
+**Kapsam yeni bir kural değil, başvuru uçlarının ilan başına kuralının sorgu hâli.** Başvuruyu gösteren ve
+cevaplayan uçlar (`getJobApplicationsByIdJobId`, `assertCurrentUserIsEmployerOf`) ilan tipine göre **tek** soru
+soruyor: şirket ilanında "şirketin yetkilisi misin", bireysel ilanda "ilanı sen mi açtın" — şirket ilanında
+yaratıcıya hiç bakılmıyor. Yetkili tanımı her yerde `CompanyContactService.isUserAContactOfCompany` =
+`company_contacts`'ta silinmemiş bir satır, rol ayrımı yok. "Sahibi **ya da** yetkilisi" diyen tek kural
+`JobManager.requireJobEditor` ve o ilanı **düzenlemeyi** yönetiyor, başvuruların görünürlüğünü değil. İlk sürüm
+gelen kutusunu ona göre yazmıştı ve ölçülen kusur şuydu: şirket ilanını açıp sonra `company_contacts`'tan
+çıkarılan kullanıcı gelen kutusunda o ilanın adaylarını görmeye devam ederken derin bağlantı verilen inceleme
+ekranı (`GET /jobs/{jobId}/applications`) 400, `respond` 404 veriyordu — aynı kaynak hakkında iki uç iki farklı
+şey söylüyordu (§2ap'nin kusur tanımı). Sayfalı sorgu bu yüzden ilan başına kuralı birebir taşıyor:
+`CompanyContactService.getCompanyIdsOfContact` (`CompanyContactDao.findCompanyIdsByUserId`) kullanıcının şirket
+kimliklerini **aynı entity** üzerinden veriyor — `@SQLRestriction` çıkarılmış yetkiliyi düşürüyor — ve
+`JobApplicationDao.RECEIVED_SCOPE` `(a.job.company is null and a.job.creator.id = :viewerId) or
+(a.job.company is not null and a.job.company.id in :companyIds)` diyor. Üyelik tanımı böylece `CompanyContact`
+aggregate'inde tek yerde kalıyor; `JobApplicationDao` `company_contacts`'ı hiç tanımıyor. Hiç şirketi olmayan
+kullanıcıda liste boş gidiyor ve Hibernate 7 boş `in` listesini `1=0` olarak çiziyor — varsayılmadı,
+`aStrangerSeesNothing` ile gerçek Postgres'te ölçüldü. Yüklemin biçimini
+`theScopePredicateGrantsCreatorsOnlyIndividualJobsAndContactsOnlyCompanyJobs` birim düzeyinde, davranışını
+`aFormerContactLosesTheCompanyJobHeOpenedAndKeepsHisIndividualJobs` gerçek Postgres'te sabitliyor: çıkarılmış
+yaratıcı bireysel ilanının adaylarını görür, açtığı şirket ilanınınkileri görmez ve aynı ilanda inceleme ekranı
+da onu reddeder; şirketin güncel yetkilisi o ilanı görür.
+
+**Kapsam dışı `jobId`/`companyId` süzgeci 404 değil boş sayfa döndürür ve var olmayan kimlikle aynı yanıttır.**
+Süzgeçler kapsam yükleminin **içinde** `and` ile bağlı; ayrı bir "bu ilan senin mi" dalı yok, dolayısıyla
+gizlenecek bir bit de yok (§2s2'nin liste ucu gerekçesi, §2d2). `aJobOutsideTheScopeIsIndistinguishableFromAJobThatDoesNotExist`
+iki gövdeyi `timeStamp`/`requestId` düşüldükten sonra birebir karşılaştırıyor. Şirket varlığı zaten herkese
+açık (§2ap) ama bu uçta onu doğrulayan bir dal açmak yalnız ikinci bir sorgu ve ikinci bir yanıt şekli katardı.
+
+**Varsayılan sıra bekleyenleri öne alır ve kararlıdır:** `APPLIED` önce, sonra `applicationDateTime desc`,
+eşitlikte `id desc`. Bu sıra `Sort` ile ifade edilemez (durum alfabetik sıralandığında `ACCEPTED` `APPLIED`'ın
+önüne geçer), o yüzden `findReceivedPendingFirst` `order by case when a.status = APPLIED then 0 else 1 end, …`
+taşıyor. İstemci `sort` verirse (`applicationDateTime`, `answeredDateTime`, `status` — `/users/me/applications`
+ile paylaşılan **tek** `APPLICATION_SORTABLE` sabiti; iki uç aynı entity'nin kolonlarını sıralıyor, küme ikiye
+kopyalanırsa biri sessizce genişler) varsayılan **tümüyle** yerini bırakıyor ve `findReceived`'e `id desc`
+eklenmiş sıra gidiyor; bilinmeyen alan 400 (`PageableSanitizer`, §2l). İki DAO metodu olmasının sebebi Spring
+Data: `@Query` zaten `order by` taşıyorsa `Pageable`'ın sırasını **onun arkasına** ekliyor, yani tek sorguda
+istemci sırası hep ikincil kalırdı. İki metot **tek** `RECEIVED_SCOPE` sabitini paylaşıyor — kapsam yüklemi iki
+yerde ayrışamaz (bu deponun baskın kusur sınıfı, §2ap `listJobs` gerekçesinin aynısı);
+`bothPageQueriesShareTheOneScopePredicate` bunu iki metodun `@Query` anotasyonundan okuyor.
+
+**Satır şekli `ReceivedApplicationDto`:** `id`, `status`, `applicationDateTime`, `answeredDateTime`, `notes`,
+`applicant` (`SafeUserDto` — `JobApplicantDto` ile aynı iç DTO, kişisel veri genişletilmedi), `jobId`,
+`postingTitle`, `jobStatus`, `companyId`/`companyName` (bireysel ilanda `null`), `assignmentId`. `jobId` + `id`
+mevcut başvuru inceleme ekranına, `companyId` şirket bağlamına derin bağlantı için (is-koala/koala-web#147).
+**İlan başlığı `jobTitle` değil `postingTitle`:** aynı ekranın kardeş DTO'su `JobApplicantDto.jobTitle` adayın
+**mesleğini** (`User.jobTitle`, §2m) taşıyor; iki DTO'da aynı ad iki farklı şey demek olurdu, istemci ikisini
+yan yana çiziyor. `cvUrl` bilerek yok: inceleme ekranı zaten veriyor ve gelen kutusu için `user.cv` join'i
+boşuna olurdu.
+
+**N+1 ölçüldü, varsayılmadı.** Graf `user`, `user.profilePicture`, `job`, `job.company`, `assignment`. Sonuncusu
+ilk sürümde yoktu ve `theNumberOfStatementsDoesNotGrowWithTheNumberOfRows` onu yakaladı: bir satırlık sayfa 5,
+beş satırlık sayfa 9 sorgu — `JobApplication.assignment` ters yönlü `@OneToOne(mappedBy)` olduğu için Hibernate
+null olup olmadığını öğrenmek üzere satır başına `job_assignments` okuyor (`findAllByJobId`'nin `assignment`
+taşımasının sebebi de bu). Şimdi ucun kendisi istek başına **üç** sorgu (üyelik kimlikleri, sayfa, sayım) ve
+satır sayısından bağımsız; Hibernate `Statistics`'in ölçtüğü sayı ise **dört**, çünkü `MinimumAppVersionFilter`
+her istekte bir `AppSetting` satırı okuyor (§2as) ve o da aynı `SessionFactory`'den geçiyor. İlk sürüm testi
+`<= 4` yazıp belgeye "üç" demişti — sayı eşitsizlikle değil ölçülen sabitle sabitlendi:
+`theNumberOfStatementsDoesNotGrowWithTheNumberOfRows` 1 ve 5 satırlık sayfayı karşılaştırıyor **ve** beş
+satırlık sayfada sayıyı `4`'e eşitliyor; mesajı dördün bileşimini adlandırıyor. Ön koşul: sayım sorgusu yalnız
+**dolu** sayfada koşar (Spring Data eksik ilk sayfada sayımı atlar), o yüzden iki istek de tam sayfa boyutu
+kadar satır döndürmeli — kurgu değişip sayfa eksik kalırsa ölçüm 3'e düşer ve test bunu "N+1 kapandı" diye
+değil eşitsizlik diye bildirir. `EagerFetchCoverageIT` muafiyeti: DTO şirketten yalnız kimlik ve ad çiziyor,
+`logo` gerekmiyor.
+
+**Sabitleyen testler.** `ReceivedApplicationsAuthorizationTest` (9) manager'ın ve yüklemin sözleşmesini tutuyor:
+kapsam yalnız oturum sahibi + `CompanyContactService`'in verdiği küme, yüklem yaratıcıya yalnız şirketsiz ilanı
+ve yetkili kümesine yalnız şirketli ilanı verir, iki sayfa sorgusu tek `RECEIVED_SCOPE`'u taşır, şirketsiz
+kullanıcı boş kümeyle gider, şirket süzgeci kapsamı genişletmez, süzgeçler sorguya değişmeden ulaşır, sortsuz
+istek bekleyen-önce sorgusuna sıralanmamış gider, istemci sırası tie-breaker alır, bilinmeyen sort sorgu koşmadan
+reddedilir. `ReceivedApplicationsIT` (19) gerçek Postgres'te: yaratıcı kendi bireysel ve (hâlâ yetkilisi olduğu)
+şirket ilanlarının hepsini görür, ilan açmamış yetkili şirketin başvurularını görür, **çıkarılmış yetkili**
+açtığı şirket ilanını kaybeder ve bireysel ilanlarını korur (inceleme ekranı da aynı ilanda onu reddeder),
+şirketin güncel yetkilisi çıkarılanın açtığı ilanı görür, yabancı hiçbir şey görmez, diğer işveren yalnız
+kendininkini görür, üç süzgeç ve bileşimi, kapsam dışı ilan/şirket süzgecinin bilinmeyenle özdeş boş sayfası,
+varsayılan sıra eşitlik dahil, istemci sırası iki yönde, bilinmeyen `status` değeri 400, bilinmeyen sort 400,
+sayfa üstverisi, satır alanları (e-posta ve telefon **yok**), ve sorgu sayısının satır sayısından bağımsızlığı.
+
+**`GET /jobs/{jobId}/applications`'ın 400/404 kusuru (§2ar3) buraya taşınmadı** — bu uç hiçbir dalda 404
+üretmiyor, gizlenecek bir varlık kararı yok.
+
 ## 2aq. Kimlik doğrulama — sunucu artık doğrulamıyor
 
 **NVİ KPS kapandı.** `https://tckimlik.nvi.gov.tr/service/kpspublicv2.asmx` bugün 302 ile hata sayfasına yönlendiriyor, o da 404. `RestTemplate` yönlendirmeyi takip ettiği için `postForObject` 404 HTML'ini string olarak döndürüyordu; içinde başarı işareti olmadığından `isVerified=false` çıkıyor ve **her kullanıcıya `IDENTITY_VERIFICATION_FAILED` (400)** dönüyordu.
@@ -2569,7 +2664,7 @@ KOALA_CHIP_DIR=/tmp/chip KOALA_CSCA_DIR=src/main/resources/csca ./mvnw test -Dte
 
 **`hasApplied` bilerek daraltılmadı.** O metot mesajlaşma kapısını besliyor (`MessagingManager.assertMayConverse`): "bu ilanla ilişkisi var mı?" sorusunun cevabı. Daraltılsaydı başvurusunu geri çeken kullanıcı ile işveren arasındaki mevcut sohbet aniden **403** dönerdi — oysa geri çekmenin sebebini konuşmak tam da o anda gerekiyor. İki kontrol farklı soruları soruyor: biri "şu an canlı bir başvurusu var mı", diğeri "bu ilana hiç dokundu mu".
 
-**`answeredDateTime` geri çekme anını da taşıyor.** Ayrı bir `withdrawnDateTime` kolonu açılmadı; alan başvurunun terminal duruma geçtiği anı ifade ediyor ve `MyApplicationDto` üzerinden zaten dönüyor. Yeni kolon migration gerektirir, sıralama kümesine (`MY_APPLICATIONS_SORTABLE`) ikinci bir zaman alanı sokar ve istemcide iki alanın hangisine bakılacağı sorusunu doğururdu.
+**`answeredDateTime` geri çekme anını da taşıyor.** Ayrı bir `withdrawnDateTime` kolonu açılmadı; alan başvurunun terminal duruma geçtiği anı ifade ediyor ve `MyApplicationDto` üzerinden zaten dönüyor. Yeni kolon migration gerektirir, sıralama kümesine (`APPLICATION_SORTABLE`, gelen kutusuyla paylaşılan) ikinci bir zaman alanı sokar ve istemcide iki alanın hangisine bakılacağı sorusunu doğururdu.
 
 **Migration gerekmedi.** `job_applications.status` `VARCHAR(255)` ve check constraint taşımıyor; enum'a değer eklemek şema değişikliği istemiyor.
 

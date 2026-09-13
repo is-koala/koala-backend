@@ -15,6 +15,8 @@ public interface CompanyContactService {
 
     boolean isUserAdminOfCompany(UUID companyId, UUID userId);
 
+    java.util.List<UUID> getCompanyIdsOfContact(UUID userId);
+
     java.util.List<CompanyContact> getContactsOfCompany(UUID companyId);
 
     java.util.Optional<CompanyContact> findContact(UUID companyId, UUID userId);
