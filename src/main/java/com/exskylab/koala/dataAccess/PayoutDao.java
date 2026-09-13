@@ -29,7 +29,7 @@ public interface PayoutDao extends JpaRepository<Payout, UUID> {
 
     Optional<Payout> findByJobAssignmentId(UUID jobAssignmentId);
 
-    @EntityGraph(attributePaths = {"jobAssignment"})
+    @EntityGraph(attributePaths = {"bankAccount"})
     Page<Payout> findAllByStatusIn(List<PayoutStatus> statuses, Pageable pageable);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

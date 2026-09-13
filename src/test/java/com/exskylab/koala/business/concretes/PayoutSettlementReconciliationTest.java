@@ -1,6 +1,7 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.ActivityNotificationService;
+import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.business.abstracts.PaymentService;
 import com.exskylab.koala.business.abstracts.SettlementService;
@@ -9,6 +10,7 @@ import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
+import com.exskylab.koala.core.mappers.PayoutMapper;
 import com.exskylab.koala.core.monitoring.PaymentMetrics;
 import com.exskylab.koala.dataAccess.DisputeDao;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
@@ -61,7 +63,8 @@ class PayoutSettlementReconciliationTest {
                 mock(JobAssignmentDao.class), mock(BankAccountService.class), mock(DisputeDao.class),
                 new PaymentStateMachine(), mock(SettlementService.class),
                 mock(ActivityNotificationService.class), new PaymentMetrics(registry),
-                Validation.buildDefaultValidatorFactory().getValidator());
+                Validation.buildDefaultValidatorFactory().getValidator(),
+                mock(UserService.class), mock(PayoutMapper.class));
 
         when(payoutDao.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }

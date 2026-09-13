@@ -27,7 +27,7 @@ class LogPrivacyTest {
                     Pattern.DOTALL);
 
     private static final List<String> FORBIDDEN_ARGUMENTS = List.of(
-            "getIban()", "getTcIdentityNumber()", "getPassword()", "getRefreshTokenHash()",
+            "getIban()", "getAccountHolderName()", "getTcIdentityNumber()", "getPassword()", "getRefreshTokenHash()",
             "getTcDocumentNumber()", "getSecretKey()", "getApiKey()", "getApiHash()",
             "getName()", "getFirstName()", "getLastName()", "getFullName()", "getMiddleName()",
             "getCompanyName()", "getContactName()", "getSenderName()", "getGrantedByName()",
@@ -50,7 +50,7 @@ class LogPrivacyTest {
     private static final List<String> PII_VARIABLE_NAMES = List.of(
             "email", "newEmail", "emailAttempted", "recipientEmail",
             "phoneNumber", "newPhoneNumber", "oldPhoneNumber", "destinationPhoneNumber",
-            "iban", "tcIdentityNumber", "password", "rawPassword", "to",
+            "iban", "accountHolderName", "tcIdentityNumber", "password", "rawPassword", "to",
             "firstName", "lastName", "fullName", "birthDate", "birthdate", "dateOfBirth",
             "verificationCode", "otpCode", "smsCode", "resetCode", "address");
 
