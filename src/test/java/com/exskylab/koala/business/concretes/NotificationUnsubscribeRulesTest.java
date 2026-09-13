@@ -20,6 +20,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -145,11 +146,15 @@ class NotificationUnsubscribeRulesTest {
     }
 
     @Test
-    void aLiveLinkResolvesToItsTarget() {
+    void aLiveLinkResolvesToItsTargetAndIsStampedAsUsed() {
         UnsubscribeToken live = tokenFor(Instant.now().plusSeconds(600));
         when(tokenDao.findByTokenDigest(any())).thenReturn(Optional.of(live));
+        Instant before = Instant.now();
 
         assertEquals(live, manager.consume(RAW_TOKEN));
+
+        assertNotNull(live.getLastUsedAt(), "canli baglanti kullanildi diye damgalanmali");
+        assertFalse(live.getLastUsedAt().isBefore(before));
     }
 
     @Test

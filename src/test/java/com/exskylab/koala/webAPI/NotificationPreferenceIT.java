@@ -173,6 +173,7 @@ class NotificationPreferenceIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.alreadyDisabled").value(false));
         commercialMessageConsentDao.flush();
         Instant firstUpdate = preferenceUpdatedAt(reader.getId());
+        Integer tasksAfterFirstClick = iysTaskCount(reader.getId());
 
         mockMvc.perform(unsubscribeWith(rawToken))
                 .andExpect(status().isOk())
@@ -190,6 +191,8 @@ class NotificationPreferenceIT extends AbstractIntegrationTest {
         assertEquals(firstUpdate, preferenceUpdatedAt(reader.getId()), "ikinci tik tercih satirini yeniden yazmamali");
         assertEquals(1, jdbcTemplate.queryForObject(
                 "select count(*) from notification_preferences where user_id = ?", Integer.class, reader.getId()));
+        assertEquals(tasksAfterFirstClick, iysTaskCount(reader.getId()),
+                "ikinci tik IYS kuyruguna yeni bir gorev acmamali");
         assertFalse(enabledFor(login("two-clicks@koala.test"), "NEWSLETTER", "EMAIL"));
     }
 
@@ -259,7 +262,7 @@ class NotificationPreferenceIT extends AbstractIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("NOTIFICATION_UNSUBSCRIBE_TOKEN_EXPIRED"))
                 .andExpect(jsonPath("$.message").value("This unsubscribe link has expired. "
-                        + "Use the link in a more recent e-mail or manage your preferences in the app."));
+                        + "Use the link in a more recent email or manage your preferences in the app."));
     }
 
     @Test
@@ -292,6 +295,11 @@ class NotificationPreferenceIT extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body(category, channel, true)))
                 .andExpect(status().isOk());
+    }
+
+    private Integer iysTaskCount(UUID userId) {
+        return jdbcTemplate.queryForObject(
+                "select count(*) from iys_consent_tasks where user_id = ?", Integer.class, userId);
     }
 
     private Instant preferenceUpdatedAt(UUID userId) {
