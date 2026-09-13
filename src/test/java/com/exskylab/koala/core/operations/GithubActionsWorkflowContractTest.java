@@ -33,16 +33,17 @@ class GithubActionsWorkflowContractTest {
 
         assertAll(
                 () -> assertEquals(Set.of("deploy"), jobs.keySet()),
-                () -> assertEquals("ubuntu-latest", deploy.get("runs-on")),
+                () -> assertEquals("self-hosted", deploy.get("runs-on")),
                 () -> assertEquals(5, deploy.get("timeout-minutes")),
                 () -> assertNull(deploy.get("needs")),
                 () -> assertEquals(
-                        "startsWith(github.ref, 'refs/tags/v')", deploy.get("if")),
+                        "startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'",
+                        deploy.get("if")),
                 () -> assertEquals(
                         "curl -fsSL -X POST \"${{ secrets.DOKPLOY_DEPLOY_WEBHOOK }}\"",
                         trigger.get("run")),
                 () -> assertEquals(List.of(), actionReferences()),
-                () -> assertFalse(workflow.contains("self-hosted")),
+                () -> assertFalse(workflow.contains("ubuntu-latest")),
                 () -> assertFalse(workflow.contains("pull_request:")),
                 () -> assertFalse(workflow.contains("branches: [main]")),
                 () -> assertTrue(workflow.contains("tags: ['v*']")),

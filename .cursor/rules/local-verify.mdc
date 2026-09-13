@@ -7,4 +7,4 @@ alwaysApply: true
 
 Ajanın kapısı Yusuf'un Mac'inde: Docker açık, Temurin 25, `./mvnw verify -Dkoala.test.latch-timeout=30`. GitHub kuyruğunu bekleme.
 
-Mac'i org GitHub Actions runner kaydetme. Üretim imajı bu makineden `scripts/publish-ghcr-image.sh --latest` ile `ghcr.io/yustyy/koala` altına `linux/amd64` (tek manifest, provenance/sbom kapalı) basılır. GitHub `v*` etikette yalnız `ubuntu-latest` ile Dokploy webhook atar; imajı yeniden derlemez.
+Mac'i org GitHub Actions runner kaydetme. Üretim imajı bu makineden `scripts/publish-ghcr-image.sh --latest` ile `ghcr.io/is-koala/koala` altına `linux/amd64` (tek manifest, provenance/sbom kapalı) basılır. GitHub `v*` etikette (veya workflow_dispatch) yalnız org self-hosted runner'da Dokploy webhook atar; imajı yeniden derlemez.

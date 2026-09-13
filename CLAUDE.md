@@ -18,7 +18,7 @@ Bu dosya projeyi konu konu anlatır: mimari, alınmış kararlar ve gerekçeleri
 - Koda **yorum satırı yazma** (bkz. §1). Gerekçe buraya yazılır.
 - Her değişiklikten sonra test yazılır; düzeltmeden **önce** kırmızıya döndüğü görülür.
 - Ana kodda imza değiştirdiysen `rm -rf target/test-classes` — Maven bayat test sınıfını yeniden derlemez, `NoSuchMethodError` alırsın.
-- Ajanın kapısı bu Mac: Docker, Temurin 25, `./mvnw verify -Dkoala.test.latch-timeout=30`. GitHub kuyruğunu bekleme. Mac org runner değil. Üretim imajı `scripts/publish-ghcr-image.sh --latest`. GitHub yalnız `v*` etikette `ubuntu-latest` ile Dokploy webhook atar.
+- Ajanın kapısı bu Mac: Docker, Temurin 25, `./mvnw verify -Dkoala.test.latch-timeout=30`. GitHub kuyruğunu bekleme. Mac org runner değil. Üretim imajı `scripts/publish-ghcr-image.sh --latest` → `ghcr.io/is-koala/koala`. GitHub yalnız `v*` etikette (veya workflow_dispatch) org self-hosted runner'da Dokploy webhook atar.
 
 **Prod durumu (30.08.2026):** Dokploy üzerinde Postgres 17, RabbitMQ ve uygulama ayakta. `api.iskoala.com`. Son etiket `v0.4.9` — kimlik doğrulama, SMS/push tüketicileri, sürüm kapısı ve çip doğrulaması dahil. Ayrıntı §9'da.
 
@@ -3677,11 +3677,12 @@ cp .env.example .env
 ## 6. Deployment ve sürümleme
 
 Doğrulama ve GHCR imajı Yusuf'un Mac'inde. GitHub Actions `./mvnw verify`
-koşmaz ve imaj basmaz. `v*` etikette tek iş `ubuntu-latest` üzerinde Dokploy
-webhook'udur. Sıra `docs/runbooks/self-hosted-runner.md`.
+koşmaz ve imaj basmaz. `v*` etikette (veya `workflow_dispatch`) tek iş org
+self-hosted runner üzerinde Dokploy webhook'udur. Sıra
+`docs/runbooks/self-hosted-runner.md`.
 
 1. **verify** — `./mvnw verify -Dkoala.test.latch-timeout=30` (Docker, Temurin 25).
-2. **image** — `scripts/publish-ghcr-image.sh --latest` → `ghcr.io/yustyy/koala:<pom>` ve `:latest`, tek `linux/amd64` manifest (`provenance`/`sbom` kapalı).
+2. **image** — `scripts/publish-ghcr-image.sh --latest` → `ghcr.io/is-koala/koala:<pom>` ve `:latest`, tek `linux/amd64` manifest (`provenance`/`sbom` kapalı).
 3. **deploy** — annotated `v*` etiket push'u GitHub'dan webhook atar. İmaj GHCR'de yokken etiket basılmaz.
 
 Sürümleme: `v1.2.3` tag'i Dokploy'un çektiği `:latest` ile aynı digest'i varsayar. `main` push imaj basmaz. Maven `pom.xml` sürümü git tag'iyle aynı semver'dir (`0.9.14` ↔ `v0.9.14`); `build-info` ve `info.app.version` / ECS `SERVICE_VERSION` (boşsa) buradan okunur. Dokploy'da `SERVICE_VERSION` hâlâ `0.0.1` ise o satır imaj varsayılanını ezer — boşaltın veya tag'le eşleyin.
@@ -3819,7 +3820,7 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 |---|---|---|
 | `koala-db` | Database → PostgreSQL | `postgres:17` |
 | `koala-rabbitmq` | Application → Docker | `rabbitmq:4.1.3-management` |
-| `koala-app` | Application → Docker | `ghcr.io/yustyy/koala:latest` |
+| `koala-app` | Application → Docker | `ghcr.io/is-koala/koala:latest` |
 
 **Postgres tuzağı — yaşandı.** Resmi imaj `POSTGRES_DB`'yi yalnızca veri dizini boşken oluşturur. Servis bir kez farklı bir adla ayağa kalktıysa sonradan adı değiştirmek env değişkenini değiştirir ama **volume'un içinde o veritabanını yaratmaz**; Dokploy'un bağlantı kutusu doğru adı gösterir, uygulama `FATAL: database ... does not exist` alır. Çözüm ya eksik veritabanını elle yaratmak ya volume'u silip yeniden ilkletmek.
 
@@ -3831,7 +3832,7 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 
 **Portlar dışarı açılmaz.** Ne 5432 ne 5672 ne 15672. Yönetim arayüzüne SSH tüneliyle bakılır.
 
-**Sürümleme etiketle.** Mac `ghcr.io/yustyy/koala:1.2.3` ve `:latest` basar; `v1.2.3` push'u Dokploy webhook'unu tetikler. `main` push imaj basmaz.
+**Sürümleme etiketle.** Mac `ghcr.io/is-koala/koala:1.2.3` ve `:latest` basar; `v1.2.3` push'u Dokploy webhook'unu tetikler. `main` push imaj basmaz.
 
 **İlk production geçişi deploy değildir.** `docs/runbooks/launch-cutover.md`, mevcut
 pre-production kaynaklarını temiz production'a çeviren bir defalık insan yordamıdır;
