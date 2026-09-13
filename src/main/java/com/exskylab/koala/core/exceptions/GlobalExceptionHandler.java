@@ -15,6 +15,7 @@ import io.jsonwebtoken.security.SignatureException;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
@@ -155,6 +156,7 @@ public class GlobalExceptionHandler {
     private ResponseEntity<Result> build(HttpStatus status, String message, String errorCode,
                                          ErrorCategory category, List<FieldError> details) {
         return ResponseEntity.status(status)
+                .contentType(MediaType.APPLICATION_JSON)
                 .body(new ErrorResult(messageResolver.resolve(message), status, errorCode, category)
                         .withDetails(details));
     }
