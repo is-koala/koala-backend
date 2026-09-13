@@ -153,6 +153,17 @@ class RateLimitBucketTest {
     }
 
     @Test
+    void theCallbackReplayOverGetDrainsTheSameAllowanceAsTheProviderPost() throws Exception {
+        properties.getWrite().setMaxAttempts(3);
+
+        assertEquals(2, passing("POST", "/payments/callback", "10.0.0.15", 2));
+        assertEquals(1, passing("GET", "/payments/callback", "10.0.0.15", 3),
+                "GET /payments/callback POST ile ayni WRITE kovasindan saymali (#252)");
+        assertEquals(200, passing("GET", "/payments/other", "10.0.0.15", 200),
+                "diger GET'ler sinirsiz kalmali");
+    }
+
+    @Test
     void everyWriteEndpointIsCoveredEvenIfNobodyListedIt() throws Exception {
         properties.getWrite().setMaxAttempts(2);
 

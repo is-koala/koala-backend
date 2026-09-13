@@ -70,23 +70,40 @@ public class PaymentsController {
 
     @SecurityRequirements
     @Operation(summary = "Iyzico geri dönüşü",
-            description = "Gövdeye güvenilmez: yalnızca token okunur ve sonuç sunucudan sunucuya sağlayıcıya sorulur. Bu yüzden imza doğrulaması uygulanmaz. İdempotanttır; zaten başarılı bir ödemeye ikinci callback gelirse sağlayıcıya hiç gidilmez ve kayıt değişmez.")
+            description = "Gövdeye güvenilmez: yalnızca token okunur ve sonuç sunucudan sunucuya sağlayıcıya sorulur. Bu yüzden imza doğrulaması uygulanmaz. İdempotanttır; zaten başarılı bir ödemeye ikinci callback gelirse sağlayıcıya hiç gidilmez ve kayıt değişmez. Tarayıcı üst düzey form gönderimi olarak geldiği için uç CORS filtresinin dışındadır.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Geri dönüş işlendi"),
+            @ApiResponse(responseCode = "302", description = "Sonuç sayfasına yönlendirildi"),
             @ApiResponse(responseCode = "404", description = "Bu token ile ödeme kaydı bulunamadı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping("/payments/callback")
     public RedirectView handleProviderCallback(@RequestParam("token") String token) {
-        log.info("Payment callback received.");
+        log.info("Payment callback received over POST.");
 
         Payment payment = paymentService.completeFromCallback(token);
-        boolean succeeded = payment.getStatus() == PaymentAttemptStatus.SUCCEEDED;
 
-        String target = paymentReturnUrlBuilder.resultUrl(
-                succeeded, payment.getJobAssignment().getId());
+        return redirectToResult(payment.getStatus(), payment.getJobAssignment().getId());
+    }
 
-        return new RedirectView(target);
+    @SecurityRequirements
+    @Operation(summary = "Iyzico geri dönüşünün sonucu",
+            description = "Sonuç sayfası yenilendiğinde ya da tarayıcı geri dönüş POST'unu GET'e çevirdiğinde kullanılır. Token tüketilmez ve sağlayıcıya gidilmez; kaydın son durumuna göre aynı sonuç sayfasına yönlendirir. Bilinmeyen token da aynı sayfaya başarısız sonuçla yönlendirilir.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "302", description = "Sonuç sayfasına yönlendirildi")
+    })
+    @GetMapping("/payments/callback")
+    public RedirectView showProviderCallbackOutcome(@RequestParam("token") String token) {
+        log.info("Payment callback received over GET; replaying the recorded outcome without contacting the provider.");
+
+        return paymentService.findRecordedOutcome(token)
+                .map(outcome -> redirectToResult(outcome.status(), outcome.jobAssignmentId()))
+                .orElseGet(() -> new RedirectView(paymentReturnUrlBuilder.unknownAttemptResultUrl()));
+    }
+
+    private RedirectView redirectToResult(PaymentAttemptStatus status, UUID assignmentId) {
+        boolean succeeded = status == PaymentAttemptStatus.SUCCEEDED;
+
+        return new RedirectView(paymentReturnUrlBuilder.resultUrl(succeeded, assignmentId));
     }
 
     @Operation(summary = "Atamanın ödeme denemeleri",

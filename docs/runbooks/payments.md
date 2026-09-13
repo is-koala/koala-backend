@@ -232,7 +232,11 @@ Bu satırı görmek olay değil.
 
 Tanımadığı token ile gelen callback 404 döner (`{payment.not.found}`) ve hiçbir
 şey yapmaz. `POST /payments/callback` `SecurityConfig` içinde bilerek
-`permitAll`. Callback isteğinin imzası yoktur; callback'ten sonra çağrılan
+`permitAll` ve `CorsConfig`'te CORS işlemesinin dışında (tarayıcı Iyzico
+kaynağından üst düzey form POST'u yapar, #252). `GET /payments/callback` sayfa
+yenilemesi içindir: sağlayıcıya gitmez, kaydın son durumuna göre sonuç sayfasına
+yönlendirir; bilinmeyen token `status=failed` ile aynı sayfaya gider. Günlükte
+kanal (`over POST` / `over GET`) yazar, token yazmaz. Callback isteğinin imzası yoktur; callback'ten sonra çağrılan
 Iyzico initialize/retrieve **yanıtlarının resmi response signature'ı** ve bütün
 snapshot alanları doğrulanır (§2k/§2x). Callback yağmuru bir doğruluk sorunu
 değil, hız sınırı sorunudur.

@@ -3,10 +3,12 @@ package com.exskylab.koala.business.abstracts;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.Payment;
+import com.exskylab.koala.entities.PaymentAttemptStatus;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface PaymentService {
@@ -22,6 +24,8 @@ public interface PaymentService {
     void failInitiation(UUID paymentId);
 
     Payment completeFromCallback(String providerToken);
+
+    Optional<RecordedOutcome> findRecordedOutcome(String providerToken);
 
     List<UUID> findDueVerificationAttemptIds();
 
@@ -43,5 +47,8 @@ public interface PaymentService {
 
     record SucceededVolume(BigDecimal employerVolume, BigDecimal koalaFee,
                            BigDecimal workerPayout, long count) {
+    }
+
+    record RecordedOutcome(PaymentAttemptStatus status, UUID jobAssignmentId) {
     }
 }

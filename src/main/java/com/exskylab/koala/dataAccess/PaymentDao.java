@@ -25,6 +25,19 @@ public interface PaymentDao extends JpaRepository<Payment, UUID> {
     @Query("select p.jobAssignment.id from Payment p where p.id = :id")
     Optional<UUID> findJobAssignmentIdById(@Param("id") UUID id);
 
+    @Query("""
+            select p.status as status, p.jobAssignment.id as jobAssignmentId
+            from Payment p
+            where p.providerToken = :providerToken
+            """)
+    Optional<RecordedOutcomeView> findRecordedOutcomeByProviderToken(@Param("providerToken") String providerToken);
+
+    interface RecordedOutcomeView {
+        PaymentAttemptStatus getStatus();
+
+        UUID getJobAssignmentId();
+    }
+
     @EntityGraph(attributePaths = {"jobAssignment", "jobAssignment.worker", "jobAssignment.job"})
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<Payment> findByProviderToken(String providerToken);

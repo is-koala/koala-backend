@@ -14,6 +14,8 @@ import java.util.List;
 @Component
 public class CorsConfig {
 
+    private static final String PAYMENT_CALLBACK_PATH = "/payments/callback";
+
     private final CorsProperties corsProperties;
     private final RealtimeProperties realtimeProperties;
 
@@ -36,7 +38,13 @@ public class CorsConfig {
         source.registerCorsConfiguration("/**", config);
 
         return new CorsFilter(request ->
-                isRealtimeHandshake(request) ? null : source.getCorsConfiguration(request));
+                isRealtimeHandshake(request) || isPaymentCallback(request)
+                        ? null
+                        : source.getCorsConfiguration(request));
+    }
+
+    private boolean isPaymentCallback(HttpServletRequest request) {
+        return PAYMENT_CALLBACK_PATH.equals(request.getRequestURI());
     }
 
     private boolean isRealtimeHandshake(HttpServletRequest request) {

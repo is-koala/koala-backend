@@ -599,7 +599,7 @@ Gerekçe: (b) elle SQL yazmayı ortadan kaldırmıyor, yalnızca kopyalanacak bi
 | `REALTIME_CREDENTIAL` | WebSocket bağlantı credential'ı üretme | 10 / 1 dk | kova + IP |
 | `PUBLIC` | ilan listesi/detayı/görselleri ve adres ağ geçidi | 120 / 1 dk | kova + IP |
 | `SITEMAP` | sitemap manifesti ve en çok 50.000 satırlık shard projection'ı | 30 / 1 dk | kova + IP |
-| `WRITE` | **diğer tüm** POST/PUT/PATCH/DELETE | 60 / 1 dk | kova + IP |
+| `WRITE` | **diğer tüm** POST/PUT/PATCH/DELETE — ve tek okuma istisnası olarak `GET /payments/callback` (§2k) | 60 / 1 dk | kova + IP |
 
 **`WRITE` bilerek yakalayıcı.** Yeni bir yazma ucu eklendiğinde listeye yazılması gerekmez, kendiliğinden kapsanır — `SecurityConfig`'teki `anyRequest().authenticated()` ile aynı mantık: unutulan uç açıkta kalmaz.
 
@@ -608,7 +608,9 @@ Gerekçe: (b) elle SQL yazmayı ortadan kaldırmıyor, yalnızca kopyalanacak bi
 **Anahtar IP, kullanıcı değil.** `RateLimitFilter` güvenlik zincirinin dışında (`HIGHEST_PRECEDENCE + 20`) çalıştığı için o noktada principal henüz yok. Kullanıcı bazlı sınır istenirse filtrenin `SessionAuthFilter`'dan sonraya, güvenlik zincirinin içine taşınması gerekir.
 
 **Diğer okuma uçları sınırlanmıyor.** Genel ilan korpusu ve adres sağlayıcı ağ geçidi `PUBLIC`, sitemap
-projection'ı ondan bağımsız `SITEMAP` kovasındadır; kimlikli profil okumaları sınır dışıdır.
+projection'ı ondan bağımsız `SITEMAP` kovasındadır; kimlikli profil okumaları sınır dışıdır. Tek istisna
+`GET /payments/callback`: sağlayıcı dönüşünün tarayıcı yenilemesi olduğu için POST ile aynı `WRITE` kovasından
+sayılır (§2k), yoksa anonim bir GET ile ödeme kaydı okuma yolu sınırsız kalırdı.
 
 Aşıldığında 429 ve `TOO_MANY_REQUESTS` döner.
 
@@ -675,6 +677,8 @@ Testlerde `rate-limit.enabled=false`; açıkça test eden sınıflar `@TestPrope
 **Belirsiz doğrulama başarısızlık değildir.** Retrieve ağ/HTTP/imza hatası veya imzalı yanıttaki immutable snapshot uyuşmazlığı `FAILED` yapılıp yeni ödeme açmaz; `VERIFY_PENDING` durumunda aktif kalır. Token'ı olan satırlar `PaymentVerificationScheduler` tarafından üstel geri çekilmeyle en çok 8 kez yeniden sorulur. Otomatik tavan dolunca satır aktif kalır, `next_verification_at=null` olur ve manuel mutabakat bekler. `IN_REVIEW` aynı döngüyle tekrar sorgulanır.
 
 **Callback idempotent.** Zaten `SUCCEEDED` olan bir ödemeye ikinci callback geldiğinde sağlayıcıya hiç gidilmez, kayıt değiştirilmez. Iyzico aynı callback'i tekrar gönderirse ikinci kez para hareketi işlenmez.
+
+**Callback CORS filtresinin dışındadır ve GET karşılığı vardır (#252).** Iyzico ödeme formu bitince tarayıcıyı `Origin: https://sandbox-api.iyzipay.com` (canlıda `api.iyzipay.com`) başlığıyla **üst düzey form POST**'una yönlendirir; Spring `CorsFilter` `Origin` taşıyan her isteği CORS isteği sayar ve izin listesinde olmayan kaynağı `403 Invalid CORS request` ile keser — `SecurityConfig`'in `permitAll` kuralına hiç gelinmiyordu, kullanıcı `api.iskoala.com` üzerinde beyaz sayfa görüyordu. `CorsConfig`, gerçek zamanlı el sıkışmada yaptığı gibi `/payments/callback` için yapılandırma döndürmez (`null`); CORS başlığı da yazılmaz, yol yalnızca filtrenin kapsamı dışında kalır. Iyzico izin listesine **eklenmedi**: sorun liste değil filtrenin kapsamıdır ve callback zaten sunucudan sunucuya doğrulanır (yukarısı). Sayfa yenilemesi ya da tarayıcının POST'u GET'e çevirmesi için `GET /payments/callback?token=` var: tokenı **tüketmez**, sağlayıcıya **gitmez**, atama kilidi almaz; `findRecordedOutcome` ile kaydın son durumunu okuyup aynı sonuç sayfasına 302 döner. Bilinmeyen token `status=failed` ile aynı sayfaya gider, `assignmentId` taşımaz (404/401 yok). Hız sınırında GET de POST ile aynı `WRITE` kovasından sayar; günlük satırı kanalı (POST/GET) söyler, token günlüğe yazılmaz. `CorsContractTest`, `RateLimitBucketTest`, `PaymentsControllerRedirectTest` ve `PaymentCallbackIT` (Iyzico `Origin` başlığıyla gerçek satır üzerinde) sabitler.
 
 **Durum geçişleri `PaymentStateMachine`'de.** Para yalnızca ileri gider: `PENDING_COLLECTION → HELD_IN_ESCROW → REFUNDED`. Başarısız deneme `FAILED`'a düşer ve yeniden denenebilir. Ödenmiş bir atama tekrar tahsilata açılamaz; geçersiz geçiş sessizce uygulanmaz, `IllegalStateException` fırlatır.
 

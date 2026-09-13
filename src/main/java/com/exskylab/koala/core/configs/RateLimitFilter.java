@@ -82,6 +82,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final PathPattern ADDRESS_REVERSE_PATH =
             PARSER.parse("/locations/address-candidates/reverse");
     private static final PathPattern SITEMAP_PATH = PARSER.parse("/sitemap/jobs/**");
+    private static final PathPattern PAYMENT_CALLBACK_PATH = PARSER.parse("/payments/callback");
 
     private static final List<PathPattern> PUBLIC_PATHS = List.of(
             PARSER.parse("/jobs"),
@@ -155,6 +156,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 || "GET".equals(request.getMethod())
                 && PUBLIC_PATHS.stream().anyMatch(pattern -> pattern.matches(container))) {
             return Bucket.PUBLIC;
+        }
+
+        if ("GET".equals(request.getMethod()) && PAYMENT_CALLBACK_PATH.matches(container)) {
+            return Bucket.WRITE;
         }
 
         if (!WRITE_METHODS.contains(request.getMethod())) {
