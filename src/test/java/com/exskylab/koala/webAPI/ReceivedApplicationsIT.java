@@ -26,7 +26,6 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -264,6 +263,13 @@ class ReceivedApplicationsIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void anUnknownStatusValueIsRejectedWith400() throws Exception {
+        inboxAs(employerA, INBOX + "?status=PENDING")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCategory").value("PARAMETER_MISSING"));
+    }
+
+    @Test
     void anUnknownSortFieldIsRejectedWith400() throws Exception {
         inboxAs(employerA, INBOX + "?sort=notes,asc")
                 .andExpect(status().isBadRequest())
@@ -339,7 +345,10 @@ class ReceivedApplicationsIT extends AbstractIntegrationTest {
 
             assertEquals(oneRow, fiveRows,
                     "bir satırlık sayfa " + oneRow + " sorgu, beş satırlık sayfa " + fiveRows + " sorgu attı");
-            assertTrue(fiveRows <= 4, "beş satırlık sayfa " + fiveRows + " sorgu attı; en fazla dört beklenir");
+            assertEquals(4, fiveRows, "beş satırlık sayfa " + fiveRows + " sorgu attı; dört beklenir: "
+                    + "sürüm kapısının istek başına AppSetting okuması + ucun üçü (üyelik kimlikleri, sayfa, "
+                    + "sayım). Sayım yalnız dolu sayfada koşar, bu yüzden iki istek de tam olarak sayfa "
+                    + "boyutu kadar satır döndürmeli");
         } finally {
             statistics.setStatisticsEnabled(wasEnabled);
         }
