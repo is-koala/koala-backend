@@ -52,10 +52,10 @@ public class StaffPayoutManager implements StaffPayoutService {
     private void requirePermission(StaffPrincipal actor, StaffPermission permission, UUID jobAssignmentId,
                                    BigDecimal amount, String reason) {
         if (actor == null || !actor.isRegistered() || !actor.holds(permission)) {
-            log.warn("Personel izni olmadan para hareketi reddedildi: izin={} atama={} tutar={} gerekçe={}",
+            log.warn("Money movement refused without staff permission: permission={} assignment={} amount={} reason={}",
                     permission.getCode(), jobAssignmentId,
-                    amount == null ? "emanetin tamamı" : amount,
-                    reason == null || reason.isBlank() ? "belirtilmedi" : reason);
+                    amount == null ? "full escrow" : amount,
+                    reason == null || reason.isBlank() ? "not specified" : reason);
             throw new ForbiddenException(StaffMessages.PERMISSION_DENIED);
         }
     }

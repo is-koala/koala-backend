@@ -134,9 +134,6 @@ public class IdentityVerificationManager implements IdentityDocumentReviewServic
     @Override
     @Transactional
     public IdentityVerification reject(StaffPrincipal actor, UUID reviewId, String reason) {
-        if (reason == null || reason.isBlank()) {
-            throw new ValidationException(IdentityMessages.REJECTION_REASON_REQUIRED);
-        }
         IdentityVerification review = lockedReview(reviewId);
         requireOpen(review);
         review.setRejectedAt(Instant.now());

@@ -46,7 +46,7 @@ public class StaffPermissionAuthorizationManager implements AuthorizationManager
         HttpServletRequest request = context.getRequest();
         RequiresPermission required = requiredBy(request);
         if (required == null) {
-            log.warn("Yetki anotasyonu olmayan yönetim isteği reddedildi: {} {}",
+            log.warn("Admin request without an authorization annotation was denied: {} {}",
                     request.getMethod(), request.getRequestURI());
             return DENIED;
         }
@@ -106,7 +106,7 @@ public class StaffPermissionAuthorizationManager implements AuthorizationManager
                     ? onMethod
                     : AnnotatedElementUtils.findMergedAnnotation(handler.getBeanType(), RequiresPermission.class);
         } catch (Exception exception) {
-            log.debug("Yönetim isteği bir handler'a bağlanamadı: {}", exception.getMessage());
+            log.debug("Admin request could not be bound to a handler: {}", exception.getMessage());
             return null;
         }
     }

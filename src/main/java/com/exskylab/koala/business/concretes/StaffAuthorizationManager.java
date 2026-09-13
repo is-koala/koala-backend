@@ -76,7 +76,7 @@ public class StaffAuthorizationManager implements StaffAuthorizationService {
         if (seeds.size() < roleCodes.size()) {
             Set<String> known = seeds.stream().map(StaffRole::getCode).collect(java.util.stream.Collectors.toSet());
             roleCodes.stream().filter(code -> !known.contains(code)).forEach(code ->
-                    log.warn("staff_member_roles içinde Koala'da karşılığı olmayan rol var, atlandı: {}", code));
+                    log.warn("staff_member_roles contains a role with no Koala counterpart, skipped: {}", code));
         }
 
         Set<UUID> closure = closureOf(seeds.stream().map(StaffRole::getId).collect(java.util.stream.Collectors.toSet()));
@@ -163,7 +163,7 @@ public class StaffAuthorizationManager implements StaffAuthorizationService {
         for (StaffRolePermission granted : staffRolePermissionDao.findAllByRoleIdIn(roleIds)) {
             StaffPermission permission = StaffPermission.fromCode(granted.getPermissionCode()).orElse(null);
             if (permission == null) {
-                log.warn("staff_role_permissions içinde tanınmayan izin kodu, atlandı: {}",
+                log.warn("staff_role_permissions contains an unrecognized permission code, skipped: {}",
                         granted.getPermissionCode());
                 continue;
             }
@@ -349,7 +349,7 @@ public class StaffAuthorizationManager implements StaffAuthorizationService {
         for (StaffRolePermission granted : staffRolePermissionDao.findAllByRoleIdIn(roleIds)) {
             StaffPermission permission = StaffPermission.fromCode(granted.getPermissionCode()).orElse(null);
             if (permission == null) {
-                log.warn("staff_role_permissions içinde tanınmayan izin kodu, atlandı: {}", granted.getPermissionCode());
+                log.warn("staff_role_permissions contains an unrecognized permission code, skipped: {}", granted.getPermissionCode());
                 continue;
             }
             permissions.add(permission);

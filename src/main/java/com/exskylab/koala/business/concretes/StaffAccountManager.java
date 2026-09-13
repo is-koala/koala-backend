@@ -97,7 +97,7 @@ public class StaffAccountManager implements StaffAccountService {
 
         if (member == null) {
             passwordEncoder.matches(rawPassword, ABSENT_ACCOUNT_HASH);
-            log.warn("Personel girişi reddedildi, kayıt yok: {}", LogMasks.email(email));
+            log.warn("Staff login refused, no account: {}", LogMasks.email(email));
             throw new UnauthorizedException(StaffMessages.LOGIN_FAILED);
         }
 
@@ -105,19 +105,19 @@ public class StaffAccountManager implements StaffAccountService {
 
         if (isLocked(member, now)) {
             passwordEncoder.matches(rawPassword, ABSENT_ACCOUNT_HASH);
-            log.warn("Personel girişi reddedildi, hesap kilitli: {} kilit={}",
+            log.warn("Staff login refused, account locked: {} lock={}",
                     LogMasks.email(member.getEmail()), member.getLockedUntil());
             throw new UnauthorizedException(StaffMessages.LOGIN_FAILED);
         }
 
         if (!passwordEncoder.matches(rawPassword, member.getPasswordHash())) {
             registerFailure(member, now);
-            log.warn("Personel girişi reddedildi, parola hatalı: {}", LogMasks.email(member.getEmail()));
+            log.warn("Staff login refused, wrong password: {}", LogMasks.email(member.getEmail()));
             throw new UnauthorizedException(StaffMessages.LOGIN_FAILED);
         }
 
         if (!member.isActive()) {
-            log.warn("Personel girişi reddedildi, hesap devre dışı: {}", LogMasks.email(member.getEmail()));
+            log.warn("Staff login refused, account disabled: {}", LogMasks.email(member.getEmail()));
             throw new UnauthorizedException(StaffMessages.LOGIN_FAILED);
         }
 
@@ -135,7 +135,7 @@ public class StaffAccountManager implements StaffAccountService {
         try {
             identity = jwtService.extractStaffIdentity(refreshToken, JwtService.STAFF_REFRESH_AUDIENCE);
         } catch (JwtException | IllegalArgumentException exception) {
-            log.warn("Personel yenileme token'ı doğrulanamadı: {}", exception.getMessage());
+            log.warn("Staff refresh token could not be verified: {}", exception.getMessage());
             throw new UnauthorizedException(StaffMessages.TOKEN_INVALID);
         }
 
@@ -178,7 +178,7 @@ public class StaffAccountManager implements StaffAccountService {
         if (attempts >= staffAuthProperties.getMaxFailedAttempts()) {
             member.setFailedLoginAttempts(0);
             member.setLockedUntil(now.plus(staffAuthProperties.getLockDuration()));
-            log.warn("Personel hesabı kilitlendi: {} deneme={} kilit={}",
+            log.warn("Staff account locked: {} attempts={} lock={}",
                     LogMasks.email(member.getEmail()), attempts, member.getLockedUntil());
         } else {
             member.setFailedLoginAttempts(attempts);
@@ -220,7 +220,7 @@ public class StaffAccountManager implements StaffAccountService {
         StaffMember member = memberById(actor.staffId());
 
         if (!passwordEncoder.matches(currentPassword, member.getPasswordHash())) {
-            log.warn("Personel parola değişikliği reddedildi, mevcut parola hatalı: {}",
+            log.warn("Staff password change refused, current password is wrong: {}",
                     LogMasks.email(member.getEmail()));
             throw new UnauthorizedException(StaffMessages.LOGIN_FAILED);
         }
@@ -356,7 +356,7 @@ public class StaffAccountManager implements StaffAccountService {
         member.setTokenVersion(member.getTokenVersion() + 1);
         staffMemberDao.save(member);
 
-        log.info("Personel parolası yönetici tarafından atandı: hedef={} aktör={}",
+        log.info("Staff password assigned by an administrator: target={} actor={}",
                 LogMasks.email(member.getEmail()), actor.staffId());
     }
 
