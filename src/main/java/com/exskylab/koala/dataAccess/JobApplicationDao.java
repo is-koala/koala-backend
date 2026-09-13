@@ -26,8 +26,6 @@ public interface JobApplicationDao extends JpaRepository<JobApplication, UUID> {
 
     String RECEIVED_COUNT = "select count(a)" + RECEIVED_SCOPE;
 
-    boolean existsByJobIdAndUserId(UUID jobId, UUID userId);
-
     boolean existsByJobIdAndUserIdAndStatusNot(UUID jobId, UUID userId, ApplicationStatus status);
 
     boolean existsByUserIdAndJobCreatorId(UUID userId, UUID creatorId);

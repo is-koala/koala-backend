@@ -1,6 +1,7 @@
 package com.exskylab.koala.core.dtos.jobAssignment.response;
 
 import com.exskylab.koala.entities.AssignmentStatus;
+import com.exskylab.koala.entities.MessagingAvailabilityReason;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -20,5 +21,9 @@ public class ShortJobAssignmentDto {
     private AssignmentStatus status;
 
     private Instant assignmentDateTime;
+
+    private boolean messagingAvailable;
+
+    private MessagingAvailabilityReason messagingAvailableReason;
 
 }

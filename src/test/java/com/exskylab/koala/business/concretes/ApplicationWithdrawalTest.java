@@ -41,7 +41,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -235,14 +234,6 @@ class ApplicationWithdrawalTest {
 
         assertEquals("JOB_APPLICATION_USER_ALREADY_APPLIED_TO_JOB", thrown.getErrorCode());
         verify(jobApplicationDao, never()).save(any());
-    }
-
-    @Test
-    void messagingStillSeesAWithdrawnApplicantAsSomeoneWhoApplied() {
-        when(jobApplicationDao.existsByJobIdAndUserId(eq(job.getId()), eq(applicant.getId())))
-                .thenReturn(true);
-
-        assertEquals(true, manager.hasApplied(job.getId(), applicant.getId()));
     }
 
     private JobApplication application(ApplicationStatus status) {

@@ -31,6 +31,7 @@ class UnpaidExpiryRulesTest {
     private JobAssignmentService jobAssignmentService;
     private ActivityNotificationService notifications;
     private PaymentService paymentService;
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
     private CancellationManager manager;
 
     private final User employer = user();
@@ -43,6 +44,7 @@ class UnpaidExpiryRulesTest {
         jobAssignmentService = mock(JobAssignmentService.class);
         notifications = mock(ActivityNotificationService.class);
         paymentService = mock(PaymentService.class);
+        eventPublisher = mock(org.springframework.context.ApplicationEventPublisher.class);
 
         SecurityService security = mock(SecurityService.class);
         when(security.getSystemUser()).thenReturn(system);
@@ -51,7 +53,7 @@ class UnpaidExpiryRulesTest {
                 security, new AssignmentParticipants(mock(com.exskylab.koala.business.abstracts.CompanyContactService.class)),
                 new CancellationPolicy(new CancellationProperties(), passthroughSettings()),
                 mock(PayoutService.class), mock(com.exskylab.koala.business.abstracts.DisputeService.class), notifications,
-                paymentService);
+                paymentService, eventPublisher);
 
         when(cancellationDao.save(any())).thenAnswer(i -> i.getArgument(0));
     }
@@ -112,6 +114,8 @@ class UnpaidExpiryRulesTest {
         verify(cancellationDao).save(any(Cancellation.class));
         verify(jobAssignmentService).getDetailedByIdForUpdate(a.getId());
         verify(jobAssignmentService, never()).getDetailedById(a.getId());
+        verify(eventPublisher).publishEvent(new com.exskylab.koala.core.events.AssignmentClosedEvent(
+                a.getJob().getId(), a.getWorker().getId(), a.getId()));
     }
 
     @Test

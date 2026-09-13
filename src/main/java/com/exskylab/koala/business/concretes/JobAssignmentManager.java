@@ -51,12 +51,14 @@ import com.exskylab.koala.business.abstracts.GalleryService;
 import com.exskylab.koala.business.abstracts.SettingsService;
 import com.exskylab.koala.core.constants.SettingKeys;
 import com.exskylab.koala.business.abstracts.ActivityNotificationService;
-import com.exskylab.koala.core.events.AssignmentConfirmedEvent;
+import com.exskylab.koala.core.events.AssignmentClosedEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -183,9 +185,9 @@ public class JobAssignmentManager implements JobAssignmentService {
 
         log.info("Job assignment with id {} has been saved", assignmentId);
 
-        if (assignment.getStatus() == AssignmentStatus.CONFIRMED) {
-            eventPublisher.publishEvent(new AssignmentConfirmedEvent(
-                    assignment.getJob().getId(), assignment.getWorker().getId()));
+        if (assignment.getStatus() == AssignmentStatus.REJECTED) {
+            eventPublisher.publishEvent(new AssignmentClosedEvent(
+                    assignment.getJob().getId(), assignment.getWorker().getId(), assignment.getId()));
         }
 
         activityNotificationService.assignmentAnswered(assignment);
@@ -590,6 +592,21 @@ public class JobAssignmentManager implements JobAssignmentService {
         return jobAssignmentDao.findAllForStaff(
                         pageableSanitizer.sanitize(requested, ADMIN_LIST_SORTABLE, ADMIN_LIST_SORT))
                 .map(jobAssignmentMapper::toAdminAssignmentDto);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<JobAssignment> findLatestByJobAndWorker(UUID jobId, UUID workerId) {
+        return jobAssignmentDao.findFirstByJobIdAndWorkerIdOrderByAssignmentDateTimeDesc(jobId, workerId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<JobAssignment> findAllByJobsAndWorkers(Collection<UUID> jobIds, Collection<UUID> workerIds) {
+        if (jobIds.isEmpty() || workerIds.isEmpty()) {
+            return List.of();
+        }
+        return jobAssignmentDao.findAllByJobIdInAndWorkerIdIn(jobIds, workerIds);
     }
 
     @Override

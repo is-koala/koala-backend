@@ -24,6 +24,8 @@ import com.exskylab.koala.entities.Payment;
 import com.exskylab.koala.entities.PaymentAttemptStatus;
 import com.exskylab.koala.entities.PaymentStatus;
 import com.exskylab.koala.core.constants.PayoutMessages;
+import com.exskylab.koala.core.events.AssignmentPaidEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -53,11 +55,13 @@ public class PaymentManager implements PaymentService {
     private final AssignmentParticipants assignmentParticipants;
     private final PaymentMetrics paymentMetrics;
     private final PaymentVerificationProperties verificationProperties;
+    private final ApplicationEventPublisher eventPublisher;
 
     public PaymentManager(PaymentDao paymentDao, IyzicoPaymentService iyzicoPaymentService,
                           PaymentStateMachine stateMachine, SecurityService securityService,
                           JobAssignmentDao jobAssignmentDao, AssignmentParticipants assignmentParticipants,
-                          PaymentMetrics paymentMetrics, PaymentVerificationProperties verificationProperties) {
+                          PaymentMetrics paymentMetrics, PaymentVerificationProperties verificationProperties,
+                          ApplicationEventPublisher eventPublisher) {
         this.paymentDao = paymentDao;
         this.iyzicoPaymentService = iyzicoPaymentService;
         this.stateMachine = stateMachine;
@@ -66,6 +70,7 @@ public class PaymentManager implements PaymentService {
         this.assignmentParticipants = assignmentParticipants;
         this.paymentMetrics = paymentMetrics;
         this.verificationProperties = verificationProperties;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -452,7 +457,10 @@ public class PaymentManager implements PaymentService {
         assignment.setFinalPayout(payment.getWorkerPayout());
 
         log.info("Payment {} settled for assignment {}", payment.getId(), assignment.getId());
-        return paymentDao.save(payment);
+        Payment settled = paymentDao.save(payment);
+        eventPublisher.publishEvent(new AssignmentPaidEvent(
+                assignment.getJob().getId(), assignment.getWorker().getId(), assignment.getId()));
+        return settled;
     }
 
     private Payment fail(Payment payment, String reason) {

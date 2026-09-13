@@ -2,6 +2,8 @@ package com.exskylab.koala.core.mappers;
 
 import com.exskylab.koala.core.dtos.jobAssignment.response.AdminAssignmentDto;
 import com.exskylab.koala.core.helpers.MediaUrlResolver;
+import com.exskylab.koala.core.helpers.MessagingAvailability;
+import com.exskylab.koala.core.properties.MessagingProperties;
 import com.exskylab.koala.core.helpers.StorageUrlResolver;
 import com.exskylab.koala.core.properties.AppProperties;
 import com.exskylab.koala.core.properties.StorageProperties;
@@ -46,7 +48,8 @@ class AdminAssignmentMappingTest {
         JobMapper jobMapper = new JobMapperImpl(userMapper, new JobCategoryMapperImpl(), addressMapper,
                 companyMapper, galleryMapper, pricingDtoMapper);
 
-        jobAssignmentMapper = new JobAssignmentMapperImpl(jobMapper, userMapper, companyMapper, pricingDtoMapper);
+        jobAssignmentMapper = new JobAssignmentMapperImpl(jobMapper, userMapper, companyMapper, pricingDtoMapper,
+                new MessagingAvailability(new MessagingProperties()));
     }
 
     private JobAssignment assignment() {

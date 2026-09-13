@@ -17,6 +17,9 @@ import com.exskylab.koala.dataAccess.PaymentDao;
 import com.exskylab.koala.entities.*;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
+import com.exskylab.koala.core.events.AssignmentPaidEvent;
+import org.mockito.InOrder;
+import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -35,6 +38,7 @@ class PaymentCallbackTest {
     private static final String TOKEN = "iyzico-token-123";
     private static final UUID ASSIGNMENT_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private static final UUID JOB_ID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+    private static final UUID WORKER_ID = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
     private static final String CONVERSATION_ID = "conversation-123";
 
     private PaymentDao paymentDao;
@@ -42,6 +46,7 @@ class PaymentCallbackTest {
     private JobAssignmentDao jobAssignmentDao;
     private PaymentManager paymentManager;
     private PaymentVerificationProperties verificationProperties;
+    private ApplicationEventPublisher eventPublisher;
 
     @BeforeEach
     void setUp() {
@@ -49,10 +54,11 @@ class PaymentCallbackTest {
         iyzicoPaymentService = mock(IyzicoPaymentService.class);
         jobAssignmentDao = mock(JobAssignmentDao.class);
         verificationProperties = new PaymentVerificationProperties();
+        eventPublisher = mock(ApplicationEventPublisher.class);
         paymentManager = new PaymentManager(paymentDao, iyzicoPaymentService, new PaymentStateMachine(),
                 mock(SecurityService.class), jobAssignmentDao,
                 new AssignmentParticipants(mock(CompanyContactService.class)),
-                new PaymentMetrics(new SimpleMeterRegistry()), verificationProperties);
+                new PaymentMetrics(new SimpleMeterRegistry()), verificationProperties, eventPublisher);
 
         when(paymentDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(paymentDao.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
@@ -66,6 +72,9 @@ class PaymentCallbackTest {
         Job job = new Job();
         job.setId(JOB_ID);
         assignment.setJob(job);
+        User worker = new User();
+        worker.setId(WORKER_ID);
+        assignment.setWorker(worker);
 
         Payment payment = new Payment();
         payment.setId(UUID.randomUUID());
@@ -127,6 +136,33 @@ class PaymentCallbackTest {
         assertEquals(new BigDecimal("0.075"), assignment.getCommissionRate());
         assertEquals(new BigDecimal("1075.00"), assignment.getTotalCharged());
         verify(jobAssignmentDao).findByIdForUpdate(ASSIGNMENT_ID);
+        verify(eventPublisher).publishEvent(new AssignmentPaidEvent(JOB_ID, WORKER_ID, ASSIGNMENT_ID));
+    }
+
+    @Test
+    void thePaidEventIsPublishedOnlyAfterThePaymentRowIsSaved() {
+        Payment payment = pendingPayment();
+        when(paymentDao.findByProviderToken(TOKEN)).thenReturn(Optional.of(payment));
+        when(iyzicoPaymentService.retrieveCheckoutFormResult(any())).thenReturn(providerSuccess());
+
+        paymentManager.completeFromCallback(TOKEN);
+
+        InOrder order = inOrder(paymentDao, eventPublisher);
+        order.verify(paymentDao).save(payment);
+        order.verify(eventPublisher).publishEvent(any(AssignmentPaidEvent.class));
+    }
+
+    @Test
+    void aDeclinedPaymentPublishesNoPaidEvent() {
+        Payment payment = pendingPayment();
+        IyzicoPaymentResultResponseDto result = providerSuccess();
+        result.setPaymentStatus("FAILURE");
+        when(paymentDao.findByProviderToken(TOKEN)).thenReturn(Optional.of(payment));
+        when(iyzicoPaymentService.retrieveCheckoutFormResult(any())).thenReturn(result);
+
+        paymentManager.completeFromCallback(TOKEN);
+
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test

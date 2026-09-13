@@ -90,4 +90,5 @@
     <include file="db/changelog/2026/09/11-03-user-profile-sync-outbox.xml"/>
     <include file="db/changelog/2026/09/11-04-identity-document-review.xml"/>
     <include file="db/changelog/2026/09/12-01-identity-four-photos.xml"/>
+    <include file="db/changelog/2026/09/13-01-crew-membership-follows-payment.xml"/>
 </databaseChangeLog>

@@ -14,6 +14,8 @@ import com.exskylab.koala.dataAccess.PayoutDao;
 import com.exskylab.koala.dataAccess.RefundDao;
 import com.exskylab.koala.entities.*;
 import org.junit.jupiter.api.BeforeEach;
+import com.exskylab.koala.core.events.AssignmentClosedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.business.abstracts.DisputeService;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
@@ -45,6 +47,7 @@ class PayoutReleaseTest {
     private UserService userService;
     private PayoutMapper payoutMapper;
     private BankAccountService bankAccountService;
+    private ApplicationEventPublisher eventPublisher;
     private PayoutManager payoutManager;
 
     private final UUID assignmentId = UUID.randomUUID();
@@ -60,6 +63,7 @@ class PayoutReleaseTest {
         settlementService = mock(SettlementService.class);
         userService = mock(UserService.class);
         payoutMapper = mock(PayoutMapper.class);
+        eventPublisher = mock(ApplicationEventPublisher.class);
 
         payoutManager = new PayoutManager(payoutDao, refundDao, paymentService, jobAssignmentDao,
                 bankAccountService, disputeDao, new PaymentStateMachine(), settlementService,
@@ -67,7 +71,7 @@ class PayoutReleaseTest {
                 new com.exskylab.koala.core.monitoring.PaymentMetrics(
                         new io.micrometer.core.instrument.simple.SimpleMeterRegistry()),
                 jakarta.validation.Validation.buildDefaultValidatorFactory().getValidator(),
-                userService, payoutMapper);
+                userService, payoutMapper, eventPublisher);
 
         when(payoutDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(refundDao.save(any())).thenAnswer(i -> i.getArgument(0));
@@ -91,8 +95,12 @@ class PayoutReleaseTest {
         User worker = new User();
         worker.setId(UUID.randomUUID());
 
+        Job job = new Job();
+        job.setId(UUID.randomUUID());
+
         JobAssignment assignment = new JobAssignment();
         assignment.setId(assignmentId);
+        assignment.setJob(job);
         assignment.setWorker(worker);
         assignment.setStatus(status);
         assignment.setPaymentStatus(paymentStatus);
@@ -250,6 +258,18 @@ class PayoutReleaseTest {
         assertEquals(RefundStatus.PENDING, refund.getStatus());
         assertEquals(new BigDecimal("1075.00"), refund.getAmount());
         assertEquals(PaymentStatus.REFUNDED, assignment.getPaymentStatus());
+        verify(eventPublisher).publishEvent(new AssignmentClosedEvent(
+                assignment.getJob().getId(), assignment.getWorker().getId(), assignmentId));
+    }
+
+    @Test
+    void aReleaseToTheWorkerDoesNotCloseTheConversation() {
+        JobAssignment assignment = assignment(AssignmentStatus.COMPLETED, PaymentStatus.HELD_IN_ESCROW);
+        settledPaymentFor(assignment).setProviderTransactionId("txn-789");
+
+        payoutManager.releaseToWorker(assignmentId);
+
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test

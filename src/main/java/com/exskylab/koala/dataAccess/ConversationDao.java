@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -31,6 +32,9 @@ public interface ConversationDao extends JpaRepository<Conversation, UUID> {
     Page<Conversation> findAllForParticipant(@Param("userId") UUID userId, Pageable pageable);
 
     Optional<Conversation> findByJobIdAndKind(UUID jobId, ConversationKind kind);
+
+    @EntityGraph(attributePaths = {"job", "participants"})
+    List<Conversation> findAllByJobCompanyIdAndKind(UUID companyId, ConversationKind kind);
 
     @Query("""
             select count(c) > 0 from Conversation c

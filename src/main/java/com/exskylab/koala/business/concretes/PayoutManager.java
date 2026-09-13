@@ -16,6 +16,7 @@ import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.monitoring.PaymentMetrics;
 import com.exskylab.koala.core.helpers.ConstraintViolations;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
+import com.exskylab.koala.core.events.AssignmentClosedEvent;
 import com.exskylab.koala.dataAccess.DisputeDao;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
 import com.exskylab.koala.dataAccess.PayoutDao;
@@ -27,6 +28,7 @@ import com.exskylab.koala.business.abstracts.ActivityNotificationService;
 import com.exskylab.koala.business.abstracts.UserService;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -69,6 +71,7 @@ public class PayoutManager implements PayoutService {
     private final Validator validator;
     private final UserService userService;
     private final PayoutMapper payoutMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     public PayoutManager(PayoutDao payoutDao, RefundDao refundDao, PaymentService paymentService,
                          JobAssignmentDao jobAssignmentDao, BankAccountService bankAccountService,
@@ -76,7 +79,8 @@ public class PayoutManager implements PayoutService {
                          SettlementService settlementService,
                          ActivityNotificationService activityNotificationService,
                          PaymentMetrics paymentMetrics, Validator validator,
-                         UserService userService, PayoutMapper payoutMapper) {
+                         UserService userService, PayoutMapper payoutMapper,
+                         ApplicationEventPublisher eventPublisher) {
         this.payoutDao = payoutDao;
         this.refundDao = refundDao;
         this.paymentService = paymentService;
@@ -90,6 +94,7 @@ public class PayoutManager implements PayoutService {
         this.validator = validator;
         this.userService = userService;
         this.payoutMapper = payoutMapper;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -181,6 +186,8 @@ public class PayoutManager implements PayoutService {
 
         Refund saved = refundDao.save(refund);
         log.info("Refund {} created for assignment {} amount {}", saved.getId(), jobAssignmentId, refundAmount);
+        eventPublisher.publishEvent(new AssignmentClosedEvent(
+                assignment.getJob().getId(), assignment.getWorker().getId(), assignment.getId()));
         return saved;
     }
 

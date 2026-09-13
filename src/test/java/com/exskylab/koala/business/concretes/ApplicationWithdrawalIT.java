@@ -146,7 +146,7 @@ class ApplicationWithdrawalIT extends AbstractIntegrationTest {
         assertFalse(jobApplicationDao.existsByJobIdAndUserIdAndStatusNot(
                         jobId, applicantId, ApplicationStatus.WITHDRAWN),
                 "Geri çekilmiş başvuru yeniden başvuruyu engellememeli.");
-        assertTrue(jobApplicationDao.existsByJobIdAndUserId(jobId, applicantId),
+        assertTrue(jobApplicationDao.existsById(applicationId),
                 "Kayıt hâlâ duruyor; geçmiş korunmalı.");
     }
 }

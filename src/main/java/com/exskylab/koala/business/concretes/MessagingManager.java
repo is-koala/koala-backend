@@ -12,8 +12,8 @@ import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.messaging.response.ConversationDto;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.helpers.Concealment;
+import com.exskylab.koala.core.helpers.MessagingAvailability;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
-import com.exskylab.koala.core.properties.MessagingProperties;
 import com.exskylab.koala.dataAccess.*;
 import com.exskylab.koala.entities.*;
 import org.springframework.data.domain.Page;
@@ -23,19 +23,22 @@ import com.exskylab.koala.core.dtos.user.response.SafeUserDto;
 import com.exskylab.koala.core.mappers.MessagingMapper;
 import com.exskylab.koala.core.mappers.UserMapper;
 import com.exskylab.koala.core.realtime.RealtimePublisher;
-import com.exskylab.koala.business.abstracts.JobApplicationService;
+import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.JobService;
 import com.exskylab.koala.business.abstracts.UserService;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.Collection;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -50,35 +53,35 @@ public class MessagingManager implements MessagingService {
     private final MessageDao messageDao;
     private final UserBlockDao userBlockDao;
     private final JobService jobService;
-    private final JobApplicationService jobApplicationService;
+    private final JobAssignmentService jobAssignmentService;
     private final UserService userService;
     private final SecurityService securityService;
     private final CompanyContactService companyContactService;
     private final PageableSanitizer pageableSanitizer;
     private final RealtimePublisher realtimePublisher;
     private final MessagingMapper messagingMapper;
-    private final MessagingProperties messagingProperties;
+    private final MessagingAvailability messagingAvailability;
     private final UserMapper userMapper;
 
     public MessagingManager(ConversationDao conversationDao, MessageDao messageDao,
                             UserBlockDao userBlockDao, JobService jobService,
-                            JobApplicationService jobApplicationService, UserService userService,
+                            JobAssignmentService jobAssignmentService, UserService userService,
                             SecurityService securityService, CompanyContactService companyContactService,
                             PageableSanitizer pageableSanitizer, RealtimePublisher realtimePublisher,
-                            MessagingMapper messagingMapper, MessagingProperties messagingProperties,
+                            MessagingMapper messagingMapper, MessagingAvailability messagingAvailability,
                             UserMapper userMapper) {
         this.conversationDao = conversationDao;
         this.messageDao = messageDao;
         this.userBlockDao = userBlockDao;
         this.jobService = jobService;
-        this.jobApplicationService = jobApplicationService;
+        this.jobAssignmentService = jobAssignmentService;
         this.userService = userService;
         this.securityService = securityService;
         this.companyContactService = companyContactService;
         this.pageableSanitizer = pageableSanitizer;
         this.realtimePublisher = realtimePublisher;
         this.messagingMapper = messagingMapper;
-        this.messagingProperties = messagingProperties;
+        this.messagingAvailability = messagingAvailability;
         this.userMapper = userMapper;
     }
 
@@ -91,10 +94,9 @@ public class MessagingManager implements MessagingService {
         UUID resolvedWorkerId = workerId != null ? workerId : currentUserId;
 
         assertMayConverse(job, resolvedWorkerId, currentUserId);
+        assertDirectMessagingOpen(job, resolvedWorkerId);
         assertNotBlocked(currentUserId, employerOf(job).getId().equals(currentUserId)
                 ? resolvedWorkerId : employerOf(job).getId());
-
-        assertMessagingWindowOpen(job);
 
         return conversationDao.findByJobIdAndWorkerIdAndKind(jobId, resolvedWorkerId, ConversationKind.DIRECT)
                 .orElseGet(() -> {
@@ -112,7 +114,7 @@ public class MessagingManager implements MessagingService {
     }
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Conversation joinJobCrew(UUID jobId, UUID workerId) {
         Job job = jobService.getById(jobId);
         User worker = userService.getReference(workerId);
@@ -124,8 +126,13 @@ public class MessagingManager implements MessagingService {
                     created.setKind(ConversationKind.GROUP);
                     created.setEmployer(employerOf(job));
                     created.addParticipant(employerOf(job));
+                    if (job.getCompany() != null) {
+                        companyContactService.getContactsOfCompany(job.getCompany().getId())
+                                .forEach(contact -> created.addParticipant(contact.getUser()));
+                    }
 
-                    log.info("Crew conversation created for job {}", job.getId());
+                    log.info("Crew conversation created for job {} with {} employer-side participants",
+                            job.getId(), created.getParticipants().size());
                     return conversationDao.save(created);
                 });
 
@@ -139,14 +146,62 @@ public class MessagingManager implements MessagingService {
     }
 
     @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void leaveJobCrew(UUID jobId, UUID workerId) {
+        conversationDao.findByJobIdAndKind(jobId, ConversationKind.GROUP).ifPresent(crew -> {
+            if (crew.getEmployer().getId().equals(workerId)) {
+                return;
+            }
+            if (crew.removeParticipant(workerId)) {
+                conversationDao.save(crew);
+                log.info("Worker {} left the crew conversation of job {}", workerId, jobId);
+            }
+        });
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void joinCompanyCrews(UUID companyId, UUID userId) {
+        User contact = userService.getReference(userId);
+        int joined = 0;
+        for (Conversation crew : conversationDao.findAllByJobCompanyIdAndKind(companyId, ConversationKind.GROUP)) {
+            if (messagingAvailability.isWindowClosed(crew.getJob()) || crew.hasParticipant(userId)) {
+                continue;
+            }
+            crew.addParticipant(contact);
+            conversationDao.save(crew);
+            joined++;
+        }
+        log.info("Company contact {} joined {} open crew conversations of company {}", userId, joined, companyId);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void leaveCompanyCrews(UUID companyId, UUID userId) {
+        int left = 0;
+        for (Conversation crew : conversationDao.findAllByJobCompanyIdAndKind(companyId, ConversationKind.GROUP)) {
+            if (crew.getEmployer().getId().equals(userId)) {
+                continue;
+            }
+            if (crew.removeParticipant(userId)) {
+                conversationDao.save(crew);
+                left++;
+            }
+        }
+        log.info("Company contact {} left {} crew conversations of company {}", userId, left, companyId);
+    }
+
+    @Override
     @Transactional
     public Message sendMessage(UUID conversationId, String body) {
         Conversation conversation = loadParticipating(conversationId);
         UUID senderId = securityService.getAuthenticatedUserId();
 
-        assertMessagingWindowOpen(conversation.getJob());
-
-        if (!conversation.isGroup()) {
+        if (conversation.isGroup()) {
+            assertMessagingWindowOpen(conversation.getJob());
+        } else {
+            assertDirectMessagingOpen(conversation.getJob(),
+                    conversation.getWorker() == null ? null : conversation.getWorker().getId());
             assertNotBlocked(senderId, conversation.counterpartOf(senderId).getId());
         }
 
@@ -186,23 +241,45 @@ public class MessagingManager implements MessagingService {
                 pageableSanitizer.sanitize(requested, SORTABLE, CONVERSATION_SORT));
 
         Map<UUID, Long> unread = unreadCounts(page.getContent().stream().map(Conversation::getId).toList());
+        Map<UUID, Boolean> closed = closedFlags(page.getContent());
 
         return PageDto.of(page, page.getContent().stream()
                 .map(conversation -> messagingMapper.toConversationDto(conversation,
                         unread.getOrDefault(conversation.getId(), 0L),
-                        isMessagingClosed(conversation.getJob()),
+                        closed.get(conversation.getId()),
                         membersOf(conversation)))
                 .toList());
     }
 
-    @Override
-    public boolean isMessagingClosed(Job job) {
-        if (job == null || job.getEndDateTime() == null) {
-            return false;
-        }
+    private Map<UUID, Boolean> closedFlags(List<Conversation> conversations) {
+        List<Conversation> direct = conversations.stream()
+                .filter(conversation -> !conversation.isGroup() && conversation.getWorker() != null)
+                .toList();
 
-        return LocalDateTime.now(messagingProperties.zone())
-                .isAfter(job.getEndDateTime().plusDays(messagingProperties.getGraceDaysAfterJob()));
+        Map<UUID, Map<UUID, JobAssignment>> latestByJobThenWorker = direct.isEmpty() ? Map.of()
+                : jobAssignmentService.findAllByJobsAndWorkers(
+                        direct.stream().map(conversation -> conversation.getJob().getId()).collect(Collectors.toSet()),
+                        direct.stream().map(conversation -> conversation.getWorker().getId()).collect(Collectors.toSet()))
+                .stream()
+                .collect(Collectors.groupingBy(assignment -> assignment.getJob().getId(),
+                        Collectors.toMap(assignment -> assignment.getWorker().getId(), Function.identity(),
+                                (first, second) -> latestOf(first, second))));
+
+        return conversations.stream().collect(Collectors.toMap(Conversation::getId, conversation -> {
+            if (conversation.isGroup() || conversation.getWorker() == null) {
+                return messagingAvailability.isWindowClosed(conversation.getJob());
+            }
+            JobAssignment assignment = latestByJobThenWorker
+                    .getOrDefault(conversation.getJob().getId(), Map.of())
+                    .get(conversation.getWorker().getId());
+            return !messagingAvailability.isAvailable(assignment);
+        }));
+    }
+
+    private static JobAssignment latestOf(JobAssignment first, JobAssignment second) {
+        Comparator<JobAssignment> byDate = Comparator.comparing(JobAssignment::getAssignmentDateTime,
+                Comparator.nullsFirst(Comparator.naturalOrder()));
+        return byDate.compare(first, second) >= 0 ? first : second;
     }
 
     @Override
@@ -258,9 +335,30 @@ public class MessagingManager implements MessagingService {
     }
 
     private void assertMessagingWindowOpen(Job job) {
-        if (isMessagingClosed(job)) {
+        if (messagingAvailability.isWindowClosed(job)) {
             log.info("Messaging window closed for job {}, it ended at {}", job.getId(), job.getEndDateTime());
             throw new ConflictException(MessagingMessages.WINDOW_CLOSED);
+        }
+    }
+
+    private void assertDirectMessagingOpen(Job job, UUID workerId) {
+        Optional<JobAssignment> assignment = workerId == null ? Optional.empty()
+                : jobAssignmentService.findLatestByJobAndWorker(job.getId(), workerId);
+        switch (messagingAvailability.reasonOf(assignment.orElse(null))) {
+            case PAYMENT_REQUIRED -> {
+                log.info("Messaging for job {} and worker {} refused: payment status {}", job.getId(), workerId,
+                        assignment.map(JobAssignment::getPaymentStatus).orElse(null));
+                throw new ForbiddenException(MessagingMessages.PAYMENT_REQUIRED);
+            }
+            case CLOSED -> {
+                log.info("Messaging for job {} and worker {} closed: assignment {} status {}, payment {}",
+                        job.getId(), workerId, assignment.map(JobAssignment::getId).orElse(null),
+                        assignment.map(JobAssignment::getStatus).orElse(null),
+                        assignment.map(JobAssignment::getPaymentStatus).orElse(null));
+                throw new ConflictException(MessagingMessages.WINDOW_CLOSED);
+            }
+            case AVAILABLE -> {
+            }
         }
     }
 
@@ -287,10 +385,6 @@ public class MessagingManager implements MessagingService {
 
         if (!currentIsEmployerSide && !currentUserId.equals(workerId)) {
             throw new ResourceNotFoundException(MessagingMessages.NOT_A_PARTICIPANT);
-        }
-
-        if (!jobApplicationService.hasApplied(job.getId(), workerId)) {
-            throw new ForbiddenException(MessagingMessages.NO_RELATIONSHIP_WITH_JOB);
         }
     }
 

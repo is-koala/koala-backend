@@ -10,6 +10,7 @@ import com.exskylab.koala.core.dtos.myWork.response.WorkFeedDto;
 import com.exskylab.koala.core.dtos.myWork.response.WorkItemDto;
 import com.exskylab.koala.entities.ApplicationStatus;
 import com.exskylab.koala.entities.AssignmentStatus;
+import com.exskylab.koala.entities.MessagingAvailabilityReason;
 import com.exskylab.koala.entities.WorkItemKind;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -133,7 +134,7 @@ class MyWorkFeedTest {
 
     private static MyAssignmentDto assignment(Instant at) {
         return new MyAssignmentDto(UUID.randomUUID(), job(), null, AssignmentStatus.CONFIRMED,
-                null, at, null, 0, null, null, null);
+                null, at, null, 0, null, null, null, false, MessagingAvailabilityReason.PAYMENT_REQUIRED);
     }
 
     private static JobSummaryDto job() {

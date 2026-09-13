@@ -3,11 +3,14 @@ package com.exskylab.koala.business.concretes;
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.CompanyContactService;
 import com.exskylab.koala.business.abstracts.CompanyService;
+import com.exskylab.koala.core.events.CompanyContactAddedEvent;
+import com.exskylab.koala.core.events.CompanyContactRemovedEvent;
 import com.exskylab.koala.dataAccess.CompanyContactDao;
 import com.exskylab.koala.entities.Company;
 import com.exskylab.koala.entities.CompanyContact;
 import com.exskylab.koala.entities.CompanyContactRole;
 import com.exskylab.koala.entities.User;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,13 +21,16 @@ import java.util.UUID;
 public class CompanyContactManager implements CompanyContactService {
 
     private final CompanyContactDao companyContactDao;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public CompanyContactManager(CompanyContactDao companyContactDao) {
+    public CompanyContactManager(CompanyContactDao companyContactDao, ApplicationEventPublisher eventPublisher) {
         this.companyContactDao = companyContactDao;
+        this.eventPublisher = eventPublisher;
     }
 
 
     @Override
+    @Transactional
     public CompanyContact addCompanyContact(Company company, User invitedUser, CompanyContactRole role) {
         log.info("Adding company contact for company with id: {}, invited user with id: {}, role: {}", company.getId(), invitedUser.getId(), role);
 
@@ -35,6 +41,7 @@ public class CompanyContactManager implements CompanyContactService {
         CompanyContact savedContact = companyContactDao.save(companyContact);
 
         log.info("Saved company contact with id: {}", savedContact.getId());
+        eventPublisher.publishEvent(new CompanyContactAddedEvent(company.getId(), invitedUser.getId()));
         return savedContact;
     }
 
@@ -84,5 +91,7 @@ public class CompanyContactManager implements CompanyContactService {
     @Transactional
     public void removeContact(CompanyContact contact) {
         companyContactDao.delete(contact);
+        eventPublisher.publishEvent(new CompanyContactRemovedEvent(
+                contact.getCompany().getId(), contact.getUser().getId()));
     }
 }

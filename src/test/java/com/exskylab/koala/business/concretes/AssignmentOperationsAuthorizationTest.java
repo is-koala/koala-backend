@@ -53,6 +53,8 @@ class AssignmentOperationsAuthorizationTest {
     private final User worker = user();
     private final User stranger = user();
 
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
+
     @BeforeEach
     void setUp() {
         cancellationDao = mock(CancellationDao.class);
@@ -70,10 +72,12 @@ class AssignmentOperationsAuthorizationTest {
         badgeService = mock(BadgeService.class);
         CancellationPolicy policy = new CancellationPolicy(new CancellationProperties(), passthroughSettings());
 
+        eventPublisher = mock(org.springframework.context.ApplicationEventPublisher.class);
         cancellationManager = new CancellationManager(cancellationDao, jobAssignmentService, userService,
                 securityService, participants, policy, payoutService, disputeService,
                 mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class),
-                mock(com.exskylab.koala.business.abstracts.PaymentService.class));
+                mock(com.exskylab.koala.business.abstracts.PaymentService.class),
+                eventPublisher);
         disputeManager = new DisputeManager(disputeDaoStub,
                 mock(com.exskylab.koala.dataAccess.DisputeEvidenceDao.class),
                 mock(com.exskylab.koala.core.utilities.storage.StorageService.class),
@@ -182,6 +186,8 @@ class AssignmentOperationsAuthorizationTest {
         assertSame(refund, cancellation.getRefund());
         assertEquals(AssignmentStatus.CANCELLED, a.getStatus());
         verify(payoutService).refundEmployer(eq(a.getId()), eq(new BigDecimal("1075.00")), any());
+        verify(eventPublisher).publishEvent(new com.exskylab.koala.core.events.AssignmentClosedEvent(
+                a.getJob().getId(), a.getWorker().getId(), a.getId()));
     }
 
     @Test
@@ -205,6 +211,8 @@ class AssignmentOperationsAuthorizationTest {
         assertEquals(CancellationParty.WORKER, cancellation.getCancelledByParty());
         assertEquals(0, cancellation.getRefundAmount().signum());
         verify(payoutService, never()).refundEmployer(any(), any(), any());
+        verify(eventPublisher).publishEvent(new com.exskylab.koala.core.events.AssignmentClosedEvent(
+                a.getJob().getId(), a.getWorker().getId(), a.getId()));
     }
 
     @Test

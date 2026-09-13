@@ -1030,19 +1030,93 @@ giriş kapatılmamıştı — tek gerçek kaynak sunucunun 400'üydü. `expiresA
 
 **Mesajlaşma platform içinde tutulur.** Taraflar telefon paylaşıp dışarı çıkarsa komisyon kaybedilir; bu yüzden konuşma ilana bağlı bir kayıt.
 
-`Conversation` = ilan + işveren + işçi. `(job_id, worker_id)` kısmi benzersiz indeksle tekil — aynı ilanda aynı işçiyle ikinci konuşma açılmıyor.
+`Conversation` = ilan + işveren + işçi. `(job_id, worker_id)` kısmi benzersiz indeksle tekil — aynı ilanda aynı işçiyle ikinci konuşma açılmıyor. `POST /jobs/{jobId}/conversation` bu yüzden **200** döner, 201 değil: ikinci çağrı yeni kayıt açmaz, mevcut olanı verir.
 
 **Üyelik `conversation_participants` tablosunda, `employer`/`worker` sütunlarında değil.** İkili sohbet artık iki katılımcılı bir konuşmadan ibaret; `kind` alanı `DIRECT` ya da `GROUP`. `employer` her iki türde de ilan sahibini gösterir, `worker` yalnızca `DIRECT`'te doludur ve ikili tekilliği o sağlar. `hasParticipant` **yalnızca** katılımcı listesine bakar — bir süre eski sütunlara düşen bir yedek dal vardı ve `addParticipant` onu görüp "zaten üye" sanarak işvereni gruba hiç eklemiyordu. İki kaynak tutmanın bedeli buydu; `29-01` migration'ı mevcut satırları katılımcı tablosuna aktarıyor.
 
-**Grup kendiliğinden kurulur: grup = ilanın ekibi.** Bir atama `CONFIRMED` olduğunda ilanın grubu yoksa açılır ve işçi eklenir. İşveren elle grup kurmaz, kimseyi elle eklemez.
+**Konuşma açmak için ödeme emanette olmalı; grup ödeme ile kurulur (#257).** Ürün kuralı: iş arayan ile işveren,
+işveren ödemeyi yapmadan mesajlaşamaz — platform dışına çıkma riski tam da o aşamada. Öncesinde `DIRECT` için tek
+şart başvurunun varlığıydı (`jobApplicationService.hasApplied`) ve grup atama `CONFIRMED` olur olmaz — yani
+`PENDING_COLLECTION`'da — kuruluyordu. Artık iki yüzeyin de kapısı aynı yüklem: **(ilan, işçi) çiftinin son
+ataması `CANCELLED`/`REJECTED` değil ve `paymentStatus` `HELD_IN_ESCROW` ya da `RELEASED_TO_WORKER`.** Yüklem tek
+yerde, `core/helpers/MessagingAvailability`: `reasonOf(JobAssignment)` üç değerden birini döndürür —
+`PAYMENT_REQUIRED` (atama yok ya da ödenmemiş: `null`/`PENDING_COLLECTION`/`FAILED`), `CLOSED` (atama
+`CANCELLED`/`REJECTED`, ödeme `REFUNDED` ya da aşağıdaki pencere kapanmış), `AVAILABLE`. `MessagingManager` kapıyı,
+`JobAssignmentMapper` istemci ipucunu aynı sınıftan okuyor; kural ikinci bir yere kopyalanmaz.
 
-**Atama tarafı mesajlaşmayı tanımıyor.** `JobAssignmentManager` `MessagingService`'e bağlansaydı `JobAssignmentManager → MessagingService → JobApplicationService → JobAssignmentService` döngüsü çıkardı (denendi, görüldü). Bunun yerine `AssignmentConfirmedEvent` yayınlanıyor, `CrewConversationListener` yakalıyor. Derleme zamanı bağımlılığı yok; dinleyici hata alırsa yalnızca uyarı loglanır, atama düşmez.
+**`POST /jobs/{jobId}/conversation` ve ikili sohbette `POST /conversations/{id}/messages`:** `PAYMENT_REQUIRED` →
+**403 `MESSAGING_PAYMENT_REQUIRED`** ("Mesajlaşma, işveren ödemeyi tamamladığında açılır."), `CLOSED` → **409
+`MESSAGING_WINDOW_CLOSED`** (pencerenin anahtarıyla aynı; iptal edilen sohbet de "kapalı"dır, ayrı bir kod
+icat edilmedi). Sıra: taraf kontrolü → ödeme kapısı → engel kontrolü; ödenmemiş bir çiftte engel hiç sorulmaz.
+İlanla hiçbir ilişkisi olmayan kullanıcı ödemeden önce de sonra da **aynı** 404 `MESSAGING_NOT_A_PARTICIPANT`
+alır (§2d2'de "ilan herkese açık, gizlenecek varlık yok" gerekçesiyle olduğu gibi bırakılan dal);
+`MessagingPaymentGateIT.anOutsiderStillGetsTheSameNotFoundBeforeAndAfterPayment` iki zarfı karşılaştırıyor.
+`messaging.no.relationship.with.job` anahtarı ve `JobApplicationService.hasApplied` düştü — tek çağıranı bu kapıydı.
+
+**`ConversationDto.closed` ikili sohbette artık atama durumunu da taşır.** `DIRECT` için `closed = reasonOf(son
+atama) != AVAILABLE`, `GROUP` için yalnız pencere. Hesap **okuma anında**, `closedAt` gibi bir sütun **yok**:
+iptal/ret/iade üç ayrı yerden yazılıyor (`CancellationManager` iki yol, `JobAssignmentManager.answerToAssignment`,
+`PayoutManager.refundEmployer`) ve bir sütun her birinin olayını dinlemeye bağlı olurdu — dinleyicinin kaçırdığı
+yol sohbeti sessizce açık bırakırdı (#77'nin dersi). Okuma anında hesap yeni bir iptal yolu eklendiğinde de
+kendiliğinden doğru; bedeli liste başına **tek** toplu sorgu (`JobAssignmentService.findAllByJobsAndWorkers`,
+sayfadaki ilan ve işçi id kümeleriyle) — satır başına sorgu yok, çünkü sayfa zaten `job` ve `worker`'ı yüklüyor
+ve atamanın aynı entity'leri persistence context'ten çözülüyor. Aynı sebeple **ödeme kapısından önce açılmış
+ikili sohbetler için migration yazılmadı**: arkalarında ödenmiş atama olmadığı için `closed=true` ve gönderim
+403 dönüyor; ödeme gelirse kendiliğinden açılıyorlar
+(`aDirectConversationLeftOverFromBeforeThePaymentGateIsReadOnly`). Test ortamı, veri kaybı yok.
+
+**Grup kendiliğinden kurulur: grup = ilanın ödenmiş ekibi + işveren tarafı.** `PaymentManager.settle`
+`HELD_IN_ESCROW` geçişinde `AssignmentPaidEvent(jobId, workerId, assignmentId)` yayımlar; `CrewConversationListener`
+onu yakalayıp `joinJobCrew` çağırır: ilanın grubu yoksa açılır ve işçi eklenir, varsa yalnız eklenir. Aynı ilanda
+ikinci/üçüncü çalışanın ödemesi geldikçe gruba katılır; ödemesi gelmeyen işçi ne grupta ne ikili sohbette. İşveren
+elle grup kurmaz, kimseyi elle eklemez. **İşveren tarafı = ilan sahibi + şirket yetkilileri:** şirket ilanında grup
+kurulurken o anki bütün `company_contacts` satırları katılımcı olur (`CompanyContactService.getContactsOfCompany`).
+Sonradan eklenen yetkili `CompanyContactAddedEvent` ile şirketin **penceresi açık** gruplarına katılır, çıkarılan
+yetkili `CompanyContactRemovedEvent` ile hepsinden çıkar (`joinCompanyCrews`/`leaveCompanyCrews`). İki olay
+`CompanyContactManager`'dan yayımlanıyor: `CompanyContactManager → MessagingService → CompanyContactService` döngü
+olurdu. **İlan sahibi gruptan hiçbir olayla çıkarılmaz** — `leaveJobCrew` ve `leaveCompanyCrews` `employer`'ı
+atlıyor; şirketten çıkarılsa bile ilan onun.
+
+**Kapanış: atama `CANCELLED`/`REJECTED` ya da ödeme `REFUNDED` olunca işçi gruptan çıkar.** Üç yazma yolu da
+`AssignmentClosedEvent(jobId, workerId, assignmentId)` yayımlıyor (`REJECTED` hiç ödenmemiş bir atamadır ve grupta
+zaten yoktur; olay yine de yayımlanıyor, `leaveJobCrew` idempotent). Katılımcı satırı soft delete edilir
+(`orphanRemoval` + `@SQLDelete`), geçmiş okunabilir kalır; ikili sohbet yukarıdaki okuma-anı hesabıyla
+`closed=true` olur. **7 günlük pencere aynen duruyor** (aşağıda) ve `endDateTime` olmayan ilanda hiç kapanmıyor.
+`2026/09/13-01` migration'ı mevcut gruplardan ödenmemiş işçileri düşürüyor ve bitmemiş şirket ilanlarının
+gruplarına o günkü yetkilileri ekliyor — ikisi de idempotent `NOT EXISTS`.
+
+**Atama tarafı mesajlaşmayı tanımıyor, ve olaylar commit'ten sonra işleniyor.** `JobAssignmentManager`
+`MessagingService`'e bağlansaydı döngü çıkardı — eskiden `JobAssignmentManager → MessagingService →
+JobApplicationService → JobAssignmentService` (denendi, görüldü), bugün `MessagingManager` doğrudan
+`JobAssignmentService`'e bağlı olduğu için daha da kısa. Ters yön yok; `PaymentManager`, `CancellationManager`,
+`PayoutManager` ve `CompanyContactManager` yalnız olay yayımlıyor. Dört olay da
+`@TransactionalEventListener(phase = AFTER_COMMIT, fallbackExecution = true)` ile dinleniyor ve dört
+`MessagingService` metodu `@Transactional(propagation = REQUIRES_NEW)`. Neden eski `AssignmentConfirmedEvent`'in
+düz `@EventListener` kalıbı değil: o kalıpta dinleyici **yayımlayanın transaction'ının içinde** koşuyordu ve
+`joinJobCrew`'un `@Transactional`'ı ona katılıyordu — içeride bir `RuntimeException` çıkarsa Spring
+transaction'ı rollback-only işaretler ve dinleyicideki `catch` bunu **geri alamaz**: commit
+`UnexpectedRollbackException` ile düşer. Eski belgede yazan "dinleyici hata alırsa yalnızca uyarı loglanır,
+atama düşmez" cümlesi bu yüzden doğru değildi. Yeni tetikleyici **para**: sağlayıcının tahsil ettiği bir
+ödemenin kaydı bir sohbet grubunun kurulamamasına bağlanamaz. Bedeli yazılı olsun: grup kurulumu commit'ten
+sonra kendi transaction'ında koşuyor ve orada düşerse **yalnız `WARN` kalır** (yığın iziyle), ödeme kaydı
+durur. `REQUIRES_NEW` zorunlu — `AFTER_COMMIT` fazında yayımlayanın transaction'ı tamamlanmıştır ve
+`REQUIRED` ile katılan bir yazma **sessizce commit edilmez**. `CrewConversationListenerTest` dört dinleyicinin
+fazını ve dört metodun yayılımını sabitliyor; `fallbackExecution` transaction'sız bir çağırandan gelen olayın
+düşürülmemesi için.
 
 **Grupta engelleme uygulanmaz.** İkili sohbette iki yönlü engel yerinde duruyor, ama grup aynı işte çalışan insanların iş kanalı — orada engel iletişimi keserdi. Ürün kararı.
 
-**Mesajlaşmanın bir penceresi var.** İş bittikten `messaging.grace-days-after-job` (7) gün sonra sohbet **salt okunur** olur: geçmiş okunur, yeni mesaj gönderilemez (409). Amaç ilişkinin süresiz açık kalıp platform dışına taşınmasını önlemek. `endDateTime` olmayan ilanlarda pencere hiç kapanmaz. `ConversationDto.closed` bunu istemciye söyler; karşılaştırma duvar saati olduğu için `messaging.zone-id` üzerinden yapılır.
+**Mesajlaşmanın bir penceresi var.** İş bittikten `messaging.grace-days-after-job` (7) gün sonra sohbet **salt okunur** olur: geçmiş okunur, yeni mesaj gönderilemez (409). Amaç ilişkinin süresiz açık kalıp platform dışına taşınmasını önlemek. `endDateTime` olmayan ilanlarda pencere hiç kapanmaz. `ConversationDto.closed` bunu istemciye söyler; karşılaştırma duvar saati olduğu için `messaging.zone-id` üzerinden yapılır. Hesap `MessagingAvailability.isWindowClosed` içinde, `MessagingManager`'da değil — mapper da aynı pencereyi okuyor.
 
-**Konuşma açmak için arada bir başvuru olmalı.** `jobApplicationDao.existsByJobIdAndUserId` kontrolü var; rastgele bir kullanıcı yabancı bir ilan üzerinden mesaj başlatamıyor. Yalnızca iki taraf okuyup yazabiliyor — taraf olmayan, var olmayan bir konuşmanın **yanıtının aynısını** alıyor: 404 ve aynı `messaging.conversation.not.found` anahtarı (§2d2). Durumu eşitlemek yetmez, `errorCode` de aynı olmak zorunda; ayrım yalnız sunucu logunda.
+**İstemci ipucu atama yanıtlarında.** `MyAssignmentDto` (`GET /users/me/assignments`, `GET /users/me/work`
+içindeki `assignment`, `GET /job-assignments/{id}`, `POST /job-assignments/{id}/complete`), `JobAssignmentDto`
+(`POST /job-assignments/{id}/respond`) ve `ShortJobAssignmentDto` (`JobApplicationDetailDto.assignment` —
+`POST /job-applications/{id}/respond` ve `/withdraw`) `messagingAvailable` (boolean) ve
+`messagingAvailableReason` (`PAYMENT_REQUIRED` | `CLOSED` | `AVAILABLE`) taşıyor; MapStruct `uses =
+MessagingAvailability.class` ile `@Named` niteleyicilerden dolduruyor, ek sorgu yok. İstemci düğmeyi ödeme
+öncesi bununla gizler. `AdminAssignmentDto` bilerek dışarıda — personel mesajlaşmıyor.
+
+**Yalnızca taraflar okuyup yazabiliyor** — taraf olmayan, var olmayan bir konuşmanın **yanıtının aynısını** alıyor: 404 ve aynı `messaging.conversation.not.found` anahtarı (§2d2). Durumu eşitlemek yetmez, `errorCode` de aynı olmak zorunda; ayrım yalnız sunucu logunda.
 
 **Engelleme iki yönlü çalışır.** `UserBlock` tek yönlü kayıt ama `assertNotBlocked` her iki yönü de kontrol ediyor: A B'yi engellediyse B de A'ya yazamıyor. Engelleme idempotent, kendini engellemek reddediliyor.
 
@@ -2031,7 +2105,7 @@ Muaf olan yedi yer ve nedenleri testte yazılı: `SecurityManager→UserDao` (al
 
 **Döngüyü kırmak için bir iş akışı da taşındı.** Otomatik tamamlamadaki uyuşmazlık kontrolü `JobAssignmentManager`'dan `AssignmentAutoCompletionScheduler`'a çıktı — iki aggregate'i koordine eden şey artık *orkestratör*, aggregate'in kendisi değil. Emanet çıkışındaki uyuşmazlık kilidi (asıl para kapısı) `PayoutManager`'da yerinde duruyor.
 
-**Yeni servisler:** `AcademicReferenceService` (üniversite/fakülte/bölüm referans verisi `EducationManager`'dan ayrıldı), ve delegasyon için `UserService.getReference`, `JobAssignmentService.getDetailedById/countCompletedForWorker/hasMoneyInEscrowFor/hasActiveWorkFor`, `DisputeService.hasActiveDispute`, `PaymentService.getSettledPaymentFor`, `MessagingService.getMessageById`, `JobApplicationService.hasApplied`, `JobCategoryService.getById`, `CompanyContactService`'e dört metot.
+**Yeni servisler:** `AcademicReferenceService` (üniversite/fakülte/bölüm referans verisi `EducationManager`'dan ayrıldı), ve delegasyon için `UserService.getReference`, `JobAssignmentService.getDetailedById/countCompletedForWorker/hasMoneyInEscrowFor/hasActiveWorkFor`, `DisputeService.hasActiveDispute`, `PaymentService.getSettledPaymentFor`, `MessagingService.getMessageById`, `JobCategoryService.getById`, `CompanyContactService`'e dört metot. `JobApplicationService.hasApplied` bir süre bu listedeydi; tek çağıranı mesajlaşma kapısıydı ve #257 ile kapı ödemeye taşınınca düştü (yerine `JobAssignmentService.findLatestByJobAndWorker` / `findAllByJobsAndWorkers`).
 
 `AggregateBoundaryTest` üç şeyi doğruluyor: kural dışına çıkan manager yok, artık gerekmeyen muafiyet listede durmuyor, her muafiyetin yazılı gerekçesi var.
 
@@ -2330,7 +2404,7 @@ Sıkıştırma yalnızca Swagger için değil: `application/json` de kapsamda, y
 
 **Kontenjan dolunca ilan kapanmaz.** Otomatik kapanma ayrı bir ürün kararı; `reachingTheHeadcountDoesNotCloseTheJob` bu yokluğu korumaya devam ediyor. `hiredCount` de değişmedi — hâlâ `CONFIRMED`/`IN_PROGRESS`/`COMPLETED` sayıyor, yani istemcinin gördüğü "2/3 alındı" göstergesi ile kapının saydığı sayı **bilerek farklı**: gösterge işe alınmış kişiyi sayar, kapı yer tutan teklifi de sayar.
 
-**Sonradan alınan kişi ekibe de katılır.** `CrewConversationListener` atama `CONFIRMED` olduğunda tetikleniyor ve tarih kontrolü yok (§2o); iş başladıktan sonra işe alınan biri de gruba girer. Mesajlaşma penceresi yalnızca `endDateTime` + grace ile kapanır.
+**Sonradan alınan kişi ekibe de katılır — ödemesi gelince.** `CrewConversationListener` atamanın ödemesi `HELD_IN_ESCROW`'a geçtiğinde tetikleniyor ve tarih kontrolü yok (§2o); iş başladıktan sonra işe alınıp ödenen biri de gruba girer. Mesajlaşma penceresi yalnızca `endDateTime` + grace ile kapanır.
 
 **`hiredCount` türetilir, saklanmaz.** `CONFIRMED`/`IN_PROGRESS`/`COMPLETED` atamalar sayılır — teklif edilmiş ama kabul edilmemiş (`PENDING_CONFIRMATION`) kişi "alınmış" sayılmaz (kontenjan kapısının saydığı küme bundan geniş, yukarı bak). Listede `countHiredByJobIds` ile **tek sorguda** toplanıyor (`JobManager.enrich`, kapak ve başvuru sayısıyla aynı yerde, §2ap); detayda tekil `countByJobIdAndStatusIn`.
 
@@ -2698,7 +2772,7 @@ KOALA_CHIP_DIR=/tmp/chip KOALA_CSCA_DIR=src/main/resources/csca ./mvnw test -Dte
 
 **Yeniden başvuru kararı: `WITHDRAWN` bir başvuru yeniden başvuruyu engellemez.** Mükerrer başvuru kapısı `existsByJobIdAndUserId`'den `existsByJobIdAndUserIdAndStatusNot(jobId, userId, WITHDRAWN)`'a daraltıldı. Gerekçe: engelleseydi geri çekme kullanıcı için tek yönlü bir kapı olurdu — fikrini değiştiren ya da yanlışlıkla geri çeken kişi ilan hâlâ `OPEN` iken bir daha başvuramaz, tek çaresi işverene mesaj atmak olurdu; bu da geri çekme düğmesini kullanılmaz derecede korkutucu yapardı. Kötüye kullanım riski (başvur–geri çek–başvur döngüsü) düşük: her yeni başvuru yeni bir satır, yani işverenin gördüğü geçmiş bozulmuyor ve gerekirse ileride sayıya bağlı bir kural eklenebilir. Karar `ApplicationWithdrawalTest` ve `ApplicationWithdrawalIT` içinde iki yönlü test edildi: `WITHDRAWN` engellemiyor, `APPLIED` engellemeye devam ediyor.
 
-**`hasApplied` bilerek daraltılmadı.** O metot mesajlaşma kapısını besliyor (`MessagingManager.assertMayConverse`): "bu ilanla ilişkisi var mı?" sorusunun cevabı. Daraltılsaydı başvurusunu geri çeken kullanıcı ile işveren arasındaki mevcut sohbet aniden **403** dönerdi — oysa geri çekmenin sebebini konuşmak tam da o anda gerekiyor. İki kontrol farklı soruları soruyor: biri "şu an canlı bir başvurusu var mı", diğeri "bu ilana hiç dokundu mu".
+**`hasApplied` bir süre bilerek daraltılmadı, sonra tümüyle düştü (#257).** O metot mesajlaşma kapısını besliyordu ("bu ilana hiç dokundu mu?") ve daraltılsaydı başvurusunu geri çeken kullanıcı ile işveren arasındaki sohbet aniden 403 dönerdi. Kapı artık başvuruya değil **ödenmiş atamaya** bakıyor (§2o); başvurusu olan ama ödenmemiş kullanıcı zaten mesajlaşamıyor, geri çekmenin sebebini konuşmak da o kanaldan yapılmıyor. Metot ve `JobApplicationDao.existsByJobIdAndUserId` silindi.
 
 **`answeredDateTime` geri çekme anını da taşıyor.** Ayrı bir `withdrawnDateTime` kolonu açılmadı; alan başvurunun terminal duruma geçtiği anı ifade ediyor ve `MyApplicationDto` üzerinden zaten dönüyor. Yeni kolon migration gerektirir, sıralama kümesine (`APPLICATION_SORTABLE`, gelen kutusuyla paylaşılan) ikinci bir zaman alanı sokar ve istemcide iki alanın hangisine bakılacağı sorusunu doğururdu.
 
@@ -3651,6 +3725,8 @@ Bu sessiz bir tavandır ve **çarpma bir gün tutmaz**: #35 ile paket on context
 
 **Faz 10/10B testleri de saf birim testi.** `MessagingAuthorizationTest`, `ReviewRulesTest`, `AssignmentOperationsAuthorizationTest`, `ReportRulesTest` ve `CancellationPolicyTest` Spring context'i kaldırmadan çalışır. Yeni bir yetki dalı ya da para kuralı eklerken karşılığı bu dosyalara yazılır.
 
+**Mesajlaşma ödeme kapısı testleri (§2o, #257).** `MessagingAvailabilityTest` yüklemi tek başına sabitliyor (atama yok / ödenmemiş / başarısız → `PAYMENT_REQUIRED`; iptal, ret, iade ve pencere → `CLOSED`; emanet ve çıkış → `AVAILABLE`; iptal ödemeden önce gelir). `MessagingAuthorizationTest` kapıyı manager'da: ödenmemiş çift 403 `MESSAGING_PAYMENT_REQUIRED`, engel listesine hiç bakılmaz, `HELD_IN_ESCROW`/`RELEASED_TO_WORKER` açar, iptal/iade/ret 409 `MESSAGING_WINDOW_CLOSED`, ikili sohbette gönderim kapıyı yeniden sorar, kapı öncesinden kalma sohbet salt okunur. `CrewConversationRulesTest` grubu: şirket ilanının grubu bütün yetkililerle kurulur, bireysel ilan yetkili sormaz, kapanan atama işçiyi çıkarır, olmayan gruptan çıkmak zararsız, işveren hiç çıkarılmaz, yeni yetkili yalnız penceresi açık gruplara katılır, çıkarılan yetkili hepsinden çıkar. `CrewConversationListenerTest` dört olayın yönlendirmesini, dinleyicinin `AFTER_COMMIT` + `fallbackExecution` olduğunu ve dört manager metodunun `REQUIRES_NEW` olduğunu; `CompanyContactCrewEventsTest` iki yetkili olayının kayıttan **sonra** yayımlandığını; `PaymentCallbackTest` ödenen olayın `paymentDao.save`'den sonra ve yalnız başarıda yayımlandığını; `AssignmentOperationsAuthorizationTest`, `UnpaidExpiryRulesTest` ve `PayoutReleaseTest` kapanış olayının üç yazma yolundan yayımlandığını (çıkışta yayımlanmadığını) sabitliyor. `MessagingPaymentGateIT` on kuralı gerçek HTTP, gerçek Postgres ve sahte Iyzico ile koşuyor: ödeme öncesi üç tarafın da 403'ü ve grubun yokluğu, atama yanıtındaki `messagingAvailable=false`/`PAYMENT_REQUIRED`, `POST /payments/callback` ile emanete geçince grubun ilan sahibi + yetkili + işçiyle kurulması ve ikili sohbetin 200 ile açılması, ikinci ödemenin aynı gruba katılması, ödenmemiş ikinci işçinin 403 alması, yetkilinin grubu okuyup yazması, sonradan eklenen yetkilinin katılıp çıkarılanın düşmesi ve 404 alması, 7 gün sonrası 409'un korunması, yabancının ödeme öncesi/sonrası **aynı** 404 zarfını alması, `POST /job-assignments/{id}/cancel` sonrası `REFUNDED` + gruptan çıkış + ikili sohbette 409 + geçmişin okunabilir kalması + `closed=true`, ve kapı öncesinden kalma ikili sohbetin ödemeyle açılması.
+
 **Faz 11C testleri.** `WorkerToolsRulesTest` on yedi kural sabitliyor: deneyim sahipliği ve tarih tutarlılığı, müsaitlik aralıklarının toptan değişmesi ve çakışma reddi, geçmiş tarihe istisna yasağı, talent pool'da kendini ekleme yasağı ve idempotanlık, şablonun başkasının ilanından çıkarılamaması, kriteri olmayan alarmın reddi ve alarm sayısı sınırı. `UserProfileContractTest` deneyimin artık yapılandırılmış döndüğünü doğruluyor.
 
 **Kontenjan, ödenmemiş atama ve değerlendirme bildirimi testleri.** `JobHeadcountRulesTest` dokuz kural sabitliyor (§2ao2): kontenjansız ilan sınırsız işe alır ve sayım sorgusu hiç çalışmaz, son yer doldurulabilir, dolu ilan 409 verir ve başvuru `APPLIED` kalır, kontenjanın üstüne çıkmış ilan da reddeder, dolu ilan **reddetmeye** devam edebilir, kontenjan dolunca ilan kapanmaz, iş başladıktan sonra da işe alım yapılabilir, kabul yayınlanmış fiyatı atamaya kopyalar. `UnpaidExpiryRulesTest` dokuz kural: ödenmemiş atama düşer, başarısız ödeme denemesi de düşer, emanetteki para dokunulmaz kalır, kabul edilmemiş teklife dokunulmaz, kayıt işveren tarafına sıfır tutarla yazılır, iki tarafa da bildirim gider, ikinci koşu zararsız, bir atamadaki hata partiyi düşürmez, kapalıyken hiç çalışmaz. Değerlendirme bildirimi `ReviewRulesTest` içinde: puan verildiğinde gider, reddedilen değerlendirmede hiç gitmez.
@@ -3821,7 +3897,7 @@ Bu depodaki yapısal korumaların hepsi kaynağı **düz metin** tarıyor, yani 
 
 **`ErrorContractIT` HTTP sözleşmesini koruyor.** Yetkisiz erişimin 403, eksik Authorization başlığının 401 döndüğünü doğrular. İkisi de eskiden 500 dönüyordu — biri yanlış `AccessDeniedException` import'u yüzünden, diğeri null başlıkta `substring(7)` çağrıldığı için.
 
-**Başvuru geri çekme testleri.** `ApplicationWithdrawalTest` on üç kural sabitliyor (§2ar2): sahibi `APPLIED` başvurusunu geri çeker, başkasınınki **404**, bilinmeyen kimlik 404, `ACCEPTED` ve `REJECTED` **409**, iki kez geri çekme 409, kayıt silinmez ve `delete` hiç çağrılmaz, işverene bildirim gider, geri çekilmiş başvuru kabul de red de **edilemez**, `WITHDRAWN` yeniden başvuruyu engellemez ama `APPLIED` engeller, `hasApplied` daraltılmadığı için mesajlaşma kapısı açık kalır. `ApplicationWithdrawalIT` aynı davranışı gerçek Postgres'te dört kuralla doğruluyor: satır tabloda kalır ve `is_deleted` `false`'tur, `APPLIED` süzgecinden düşüp `WITHDRAWN` süzgecinde görünür, işverenin listesinde durur, mükerrer başvuru kapısı yalnızca canlı başvuruda kapanır.
+**Başvuru geri çekme testleri.** `ApplicationWithdrawalTest` on iki kural sabitliyor (§2ar2): sahibi `APPLIED` başvurusunu geri çeker, başkasınınki **404**, bilinmeyen kimlik 404, `ACCEPTED` ve `REJECTED` **409**, iki kez geri çekme 409, kayıt silinmez ve `delete` hiç çağrılmaz, işverene bildirim gider, geri çekilmiş başvuru kabul de red de **edilemez**, `WITHDRAWN` yeniden başvuruyu engellemez ama `APPLIED` engeller (mesajlaşma kapısını tutan on üçüncü kural #257 ile kapının kendisiyle birlikte düştü). `ApplicationWithdrawalIT` aynı davranışı gerçek Postgres'te dört kuralla doğruluyor: satır tabloda kalır ve `is_deleted` `false`'tur, `APPLIED` süzgecinden düşüp `WITHDRAWN` süzgecinde görünür, işverenin listesinde durur, mükerrer başvuru kapısı yalnızca canlı başvuruda kapanır.
 
 **`EntityGraphPathsIT` neden var.** `@EntityGraph` içindeki `attributePaths` derleyicinin denetlemediği düz metin; yanlış bir yol ancak o sorgu çalıştırıldığında patlıyor. `JobAssignmentDao` içinde `job.creator.addresses` yazıyordu, oysa `User.address` tekil — `PATCH /job-assignments/{id}/status` her çağrıda çöküyordu ve kimse fark etmemişti. Test tüm DAO'ları tarayıp her yolu JPA metamodel'ine karşı doğruluyor. Yeni bir entity graph eklerken bu test bedava koruma sağlıyor.
 

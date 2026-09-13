@@ -11,7 +11,9 @@ import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentDto;
 import com.exskylab.koala.entities.JobAssignment;
 import jakarta.validation.Valid;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.domain.Page;
@@ -54,4 +56,8 @@ public interface JobAssignmentService {
     boolean hasActiveWorkFor(UUID workerId);
 
     long countOccupiedSlots(UUID jobId);
+
+    Optional<JobAssignment> findLatestByJobAndWorker(UUID jobId, UUID workerId);
+
+    List<JobAssignment> findAllByJobsAndWorkers(Collection<UUID> jobIds, Collection<UUID> workerIds);
 }
