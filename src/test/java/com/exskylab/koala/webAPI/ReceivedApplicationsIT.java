@@ -3,8 +3,6 @@ package com.exskylab.koala.webAPI;
 import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.support.AbstractIntegrationTest;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManagerFactory;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
@@ -16,6 +14,9 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -45,7 +46,8 @@ class ReceivedApplicationsIT extends AbstractIntegrationTest {
     @Autowired
     private EntityManagerFactory entityManagerFactory;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    @Autowired
+    private ObjectMapper objectMapper;
 
     private final UUID employerA = UUID.randomUUID();
     private final UUID officerO = UUID.randomUUID();
@@ -365,7 +367,7 @@ class ReceivedApplicationsIT extends AbstractIntegrationTest {
     }
 
     private JsonNode comparable(JsonNode envelope) {
-        com.fasterxml.jackson.databind.node.ObjectNode copy = envelope.deepCopy();
+        ObjectNode copy = (ObjectNode) envelope.deepCopy();
         copy.remove("timeStamp");
         copy.remove("requestId");
         return copy;
