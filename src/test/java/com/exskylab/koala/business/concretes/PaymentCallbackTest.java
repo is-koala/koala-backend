@@ -219,6 +219,31 @@ class PaymentCallbackTest {
     }
 
     @Test
+    void replayingTheRecordedOutcomeNeverContactsTheProviderOrTouchesTheRow() {
+        PaymentDao.RecordedOutcomeView pending = mock(PaymentDao.RecordedOutcomeView.class);
+        when(pending.getStatus()).thenReturn(PaymentAttemptStatus.VERIFY_PENDING);
+        when(pending.getJobAssignmentId()).thenReturn(ASSIGNMENT_ID);
+        when(paymentDao.findRecordedOutcomeByProviderToken(TOKEN)).thenReturn(Optional.of(pending));
+
+        var outcome = paymentManager.findRecordedOutcome(TOKEN);
+
+        assertEquals(PaymentAttemptStatus.VERIFY_PENDING, outcome.orElseThrow().status());
+        assertEquals(ASSIGNMENT_ID, outcome.orElseThrow().jobAssignmentId());
+        verify(iyzicoPaymentService, never()).retrieveCheckoutFormResult(any());
+        verify(paymentDao, never()).findByProviderToken(any());
+        verify(paymentDao, never()).save(any());
+        verify(jobAssignmentDao, never()).findByIdForUpdate(any());
+    }
+
+    @Test
+    void replayingAnUnknownTokenIsEmptyRatherThanAnError() {
+        when(paymentDao.findRecordedOutcomeByProviderToken("sahte")).thenReturn(Optional.empty());
+
+        assertTrue(paymentManager.findRecordedOutcome("sahte").isEmpty());
+        verify(iyzicoPaymentService, never()).retrieveCheckoutFormResult(any());
+    }
+
+    @Test
     void anAmbiguousProviderErrorCannotBeRetriedAsANewPayment() {
         Payment first = pendingPayment();
         when(paymentDao.findByProviderToken(TOKEN)).thenReturn(Optional.of(first));

@@ -16,6 +16,21 @@ public class PaymentReturnUrlBuilder {
     }
 
     public String resultUrl(boolean succeeded, UUID assignmentId) {
+        return resultPage(succeeded)
+                .queryParam("assignmentId", assignmentId)
+                .build()
+                .encode()
+                .toUriString();
+    }
+
+    public String unknownAttemptResultUrl() {
+        return resultPage(false)
+                .build()
+                .encode()
+                .toUriString();
+    }
+
+    private UriComponentsBuilder resultPage(boolean succeeded) {
         UriComponentsBuilder builder = switch (properties.returnTarget()) {
             case PaymentReturnProperties.WebOrigin webOrigin -> UriComponentsBuilder
                     .fromUri(webOrigin.value())
@@ -26,11 +41,6 @@ public class PaymentReturnUrlBuilder {
                     .host("payment-result");
         };
 
-        return builder
-                .queryParam("status", succeeded ? "success" : "failed")
-                .queryParam("assignmentId", assignmentId)
-                .build()
-                .encode()
-                .toUriString();
+        return builder.queryParam("status", succeeded ? "success" : "failed");
     }
 }

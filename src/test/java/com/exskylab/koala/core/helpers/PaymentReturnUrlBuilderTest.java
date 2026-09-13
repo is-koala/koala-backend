@@ -33,6 +33,14 @@ class PaymentReturnUrlBuilderTest {
     }
 
     @Test
+    void anUnknownAttemptLandsOnTheSameResultPageAsFailedWithoutAnAssignment() {
+        assertEquals("koala://payment-result?status=failed",
+                new PaymentReturnUrlBuilder(properties("koala://")).unknownAttemptResultUrl());
+        assertEquals("https://iskoala.com/payment/result?status=failed",
+                new PaymentReturnUrlBuilder(properties("https://iskoala.com")).unknownAttemptResultUrl());
+    }
+
+    @Test
     void returnBaseUrlAcceptsHttpsOriginsAndKnownAppSchemesOnly() {
         try (var validatorFactory = Validation.buildDefaultValidatorFactory()) {
             var validator = validatorFactory.getValidator();
