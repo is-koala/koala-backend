@@ -219,6 +219,24 @@ kümesine yazılır; küme boşken tarama her `*Messages.SABIT` referansını ya
 
 **İstemciye iç detay sızmaz.** Beklenmeyen hatalarda gövdeye sabit bir metin yazılır, exception yalnızca `requestId` ile loglanır. Zarftaki istek kimliğinin tek adı `requestId` (§2i).
 
+**Hata gövdesi `Accept` ne olursa olsun `application/json` (is-koala/koala-backend#256).** `SecurityExceptionConfig`
+kimlik ve yetki hatalarını `HandlerExceptionResolver` üzerinden `GlobalExceptionHandler`'a taşıyor; handler bir
+`ResponseEntity<Result>` döndürdüğü için gövde içerik müzakeresinden geçiyordu ve JSON kabul etmeyen bir `Accept`
+(yalnız `text/html` gönderen tarayıcı/bot probları) `HttpMediaTypeNotAcceptableException` üretiyordu. Sonucu iki
+katlıydı: `ExceptionHandlerExceptionResolver` her istekte `Failure in @ExceptionHandler … handleAuthentication`
+diye WARN + tam yığın izi basıyor, istemci ise gövdesiz ve `Content-Type`'sız bir 401 alıyordu — durum kodu
+`HttpEntityMethodProcessor` gövdeyi yazmadan önce set edildiği için 401 kalıyor, ama zarf hiç yazılmıyordu.
+`build` artık `ResponseEntity.contentType(APPLICATION_JSON)` ile içerik tipini sabitliyor; Spring, yanıtta önceden
+set edilmiş somut bir `Content-Type` görünce müzakereyi hiç yapmıyor
+(`AbstractMessageConverterMethodProcessor.writeWithMessageConverters`, `isContentTypePreset`). Yani hata zarfı bir
+sözleşme: istemci ne isterse istesin JSON. `HttpMessageConverter`'a elle yazmak yerine bu yol seçildi, çünkü tek
+satır ve bütün handler'ları — güvenlik giriş noktasından, `SessionAuthFilter`/`StaffAuthFilter`/`RateLimitFilter`'ın
+aynı resolver'a verdiği hatalardan ve controller'lardan geleni — tek yerden kapsıyor. Eşleşmeyen yol + anonim istek
+için handler ayrıca log yazmıyor: erişim logu (§2i) 4xx'i zaten WARN ile tek satır yazıyor, ikinci bir satır
+gürültü olurdu. `ErrorResponseContentTypeTest` (standalone MockMvc; `text/html`, `*/*;q=0`, `image/png` ve
+tarayıcı biçimli Accept; kimlik, yetki ve alan hatası) ve `ErrorEnvelopeIT` (`POST /` + `Accept: text/html` →
+401 JSON zarfı, o iş parçacığında yığın izi yok ve tek WARN satırı `http.access`'ten; `GET /users/me` aynı) sabitliyor.
+
 ## 2d2. Var olma gizlemesi — eşitlenen şey yanıt, durum kodu değil
 
 Depo beş ayrı yerde bir kaynağın **var olduğunu** sızdırmamak için 403 yerine 404 döndürmeyi seçmişti (§2o,
