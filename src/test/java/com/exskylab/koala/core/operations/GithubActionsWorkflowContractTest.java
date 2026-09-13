@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.yaml.snakeyaml.Yaml;
 
@@ -23,76 +24,42 @@ class GithubActionsWorkflowContractTest {
     private static final Path WORKFLOW = Path.of(".github/workflows/ci.yml");
 
     @Test
-    void usesTheSupportedNode24ActionMajors() throws IOException {
-        assertEquals(
-                List.of(
-                        "actions/checkout@v7",
-                        "actions/setup-java@v6",
-                        "actions/upload-artifact@v7",
-                        "actions/checkout@v7",
-                        "docker/setup-qemu-action@v4",
-                        "docker/setup-buildx-action@v4",
-                        "docker/login-action@v4",
-                        "docker/build-push-action@v7"),
-                actionReferences());
-    }
-
-    @Test
-    void keepsTheTestReportAndMavenCacheContract() throws IOException {
-        Map<?, ?> jobs = jobs();
-        Map<?, ?> setupJava = stepUsing(jobs, "test", "actions/setup-java@v6");
-        Map<?, ?> setupJavaInputs = assertInstanceOf(Map.class, setupJava.get("with"));
-        Map<?, ?> tests = stepNamed(jobs, "test", "Run tests");
-        Map<?, ?> upload = stepUsing(jobs, "test", "actions/upload-artifact@v7");
-        Map<?, ?> uploadInputs = assertInstanceOf(Map.class, upload.get("with"));
-        String reportPaths = assertInstanceOf(String.class, uploadInputs.get("path"));
-
-        Map<?, ?> buildPush = stepUsing(jobs, "build", "docker/build-push-action@v7");
-        Map<?, ?> buildPushInputs = assertInstanceOf(Map.class, buildPush.get("with"));
-        String cacheTo = assertInstanceOf(String.class, buildPushInputs.get("cache-to"));
-
-        assertAll(
-                () -> assertEquals("maven", setupJavaInputs.get("cache")),
-                () -> assertEquals("./mvnw -B verify -Dkoala.test.latch-timeout=30", tests.get("run")),
-                () -> assertEquals(45, job(jobs, "test").get("timeout-minutes")),
-                () -> assertEquals(60, job(jobs, "build").get("timeout-minutes")),
-                () -> assertEquals(5, job(jobs, "deploy").get("timeout-minutes")),
-                () -> assertEquals("always()", upload.get("if")),
-                () -> assertEquals(true, upload.get("continue-on-error")),
-                () -> assertEquals("test-results", uploadInputs.get("name")),
-                () -> assertEquals("ignore", uploadInputs.get("if-no-files-found")),
-                () -> assertTrue(reportPaths.contains("target/surefire-reports/")),
-                () -> assertTrue(reportPaths.contains("target/failsafe-reports/")),
-                () -> assertFalse(reportPaths.contains("jacoco")),
-                () -> assertEquals(3, uploadInputs.get("retention-days")),
-                () -> assertTrue(cacheTo.contains("ignore-error=true")));
-    }
-
-    @Test
-    void keepsPullRequestsReadOnlyAndDeploysOnlyVersionTags() throws IOException {
+    void githubOnlyFiresTheDokployWebhookOnVersionTags() throws IOException {
         String workflow = workflow();
         Map<?, ?> jobs = jobs();
+        Map<?, ?> deploy = job(jobs, "deploy");
+        Map<?, ?> trigger = stepNamed(jobs, "deploy", "Trigger Dokploy deploy");
         Map<?, ?> concurrency = concurrency();
 
         assertAll(
-                () -> assertTrue(workflow.contains("pull_request:\n    branches: [main]")),
+                () -> assertEquals(Set.of("deploy"), jobs.keySet()),
+                () -> assertEquals("ubuntu-latest", deploy.get("runs-on")),
+                () -> assertEquals(5, deploy.get("timeout-minutes")),
+                () -> assertNull(deploy.get("needs")),
+                () -> assertEquals(
+                        "startsWith(github.ref, 'refs/tags/v')", deploy.get("if")),
+                () -> assertEquals(
+                        "curl -fsSL -X POST \"${{ secrets.DOKPLOY_DEPLOY_WEBHOOK }}\"",
+                        trigger.get("run")),
+                () -> assertEquals(List.of(), actionReferences()),
+                () -> assertFalse(workflow.contains("self-hosted")),
+                () -> assertFalse(workflow.contains("pull_request:")),
+                () -> assertFalse(workflow.contains("branches: [main]")),
+                () -> assertTrue(workflow.contains("tags: ['v*']")),
                 () -> assertTrue(workflow.contains("workflow_dispatch:")),
                 () -> assertEquals(
-                        "github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'",
-                        job(jobs, "test").get("if")),
-                () -> assertNull(job(jobs, "build").get("needs")),
-                () -> assertEquals("github.event_name == 'push'", job(jobs, "build").get("if")),
-                () -> assertTrue(workflow.contains("VERSION=main-${GITHUB_SHA::7}")),
-                () -> assertTrue(workflow.contains("refs/tags/v")),
-                () -> assertTrue(workflow.contains("koala:latest")),
-                () -> assertEquals("build", job(jobs, "deploy").get("needs")),
-                () -> assertEquals(
-                        "startsWith(github.ref, 'refs/tags/v')", job(jobs, "deploy").get("if")),
-                () -> assertEquals(
                         "ci-${{ github.workflow }}-${{ github.ref }}", concurrency.get("group")),
-                () -> assertEquals(
-                        "${{ github.event_name == 'pull_request' }}",
-                        concurrency.get("cancel-in-progress")));
+                () -> assertEquals(false, concurrency.get("cancel-in-progress")));
+    }
+
+    @Test
+    void githubDoesNotBuildImagesOrRunMaven() throws IOException {
+        String workflow = workflow();
+        assertAll(
+                () -> assertFalse(workflow.contains("docker/")),
+                () -> assertFalse(workflow.contains("setup-java")),
+                () -> assertFalse(workflow.contains("mvnw")),
+                () -> assertFalse(workflow.contains("qemu")));
     }
 
     private static String workflow() throws IOException {
@@ -130,14 +97,6 @@ class GithubActionsWorkflowContractTest {
 
     private static Map<?, ?> job(Map<?, ?> jobs, String name) {
         return assertInstanceOf(Map.class, jobs.get(name));
-    }
-
-    private static Map<?, ?> stepUsing(Map<?, ?> jobs, String jobName, String reference) {
-        return steps(jobs, jobName).stream()
-                .map(rawStep -> assertInstanceOf(Map.class, rawStep))
-                .filter(step -> reference.equals(step.get("uses")))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError(jobName + " job has no " + reference + " step"));
     }
 
     private static Map<?, ?> stepNamed(Map<?, ?> jobs, String jobName, String name) {
