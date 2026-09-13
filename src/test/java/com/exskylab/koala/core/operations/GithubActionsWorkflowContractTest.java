@@ -53,7 +53,7 @@ class GithubActionsWorkflowContractTest {
 
         assertAll(
                 () -> assertEquals("maven", setupJavaInputs.get("cache")),
-                () -> assertEquals("./mvnw -B verify", tests.get("run")),
+                () -> assertEquals("./mvnw -B verify -Dkoala.test.latch-timeout=30", tests.get("run")),
                 () -> assertEquals(45, job(jobs, "test").get("timeout-minutes")),
                 () -> assertEquals(60, job(jobs, "build").get("timeout-minutes")),
                 () -> assertEquals(5, job(jobs, "deploy").get("timeout-minutes")),
