@@ -2,6 +2,7 @@ package com.exskylab.koala.dataAccess;
 
 import com.exskylab.koala.support.AbstractIntegrationTest;
 import com.exskylab.koala.support.OverlappingWrites;
+import com.exskylab.koala.support.TestLatches;
 import com.exskylab.koala.business.abstracts.PaymentService;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
@@ -157,8 +158,8 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
             start.countDown();
 
             assertEquals(List.of("CONFLICT", "SUCCESS"),
-                    java.util.stream.Stream.of(first.get(10, TimeUnit.SECONDS),
-                                    second.get(10, TimeUnit.SECONDS)).sorted().toList());
+                    java.util.stream.Stream.of(TestLatches.getProgress(first),
+                                    TestLatches.getProgress(second)).sorted().toList());
             assertEquals(1, jdbcTemplate.queryForObject("""
                     select count(*) from payments
                     where job_assignment_id = ? and status in ('INITIATED', 'VERIFY_PENDING', 'IN_REVIEW')
@@ -207,7 +208,7 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
                 firstHasLock.countDown();
                 await(releaseFirst);
             }));
-            assertTrue(firstHasLock.await(10, TimeUnit.SECONDS));
+            TestLatches.awaitProgress(firstHasLock);
 
             var reservation = executor.submit(() -> {
                 JobAssignment stale = new JobAssignment();
@@ -224,8 +225,8 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
 
             assertThrows(TimeoutException.class, () -> reservation.get(250, TimeUnit.MILLISECONDS));
             releaseFirst.countDown();
-            financialDecision.get(10, TimeUnit.SECONDS);
-            assertEquals("JOB_ASSIGNMENT_NOT_READY_FOR_PAYMENT", reservation.get(10, TimeUnit.SECONDS));
+            TestLatches.getProgress(financialDecision);
+            assertEquals("JOB_ASSIGNMENT_NOT_READY_FOR_PAYMENT", TestLatches.getProgress(reservation));
             assertEquals(0, jdbcTemplate.queryForObject(
                     "select count(*) from payments where job_assignment_id = ?", Integer.class, assignmentId));
         } finally {
@@ -528,13 +529,6 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
     }
 
     private static void await(CountDownLatch latch) {
-        try {
-            if (!latch.await(10, TimeUnit.SECONDS)) {
-                throw new IllegalStateException("payment reservation lock test timed out");
-            }
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("payment reservation lock test interrupted", exception);
-        }
+        TestLatches.awaitProgress(latch);
     }
 }

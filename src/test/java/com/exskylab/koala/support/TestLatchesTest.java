@@ -1,0 +1,69 @@
+package com.exskylab.koala.support;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class TestLatchesTest {
+
+    @AfterEach
+    void clearOverride() {
+        System.clearProperty(TestLatches.PROPERTY);
+    }
+
+    @Test
+    void localDefaultIsFiveSeconds() {
+        assertEquals(Duration.ofSeconds(5), TestLatches.progressTimeout());
+    }
+
+    @Test
+    void systemPropertyWidensTheBudget() {
+        System.setProperty(TestLatches.PROPERTY, "30");
+        assertEquals(Duration.ofSeconds(30), TestLatches.progressTimeout());
+    }
+
+    @Test
+    void awaitProgressUsesTheConfiguredBudget() throws InterruptedException {
+        System.setProperty(TestLatches.PROPERTY, "1");
+        CountDownLatch never = new CountDownLatch(1);
+        long started = System.nanoTime();
+        assertThrows(IllegalStateException.class, () -> TestLatches.awaitProgress(never));
+        long waitedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+        assertTrue(waitedMs >= 900, "budget ignored; waited " + waitedMs + " ms");
+    }
+
+    @Test
+    void ciWorkflowPassesAWiderBudget() throws Exception {
+        String workflow = Files.readString(Path.of(".github", "workflows", "ci.yml"));
+        assertTrue(
+                workflow.contains("-Dkoala.test.latch-timeout="),
+                "Pi verify must pass -Dkoala.test.latch-timeout so 5s progress awaits do not flake");
+    }
+
+    @Test
+    void listedRaceTestsDoNotHardCodeFiveSecondProgressWaits() throws Exception {
+        List<Path> sources = List.of(
+                Path.of("src/test/java/com/exskylab/koala/business/concretes/PushDeliveryClaimIT.java"),
+                Path.of("src/test/java/com/exskylab/koala/dataAccess/ReportLockIT.java"),
+                Path.of("src/test/java/com/exskylab/koala/dataAccess/ActivePaymentAttemptConstraintIT.java"),
+                Path.of("src/test/java/com/exskylab/koala/dataAccess/PayoutSettlementReconciliationIT.java"),
+                Path.of("src/test/java/com/exskylab/koala/support/OverlappingWrites.java"));
+        for (Path source : sources) {
+            String text = Files.readString(source);
+            assertTrue(
+                    !text.contains("await(5, TimeUnit.SECONDS)")
+                            && !text.contains("get(5, TimeUnit.SECONDS)"),
+                    source + " still hard-codes a 5s progress wait");
+        }
+    }
+}

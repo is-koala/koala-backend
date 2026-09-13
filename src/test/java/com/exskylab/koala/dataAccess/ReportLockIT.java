@@ -1,6 +1,7 @@
 package com.exskylab.koala.dataAccess;
 
 import com.exskylab.koala.support.AbstractIntegrationTest;
+import com.exskylab.koala.support.TestLatches;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,7 +17,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ReportLockIT extends AbstractIntegrationTest {
 
@@ -64,31 +64,24 @@ class ReportLockIT extends AbstractIntegrationTest {
                 firstHasLock.countDown();
                 await(releaseFirst);
             }));
-            assertTrue(firstHasLock.await(10, TimeUnit.SECONDS));
+            TestLatches.awaitProgress(firstHasLock);
 
             var second = executor.submit(() -> transactions.execute(status -> {
                 secondStarted.countDown();
                 return reportDao.findByIdForUpdate(reportId).orElseThrow().getId();
             }));
-            assertTrue(secondStarted.await(10, TimeUnit.SECONDS));
+            TestLatches.awaitProgress(secondStarted);
             assertThrows(TimeoutException.class, () -> second.get(250, TimeUnit.MILLISECONDS));
 
             releaseFirst.countDown();
-            first.get(10, TimeUnit.SECONDS);
-            second.get(10, TimeUnit.SECONDS);
+            TestLatches.getProgress(first);
+            TestLatches.getProgress(second);
         } finally {
             releaseFirst.countDown();
         }
     }
 
     private static void await(CountDownLatch latch) {
-        try {
-            if (!latch.await(10, TimeUnit.SECONDS)) {
-                throw new IllegalStateException("report lock test timed out");
-            }
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("report lock test interrupted", exception);
-        }
+        TestLatches.awaitProgress(latch);
     }
 }

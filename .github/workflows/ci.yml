@@ -39,7 +39,7 @@ jobs:
           cache: maven
 
       - name: Run tests
-        run: ./mvnw -B verify
+        run: ./mvnw -B verify -Dkoala.test.latch-timeout=30
 
       # Kota dolduğunda CreateArtifact kırmızısı verify yeşilini eziyordu.
       # Kapı Surefire/Failsafe çıkış kodu; rapor yüklemesi isteğe bağlı.
