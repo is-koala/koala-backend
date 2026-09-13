@@ -1,8 +1,8 @@
 name: koala ci
 
 # Verify and the GHCR image run on Yusuf's Mac. GitHub only curls the
-# Dokploy webhook after a v* tag, and only after that image is already on
-# GHCR. ubuntu-latest is seconds of hosted minutes, not a runner queue.
+# Dokploy webhook after a v* tag (or a manual dispatch), on the org
+# self-hosted runners. It does not rebuild the image.
 on:
   push:
     tags: ['v*']
@@ -15,8 +15,8 @@ concurrency:
 jobs:
   deploy:
     name: deploy
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: self-hosted
     timeout-minutes: 5
     steps:
       - name: Trigger Dokploy deploy

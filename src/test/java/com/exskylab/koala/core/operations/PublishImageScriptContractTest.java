@@ -17,7 +17,8 @@ class PublishImageScriptContractTest {
     void theMacScriptPushesASingleAmd64ManifestToTheProductionRepository() throws IOException {
         String script = Files.readString(SCRIPT, StandardCharsets.UTF_8);
         assertAll(
-                () -> assertTrue(script.contains("ghcr.io/yustyy/koala")),
+                () -> assertTrue(script.contains("ghcr.io/is-koala/koala")),
+                () -> assertTrue(!script.contains("ghcr.io/yustyy/koala")),
                 () -> assertTrue(script.contains("--platform linux/amd64")),
                 () -> assertTrue(script.contains("--provenance=false")),
                 () -> assertTrue(script.contains("--sbom=false")),

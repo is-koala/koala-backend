@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-IMAGE="${KOALA_GHCR_IMAGE:-ghcr.io/yustyy/koala}"
+IMAGE="${KOALA_GHCR_IMAGE:-ghcr.io/is-koala/koala}"
 VERSION="$(sed -n '/<artifactId>koala<\/artifactId>/,/<version>/s/.*<version>\([^<]*\)<\/version>.*/\1/p' pom.xml | head -1)"
 [ -n "$VERSION" ] || { echo "pom.xml version not found" >&2; exit 1; }
 
