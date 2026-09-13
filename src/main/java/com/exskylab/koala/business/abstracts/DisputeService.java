@@ -21,7 +21,7 @@ public interface DisputeService {
 
     List<Dispute> getForAssignment(UUID jobAssignmentId);
 
-    Page<Dispute> searchForStaff(DisputeStatus status, Pageable pageable);
+    Page<Dispute> searchForStaff(DisputeStatus status, String query, Pageable pageable);
 
     Dispute getForStaff(UUID disputeId);
 

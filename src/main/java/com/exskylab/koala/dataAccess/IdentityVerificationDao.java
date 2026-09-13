@@ -34,12 +34,20 @@ public interface IdentityVerificationDao extends JpaRepository<IdentityVerificat
     @EntityGraph(attributePaths = {"user", "verificationDocument", "backDocument", "selfieDocument", "togetherDocument"})
     Optional<IdentityVerification> findTopByUser_IdOrderByCreatedAtDesc(UUID userId);
 
+    @Query("""
+            select v from IdentityVerification v
+            left join v.user u
+            where ((cast(:status as string) = 'PENDING' and v.verified = false and v.rejectedAt is null)
+                   or (cast(:status as string) = 'APPROVED' and v.verified = true)
+                   or (cast(:status as string) = 'REJECTED' and v.rejectedAt is not null))
+              and (cast(:query as string) is null
+                   or unaccent(lower(u.email)) like unaccent(lower(concat('%', cast(:query as string), '%')))
+                   or unaccent(lower(concat(u.firstName, ' ', u.lastName)))
+                      like unaccent(lower(concat('%', cast(:query as string), '%')))
+                   or unaccent(lower(concat(v.firstName, ' ', v.lastName)))
+                      like unaccent(lower(concat('%', cast(:query as string), '%'))))
+            """)
     @EntityGraph(attributePaths = {"user", "verificationDocument", "backDocument", "selfieDocument", "togetherDocument"})
-    Page<IdentityVerification> findByVerifiedFalseAndRejectedAtIsNull(Pageable pageable);
-
-    @EntityGraph(attributePaths = {"user", "verificationDocument", "backDocument", "selfieDocument", "togetherDocument"})
-    Page<IdentityVerification> findByVerifiedTrue(Pageable pageable);
-
-    @EntityGraph(attributePaths = {"user", "verificationDocument", "backDocument", "selfieDocument", "togetherDocument"})
-    Page<IdentityVerification> findByRejectedAtIsNotNull(Pageable pageable);
+    Page<IdentityVerification> search(@Param("status") String status, @Param("query") String query,
+                                      Pageable pageable);
 }

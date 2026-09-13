@@ -33,5 +33,5 @@ public interface BankAccountService {
 
     BankAccount confirmVerification(String reference, ConfirmIbanTransferDto observation);
 
-    Page<BankAccount> listPendingForStaff(Pageable pageable);
+    Page<BankAccount> listPendingForStaff(String query, Pageable pageable);
 }

@@ -36,11 +36,11 @@ public interface ReportDao extends JpaRepository<Report, UUID> {
             "reviewedBy", "reviewedBy.profilePicture", "job", "message", "image"})
     Optional<Report> findDetailedById(UUID id);
 
-    @EntityGraph(attributePaths = {"reporter", "reporter.profilePicture",
-            "reportedUser", "reportedUser.profilePicture",
-            "reviewedBy", "reviewedBy.profilePicture"})
     @Query(value = """
             select r from Report r
+            left join r.reporter reporter
+            left join r.reportedUser reported
+            left join r.job job
             where (:status is null or r.status = :status)
               and (:reason is null or r.reason = :reason)
               and (:reportedUserId is null or r.reportedUser.id = :reportedUserId)
@@ -49,9 +49,20 @@ public interface ReportDao extends JpaRepository<Report, UUID> {
                    or (cast(:targetType as string) = 'JOB' and r.job.id is not null)
                    or (cast(:targetType as string) = 'MESSAGE' and r.message.id is not null)
                    or (cast(:targetType as string) = 'IMAGE' and r.image.id is not null))
+              and (cast(:query as string) is null
+                   or unaccent(lower(reporter.email)) like unaccent(lower(concat('%', cast(:query as string), '%')))
+                   or unaccent(lower(concat(reporter.firstName, ' ', reporter.lastName)))
+                      like unaccent(lower(concat('%', cast(:query as string), '%')))
+                   or unaccent(lower(reported.email)) like unaccent(lower(concat('%', cast(:query as string), '%')))
+                   or unaccent(lower(concat(reported.firstName, ' ', reported.lastName)))
+                      like unaccent(lower(concat('%', cast(:query as string), '%')))
+                   or unaccent(lower(job.title)) like unaccent(lower(concat('%', cast(:query as string), '%'))))
             """,
             countQuery = """
                     select count(r) from Report r
+                    left join r.reporter reporter
+                    left join r.reportedUser reported
+                    left join r.job job
                     where (:status is null or r.status = :status)
                       and (:reason is null or r.reason = :reason)
                       and (:reportedUserId is null or r.reportedUser.id = :reportedUserId)
@@ -60,11 +71,26 @@ public interface ReportDao extends JpaRepository<Report, UUID> {
                            or (cast(:targetType as string) = 'JOB' and r.job.id is not null)
                            or (cast(:targetType as string) = 'MESSAGE' and r.message.id is not null)
                            or (cast(:targetType as string) = 'IMAGE' and r.image.id is not null))
+                      and (cast(:query as string) is null
+                           or unaccent(lower(reporter.email))
+                              like unaccent(lower(concat('%', cast(:query as string), '%')))
+                           or unaccent(lower(concat(reporter.firstName, ' ', reporter.lastName)))
+                              like unaccent(lower(concat('%', cast(:query as string), '%')))
+                           or unaccent(lower(reported.email))
+                              like unaccent(lower(concat('%', cast(:query as string), '%')))
+                           or unaccent(lower(concat(reported.firstName, ' ', reported.lastName)))
+                              like unaccent(lower(concat('%', cast(:query as string), '%')))
+                           or unaccent(lower(job.title))
+                              like unaccent(lower(concat('%', cast(:query as string), '%'))))
                     """)
+    @EntityGraph(attributePaths = {"reporter", "reporter.profilePicture",
+            "reportedUser", "reportedUser.profilePicture",
+            "reviewedBy", "reviewedBy.profilePicture"})
     Page<Report> search(@Param("status") ReportStatus status,
                         @Param("reason") ReportReason reason,
                         @Param("targetType") String targetType,
                         @Param("reportedUserId") UUID reportedUserId,
+                        @Param("query") String query,
                         Pageable pageable);
 
     @Query("""

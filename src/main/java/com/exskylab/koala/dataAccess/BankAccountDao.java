@@ -34,13 +34,21 @@ public interface BankAccountDao extends JpaRepository<BankAccount, UUID> {
 
     @Query("""
             select account from BankAccount account
+            left join account.user owner
             where account.active = true
               and account.verificationStatus = com.exskylab.koala.entities.BankAccountVerificationStatus.PENDING
               and account.verificationReference is not null
               and (account.verificationExpiresAt is null or account.verificationExpiresAt > :now)
+              and (cast(:query as string) is null
+                   or unaccent(lower(account.verificationReference))
+                      like unaccent(lower(concat('%', cast(:query as string), '%')))
+                   or unaccent(lower(owner.email)) like unaccent(lower(concat('%', cast(:query as string), '%')))
+                   or unaccent(lower(concat(owner.firstName, ' ', owner.lastName)))
+                      like unaccent(lower(concat('%', cast(:query as string), '%'))))
             """)
     @EntityGraph(attributePaths = {"user", "user.profilePicture"})
-    Page<BankAccount> findAwaitingStaffConfirmation(@Param("now") Instant now, Pageable pageable);
+    Page<BankAccount> findAwaitingStaffConfirmation(@Param("now") Instant now, @Param("query") String query,
+                                                    Pageable pageable);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update BankAccount account set account.primaryAccount = false "

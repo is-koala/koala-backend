@@ -50,13 +50,14 @@ public class StaffPayoutManager implements StaffPayoutService {
     }
 
     @Override
-    public PageDto<StaffPayoutDto> listForStaff(StaffPrincipal actor, List<PayoutStatus> statuses, Pageable pageable) {
+    public PageDto<StaffPayoutDto> listForStaff(StaffPrincipal actor, List<PayoutStatus> statuses, String query,
+                                                Pageable pageable) {
         if (lacks(actor, StaffPermission.PAYOUT_RECONCILE)) {
             log.warn("Payout queue read refused without staff permission: permission={} statuses={}",
                     StaffPermission.PAYOUT_RECONCILE.getCode(), statuses);
             throw new ForbiddenException(StaffMessages.PERMISSION_DENIED);
         }
-        return payoutService.listForStaff(statuses, pageable);
+        return payoutService.listForStaff(statuses, query, pageable);
     }
 
     @Override

@@ -19,6 +19,7 @@ import com.exskylab.koala.core.exceptions.ExternalServiceException;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ConflictException;
+import com.exskylab.koala.core.helpers.StaffSearchQuery;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -288,9 +289,9 @@ public class BankAccountManager implements BankAccountService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<BankAccount> listPendingForStaff(Pageable requested) {
+    public Page<BankAccount> listPendingForStaff(String query, Pageable requested) {
         pageableSanitizer.rejectUnknownSort(requested, PENDING_SORTABLE);
-        return bankAccountDao.findAwaitingStaffConfirmation(Instant.now(),
+        return bankAccountDao.findAwaitingStaffConfirmation(Instant.now(), StaffSearchQuery.normalize(query),
                 pageableSanitizer.sanitize(requested, PENDING_SORTABLE, PENDING_SORT));
     }
 

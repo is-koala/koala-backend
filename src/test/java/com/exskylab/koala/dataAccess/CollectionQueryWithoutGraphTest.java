@@ -35,9 +35,9 @@ class CollectionQueryWithoutGraphTest {
      * gerekçe yorumu yaz.
      */
     private static final Set<String> GRAPHLESS_COLLECTION_QUERIES = Set.of(
-            "AccountDeletionRequestDao.findAllByStatus",
-            "AccountDeletionRequestDao.findAll",
             "AccountDeletionRequestDao.findDueIds",
+            // AccountDeletionDto renders no user; the search joins users only to match the e-mail (#254).
+            "AccountDeletionRequestDao.search",
             "AdminAuditEntryDao.search",
             "AgreementVersionDao.findAllCurrent",
             "AppSettingDao.findAllByOrderByKeyAsc",
@@ -88,7 +88,6 @@ class CollectionQueryWithoutGraphTest {
             "PayoutDao.summarizeCompleted",
             "RefundDao.findAllByPaymentIdOrderByCreatedAtDesc",
             "ReportDao.findAllByReporterId",
-            "ReportDao.search",
             "ReportDao.tallyByReportedUser",
             "SettlementTaskDao.findDueIds",
             "SitemapManifestDao.readShard",

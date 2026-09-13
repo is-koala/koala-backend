@@ -114,14 +114,14 @@ class StaffPayoutFacadeTest {
         StaffPrincipal analyst = staff(StaffPermission.FINANCE_READ, StaffPermission.PAYMENT_READ);
 
         assertThrows(ForbiddenException.class,
-                () -> facade.listForStaff(analyst, List.of(PayoutStatus.PROCESSING), PageRequest.of(0, 20)));
+                () -> facade.listForStaff(analyst, List.of(PayoutStatus.PROCESSING), null, PageRequest.of(0, 20)));
         verifyNoInteractions(payoutService);
     }
 
     @Test
     void noActorReadsNoSettlementQueue() {
         assertThrows(ForbiddenException.class,
-                () -> facade.listForStaff(null, List.of(), PageRequest.of(0, 20)));
+                () -> facade.listForStaff(null, List.of(), null, PageRequest.of(0, 20)));
         verifyNoInteractions(payoutService);
     }
 
@@ -130,11 +130,12 @@ class StaffPayoutFacadeTest {
         PageDto<StaffPayoutDto> queue = PageDto.of(Page.empty(), List.of());
         Pageable requested = PageRequest.of(0, 20);
         List<PayoutStatus> statuses = List.of(PayoutStatus.PROCESSING);
-        when(payoutService.listForStaff(statuses, requested)).thenReturn(queue);
+        when(payoutService.listForStaff(statuses, "iyz", requested)).thenReturn(queue);
 
-        PageDto<StaffPayoutDto> result = facade.listForStaff(staff(StaffPermission.PAYOUT_RECONCILE), statuses, requested);
+        PageDto<StaffPayoutDto> result = facade.listForStaff(staff(StaffPermission.PAYOUT_RECONCILE), statuses, "iyz",
+                requested);
 
         assertSame(queue, result);
-        verify(payoutService, times(1)).listForStaff(statuses, requested);
+        verify(payoutService, times(1)).listForStaff(statuses, "iyz", requested);
     }
 }

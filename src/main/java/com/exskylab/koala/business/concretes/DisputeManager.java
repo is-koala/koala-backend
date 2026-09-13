@@ -35,6 +35,7 @@ import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.UserService;
 import org.springframework.data.domain.Sort;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
+import com.exskylab.koala.core.helpers.StaffSearchQuery;
 import java.util.Set;
 import com.exskylab.koala.business.abstracts.ActivityNotificationService;
 import org.springframework.stereotype.Service;
@@ -184,10 +185,10 @@ public class DisputeManager implements DisputeService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Dispute> searchForStaff(DisputeStatus status, Pageable requested) {
+    public Page<Dispute> searchForStaff(DisputeStatus status, String query, Pageable requested) {
         pageableSanitizer.rejectUnknownSort(requested, SORTABLE);
         List<DisputeStatus> statuses = status == null ? ACTIVE : List.of(status);
-        return disputeDao.findAllByStatusIn(statuses,
+        return disputeDao.searchForStaff(statuses, StaffSearchQuery.normalize(query),
                 pageableSanitizer.sanitize(requested, SORTABLE, DEFAULT_SORT));
     }
 

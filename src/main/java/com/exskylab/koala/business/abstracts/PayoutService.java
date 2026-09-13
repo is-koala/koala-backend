@@ -31,7 +31,7 @@ public interface PayoutService {
 
     AmountCount awaitingVolume(String currency);
 
-    PageDto<StaffPayoutDto> listForStaff(List<PayoutStatus> statuses, Pageable pageable);
+    PageDto<StaffPayoutDto> listForStaff(List<PayoutStatus> statuses, String query, Pageable pageable);
 
     record AmountCount(BigDecimal amount, long count) {
     }

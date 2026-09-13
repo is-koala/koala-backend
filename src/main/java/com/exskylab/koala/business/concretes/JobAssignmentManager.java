@@ -52,6 +52,7 @@ import com.exskylab.koala.business.abstracts.SettingsService;
 import com.exskylab.koala.core.constants.SettingKeys;
 import com.exskylab.koala.business.abstracts.ActivityNotificationService;
 import com.exskylab.koala.core.events.AssignmentClosedEvent;
+import com.exskylab.koala.core.helpers.StaffSearchQuery;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -593,9 +594,9 @@ public class JobAssignmentManager implements JobAssignmentService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<AdminAssignmentDto> listForStaff(Pageable requested) {
+    public Page<AdminAssignmentDto> listForStaff(String query, Pageable requested) {
         pageableSanitizer.rejectUnknownSort(requested, ADMIN_LIST_SORTABLE);
-        return jobAssignmentDao.findAllForStaff(
+        return jobAssignmentDao.findAllForStaff(StaffSearchQuery.normalize(query),
                         pageableSanitizer.sanitize(requested, ADMIN_LIST_SORTABLE, ADMIN_LIST_SORT))
                 .map(jobAssignmentMapper::toAdminAssignmentDto);
     }
