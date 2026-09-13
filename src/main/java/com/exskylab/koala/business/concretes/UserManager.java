@@ -396,7 +396,7 @@ public class UserManager implements UserService {
         return identityChallengeService.issue(securityService.getAuthenticatedUser());
     }
 
-    private void verifyChipPresence(User user, VerifyIdentityDto request, byte[] dataGroup15) {
+    private void verifyChipPresence(User user, VerifyIdentityDto request, byte[] dataGroup15, byte[] dataGroup14) {
         boolean supplied = request.getChallenge() != null && !request.getChallenge().isBlank()
                 && request.getActiveAuthenticationSignature() != null
                 && !request.getActiveAuthenticationSignature().isBlank()
@@ -417,7 +417,7 @@ public class UserManager implements UserService {
             throw new ValidationException(IdentityMessages.CHALLENGE_INVALID);
         }
 
-        identityChallengeService.consume(user, request.getChallenge().trim(), dataGroup15, signature);
+        identityChallengeService.consume(user, request.getChallenge().trim(), dataGroup15, dataGroup14, signature);
     }
 
     private void stampVerifiedIdentity(User user, VerifyIdentityDto request, PassiveAuthenticationResult evidence) {
@@ -459,12 +459,16 @@ public class UserManager implements UserService {
         byte[] securityObject;
         byte[] dataGroup1;
         byte[] dataGroup11 = null;
+        byte[] dataGroup14 = null;
         byte[] dataGroup15 = null;
         try {
             securityObject = java.util.Base64.getDecoder().decode(request.getSod().trim());
             dataGroup1 = java.util.Base64.getDecoder().decode(request.getDg1().trim());
             if (request.getDg11() != null && !request.getDg11().isBlank()) {
                 dataGroup11 = java.util.Base64.getDecoder().decode(request.getDg11().trim());
+            }
+            if (request.getDg14() != null && !request.getDg14().isBlank()) {
+                dataGroup14 = java.util.Base64.getDecoder().decode(request.getDg14().trim());
             }
             if (request.getDg15() != null && !request.getDg15().isBlank()) {
                 dataGroup15 = java.util.Base64.getDecoder().decode(request.getDg15().trim());
@@ -475,7 +479,8 @@ public class UserManager implements UserService {
 
         PassiveAuthenticationResult result;
         try {
-            result = cscaTrustStore.verifier().verify(securityObject, dataGroup1, dataGroup11, dataGroup15);
+            result = cscaTrustStore.verifier().verify(securityObject, dataGroup1, dataGroup11, dataGroup14,
+                    dataGroup15);
         } catch (PassiveAuthenticationException e) {
             log.warn("Passive authentication failed: {}", e.getMessage());
             throw new ValidationException(e.getMessageKey());
@@ -486,7 +491,7 @@ public class UserManager implements UserService {
             throw new ValidationException(IdentityMessages.IDENTITY_NUMBER_MISMATCH);
         }
 
-        verifyChipPresence(securityService.getAuthenticatedUser(), request, dataGroup15);
+        verifyChipPresence(securityService.getAuthenticatedUser(), request, dataGroup15, dataGroup14);
 
         if (!result.machineReadableZone().matchesHolder(request.getFirstName(), request.getLastName())) {
             log.warn("Passive authentication refused: the name does not match the signed chip data.");

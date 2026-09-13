@@ -53,6 +53,11 @@ public class PassiveAuthenticationVerifier {
 
     public PassiveAuthenticationResult verify(byte[] securityObject, byte[] dataGroup1, byte[] dataGroup11,
                                               byte[] dataGroup15) {
+        return verify(securityObject, dataGroup1, dataGroup11, null, dataGroup15);
+    }
+
+    public PassiveAuthenticationResult verify(byte[] securityObject, byte[] dataGroup1, byte[] dataGroup11,
+                                              byte[] dataGroup14, byte[] dataGroup15) {
         if (trustAnchors.isEmpty()) {
             throw new PassiveAuthenticationException(IdentityMessages.NO_TRUST_ANCHORS,
                     "no CSCA trust anchors are configured");
@@ -95,10 +100,26 @@ public class PassiveAuthenticationVerifier {
             additional = AdditionalPersonalDetails.parse(dataGroup11).orElse(null);
         }
 
+        verifySecurityInfosAreSigned(lds, dataGroup14);
         verifyChipKeyIsSigned(lds, dataGroup15);
 
         return new PassiveAuthenticationResult(identityNumber, birthDate, mrz, additional,
                 documentSigner.getSubjectX500Principal().getName(), sha256Hex(securityObject));
+    }
+
+    private static void verifySecurityInfosAreSigned(LdsSecurityObject lds, byte[] dataGroup14) {
+        if (dataGroup14 == null || dataGroup14.length == 0) {
+            return;
+        }
+
+        byte[] expected = lds.findHashForDataGroup(14)
+                .orElseThrow(() -> new PassiveAuthenticationException(IdentityMessages.SECURITY_INFO_UNSIGNED,
+                        "a DG14 was supplied but the signed security object lists no DG14 hash"));
+
+        if (!MessageDigest.isEqual(expected, digest(lds.hashAlgorithm(), dataGroup14))) {
+            throw new PassiveAuthenticationException(IdentityMessages.DATA_GROUP_TAMPERED,
+                    "DG14 hash does not match the signed security object");
+        }
     }
 
     private static void verifyChipKeyIsSigned(LdsSecurityObject lds, byte[] dataGroup15) {
@@ -118,7 +139,7 @@ public class PassiveAuthenticationVerifier {
 
     private CMSSignedData parse(byte[] securityObject) {
         try {
-            return new CMSSignedData(unwrapApplicationTag(securityObject));
+            return new CMSSignedData(LdsFiles.unwrap(securityObject, DataGroupTags.SOD));
         } catch (Exception e) {
             throw new PassiveAuthenticationException(IdentityMessages.SOD_UNREADABLE, e.getMessage());
         }
@@ -177,17 +198,6 @@ public class PassiveAuthenticationVerifier {
         } catch (Exception e) {
             throw new PassiveAuthenticationException(IdentityMessages.SOD_UNREADABLE, e.getMessage());
         }
-    }
-
-    private static byte[] unwrapApplicationTag(byte[] securityObject) {
-        if (securityObject.length > 0 && (securityObject[0] & 0xFF) == 0x77) {
-            int first = securityObject[1] & 0xFF;
-            int offset = first < 0x80 ? 2 : 2 + (first & 0x7F);
-            byte[] unwrapped = new byte[securityObject.length - offset];
-            System.arraycopy(securityObject, offset, unwrapped, 0, unwrapped.length);
-            return unwrapped;
-        }
-        return securityObject;
     }
 
     private static String sha256Hex(byte[] content) {

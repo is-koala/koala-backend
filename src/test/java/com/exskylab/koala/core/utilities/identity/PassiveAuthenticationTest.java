@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.utilities.identity;
 
+import org.bouncycastle.asn1.bsi.BSIObjectIdentifiers;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -261,6 +262,68 @@ class PassiveAuthenticationTest {
         byte[] sod = turkey.securityObjectWithDg15(dg1, TestChip.dataGroup15());
 
         PassiveAuthenticationResult result = verifierTrusting(turkey).verify(sod, dg1, null, new byte[0]);
+
+        assertEquals(TCKN, result.nationalIdentityNumber());
+    }
+
+    @Test
+    void theChipsOwnDataGroup14VerifiesAgainstTheSignedSecurityObject() throws Exception {
+        byte[] dg14 = TestChip.dataGroup14(BSIObjectIdentifiers.ecdsa_plain_SHA256);
+        byte[] dg15 = TestChip.dataGroup15();
+        byte[] sod = turkey.securityObjectForHashes(TestChip.sha256(dg1), null,
+                TestChip.sha256(dg14), TestChip.sha256(dg15));
+
+        PassiveAuthenticationResult result = verifierTrusting(turkey).verify(sod, dg1, null, dg14, dg15);
+
+        assertEquals(TCKN, result.nationalIdentityNumber());
+    }
+
+    @Test
+    void aTamperedDataGroup14IsRefused() throws Exception {
+        byte[] dg14 = TestChip.dataGroup14(BSIObjectIdentifiers.ecdsa_plain_SHA256);
+        byte[] sod = turkey.securityObjectWithDg14(dg1, dg14);
+        byte[] swapped = TestChip.dataGroup14(BSIObjectIdentifiers.ecdsa_plain_SHA1);
+
+        PassiveAuthenticationException thrown = assertThrows(PassiveAuthenticationException.class,
+                () -> verifierTrusting(turkey).verify(sod, dg1, null, swapped, null),
+                "algoritma bilgisi SOD'daki DG14 ile uyusmuyorsa kurcalanmistir");
+
+        assertEquals("{identity.data.group.tampered}", thrown.getMessageKey());
+    }
+
+    @Test
+    void aDataGroup14ThatTheSecurityObjectNeverSignedIsRefused() throws Exception {
+        byte[] sod = turkey.securityObject(dg1);
+        byte[] dg14 = TestChip.dataGroup14(BSIObjectIdentifiers.ecdsa_plain_SHA256);
+
+        PassiveAuthenticationException thrown = assertThrows(PassiveAuthenticationException.class,
+                () -> verifierTrusting(turkey).verify(sod, dg1, null, dg14, null),
+                "SOD DG14 listelemiyorsa gonderilen guvenlik bilgisi uydurmadir");
+
+        assertEquals("{identity.security.info.unsigned}", thrown.getMessageKey());
+    }
+
+    @Test
+    void aCardThatCarriesDataGroup14StillVerifiesWhenItIsNotSent() throws Exception {
+        byte[] sod = turkey.securityObjectWithDg14(dg1, TestChip.dataGroup14(BSIObjectIdentifiers.ecdsa_plain_SHA256));
+
+        PassiveAuthenticationResult result = verifierTrusting(turkey).verify(sod, dg1, null, null, null);
+
+        assertEquals(TCKN, result.nationalIdentityNumber());
+    }
+
+    @Test
+    void aSecurityObjectWithALongFormApplicationTagLengthIsStillParsed() throws Exception {
+        byte[] sod = turkey.securityObject(dg1);
+        byte[] wrapped = new byte[sod.length + 5];
+        wrapped[0] = (byte) DataGroupTags.SOD;
+        wrapped[1] = (byte) 0x83;
+        wrapped[2] = (byte) (sod.length >> 16);
+        wrapped[3] = (byte) (sod.length >> 8);
+        wrapped[4] = (byte) sod.length;
+        System.arraycopy(sod, 0, wrapped, 5, sod.length);
+
+        PassiveAuthenticationResult result = verifierTrusting(turkey).verify(wrapped, dg1);
 
         assertEquals(TCKN, result.nationalIdentityNumber());
     }

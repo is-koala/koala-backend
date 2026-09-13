@@ -253,7 +253,12 @@ public class UsersController {
     }
 
     @Operation(summary = "Kimlik doğrulama başlat",
-            description = "Ad, soyad, TCKN ve doğum yılı ile kimlik doğrulaması yapar. Başarılı olursa kullanıcının rozetleri yeniden değerlendirilir.")
+            description = "Kimlik kartının çipinden okunan kanıtla kimlik doğrulaması yapar: `sod` ve `dg1` (base64) "
+                    + "zorunlu, `dg11` (ulusal karakterli ad), `dg14` (Active Authentication imza algoritması, "
+                    + "ActiveAuthenticationInfo) ve `dg15` + `challenge` + `activeAuthenticationSignature` (çip "
+                    + "varlığı) isteğe bağlı. Gönderilen her veri grubu SOD özetleriyle doğrulanır; `dg14` yoksa "
+                    + "sunucu ECDSA (SHA-1/224/256/384/512, düz ve DER) ve RSA ISO 9796-2 yelpazesini dener. "
+                    + "Başarılı olursa kullanıcının rozetleri yeniden değerlendirilir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Kimlik doğrulandı"),
             @ApiResponse(responseCode = "400", description = "Bilgiler doğrulanamadı",
