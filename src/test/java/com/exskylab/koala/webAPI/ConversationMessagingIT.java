@@ -387,6 +387,35 @@ class ConversationMessagingIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void aDeletedSendersMessageStaysOnThePageUnderItsAnonymisedNameAndTheBadgeAgrees() throws Exception {
+        UUID ghost = insertMessage(crewId, ghostId, "silinmeden önce", "3 minutes");
+        insertMessage(crewId, employerId, "duyuru", "2 minutes");
+        insertMessage(crewId, secondWorkerId, "tamam", "1 minute");
+
+        mockMvc.perform(get("/conversations/{id}", crewId).with(user(principal(firstWorkerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.unreadCount").value(3));
+
+        mockMvc.perform(get("/conversations/{id}/messages", crewId).with(user(principal(firstWorkerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(3))
+                .andExpect(jsonPath("$.data.content", hasSize(3)))
+                .andExpect(jsonPath("$.data.content[2].id").value(ghost.toString()))
+                .andExpect(jsonPath("$.data.content[2].senderId").value(ghostId.toString()))
+                .andExpect(jsonPath("$.data.content[2].senderName").value("Anonim Kullanıcı"))
+                .andExpect(jsonPath("$.data.content[2].senderProfilePictureUrl").isEmpty())
+                .andExpect(jsonPath("$.data.content[1].senderName").value("İşveren Bey"));
+
+        mockMvc.perform(get("/conversations/{id}/messages", crewId)
+                        .param("after", ghost.toString())
+                        .with(user(principal(firstWorkerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(2))
+                .andExpect(jsonPath("$.data.content[0].senderName").value("İşveren Bey"))
+                .andExpect(jsonPath("$.data.content[1].senderName").value("Mehmet Kaya"));
+    }
+
+    @Test
     void messagesCarryTheSenderNameAndPicture() throws Exception {
         insertMessage(directId, employerId, "Merhaba", "1 minute");
 

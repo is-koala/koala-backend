@@ -75,6 +75,12 @@ class CollectionQueryWithoutGraphTest {
             "JobAssignmentDao.countHiredByJobIds",
             "JobDao.searchIds",
             "MessageDao.countUnreadByConversationIds",
+            // Message pages fetch no sender: with Message.sender nullable=false and User @SQLRestriction the graph
+            // became an INNER join that dropped deleted senders' messages (#231 trap). The page reads only
+            // sender.id (proxy, no query); names and pictures come from ConversationDao.findParticipantRows,
+            // one query per page (#281).
+            "MessageDao.findAllByConversationIdOrderBySentAtDesc",
+            "MessageDao.findAllAfter",
             "NotificationDao.findAllByRecipientIdOrderByCreatedAtDesc",
             "NotificationDao.findAllByRecipientIdAndChannelOrderByCreatedAtDesc",
             "NotificationDao.findDuePushDeliveryIds",

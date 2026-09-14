@@ -80,6 +80,8 @@ class MessagingAuthorizationTest {
         when(jobService.getById(job.getId())).thenReturn(job);
         when(conversationDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(messageDao.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(messageDao.findAllByConversationIdOrderBySentAtDesc(any(), any()))
+                .thenReturn(org.springframework.data.domain.Page.empty());
         when(userService.getReference(any())).thenAnswer(i -> {
             User u = new User();
             u.setId(i.getArgument(0));
@@ -466,11 +468,58 @@ class MessagingAuthorizationTest {
         assignment(AssignmentStatus.CONFIRMED, PaymentStatus.HELD_IN_ESCROW);
         when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());
 
-        Message sent = manager.sendMessage(c.getId(), "Musaitim");
+        manager.sendMessage(c.getId(), "Musaitim");
 
-        assertEquals("Musaitim", sent.getBody());
-        assertNotNull(sent.getSentAt());
-        assertEquals(sent.getSentAt(), c.getLastMessageAt());
+        org.mockito.ArgumentCaptor<Message> saved = org.mockito.ArgumentCaptor.forClass(Message.class);
+        verify(messageDao).save(saved.capture());
+        assertEquals("Musaitim", saved.getValue().getBody());
+        assertNotNull(saved.getValue().getSentAt());
+        assertEquals(saved.getValue().getSentAt(), c.getLastMessageAt());
+    }
+
+    @Test
+    void aMessagePageResolvesItsSendersFromTheParticipantRowsInOneQuery() {
+        Conversation c = conversation();
+        when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());
+        Message first = messageFrom(c, employer);
+        Message second = messageFrom(c, worker);
+        when(messageDao.findAllByConversationIdOrderBySentAtDesc(eq(c.getId()), any()))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(first, second)));
+        ConversationDao.ParticipantView employerRow = participantRow(employer.getId());
+        ConversationDao.ParticipantView workerRow = participantRow(worker.getId());
+        when(conversationDao.findParticipantRows(List.of(c.getId()))).thenReturn(List.of(employerRow, workerRow));
+
+        manager.getMessages(c.getId(), org.springframework.data.domain.PageRequest.of(0, 10));
+
+        verify(conversationDao, times(1)).findParticipantRows(any());
+        verify(messagingMapper).toMessageDto(first, employerRow);
+        verify(messagingMapper).toMessageDto(second, workerRow);
+    }
+
+    @Test
+    void anEmptyMessagePageAsksForNoSenders() {
+        Conversation c = conversation();
+        when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());
+
+        manager.getMessages(c.getId(), org.springframework.data.domain.PageRequest.of(0, 10));
+
+        verify(conversationDao, never()).findParticipantRows(any());
+    }
+
+    private static Message messageFrom(Conversation conversation, User sender) {
+        Message message = new Message();
+        message.setId(UUID.randomUUID());
+        message.setConversation(conversation);
+        message.setSender(sender);
+        message.setBody("mesaj");
+        message.setSentAt(Instant.now());
+        return message;
+    }
+
+    private static ConversationDao.ParticipantView participantRow(UUID userId) {
+        ConversationDao.ParticipantView row = mock(ConversationDao.ParticipantView.class);
+        when(row.getUserId()).thenReturn(userId);
+        return row;
     }
 
     @Test

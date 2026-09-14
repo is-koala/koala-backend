@@ -12,6 +12,7 @@ import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.messaging.response.ConversationDto;
 import com.exskylab.koala.core.dtos.messaging.response.ConversationParticipantDto;
+import com.exskylab.koala.core.dtos.messaging.response.MessageDto;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.helpers.Concealment;
 import com.exskylab.koala.core.helpers.MessagingAvailability;
@@ -196,7 +197,7 @@ public class MessagingManager implements MessagingService {
 
     @Override
     @Transactional
-    public Message sendMessage(UUID conversationId, String body) {
+    public MessageDto sendMessage(UUID conversationId, String body) {
         Conversation conversation = loadParticipating(conversationId);
         UUID senderId = securityService.getAuthenticatedUserId();
 
@@ -222,25 +223,25 @@ public class MessagingManager implements MessagingService {
 
         activityNotificationService.messageSent(saved);
 
-        realtimePublisher.messageSent(conversationId, messagingMapper.toMessageDto(saved),
-                conversation.participantIds());
+        MessageDto sent = messagingMapper.toMessageDto(saved, sendersOf(conversationId).get(senderId));
+        realtimePublisher.messageSent(conversationId, sent, conversation.participantIds());
 
         log.info("Message {} sent in conversation {}", saved.getId(), conversationId);
-        return saved;
+        return sent;
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Message> getMessages(UUID conversationId, Pageable requested) {
+    public PageDto<MessageDto> getMessages(UUID conversationId, Pageable requested) {
         loadParticipating(conversationId);
         pageableSanitizer.rejectUnknownSort(requested, SORTABLE);
-        return messageDao.findAllByConversationIdOrderBySentAtDesc(conversationId,
-                pageableSanitizer.sanitize(requested, SORTABLE, MESSAGE_SORT));
+        return withSenders(conversationId, messageDao.findAllByConversationIdOrderBySentAtDesc(conversationId,
+                pageableSanitizer.sanitize(requested, SORTABLE, MESSAGE_SORT)));
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Message> getMessagesAfter(UUID conversationId, UUID afterMessageId, Pageable requested) {
+    public PageDto<MessageDto> getMessagesAfter(UUID conversationId, UUID afterMessageId, Pageable requested) {
         loadParticipating(conversationId);
         pageableSanitizer.rejectUnknownSort(requested, AFTER_SORTABLE);
         Message anchor = messageDao.findByIdAndConversationId(afterMessageId, conversationId)
@@ -249,8 +250,20 @@ public class MessagingManager implements MessagingService {
                             + "of this conversation", conversationId, afterMessageId);
                     return new ValidationException(MessagingMessages.AFTER_UNKNOWN);
                 });
-        return messageDao.findAllAfter(conversationId, anchor.getSentAt(), anchor.getId(),
-                pageableSanitizer.sanitize(requested, AFTER_SORTABLE, MESSAGES_AFTER_SORT));
+        return withSenders(conversationId, messageDao.findAllAfter(conversationId, anchor.getSentAt(), anchor.getId(),
+                pageableSanitizer.sanitize(requested, AFTER_SORTABLE, MESSAGES_AFTER_SORT)));
+    }
+
+    private PageDto<MessageDto> withSenders(UUID conversationId, Page<Message> page) {
+        Map<UUID, ConversationDao.ParticipantView> senders = page.isEmpty() ? Map.of() : sendersOf(conversationId);
+        return PageDto.of(page, page.getContent().stream()
+                .map(message -> messagingMapper.toMessageDto(message, senders.get(message.getSender().getId())))
+                .toList());
+    }
+
+    private Map<UUID, ConversationDao.ParticipantView> sendersOf(UUID conversationId) {
+        return conversationDao.findParticipantRows(List.of(conversationId)).stream()
+                .collect(Collectors.toMap(ConversationDao.ParticipantView::getUserId, Function.identity()));
     }
 
     @Override

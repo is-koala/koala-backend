@@ -25,7 +25,18 @@
                AND p.last_read_at IS NULL
         </sql>
         <rollback>
-            <sql>UPDATE conversation_participants SET last_read_at = NULL</sql>
+            <sql>
+                UPDATE conversation_participants p
+                   SET last_read_at = NULL
+                  FROM (SELECT m.conversation_id, m.sender_id, MAX(m.read_at) AS read_at
+                          FROM messages m
+                         WHERE m.read_at IS NOT NULL
+                         GROUP BY m.conversation_id, m.sender_id) latest
+                  JOIN conversations c ON c.id = latest.conversation_id AND c.kind = 'DIRECT'
+                 WHERE p.conversation_id = latest.conversation_id
+                   AND p.user_id &lt;&gt; latest.sender_id
+                   AND p.last_read_at = latest.read_at
+            </sql>
         </rollback>
     </changeSet>
 </databaseChangeLog>

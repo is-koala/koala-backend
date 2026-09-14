@@ -128,11 +128,10 @@ public class ConversationsController {
             @RequestParam(required = false) UUID after,
             @ParameterObject @PageableDefault(size = 30) Pageable pageable) {
 
-        var page = after == null
-                ? messagingService.getMessages(conversationId, pageable)
-                : messagingService.getMessagesAfter(conversationId, after, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
-                PageDto.of(page, messagingMapper.toMessageDtoList(page.getContent())),
+                after == null
+                        ? messagingService.getMessages(conversationId, pageable)
+                        : messagingService.getMessagesAfter(conversationId, after, pageable),
                 MessagingMessages.MESSAGES_LISTED, HttpStatus.OK));
     }
 
@@ -159,7 +158,7 @@ public class ConversationsController {
             @PathVariable UUID conversationId, @RequestBody @Valid SendMessageDto request) {
 
         return ResponseEntity.status(HttpStatus.CREATED).body(new SuccessDataResult<>(
-                messagingMapper.toMessageDto(messagingService.sendMessage(conversationId, request.getBody())),
+                messagingService.sendMessage(conversationId, request.getBody()),
                 MessagingMessages.MESSAGE_SENT, HttpStatus.CREATED));
     }
 
