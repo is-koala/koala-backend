@@ -29,11 +29,11 @@ public class PayoutDto {
     @Schema(types = {"string", "null"},
             description = "Hakedişin gittiği banka hesabının maskeli IBAN'ı (ilk 4 + *** + son 4, örn. TR18***2315); "
                     + "çıkış anındaki birincil hesaptır, sonradan değişmez. Tam IBAN hiçbir yanıtta dönmez. "
-                    + "Hesap kaydı olmayan eski hakedişlerde null.")
+                    + "Hesap kaydı yok ya da hesap sonradan silinmişse null.")
     private String maskedIban;
     @Schema(types = {"string", "null"}, format = "uuid",
             description = "Hakedişin gittiği banka hesabının kimliği (GET /users/me/bank-accounts ile eşleşir); "
-                    + "hesap kaydı olmayan eski hakedişlerde null.")
+                    + "hesap kaydı yok ya da hesap sonradan silinmişse null.")
     private UUID bankAccountId;
     @Schema(types = {"string", "null"},
             description = "Sağlayıcının (Iyzico) çıkış talimatını onaylarken verdiği işlem referansı; "

@@ -110,9 +110,6 @@ class PayoutQueueIT extends AbstractStaffIntegrationTest {
 
     private UUID seedProcessingPayout(String firstName, String lastName, String iban, String providerReference) {
         UUID user = UUID.randomUUID();
-        UUID job = UUID.randomUUID();
-        UUID assignment = UUID.randomUUID();
-        UUID payout = UUID.randomUUID();
         UUID account = UUID.randomUUID();
 
         jdbcTemplate.update("insert into users (id, created_at, is_deleted, email, password, first_name, last_name, "
@@ -123,32 +120,8 @@ class PayoutQueueIT extends AbstractStaffIntegrationTest {
                         + "is_active, verification_status, verification_attempts, account_holder_name_verified) "
                         + "values (?, now(), false, ?, ?, true, true, 'UNVERIFIED', 0, false)",
                 account, user, iban);
-        jdbcTemplate.update("""
-                insert into jobs (id, created_at, is_deleted, title, status, employer_type,
-                                  experience_required, insurance_required, min_age, max_age,
-                                  start_date_time, end_date_time)
-                values (?, now(), false, 'Payout queue', 'OPEN', 'INDIVIDUAL',
-                        false, false, 18, 65, now() + interval '1 day', now() + interval '2 days')
-                """, job);
-        jdbcTemplate.update("""
-                insert into job_assignments
-                    (id, created_at, is_deleted, job_id, worker_id, status, payment_status,
-                     pricing_version, currency,
-                     worker_payout, commission_rate, commission_amount, total_charged, work_hours)
-                values (?, now(), false, ?, ?, 'COMPLETED', 'RELEASED_TO_WORKER', '2026-09-v1', 'TRY',
-                        1000.00, 0.0750, 75.00, 1075.00, 0)
-                """, assignment, job, user);
-        jdbcTemplate.update("""
-                insert into payouts (id, created_at, is_deleted, job_assignment_id, worker_id, bank_account_id,
-                                     amount, currency, status, provider_reference, processing_at)
-                values (?, now() - interval '2 days', false, ?, ?, ?, 1000.00, 'TRY', 'PROCESSING', ?,
-                        now() - interval '2 days')
-                """, payout, assignment, user, account, providerReference);
-
         workers.add(user);
-        jobs.add(job);
-        assignments.add(assignment);
-        payouts.add(payout);
+        seedPayoutFor(user, account, "PROCESSING", providerReference, "now() - interval '2 days'");
         return user;
     }
 
@@ -355,6 +328,20 @@ class PayoutQueueIT extends AbstractStaffIntegrationTest {
                 .andExpect(jsonPath("$.data[1].settledAt").value(nullValue()))
                 .andExpect(jsonPath("$.data[1].releasedAt").isNotEmpty())
                 .andExpect(content().string(not(containsString("\"***\""))));
+    }
+
+    @Test
+    void aPayoutWhoseBankAccountWasDeletedAfterwardsRendersNullsWithoutFailing() throws Exception {
+        jdbcTemplate.update("update bank_accounts set is_deleted = true, deleted_at = now() where user_id = ?", worker);
+
+        mockMvc.perform(get("/users/me/payouts").with(user(principal(worker))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(1)))
+                .andExpect(jsonPath("$.data[0].id").value(payoutId.toString()))
+                .andExpect(jsonPath("$.data[0].maskedIban").value(nullValue()))
+                .andExpect(jsonPath("$.data[0].bankAccountId").value(nullValue()))
+                .andExpect(jsonPath("$.data[0].providerReference").value(PROVIDER_REFERENCE))
+                .andExpect(content().string(not(containsString(FULL_IBAN))));
     }
 
     @Test

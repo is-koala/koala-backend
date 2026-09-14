@@ -65,7 +65,7 @@ public class PayoutsController {
                     + "ekstresiyle doğrulanan gerçekleşme anını (settledAt; yalnız COMPLETED'da dolu) taşır. "
                     + "Durum sözlüğü: PENDING = çıkışa alındı, sağlayıcı onayı bekleniyor; PROCESSING = sağlayıcı "
                     + "onayladı, banka transferi yolda; COMPLETED = banka ekstresiyle doğrulandı; FAILED = çıkış "
-                    + "başarısız (failureReason açıklar). Hesap kaydı olmayan eski hakedişlerde maskedIban ve "
+                    + "başarısız (failureReason açıklar). Hesap kaydı yok ya da hesap sonradan silinmişse maskedIban ve "
                     + "bankAccountId null döner; uydurulmaz.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Ödemeler listelendi")
