@@ -10,6 +10,8 @@ import com.exskylab.koala.entities.ReportTargetType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 public interface ReportService {
@@ -26,4 +28,6 @@ public interface ReportService {
                                              String query, Pageable pageable);
 
     AdminReportDetailDto getForModeration(UUID reportId);
+
+    List<Report> findAllBetweenAssignmentParties(UUID jobId, Collection<UUID> partyIds);
 }

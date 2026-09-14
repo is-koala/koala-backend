@@ -18,4 +18,6 @@ public interface SettlementService {
     boolean runTask(UUID taskId);
 
     List<UUID> findDueTaskIds();
+
+    List<SettlementTask> getTasksForPayment(UUID paymentId);
 }

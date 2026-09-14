@@ -31,4 +31,6 @@ public interface SettlementTaskDao extends JpaRepository<SettlementTask, UUID> {
 
     @EntityGraph(attributePaths = {"payment", "jobAssignment"})
     Optional<SettlementTask> findWithDetailsById(UUID id);
+
+    List<SettlementTask> findAllByPaymentIdOrderByCreatedAtAsc(UUID paymentId);
 }

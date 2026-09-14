@@ -65,6 +65,7 @@ class PayoutSettlementReconciliationTest {
                 mock(ActivityNotificationService.class), new PaymentMetrics(registry),
                 Validation.buildDefaultValidatorFactory().getValidator(),
                 mock(UserService.class), mock(PayoutMapper.class),
+                mock(com.exskylab.koala.core.mappers.AdminDetailMapper.class),
                 mock(org.springframework.context.ApplicationEventPublisher.class));
 
         when(payoutDao.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));

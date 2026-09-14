@@ -72,7 +72,8 @@ class PayoutReleaseTest {
                 new com.exskylab.koala.core.monitoring.PaymentMetrics(
                         new io.micrometer.core.instrument.simple.SimpleMeterRegistry()),
                 jakarta.validation.Validation.buildDefaultValidatorFactory().getValidator(),
-                userService, payoutMapper, eventPublisher);
+                userService, payoutMapper, mock(com.exskylab.koala.core.mappers.AdminDetailMapper.class),
+                eventPublisher);
 
         when(payoutDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(refundDao.save(any())).thenAnswer(i -> i.getArgument(0));

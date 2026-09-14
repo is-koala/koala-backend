@@ -19,6 +19,7 @@ public enum StaffPermission {
     COMPANY_APPROVE("company.approve", true, PermissionSensitivity.NORMAL),
     IDENTITY_REVIEW("identity.review", true, PermissionSensitivity.PERSONAL_DATA),
     DISPUTE_RESOLVE("dispute.resolve", true, PermissionSensitivity.NORMAL),
+    JOB_READ("job.read", false, PermissionSensitivity.PERSONAL_DATA),
     PAYMENT_READ("payment.read", false, PermissionSensitivity.FINANCIAL),
     FINANCE_READ("finance.read", false, PermissionSensitivity.FINANCIAL),
     PAYOUT_RELEASE("payout.release", true, PermissionSensitivity.FINANCIAL),

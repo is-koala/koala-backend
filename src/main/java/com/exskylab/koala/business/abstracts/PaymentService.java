@@ -37,6 +37,10 @@ public interface PaymentService {
 
     List<Payment> getAttemptsForAssignment(UUID jobAssignmentId);
 
+    List<Payment> getAttemptsForStaff(UUID jobAssignmentId);
+
+    Payment getForStaff(UUID paymentId);
+
     Payment getSettledPaymentFor(UUID jobAssignmentId);
 
     boolean hasPendingAttemptForAssignment(UUID jobAssignmentId);

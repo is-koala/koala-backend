@@ -11,7 +11,10 @@ import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.job.request.JobSearchCriteriaDto;
 import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
 import com.exskylab.koala.core.dtos.job.response.JobDetailDto;
+import com.exskylab.koala.core.dtos.job.response.AdminJobDetailDto;
+import com.exskylab.koala.core.dtos.job.response.AdminJobDto;
 import com.exskylab.koala.entities.Job;
+import com.exskylab.koala.entities.JobStatus;
 import org.springframework.data.domain.Pageable;
 
 import java.util.UUID;
@@ -57,5 +60,9 @@ public interface JobService {
     boolean existsById(UUID jobId);
 
     long countJobsCreatedBy(UUID userId);
+
+    PageDto<AdminJobDto> searchForStaff(List<JobStatus> statuses, String query, Pageable pageable);
+
+    AdminJobDetailDto getAdminDetail(UUID jobId);
 
 }

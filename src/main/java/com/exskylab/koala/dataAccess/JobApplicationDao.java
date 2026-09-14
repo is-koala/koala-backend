@@ -34,6 +34,8 @@ public interface JobApplicationDao extends JpaRepository<JobApplication, UUID> {
             + "where a.job.id in :jobIds group by a.job.id")
     List<JobApplicationCount> countByJobIds(@Param("jobIds") Collection<UUID> jobIds);
 
+    long countByJobId(UUID jobId);
+
     interface JobApplicationCount {
         UUID getJobId();
 

@@ -72,6 +72,11 @@ public interface PaymentDao extends JpaRepository<Payment, UUID> {
 
     List<Payment> findAllByJobAssignmentIdOrderByCreatedAtDesc(UUID jobAssignmentId);
 
+    @EntityGraph(attributePaths = {"jobAssignment", "jobAssignment.worker", "jobAssignment.job",
+            "jobAssignment.job.creator", "jobAssignment.job.company"})
+    @Query("select p from Payment p where p.id = :id")
+    Optional<Payment> findForStaffById(@Param("id") UUID id);
+
     boolean existsByJobAssignmentIdAndStatus(UUID jobAssignmentId, PaymentAttemptStatus status);
 
     boolean existsByJobAssignmentIdAndStatusIn(UUID jobAssignmentId, List<PaymentAttemptStatus> statuses);

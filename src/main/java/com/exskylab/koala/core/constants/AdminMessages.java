@@ -27,4 +27,9 @@ public class AdminMessages {
     public static final String REJECTION_REASON_NOT_BLANK = "{admin.company.rejection.reason.not.blank}";
     public static final String DECISION_NOTE_TOO_LONG = "{admin.company.decision.note.too.long}";
     public static final String SEARCH_QUERY_TOO_LONG = "{admin.search.query.too.long}";
+    public static final String PAYMENTS_LISTED = "{admin.payments.listed}";
+    public static final String PAYMENT_DETAIL = "{admin.payment.detail}";
+    public static final String PAYOUT_DETAIL = "{admin.payout.detail}";
+    public static final String JOBS_LISTED = "{admin.jobs.listed}";
+    public static final String JOB_DETAIL = "{admin.job.detail}";
 }

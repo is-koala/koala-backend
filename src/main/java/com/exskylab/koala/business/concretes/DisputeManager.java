@@ -185,6 +185,12 @@ public class DisputeManager implements DisputeService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<Dispute> findAllForAssignment(UUID jobAssignmentId) {
+        return disputeDao.findAllByJobAssignmentIdOrderByCreatedAtDesc(jobAssignmentId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Page<Dispute> searchForStaff(DisputeStatus status, String query, Pageable requested) {
         pageableSanitizer.rejectUnknownSort(requested, SORTABLE);
         List<DisputeStatus> statuses = status == null ? ACTIVE : List.of(status);

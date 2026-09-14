@@ -35,6 +35,13 @@ import com.exskylab.koala.core.dtos.company.request.RejectCompanyDto;
 import com.exskylab.koala.core.dtos.company.response.CompanyReviewDto;
 import com.exskylab.koala.entities.CompanyApprovalStatus;
 import com.exskylab.koala.core.dtos.jobAssignment.response.AdminAssignmentDto;
+import com.exskylab.koala.core.dtos.jobAssignment.response.AdminAssignmentDetailDto;
+import com.exskylab.koala.core.dtos.payment.response.AdminPaymentDto;
+import com.exskylab.koala.core.dtos.job.response.AdminJobDetailDto;
+import com.exskylab.koala.core.dtos.job.response.AdminJobDto;
+import com.exskylab.koala.business.abstracts.AdminDetailService;
+import com.exskylab.koala.business.abstracts.JobService;
+import com.exskylab.koala.entities.JobStatus;
 import com.exskylab.koala.core.dtos.user.request.GrantRoleDto;
 import com.exskylab.koala.core.dtos.user.response.RoleGrantDto;
 import com.exskylab.koala.core.dtos.user.response.SafeUserDto;
@@ -76,6 +83,8 @@ public class AdminController {
     private final BankAccountMapper bankAccountMapper;
     private final IdentityDocumentReviewService identityDocumentReviewService;
     private final SignedFileResponses signedFileResponses;
+    private final AdminDetailService adminDetailService;
+    private final JobService jobService;
 
     public AdminController(CompanyService companyService, UserService userService,
                            CompanyMapper companyMapper, UserMapper userMapper,
@@ -83,7 +92,8 @@ public class AdminController {
                            JobAssignmentService jobAssignmentService,
                            BankAccountService bankAccountService, BankAccountMapper bankAccountMapper,
                            IdentityDocumentReviewService identityDocumentReviewService,
-                           SignedFileResponses signedFileResponses) {
+                           SignedFileResponses signedFileResponses, AdminDetailService adminDetailService,
+                           JobService jobService) {
         this.companyService = companyService;
         this.userService = userService;
         this.companyMapper = companyMapper;
@@ -95,6 +105,8 @@ public class AdminController {
         this.bankAccountMapper = bankAccountMapper;
         this.identityDocumentReviewService = identityDocumentReviewService;
         this.signedFileResponses = signedFileResponses;
+        this.adminDetailService = adminDetailService;
+        this.jobService = jobService;
     }
 
     @Operation(summary = "Atama kuyruğu",
@@ -118,19 +130,98 @@ public class AdminController {
                 AdminMessages.ASSIGNMENTS_LISTED, HttpStatus.OK));
     }
 
-    @Operation(summary = "Atama özeti",
-            description = "Uyuşmazlık ve emanet ekranlarının ihtiyaç duyduğu okuma: taraflar, atama ve ödeme durumu, fiyat dökümü. Emanetteki tutar finansal veridir; uç payment.read ile korunur.")
+    @Operation(summary = "Atama detayı",
+            description = "Uyuşmazlık ve emanet ekranlarının ihtiyaç duyduğu okuma: taraflar, atama ve ödeme durumu, "
+                    + "fiyat dökümü. Liste satırının alanlarına ek olarak bağlı kayıtların özetini (id + durum + oluşturulma) "
+                    + "taşır: ödeme denemeleri (payments), hakediş (payout, yoksa null), uyuşmazlıklar (disputes) ve "
+                    + "taraflar arasındaki ya da ilana bağlı şikayetler (reports). Emanetteki tutar finansal veridir; "
+                    + "uç payment.read ile korunur.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Atama özeti döndürüldü"),
+            @ApiResponse(responseCode = "200", description = "Atama detayı döndürüldü"),
             @ApiResponse(responseCode = "404", description = "Atama bulunamadı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @RequiresPermission(StaffPermission.PAYMENT_READ)
     @GetMapping("/job-assignments/{assignmentId}")
-    public ResponseEntity<SuccessDataResult<AdminAssignmentDto>> assignment(@PathVariable UUID assignmentId) {
+    public ResponseEntity<SuccessDataResult<AdminAssignmentDetailDto>> assignment(@PathVariable UUID assignmentId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
-                jobAssignmentService.getAdminDetail(assignmentId),
+                adminDetailService.getAssignmentDetail(assignmentId),
                 AdminMessages.ASSIGNMENT_DETAIL, HttpStatus.OK));
+    }
+
+    @Operation(summary = "Atamanın ödeme denemeleri (personel)",
+            description = "Atamaya ait her ödeme denemesini yeniden eskiye sıralar. Her satır durum, tutar dökümü, "
+                    + "sağlayıcı referansları (conversationId, providerPaymentId, providerTransactionId), doğrulama "
+                    + "sayacı, oluşturulma/güncellenme anları ve iade kayıtlarını taşır. Kart verisi ya da ödeme "
+                    + "token'ı dönmez. Uç payment.read ile korunur.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Ödeme denemeleri listelendi"),
+            @ApiResponse(responseCode = "404", description = "Atama bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(StaffPermission.PAYMENT_READ)
+    @GetMapping("/job-assignments/{assignmentId}/payments")
+    public ResponseEntity<SuccessDataResult<List<AdminPaymentDto>>> assignmentPayments(
+            @PathVariable UUID assignmentId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                adminDetailService.getPaymentsForAssignment(assignmentId),
+                AdminMessages.PAYMENTS_LISTED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "Ödeme denemesi detayı",
+            description = "Tek bir ödeme denemesi: bağlı atama/ilan/taraflar (id, ad, e-posta), durum, tutar dökümü, "
+                    + "sağlayıcı referansları, doğrulama sayacı, oluşturulma/güncellenme anları ve iade kayıtları. "
+                    + "Kart verisi ya da ödeme token'ı dönmez. Uç payment.read ile korunur.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Ödeme denemesi getirildi"),
+            @ApiResponse(responseCode = "404", description = "Ödeme kaydı bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(StaffPermission.PAYMENT_READ)
+    @GetMapping("/payments/{paymentId}")
+    public ResponseEntity<SuccessDataResult<AdminPaymentDto>> payment(@PathVariable UUID paymentId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                adminDetailService.getPayment(paymentId),
+                AdminMessages.PAYMENT_DETAIL, HttpStatus.OK));
+    }
+
+    @Operation(summary = "İlan listesi (personel)",
+            description = "İlanları durum süzgeci ve aramayla sayfalar; status verilmezse her durum döner. "
+                    + "query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) ilan id'si, ilan başlığı, şirket adı, "
+                    + "işverenin ad-soyadı ile e-postasında büyük-küçük harf ve Türkçe karakter duyarsız arar; "
+                    + "100 karakteri aşarsa 400. Satır işvereni id, ad ve e-postayla, başvuru ve atama sayılarıyla "
+                    + "taşır. Uç job.read ile korunur.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "İlanlar listelendi"),
+            @ApiResponse(responseCode = "400", description = "query 100 karakteri aşıyor ya da bilinmeyen sıralama alanı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(StaffPermission.JOB_READ)
+    @GetMapping("/jobs")
+    public ResponseEntity<SuccessDataResult<PageDto<AdminJobDto>>> jobs(
+            @RequestParam(required = false) List<JobStatus> status,
+            @RequestParam(required = false) String query,
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                jobService.searchForStaff(status, query, pageable),
+                AdminMessages.JOBS_LISTED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "İlan detayı (personel)",
+            description = "İlanın tamamı: açıklama, kategori, fiyat dökümü, işveren (id, ad, e-posta) ve şirket, "
+                    + "başvuru ve atama sayıları, görseller. Adres personele tam hâliyle döner; ADR-0003'ün yaklaşık "
+                    + "konum kuralı kullanıcı yüzeyi içindir ve personel istisnadır. Uç job.read ile korunur.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "İlan detayı getirildi"),
+            @ApiResponse(responseCode = "404", description = "İlan bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(StaffPermission.JOB_READ)
+    @GetMapping("/jobs/{jobId}")
+    public ResponseEntity<SuccessDataResult<AdminJobDetailDto>> job(@PathVariable UUID jobId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                jobService.getAdminDetail(jobId),
+                AdminMessages.JOB_DETAIL, HttpStatus.OK));
     }
 
     @Operation(summary = "Görseli her yerden kaldır",

@@ -1776,6 +1776,84 @@ metninin kendisi kişisel veri olabilir, gerekçe `/admin/users` için yazılanl
 
 **Panel tarafı is-koala/koala-admin#94.**
 
+## 2s6. Personel detay uçları — hakediş, ödeme, ilan ve zengin atama (#255)
+
+Panel listelerden detaya inemiyordu (13.09.2026: "ödeme detayı yok"): `GET /admin/payouts` vardı ama tekil hakediş
+yoktu, ödeme denemeleri yalnız kullanıcı ucundaydı (`GET /job-assignments/{id}/payments`, taraf kontrolü
+`securityService` üzerinden — personel için çağrılamaz, §0b), ilan uçları hiç yoktu ve `AdminAssignmentDto` bağlı
+kayıtları özetlemiyordu. Beş uç eklendi, altıncısı zenginleşti:
+
+| Uç | İzin | DTO |
+|---|---|---|
+| `GET /admin/payouts/{payoutId}` | `payout.reconcile` (facade üzerinden, liste gibi) | `AdminPayoutDetailDto` |
+| `GET /admin/job-assignments/{assignmentId}/payments` | `payment.read` | `List<AdminPaymentDto>` |
+| `GET /admin/payments/{paymentId}` | `payment.read` | `AdminPaymentDto` |
+| `GET /admin/jobs?status=&query=` | **`job.read`** (yeni) | `PageDto<AdminJobDto>` |
+| `GET /admin/jobs/{jobId}` | `job.read` | `AdminJobDetailDto` |
+| `GET /admin/job-assignments/{assignmentId}` | `payment.read` (değişmedi) | `AdminAssignmentDetailDto` (eski alanlar + `payments`, `payout`, `disputes`, `reports`) |
+
+**Bağlı kayıt özetleri tek şekil: `LinkedRecordDto(id, status, createdAt)`.** Atama detayı ödeme denemelerini,
+hakedişi (yoksa `null`), uyuşmazlıkları ve şikayetleri bununla listeler; panel her satırdan kendi detay ucuna
+bağlanır. Şikayet kapsamı **tarafların birbirine ya da ilana yaptığı** şikayetler: `reporter ∈ {işçi, ilan
+sahibi}` ve (`reportedUser ∈ taraflar` ya da `job = ilan`). İlan hakkında üçüncü kişinin şikayeti atamaya
+ait değildir, ilan detayına aittir. Liste satırı `AdminAssignmentDto` **değişmedi**; detay ayrı kayıt tipi, çünkü
+özetler sayfa başına dört ek sorgu demek ve liste onları çizmiyor.
+
+**Bileşim `AdminDetailManager` orkestratöründe** (`MyWorkManager`/`StatisticsManager` deseni, §2al/§2am): hiçbir
+DAO'ya uzanmaz, `JobAssignmentService.getDetailedById` + `PaymentService.getAttemptsForStaff/getForStaff` +
+`PayoutService.findForAssignment/getRefundsForPayments` + `DisputeService.findAllForAssignment` +
+`ReportService.findAllBetweenAssignmentParties` çağırır. `JobAssignmentManager`'a konamazdı —
+`JobAssignmentManager → DisputeService → JobAssignmentService` döngüsü (§2ae); `PaymentManager` iadeleri
+`RefundDao`'dan okuyamazdı — o `PayoutManager`'ın. Yeni servis metotlarının hiçbiri `securityService`'e uzanmıyor
+(`AdminStaffPrincipalGuardIT` bir seviye tarıyor, ikinci seviye elle tarandı). `JobAssignmentService.getAdminDetail`
+silindi; tek çağıranı bu uçtu.
+
+**Hakediş detayı `PayoutManager.getStaffDetail`'de ve kuyrukla aynı kurallara uyuyor (§2y3).** Grafik yalnız
+`bankAccount` + `payment` (ikisi de opsiyonel); `worker` grafikte yok ve `UserService.getAllByIdIn` ile ayrıca
+okunuyor — hesabını silen işçinin hakedişi 404 değil `worker: null` ile döner. Atama `JobAssignmentDao.
+findWithDetailsForPaymentById` ile ayrıca yükleniyor (`PayoutManager → JobAssignmentDao` mevcut muafiyet).
+`settlementTasks` = hakedişin ödemesine bağlı `settlement_tasks` satırları (`SettlementService.getTasksForPayment`:
+işlem, durum, `attempts`, `nextAttemptAt`, `lastError`, sağlayıcı referansları) — issue'nun "mutabakat kayıtları /
+deneme geçmişi"; `paymentAttempts` atamanın ödeme denemelerinin `LinkedRecordDto` özeti. Denetim satırları
+**bilerek yok**: `audit.read` ayrı bir `PERSONAL_DATA` izin, finans dalına o kapıyı buradan açmak görev ayrılığını
+delerdi. IBAN `LogMasks.iban` ile maskeli, tam IBAN gövdeye girmiyor (`AdminDetailReadIT` ölçüyor).
+
+**Ödeme DTO'su sağlayıcı referanslarını taşır, sırları taşımaz.** `conversationId`, `providerPaymentId`,
+`providerTransactionId`, `verificationAttempts`, `nextVerificationAt`, tutar dökümü, `failureReason`, `refunds`
+(`AdminRefundDto`: tutar, durum, gerekçe, `providerRefundId`). **`providerToken` ve `providerSubmerchantKey`
+DTO'da yok** — ilki checkout oturumunun sırrı (§2k "provider token dahili korelasyon sırrıdır"), ikincisi alt üye
+işyeri anahtarı; ikisi de panelin işine yaramaz. Liste ve tekil detay aynı DTO; iadeler sayfa başına tek
+`findAllByPaymentIdInOrderByCreatedAtDesc` ile (`CollectionQueryWithoutGraphTest` allowlist'inde — DTO refund
+satırından yalnız `payment.id` okur). Taraflar `StaffPartyDto(id, firstName, lastName, email)`: personel
+yüzeyi, `SafeUserDto` değil — issue e-postayı açıkça istiyor ve kuyruk aramaları zaten e-postayla yapılıyor (§2s5).
+
+**`job.read` yeni izin: `PERSONAL_DATA`, non-mutating, seed'de `SUPPORT_AGENT`** (`14-01-job-read-staff-permission.xml`;
+`MODERATOR`/`DISPUTE_HANDLER`/`COMPANY_APPROVER`/`TRUST_LEAD`/`OWNER` kapsama yoluyla alır, finans dalı almaz —
+görev ayrılığı korunuyor). Hassasiyet `PERSONAL_DATA` çünkü detay **tam adresi** ve işveren e-postasını taşıyor;
+bireysel işverenin adresi ev adresidir. ADR-0003'ün yaklaşık konum kuralı kullanıcı yüzeyi içindir, personel
+istisnadır: `AdminJobDetailDto.address` `AddressMapper.toAddressDto` ile **maskesiz** gider, `JobAddressVisibility`
+hiç çağrılmaz. Sonucu §2av kural 3: her `/admin/jobs` isteği denetim satırı yazar. `user.read`'e (`NORMAL`,
+`SafeUserDto`) yaslanmak e-posta ve adresi `NORMAL` bir iznin arkasına koyardı; `user.read_pii` yalnız `TRUST_LEAD`'de
+ve ilanı destek görevlisi de görebilmeli.
+
+**İlan araması `StaffSearchQuery` sözleşmesiyle (§2s5):** ilan id'si, başlık, şirket adı, işverenin ad-soyadı ve
+e-postası, `unaccent(lower(...))`; `status` listesi verilmezse **her durum**. Grafik `category, creator, company,
+company.address, address, address.city, address.district` — `Job.category` ve `Company.address` **eager** to-one
+olduğu için grafiğe alınmadan satır başına ikincil select üretirlerdi; `creator.profilePicture`/`company.logo`
+`EagerFetchCoverageIT` muafiyetinde (DTO çizmiyor). Başvuru ve atama sayıları sayfa başına iki `group by`
+(`countByJobIds`, `countHiredByJobIds` **tüm** `AssignmentStatus` ile — `assignmentCount` işe alınanı değil her
+atamayı sayar, `hiredCount` değil). `AdminDetailReadIT.theJobListIsBuiltWithoutAQueryPerRow` `size=1` ile `size=2`
+sayfanın statement sayısını eşitliyor ve lazy fetch'i sıfırlıyor.
+
+**Var/yok ve izin (§2d2).** Personel uçlarında taraf yok; gizlenecek şey izinsiz personele karşı varlık. Zincir
+fail-closed olduğu için izinsiz aktör gerçek id'ye de rastgele id'ye de **aynı 403 zarfını** alır
+(`AdminDetailReadIT.assertRefusedIdentically`, `timeStamp`/`requestId` düşülerek birebir); izinli aktör olmayan
+kayda kaynağın kendi anahtarıyla 404 alır (`PAYOUT_NOT_FOUND`, `PAYMENT_NOT_FOUND`, `JOB_ASSIGNMENT_NOT_FOUND`,
+`JOB_NOT_FOUND`). Hakediş detayı `StaffPayoutManager.getForStaff(actor, id)` facade'ından geçer (kuyrukla aynı iki
+katman); diğer dördü `@RequiresPermission` ile yeterli, para hareketi yok.
+
+**Panel tarafı is-koala/koala-admin#95.**
+
 ---
 
 ## 2t. Iyzico mutabakat tetiği

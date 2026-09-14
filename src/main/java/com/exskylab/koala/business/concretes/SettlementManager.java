@@ -106,6 +106,12 @@ public class SettlementManager implements SettlementService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<SettlementTask> getTasksForPayment(UUID paymentId) {
+        return settlementTaskDao.findAllByPaymentIdOrderByCreatedAtAsc(paymentId);
+    }
+
+    @Override
     @Transactional
     public boolean runTask(UUID taskId) {
         SettlementTask task = settlementTaskDao.findWithDetailsById(taskId).orElse(null);

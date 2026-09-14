@@ -2,6 +2,7 @@ package com.exskylab.koala.business.abstracts;
 
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.payout.request.ConfirmPayoutSettlementDto;
+import com.exskylab.koala.core.dtos.payout.response.AdminPayoutDetailDto;
 import com.exskylab.koala.core.dtos.payout.response.StaffPayoutDto;
 import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.entities.Payout;
@@ -24,6 +25,8 @@ public interface StaffPayoutService {
 
     PageDto<StaffPayoutDto> listForStaff(StaffPrincipal actor, List<PayoutStatus> statuses, String query,
                                          Pageable pageable);
+
+    AdminPayoutDetailDto getForStaff(StaffPrincipal actor, UUID payoutId);
 
     void requirePermission(StaffPrincipal actor, StaffPermission permission, UUID jobAssignmentId);
 }

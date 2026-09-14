@@ -87,6 +87,11 @@ class CollectionQueryWithoutGraphTest {
             "PayoutDao.summarizeAwaiting",
             "PayoutDao.summarizeCompleted",
             "RefundDao.findAllByPaymentIdOrderByCreatedAtDesc",
+            // Staff payment detail reads only the refund row and payment.id (proxy identifier, no query); the
+            // payments themselves are already in the persistence context (#255).
+            "RefundDao.findAllByPaymentIdInOrderByCreatedAtDesc",
+            // Staff assignment detail renders reports as id + status only; no reporter or job is drawn (#255).
+            "ReportDao.findAllBetweenAssignmentParties",
             "ReportDao.findAllByReporterId",
             "ReportDao.tallyByReportedUser",
             "SettlementTaskDao.findDueIds",
