@@ -262,7 +262,7 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
         jdbcTemplate.update("delete from addresses where id = ?", addressId);
         jdbcTemplate.update("delete from companies where id = ?", companyId);
         jdbcTemplate.update("delete from users where id in (?, ?, ?)", employerId, workerId, strangerId);
-        jdbcTemplate.update("delete from staff_members where email like 'detail-read-%@iskoala.com'");
+        deleteStaffMembersLike("detail-read-%@iskoala.com");
     }
 
     private void insertUser(UUID id, String email, boolean employer, String firstName, String lastName) {

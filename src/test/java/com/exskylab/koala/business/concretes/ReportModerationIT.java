@@ -112,7 +112,7 @@ class ReportModerationIT extends AbstractStaffIntegrationTest {
         jdbcTemplate.update("delete from reports where reporter_id = ?", reporterId);
         jdbcTemplate.update("delete from staff_member_roles where staff_member_id in "
                 + "(select id from staff_members where email like 'decision-%@iskoala.com')");
-        jdbcTemplate.update("delete from staff_members where email like 'decision-%@iskoala.com'");
+        deleteStaffMembersLike("decision-%@iskoala.com");
         jdbcTemplate.update("delete from media where id = ?", imageId);
         jdbcTemplate.update("delete from messages where conversation_id = ?", conversationId);
         jdbcTemplate.update("delete from conversations where id = ?", conversationId);

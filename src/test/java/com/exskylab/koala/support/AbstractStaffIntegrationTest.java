@@ -51,4 +51,22 @@ public abstract class AbstractStaffIntegrationTest extends AbstractIntegrationTe
     protected String staffTokenFor(String email, String displayName, String... roleCodes) {
         return staffAccessToken(createStaffMember(email, displayName, roleCodes));
     }
+
+    protected void deleteStaffMembersLike(String emailPattern) {
+        staffJdbc.update("update payouts set reconciled_by_staff_id = null where reconciled_by_staff_id in "
+                + "(select id from staff_members where email like ?)", emailPattern);
+        staffJdbc.update("update companies set approved_by_staff_id = null where approved_by_staff_id in "
+                + "(select id from staff_members where email like ?)", emailPattern);
+        staffJdbc.update("update account_deletion_requests set rejected_by_staff_id = null "
+                + "where rejected_by_staff_id in (select id from staff_members where email like ?)", emailPattern);
+        staffJdbc.update("update user_verifications set reviewed_by_staff_id = null where reviewed_by_staff_id in "
+                + "(select id from staff_members where email like ?)", emailPattern);
+        staffJdbc.update("update disputes set resolved_by_staff_id = null where resolved_by_staff_id in "
+                + "(select id from staff_members where email like ?)", emailPattern);
+        staffJdbc.update("update reports set reviewed_by_staff_id = null where reviewed_by_staff_id in "
+                + "(select id from staff_members where email like ?)", emailPattern);
+        staffJdbc.update("delete from staff_member_roles where staff_member_id in "
+                + "(select id from staff_members where email like ?)", emailPattern);
+        staffJdbc.update("delete from staff_members where email like ?", emailPattern);
+    }
 }

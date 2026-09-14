@@ -65,7 +65,7 @@ class SettingsAdministrationIT extends AbstractStaffIntegrationTest {
         jdbcTemplate.update("delete from admin_audit_entries");
         jdbcTemplate.update("delete from staff_member_roles where staff_member_id in "
                 + "(select id from staff_members where email like 'settings-%@iskoala.com')");
-        jdbcTemplate.update("delete from staff_members where email like 'settings-%@iskoala.com'");
+        deleteStaffMembersLike("settings-%@iskoala.com");
         jdbcTemplate.update("delete from app_settings where setting_key = ?", SettingKeys.COMMISSION_RATE);
         jdbcTemplate.update("""
                 update app_settings

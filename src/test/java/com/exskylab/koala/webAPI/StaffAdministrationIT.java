@@ -44,7 +44,7 @@ class StaffAdministrationIT extends AbstractStaffIntegrationTest {
         jdbcTemplate.update("delete from admin_audit_entries");
         jdbcTemplate.update("delete from staff_member_roles where staff_member_id in "
                 + "(select id from staff_members where email like 'admin-staff-%@iskoala.com')");
-        jdbcTemplate.update("delete from staff_members where email like 'admin-staff-%@iskoala.com'");
+        deleteStaffMembersLike("admin-staff-%@iskoala.com");
     }
 
     private String email() {

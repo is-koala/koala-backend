@@ -64,7 +64,7 @@ class IbanVerificationIT extends AbstractStaffIntegrationTest {
     @AfterEach
     void tearDown() {
         jdbcTemplate.update("delete from admin_audit_entries");
-        jdbcTemplate.update("delete from staff_members where email like 'iban-verification-%@iskoala.com'");
+        deleteStaffMembersLike("iban-verification-%@iskoala.com");
         jdbcTemplate.update("delete from bank_accounts where user_id = ?", userId);
         jdbcTemplate.update("delete from authorities where user_id = ?", userId);
         jdbcTemplate.update("delete from users where id = ?", userId);

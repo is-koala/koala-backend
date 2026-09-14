@@ -92,9 +92,7 @@ class IdentityReviewApprovalIT extends AbstractStaffIntegrationTest {
             jdbc.update("delete from media where id = ?", mediaId);
         }
         jdbc.update("delete from users where id = ?", userId);
-        jdbc.update("delete from staff_member_roles where staff_member_id in "
-                + "(select id from staff_members where email like ?)", STAFF_EMAIL_PREFIX + "%");
-        jdbc.update("delete from staff_members where email like ?", STAFF_EMAIL_PREFIX + "%");
+        deleteStaffMembersLike(STAFF_EMAIL_PREFIX + "%");
     }
 
     @Test

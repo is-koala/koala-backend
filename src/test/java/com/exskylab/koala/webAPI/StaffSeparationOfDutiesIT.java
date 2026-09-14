@@ -52,7 +52,7 @@ class StaffSeparationOfDutiesIT extends AbstractStaffIntegrationTest {
         jdbcTemplate.update("delete from admin_audit_entries");
         jdbcTemplate.update("delete from staff_member_roles where staff_member_id in "
                 + "(select id from staff_members where email like 'sod-%@iskoala.com')");
-        jdbcTemplate.update("delete from staff_members where email like 'sod-%@iskoala.com'");
+        deleteStaffMembersLike("sod-%@iskoala.com");
         jdbcTemplate.update("delete from staff_role_includes where parent_role_id in "
                 + "(select id from staff_roles where code like 'TEST_SOD%') "
                 + "or child_role_id in (select id from staff_roles where code like 'TEST_SOD%')");

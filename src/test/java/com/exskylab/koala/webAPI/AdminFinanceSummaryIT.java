@@ -41,7 +41,7 @@ class AdminFinanceSummaryIT extends AbstractStaffIntegrationTest {
     @AfterEach
     void cleanUp() {
         jdbcTemplate.update("delete from admin_audit_entries");
-        jdbcTemplate.update("delete from staff_members where email like 'finance-summary-%@iskoala.com'");
+        deleteStaffMembersLike("finance-summary-%@iskoala.com");
         jdbcTemplate.update("delete from payouts where worker_id = ?", workerId);
         jdbcTemplate.update("delete from payments where job_assignment_id in (?, ?, ?)",
                 inPeriodAssignment, outPeriodAssignment, awaitingAssignment);

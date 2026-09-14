@@ -83,7 +83,7 @@ class PayoutQueueIT extends AbstractStaffIntegrationTest {
     @AfterEach
     void tearDown() {
         jdbcTemplate.update("delete from admin_audit_entries");
-        jdbcTemplate.update("delete from staff_members where email like 'payout-queue-%@iskoala.com'");
+        deleteStaffMembersLike("payout-queue-%@iskoala.com");
         for (UUID request : deletionRequests) {
             jdbcTemplate.update("delete from account_anonymization_audit where request_id = ?", request);
             jdbcTemplate.update("delete from account_deletion_requests where id = ?", request);

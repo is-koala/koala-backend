@@ -91,9 +91,7 @@ class CompanyApprovalIT extends AbstractStaffIntegrationTest {
         jdbcTemplate.update("delete from companies where tax_number like ?", TAX_PREFIX + "%");
         jdbcTemplate.update("delete from notifications where recipient_id = ?", founder.getId());
         jdbcTemplate.update("delete from admin_audit_entries");
-        jdbcTemplate.update("delete from staff_member_roles where staff_member_id in "
-                + "(select id from staff_members where email like 'company-approval-%@iskoala.com')");
-        jdbcTemplate.update("delete from staff_members where email like 'company-approval-%@iskoala.com'");
+        deleteStaffMembersLike("company-approval-%@iskoala.com");
 
         operatorToken = staffTokenFor("company-approval-" + UUID.randomUUID() + "@iskoala.com",
                 "Şirket Onaylayıcısı", "COMPANY_APPROVER");

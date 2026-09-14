@@ -66,7 +66,7 @@ class AdminAssignmentReadIT extends AbstractStaffIntegrationTest {
     @AfterEach
     void cleanUp() {
         jdbcTemplate.update("delete from admin_audit_entries");
-        jdbcTemplate.update("delete from staff_members where email like 'assignment-read-%@iskoala.com'");
+        deleteStaffMembersLike("assignment-read-%@iskoala.com");
         jdbcTemplate.update("delete from job_assignments where id = ?", assignmentId);
         jdbcTemplate.update("delete from jobs where id = ?", jobId);
         jdbcTemplate.update("delete from users where id in (?, ?)", employerId, workerId);

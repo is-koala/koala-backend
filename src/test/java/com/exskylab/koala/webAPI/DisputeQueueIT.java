@@ -91,7 +91,7 @@ class DisputeQueueIT extends AbstractStaffIntegrationTest {
         jdbc.update("delete from companies where id = ?", companyId);
         jdbc.update("delete from staff_member_roles where staff_member_id in "
                 + "(select id from staff_members where email like 'dispute-queue-%@iskoala.com')");
-        jdbc.update("delete from staff_members where email like 'dispute-queue-%@iskoala.com'");
+        deleteStaffMembersLike("dispute-queue-%@iskoala.com");
         jdbc.update("delete from users where id in (?, ?)", employerId, workerId);
     }
 

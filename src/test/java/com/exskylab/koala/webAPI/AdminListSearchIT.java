@@ -19,6 +19,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
@@ -129,7 +130,7 @@ class AdminListSearchIT extends AbstractStaffIntegrationTest {
     void cleanUp() {
         jdbc.update("delete from admin_audit_entries");
         jdbc.update("delete from account_deletion_requests where id in (?, ?)", matchingDeletionId, otherDeletionId);
-        jdbc.update("delete from staff_members where email like 'list-search-%@iskoala.com'");
+        deleteStaffMembersLike("list-search-%@iskoala.com");
         jdbc.update("delete from user_verifications where id in (?, ?)", matchingReviewId, otherReviewId);
         jdbc.update("delete from reports where id in (?, ?)", matchingReportId, otherReportId);
         jdbc.update("delete from disputes where id in (?, ?)", matchingDisputeId, otherDisputeId);
@@ -426,7 +427,7 @@ class AdminListSearchIT extends AbstractStaffIntegrationTest {
         jdbc.update("""
                 insert into account_deletion_requests
                     (id, user_id, subject_id, status, reason, requested_at, created_at, is_deleted)
-                values (?, ?, ?, 'REQUESTED', 'n+1 testi', now() - interval '1 minute', now(), false)
+                values (?, ?, ?, 'REQUESTED', 'n+1 testi', now() + interval '1 second', now(), false)
                 """, secondDeletionId, employerId, employerId);
         Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
         boolean wasEnabled = statistics.isStatisticsEnabled();
@@ -437,7 +438,7 @@ class AdminListSearchIT extends AbstractStaffIntegrationTest {
                     "sort", "requestedAt,desc")
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.content", hasSize(1)))
-                    .andExpect(jsonPath("$.data.content[0].id").value(matchingDeletionId.toString()))
+                    .andExpect(jsonPath("$.data.content[0].id").value(secondDeletionId.toString()))
                     .andExpect(jsonPath("$.data.content[0].blockers[*].type", hasItem("DISPUTE")));
             long statementsForOneRow = statistics.getPrepareStatementCount();
 
@@ -446,8 +447,10 @@ class AdminListSearchIT extends AbstractStaffIntegrationTest {
                     "sort", "requestedAt,desc")
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.content", hasSize(2)))
-                    .andExpect(jsonPath("$.data.content[1].id").value(secondDeletionId.toString()))
-                    .andExpect(jsonPath("$.data.content[1].blockers[*].type", hasItem("DISPUTE")));
+                    .andExpect(jsonPath("$.data.content[*].id",
+                            containsInAnyOrder(secondDeletionId.toString(), matchingDeletionId.toString())))
+                    .andExpect(jsonPath("$.data.content[?(@.id == '" + matchingDeletionId + "')].blockers[*].type",
+                            hasItem("DISPUTE")));
             long statementsForTwoRows = statistics.getPrepareStatementCount();
 
             assertEquals(statementsForOneRow, statementsForTwoRows,

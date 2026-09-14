@@ -44,7 +44,7 @@ class AdminAuditTrailIT extends AbstractStaffIntegrationTest {
     @AfterEach
     void removeTestData() {
         jdbcTemplate.update("delete from admin_audit_entries");
-        jdbcTemplate.update("delete from staff_members where email like 'audit-%@iskoala.com'");
+        deleteStaffMembersLike("audit-%@iskoala.com");
         jdbcTemplate.update("delete from app_settings where setting_key = ?", LATE_FEE_KEY);
     }
 
