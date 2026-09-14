@@ -5,6 +5,7 @@ import com.exskylab.koala.entities.Company;
 import com.exskylab.koala.entities.Dispute;
 import com.exskylab.koala.entities.JobApplication;
 import com.exskylab.koala.entities.JobAssignment;
+import com.exskylab.koala.entities.Message;
 import com.exskylab.koala.entities.Review;
 import com.exskylab.koala.entities.User;
 
@@ -35,4 +36,6 @@ public interface ActivityNotificationService {
     void identityVerified(User user);
 
     void companyApprovalDecided(Company company);
+
+    void messageSent(Message message);
 }

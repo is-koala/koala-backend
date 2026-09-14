@@ -36,6 +36,19 @@ public interface MessageDao extends JpaRepository<Message, UUID> {
     @EntityGraph(attributePaths = {"sender", "sender.profilePicture"})
     Page<Message> findAllByConversationIdOrderBySentAtDesc(UUID conversationId, Pageable pageable);
 
+    Optional<Message> findByIdAndConversationId(UUID id, UUID conversationId);
+
+    @EntityGraph(attributePaths = {"sender", "sender.profilePicture"})
+    @Query("""
+            select m from Message m
+            where m.conversation.id = :conversationId
+              and (m.sentAt > :sentAt or (m.sentAt = :sentAt and m.id > :messageId))
+            """)
+    Page<Message> findAllAfter(@Param("conversationId") UUID conversationId,
+                               @Param("sentAt") Instant sentAt,
+                               @Param("messageId") UUID messageId,
+                               Pageable pageable);
+
     @Modifying
     @Query("""
             update Message m set m.readAt = :readAt

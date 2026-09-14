@@ -2,6 +2,7 @@ package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.core.utilities.results.ErrorResult;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -86,18 +87,49 @@ public class ConversationsController {
                 MessagingMessages.CONVERSATIONS_LISTED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Tek konuşma",
+            description = "Konuşma listesindeki satırın aynısı: tür, katılımcılar, son mesaj, okunmamış sayısı ve "
+                    + "closed. Bildirimden gelen istemci listeyi çekmeden tek konuşmayı okur. "
+                    + "Taraf olmayan kullanıcı 404 alır; konuşmanın varlığı sızmaz.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Konuşma getirildi"),
+            @ApiResponse(responseCode = "404", description = "Konuşma bulunamadı ya da taraf değilsiniz",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @GetMapping("/conversations/{conversationId}")
+    public ResponseEntity<SuccessDataResult<ConversationDto>> conversation(@PathVariable UUID conversationId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                messagingService.getConversation(conversationId),
+                MessagingMessages.CONVERSATION_FETCHED, HttpStatus.OK));
+    }
+
     @Operation(summary = "Konuşmanın mesajları",
-            description = "Taraf olmayan kullanıcı 404 alır; konuşmanın varlığı sızmaz. Sayfalıdır.")
+            description = "Taraf olmayan kullanıcı 404 alır; konuşmanın varlığı sızmaz. Sayfalıdır; varsayılan "
+                    + "sıra en yeni önce. after=<messageId> verilirse yalnız o mesajdan sonra gelenler, gönderim "
+                    + "zamanına göre ARTAN sırada ve aynı sayfalamayla döner (kopukluk sonrası artımlı çekim); sıra "
+                    + "sabittir, bu kipte sort parametresi verilirse 400 PAGE_SORT_FIELD_NOT_ALLOWED. after bu "
+                    + "konuşmanın bir mesajı değilse ya da "
+                    + "hiç yoksa 400 MESSAGING_AFTER_UNKNOWN döner ve iki hâl ayırt edilemez; istemci listeyi "
+                    + "baştan çeker.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Mesajlar listelendi"),
+            @ApiResponse(responseCode = "400",
+                    description = "Sıralama alanı desteklenmiyor (after ile her sort dahil) ya da after bu "
+                            + "konuşmada bilinmiyor (MESSAGING_AFTER_UNKNOWN)",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "404", description = "Konuşma bulunamadı ya da taraf değilsiniz",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @GetMapping("/conversations/{conversationId}/messages")
     public ResponseEntity<SuccessDataResult<PageDto<MessageDto>>> messages(
-            @PathVariable UUID conversationId, @ParameterObject @PageableDefault(size = 30) Pageable pageable) {
+            @PathVariable UUID conversationId,
+            @Parameter(description = "Yalnız bu mesajdan sonra gönderilenleri artan sırada döndürür")
+            @RequestParam(required = false) UUID after,
+            @ParameterObject @PageableDefault(size = 30) Pageable pageable) {
 
-        var page = messagingService.getMessages(conversationId, pageable);
+        var page = after == null
+                ? messagingService.getMessages(conversationId, pageable)
+                : messagingService.getMessagesAfter(conversationId, after, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
                 PageDto.of(page, messagingMapper.toMessageDtoList(page.getContent())),
                 MessagingMessages.MESSAGES_LISTED, HttpStatus.OK));
@@ -108,7 +140,9 @@ public class ConversationsController {
                     + "İkili sohbette işçinin, grupta işveren tarafında olmayan gönderenin ataması ödenmemişse "
                     + "403 MESSAGING_PAYMENT_REQUIRED; atama kapandıysa ya da iş bitimi penceresi dolduysa "
                     + "409 MESSAGING_WINDOW_CLOSED. Mesaj gerçek zamanlı olarak "
-                    + "konuşma topic ve katılımcıların kişisel kuyruğuna yayınlanır.")
+                    + "konuşma topic ve katılımcıların kişisel kuyruğuna yayınlanır; gönderen dışındaki "
+                    + "katılımcılara MESSAGES kategorisinde push kuyruğa girer "
+                    + "(data: type=MESSAGE, conversationId, messageId).")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Mesaj gönderildi"),
             @ApiResponse(responseCode = "403",

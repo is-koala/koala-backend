@@ -20,4 +20,6 @@ public class ActivityMessages {
     public static final String COMPANY_INVITATION_RECEIVED = "{activity.company.invitation.received}";
     public static final String COMPANY_APPROVED = "{activity.company.approved}";
     public static final String COMPANY_REJECTED = "{activity.company.rejected}";
+    public static final String MESSAGE_RECEIVED = "{activity.message.received}";
+    public static final String MESSAGE_RECEIVED_TITLE = "{activity.message.received.title}";
 }

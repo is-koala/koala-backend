@@ -2,6 +2,7 @@ package com.exskylab.koala.business.concretes;
 
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.exceptions.ValidationException;
+import com.exskylab.koala.business.abstracts.ActivityNotificationService;
 import com.exskylab.koala.business.abstracts.CompanyContactService;
 import com.exskylab.koala.business.abstracts.MessagingService;
 import com.exskylab.koala.business.abstracts.SecurityService;
@@ -47,6 +48,9 @@ public class MessagingManager implements MessagingService {
     private static final Set<String> SORTABLE = Set.of("createdAt", "lastMessageAt", "sentAt");
     private static final Sort CONVERSATION_SORT = Sort.by(Sort.Direction.DESC, "lastMessageAt");
     private static final Sort MESSAGE_SORT = Sort.by(Sort.Direction.DESC, "sentAt");
+    private static final Set<String> AFTER_SORTABLE = Set.of();
+    private static final Sort MESSAGES_AFTER_SORT = Sort.by(Sort.Direction.ASC, "sentAt")
+            .and(Sort.by(Sort.Direction.ASC, "id"));
 
     private final ConversationDao conversationDao;
     private final MessageDao messageDao;
@@ -61,6 +65,7 @@ public class MessagingManager implements MessagingService {
     private final MessagingMapper messagingMapper;
     private final MessagingAvailability messagingAvailability;
     private final UserMapper userMapper;
+    private final ActivityNotificationService activityNotificationService;
 
     public MessagingManager(ConversationDao conversationDao, MessageDao messageDao,
                             UserBlockDao userBlockDao, JobService jobService,
@@ -68,7 +73,7 @@ public class MessagingManager implements MessagingService {
                             SecurityService securityService, CompanyContactService companyContactService,
                             PageableSanitizer pageableSanitizer, RealtimePublisher realtimePublisher,
                             MessagingMapper messagingMapper, MessagingAvailability messagingAvailability,
-                            UserMapper userMapper) {
+                            UserMapper userMapper, ActivityNotificationService activityNotificationService) {
         this.conversationDao = conversationDao;
         this.messageDao = messageDao;
         this.userBlockDao = userBlockDao;
@@ -82,6 +87,7 @@ public class MessagingManager implements MessagingService {
         this.messagingMapper = messagingMapper;
         this.messagingAvailability = messagingAvailability;
         this.userMapper = userMapper;
+        this.activityNotificationService = activityNotificationService;
     }
 
     @Override
@@ -216,6 +222,8 @@ public class MessagingManager implements MessagingService {
         conversation.setLastMessageBody(saved.getBody());
         conversationDao.save(conversation);
 
+        activityNotificationService.messageSent(saved);
+
         realtimePublisher.messageSent(conversationId, messagingMapper.toMessageDto(saved),
                 conversation.participantIds());
 
@@ -230,6 +238,31 @@ public class MessagingManager implements MessagingService {
         pageableSanitizer.rejectUnknownSort(requested, SORTABLE);
         return messageDao.findAllByConversationIdOrderBySentAtDesc(conversationId,
                 pageableSanitizer.sanitize(requested, SORTABLE, MESSAGE_SORT));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<Message> getMessagesAfter(UUID conversationId, UUID afterMessageId, Pageable requested) {
+        loadParticipating(conversationId);
+        pageableSanitizer.rejectUnknownSort(requested, AFTER_SORTABLE);
+        Message anchor = messageDao.findByIdAndConversationId(afterMessageId, conversationId)
+                .orElseThrow(() -> {
+                    log.warn("Incremental message fetch for conversation {} refused: anchor {} is not a message "
+                            + "of this conversation", conversationId, afterMessageId);
+                    return new ValidationException(MessagingMessages.AFTER_UNKNOWN);
+                });
+        return messageDao.findAllAfter(conversationId, anchor.getSentAt(), anchor.getId(),
+                pageableSanitizer.sanitize(requested, AFTER_SORTABLE, MESSAGES_AFTER_SORT));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ConversationDto getConversation(UUID conversationId) {
+        Conversation conversation = loadParticipating(conversationId);
+        return messagingMapper.toConversationDto(conversation,
+                unreadCounts(List.of(conversationId)).getOrDefault(conversationId, 0L),
+                closedFlags(List.of(conversation)).get(conversationId),
+                membersOf(conversation));
     }
 
     @Override

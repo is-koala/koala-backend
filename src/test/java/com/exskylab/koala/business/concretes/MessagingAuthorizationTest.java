@@ -69,7 +69,8 @@ class MessagingAuthorizationTest {
                 jobAssignmentService, userService, securityService, companyContactService,
                 new PageableSanitizer(), realtimePublisher, messagingMapper,
                 new MessagingAvailability(properties),
-                mock(com.exskylab.koala.core.mappers.UserMapper.class));
+                mock(com.exskylab.koala.core.mappers.UserMapper.class),
+                mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class));
 
         job = new Job();
         job.setId(UUID.randomUUID());

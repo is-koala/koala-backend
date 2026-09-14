@@ -1,6 +1,7 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.NotificationService;
+import com.exskylab.koala.core.constants.ActivityMessages;
 import com.exskylab.koala.core.dtos.notification.request.SendEmailDto;
 import com.exskylab.koala.core.dtos.notification.request.SendPushToUserDto;
 import com.exskylab.koala.core.helpers.MessageResolver;
@@ -15,6 +16,9 @@ import com.exskylab.koala.entities.Dispute;
 import com.exskylab.koala.entities.Job;
 import com.exskylab.koala.entities.JobApplication;
 import com.exskylab.koala.entities.JobAssignment;
+import com.exskylab.koala.entities.Conversation;
+import com.exskylab.koala.entities.ConversationKind;
+import com.exskylab.koala.entities.Message;
 import com.exskylab.koala.entities.NotificationCategory;
 import com.exskylab.koala.entities.User;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +27,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 
 import java.util.Collection;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -304,5 +310,96 @@ class ActivityNotificationRulesTest {
         assertDoesNotThrow(() -> manager.assignmentCompleted(assignment()));
 
         verify(notificationService).sendEmail(any(), any(), anyBoolean());
+    }
+
+    private Message message(User sender, ConversationKind kind, User... participants) {
+        Conversation conversation = new Conversation();
+        conversation.setId(UUID.randomUUID());
+        conversation.setKind(kind);
+        conversation.setJob(job);
+        conversation.setEmployer(employer);
+        for (User participant : participants) {
+            conversation.addParticipant(participant);
+        }
+        Message message = new Message();
+        message.setId(UUID.randomUUID());
+        message.setConversation(conversation);
+        message.setSender(sender);
+        message.setBody("Yarın saat kaçta?");
+        return message;
+    }
+
+    private List<SendPushToUserDto> capturedPushes() {
+        ArgumentCaptor<SendPushToUserDto> captor = ArgumentCaptor.forClass(SendPushToUserDto.class);
+        verify(notificationService, atLeast(0)).sendPushToUser(captor.capture(), any(), anyBoolean());
+        return captor.getAllValues();
+    }
+
+    @Test
+    void aDirectMessageIsPushedToTheCounterpartOnly() {
+        User sender = worker;
+        sender.setLastName("Yılmaz");
+
+        manager.messageSent(message(sender, ConversationKind.DIRECT, employer, sender));
+
+        List<SendPushToUserDto> pushes = capturedPushes();
+        assertEquals(1, pushes.size());
+        assertEquals(employer, pushes.get(0).getRecipient());
+        assertEquals(NotificationCategory.MESSAGES, pushes.get(0).getCategory());
+        assertEquals("Ayşe Yılmaz", pushes.get(0).getTitle());
+        assertEquals("metin:" + ActivityMessages.MESSAGE_RECEIVED, pushes.get(0).getBody());
+    }
+
+    @Test
+    void theMessageTextNeverEntersThePush() {
+        Message message = message(worker, ConversationKind.DIRECT, employer, worker);
+
+        manager.messageSent(message);
+
+        SendPushToUserDto push = captured();
+        assertFalse(push.getBody().contains(message.getBody()));
+        assertFalse(push.getTitle().contains(message.getBody()));
+        assertEquals(Map.of("type", "MESSAGE",
+                "conversationId", message.getConversation().getId().toString(),
+                "messageId", message.getId().toString()), push.getDataPayload());
+    }
+
+    @Test
+    void aGroupMessageReachesEveryOtherParticipant() {
+        User second = user();
+        User third = user();
+
+        manager.messageSent(message(employer, ConversationKind.GROUP, employer, worker, second, third));
+
+        List<SendPushToUserDto> pushes = capturedPushes();
+        assertEquals(3, pushes.size());
+        assertTrue(pushes.stream().noneMatch(push -> push.getRecipient().equals(employer)));
+        verify(notificationService).preparePushRecipients(argThat((Collection<UUID> ids) ->
+                ids.size() == 3 && !ids.contains(employer.getId())));
+    }
+
+    @Test
+    void aMessagePushIsNeitherAFeedEntryNorAnEmail() {
+        manager.messageSent(message(worker, ConversationKind.DIRECT, employer, worker));
+
+        verify(notificationService, never()).sendInApp(any());
+        verify(notificationService, never()).sendEmail(any(), any(), anyBoolean());
+    }
+
+    @Test
+    void aMessagePushCarriesTheHumanSenderNotTheSystem() {
+        manager.messageSent(message(worker, ConversationKind.DIRECT, employer, worker));
+
+        verify(notificationService).sendPushToUser(any(), any(), eq(false));
+    }
+
+    @Test
+    void aSenderWithoutANameStillGetsATitle() {
+        User anonymous = new User();
+        anonymous.setId(UUID.randomUUID());
+
+        manager.messageSent(message(anonymous, ConversationKind.DIRECT, employer, anonymous));
+
+        assertEquals("metin:" + ActivityMessages.MESSAGE_RECEIVED_TITLE, captured().getTitle());
     }
 }

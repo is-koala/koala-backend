@@ -28,6 +28,10 @@ public interface MessagingService {
 
     Page<Message> getMessages(UUID conversationId, Pageable pageable);
 
+    Page<Message> getMessagesAfter(UUID conversationId, UUID afterMessageId, Pageable pageable);
+
+    com.exskylab.koala.core.dtos.messaging.response.ConversationDto getConversation(UUID conversationId);
+
     com.exskylab.koala.core.dtos.common.PageDto<com.exskylab.koala.core.dtos.messaging.response.ConversationDto> getMyConversations(Pageable pageable);
 
     int markRead(UUID conversationId);

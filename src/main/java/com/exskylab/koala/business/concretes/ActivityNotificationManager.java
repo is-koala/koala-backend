@@ -15,10 +15,12 @@ import com.exskylab.koala.entities.Company;
 import com.exskylab.koala.entities.CompanyApprovalStatus;
 import com.exskylab.koala.entities.CompanyContact;
 import com.exskylab.koala.entities.CompanyContactRole;
+import com.exskylab.koala.entities.ConversationParticipant;
 import com.exskylab.koala.entities.DispatchPriority;
 import com.exskylab.koala.entities.Dispute;
 import com.exskylab.koala.entities.JobApplication;
 import com.exskylab.koala.entities.JobAssignment;
+import com.exskylab.koala.entities.Message;
 import com.exskylab.koala.entities.NotificationCategory;
 import com.exskylab.koala.entities.NotificationTargetType;
 import com.exskylab.koala.entities.Review;
@@ -28,8 +30,10 @@ import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.Map;
+import java.util.stream.Stream;
 
 @Service
 @Slf4j
@@ -180,6 +184,47 @@ public class ActivityNotificationManager implements ActivityNotificationService 
         admins.forEach(admin -> notify(admin, company.getName(), key,
                 NotificationCategory.COMPANY_UPDATES,
                 NotificationTargetType.COMPANY, company.getId()));
+    }
+
+    @Override
+    public void messageSent(Message message) {
+        User sender = message.getSender();
+        List<User> recipients = message.getConversation().getParticipants().stream()
+                .map(ConversationParticipant::getUser)
+                .filter(participant -> !participant.getId().equals(sender.getId()))
+                .toList();
+        if (recipients.isEmpty()) {
+            return;
+        }
+
+        notificationService.preparePushRecipients(recipients.stream().map(User::getId).toList());
+
+        String title = displayNameOf(sender);
+        String body = messageResolver.resolve(ActivityMessages.MESSAGE_RECEIVED);
+        Map<String, String> data = Map.of(
+                "type", "MESSAGE",
+                "conversationId", message.getConversation().getId().toString(),
+                "messageId", message.getId().toString());
+
+        for (User recipient : recipients) {
+            SendPushToUserDto dto = new SendPushToUserDto();
+            dto.setRecipient(recipient);
+            dto.setTitle(title);
+            dto.setBody(body);
+            dto.setCategory(NotificationCategory.MESSAGES);
+            dto.setDataPayload(data);
+
+            notificationService.sendPushToUser(dto, DispatchPriority.NORMAL, false);
+        }
+    }
+
+    private String displayNameOf(User user) {
+        String name = String.join(" ", Stream.of(user.getFirstName(), user.getLastName())
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(part -> !part.isEmpty())
+                .toList());
+        return name.isEmpty() ? messageResolver.resolve(ActivityMessages.MESSAGE_RECEIVED_TITLE) : name;
     }
 
     private User employerOf(JobAssignment assignment) {

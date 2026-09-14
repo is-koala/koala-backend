@@ -18,4 +18,6 @@ public class MessagingMessages {
     public static final String BLOCKS_LISTED = "{messaging.blocks.listed}";
     public static final String MESSAGE_NOT_FOUND = "{messaging.message.not.found}";
     public static final String SUBSCRIPTION_NOT_ALLOWED = "{messaging.subscription.not.allowed}";
+    public static final String AFTER_UNKNOWN = "{messaging.after.unknown}";
+    public static final String CONVERSATION_FETCHED = "{messaging.conversation.fetched}";
 }
