@@ -42,6 +42,7 @@ class JobResponsePrimitiveContractTest {
 
     private static final Set<String> DOCUMENTED_PRIMITIVE_DEFAULTS = Set.of(
             "JobDetailDto.acceptingApplications",
+            "JobDetailDto.applicationCount",
             "JobDetailDto.hiredCount",
             "JobSummaryDto.applicationCount",
             "JobSummaryDto.hiredCount",

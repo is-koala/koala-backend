@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -117,6 +118,9 @@ public class Job extends BaseEntity{
 
     @Enumerated(EnumType.STRING)
     private JobStatus status;
+
+    @Column(name = "cancelled_at")
+    private Instant cancelledAt;
 
     @OneToMany(mappedBy = "job", fetch = FetchType.LAZY)
     @OrderBy("sortOrder ASC")

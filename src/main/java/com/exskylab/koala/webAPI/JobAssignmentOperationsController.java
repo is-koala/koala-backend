@@ -27,7 +27,6 @@ import com.exskylab.koala.core.mappers.TimesheetMapper;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.core.constants.JobAssignmentMessages;
 import com.exskylab.koala.core.dtos.jobAssignment.response.MyAssignmentDto;
-import com.exskylab.koala.core.mappers.JobAssignmentMapper;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -46,7 +45,6 @@ public class JobAssignmentOperationsController {
     private final DisputeService disputeService;
     private final TimesheetService timesheetService;
     private final JobAssignmentService jobAssignmentService;
-    private final JobAssignmentMapper jobAssignmentMapper;
     private final CancellationMapper cancellationMapper;
     private final DisputeMapper disputeMapper;
     private final TimesheetMapper timesheetMapper;
@@ -55,7 +53,6 @@ public class JobAssignmentOperationsController {
                                              DisputeService disputeService,
                                              TimesheetService timesheetService,
                                              JobAssignmentService jobAssignmentService,
-                                             JobAssignmentMapper jobAssignmentMapper,
                                              CancellationMapper cancellationMapper,
                                              DisputeMapper disputeMapper,
                                              TimesheetMapper timesheetMapper) {
@@ -63,7 +60,6 @@ public class JobAssignmentOperationsController {
         this.disputeService = disputeService;
         this.timesheetService = timesheetService;
         this.jobAssignmentService = jobAssignmentService;
-        this.jobAssignmentMapper = jobAssignmentMapper;
         this.cancellationMapper = cancellationMapper;
         this.disputeMapper = disputeMapper;
         this.timesheetMapper = timesheetMapper;
@@ -216,7 +212,7 @@ public class JobAssignmentOperationsController {
     @PostMapping("/{assignmentId}/complete")
     public ResponseEntity<SuccessDataResult<MyAssignmentDto>> complete(@PathVariable UUID assignmentId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
-                jobAssignmentMapper.toMyAssignmentDto(jobAssignmentService.completeAssignment(assignmentId)),
+                jobAssignmentService.completeAssignment(assignmentId),
                 JobAssignmentMessages.COMPLETED, HttpStatus.OK));
     }
 }

@@ -44,6 +44,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -317,6 +318,7 @@ public class JobManager implements JobService {
         Job job = getDetailedById(jobId);
         JobDetailDto detail = jobMapper.toJobDetailDto(job);
         detail.setHiredCount(jobAssignmentDao.countByJobIdAndStatusIn(jobId, HIRED_STATUSES));
+        detail.setApplicationCount(jobApplicationDao.countByJobId(jobId));
         detail.setAcceptingApplications(jobAvailability.acceptsApplications(job));
         addressVisibility.protect(job, detail, viewerId, hasAddressAccess(jobId, viewerId));
         return detail;
@@ -439,6 +441,7 @@ public class JobManager implements JobService {
         }
 
         job.setStatus(JobStatus.CANCELLED);
+        job.setCancelledAt(Instant.now());
         jobDao.save(job);
 
         log.info("Job {} cancelled by user {}", jobId, securityService.getAuthenticatedUserId());

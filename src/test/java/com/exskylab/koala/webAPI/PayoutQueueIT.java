@@ -203,11 +203,64 @@ class PayoutQueueIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
+    void theWorkerFacingListNamesTheJobAndTheCompanyWhenThereIsOne() throws Exception {
+        UUID companyId = UUID.randomUUID();
+        UUID companyJobId = UUID.randomUUID();
+        UUID companyAssignmentId = UUID.randomUUID();
+        jdbcTemplate.update("insert into companies (id, created_at, is_deleted, name, tax_number, email, "
+                        + "approval_status) values (?, now(), false, ?, ?, ?, 'APPROVED')",
+                companyId, "Hakediş Şirketi", String.valueOf(Math.abs(companyId.hashCode())),
+                companyId + "@example.com");
+        jdbcTemplate.update("""
+                insert into jobs (id, created_at, is_deleted, company_id, title, status, employer_type,
+                                  experience_required, insurance_required, min_age, max_age,
+                                  start_date_time, end_date_time)
+                values (?, now(), false, ?, 'Şirket işi', 'OPEN', 'COMPANY',
+                        false, false, 18, 65, now() + interval '1 day', now() + interval '2 days')
+                """, companyJobId, companyId);
+        jdbcTemplate.update("""
+                insert into job_assignments
+                    (id, created_at, is_deleted, job_id, worker_id, status, payment_status,
+                     assignment_date_time, work_hours)
+                values (?, now(), false, ?, ?, 'COMPLETED', 'RELEASED_TO_WORKER', now() - interval '1 day', 0)
+                """, companyAssignmentId, companyJobId, worker);
+        jdbcTemplate.update("""
+                insert into payouts (id, created_at, is_deleted, job_assignment_id, worker_id, amount, currency,
+                                     status, provider_reference, settlement_reference, processing_at, completed_at)
+                values (?, now() - interval '1 day', false, ?, ?, 500.00, 'TRY', 'COMPLETED', ?, ?,
+                        now() - interval '1 day', now())
+                """, UUID.randomUUID(), companyAssignmentId, worker, "iyz-" + companyAssignmentId,
+                "stl-" + companyAssignmentId);
+        jobs.add(companyJobId);
+        assignments.add(companyAssignmentId);
+        try {
+            mockMvc.perform(get("/users/me/payouts").with(user(principal(worker))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data", hasSize(2)))
+                    .andExpect(jsonPath("$.data[0].status").value("COMPLETED"))
+                    .andExpect(jsonPath("$.data[0].jobTitle").value("Şirket işi"))
+                    .andExpect(jsonPath("$.data[0].companyName").value("Hakediş Şirketi"))
+                    .andExpect(jsonPath("$.data[0].jobAssignmentId").value(companyAssignmentId.toString()))
+                    .andExpect(jsonPath("$.data[0].completedAt").isNotEmpty())
+                    .andExpect(jsonPath("$.data[1].jobTitle").value("Payout queue"))
+                    .andExpect(jsonPath("$.data[1].companyName").value(nullValue()))
+                    .andExpect(jsonPath("$.data[1].completedAt").value(nullValue()));
+        } finally {
+            jdbcTemplate.update("delete from payouts where job_assignment_id = ?", companyAssignmentId);
+            jdbcTemplate.update("delete from job_assignments where id = ?", companyAssignmentId);
+            jdbcTemplate.update("delete from jobs where id = ?", companyJobId);
+            jdbcTemplate.update("delete from companies where id = ?", companyId);
+        }
+    }
+
+    @Test
     void theWorkerFacingListNeverCarriesTheStaffEvidence() throws Exception {
         mockMvc.perform(get("/users/me/payouts").with(user(principal(worker))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data", hasSize(1)))
                 .andExpect(jsonPath("$.data[0].status").value("PROCESSING"))
+                .andExpect(jsonPath("$.data[0].jobTitle").value("Payout queue"))
+                .andExpect(jsonPath("$.data[0].jobAssignmentId").isNotEmpty())
                 .andExpect(jsonPath("$.data[0].providerReference").doesNotExist())
                 .andExpect(jsonPath("$.data[0].maskedIban").doesNotExist())
                 .andExpect(jsonPath("$.data[0].recipient").doesNotExist())

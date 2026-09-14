@@ -12,7 +12,6 @@ import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.core.constants.JobAssignmentMessages;
 import com.exskylab.koala.core.dtos.jobAssignment.request.AnswerAssignmentDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.PaymentSessionDto;
-import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.MyAssignmentDto;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.PaymentSessionResponseDto;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
@@ -39,7 +38,7 @@ public class JobAssignmentsController {
 
 
     @Operation(summary = "Atamayı getir",
-            description = "Yalnızca atanan işçi, ilan sahibi veya şirket ilanının güncel yetkilisi okuyabilir. Taraf olmayan kullanıcı 404 alır.")
+            description = "Yalnızca atanan işçi, ilan sahibi veya şirket ilanının güncel yetkilisi okuyabilir. Taraf olmayan kullanıcı 404 alır. Zaman çizelgesi alanları: application.applicationDateTime (başvuru), application.answeredDateTime (işverenin kabulü), createdAt (atama kaydı), confirmedAt (işçinin kabulü), paymentSecuredAt (ilk başarılı ödemenin tamamlanma anı), actualCompletionDateTime, cancellation.cancelledAt ve payout.completedAt; ilgili olay yaşanmadıysa alan null. İşveren kimliği employer (ilan sahibi kişi) ve şirket ilanında company (id, ad, logo) alanlarında.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Atama getirildi"),
             @ApiResponse(responseCode = "404", description = "Atama bulunamadı ya da taraf değilsiniz",
@@ -57,7 +56,7 @@ public class JobAssignmentsController {
 
 
     @Operation(summary = "Atamayı kabul et ya da reddet",
-            description = "accepted alanı Boolean ve zorunludur; eksik gönderilirse 400 döner. Primitive olsaydı eksik alan sessizce reddetme sayılırdı.")
+            description = "accepted alanı Boolean ve zorunludur; eksik gönderilirse 400 döner. Primitive olsaydı eksik alan sessizce reddetme sayılırdı. Yanıt GET /job-assignments/{assignmentId} ile aynı MyAssignmentDto sözleşmesidir; kabulde confirmedAt damgalanır.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Cevap kaydedildi"),
             @ApiResponse(responseCode = "400", description = "accepted alanı eksik",
@@ -68,10 +67,10 @@ public class JobAssignmentsController {
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping("/{assignmentId}/respond")
-    public ResponseEntity<SuccessDataResult<JobAssignmentDto>> answerToAssignment(@PathVariable UUID assignmentId,
+    public ResponseEntity<SuccessDataResult<MyAssignmentDto>> answerToAssignment(@PathVariable UUID assignmentId,
             @RequestBody @Valid AnswerAssignmentDto jobAssignmentsAssignmentIdStatusPatchRequestDto){
 
-        JobAssignmentDto response = jobAssignmentService.answerToAssignment(assignmentId, jobAssignmentsAssignmentIdStatusPatchRequestDto);
+        MyAssignmentDto response = jobAssignmentService.answerToAssignment(assignmentId, jobAssignmentsAssignmentIdStatusPatchRequestDto);
 
         return ResponseEntity.status(HttpStatus.OK)
                 .body(

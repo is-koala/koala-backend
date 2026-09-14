@@ -134,7 +134,8 @@ class MyWorkFeedTest {
 
     private static MyAssignmentDto assignment(Instant at) {
         return new MyAssignmentDto(UUID.randomUUID(), job(), null, AssignmentStatus.CONFIRMED,
-                null, at, null, 0, null, null, null, false, MessagingAvailabilityReason.PAYMENT_REQUIRED);
+                null, at, null, 0, null, null, null, false, MessagingAvailabilityReason.PAYMENT_REQUIRED,
+                null, null, null, null, null, null, null, null, null);
     }
 
     private static JobSummaryDto job() {

@@ -106,6 +106,53 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void assignmentTimelineAndEmployerIdentityAreDocumentedInTurkish() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paths['/jobs/{jobId}/assignments'].get.responses.200").exists())
+                .andExpect(jsonPath("$.paths['/jobs/{jobId}/assignments'].get.responses.404").exists())
+                .andExpect(jsonPath("$.paths['/jobs/{jobId}/assignments'].get.security").exists())
+                .andExpect(jsonPath("$.paths['/job-assignments/{assignmentId}/respond'].post.responses.200.content"
+                        + "['*/*'].schema.$ref").value(containsString("MyAssignmentDto")))
+                .andExpect(jsonPath("$.components.schemas.MyAssignmentDto.properties.confirmedAt.type")
+                        .value(hasItems("string", "null")))
+                .andExpect(jsonPath("$.components.schemas.MyAssignmentDto.properties.confirmedAt.description")
+                        .value(containsString("kabul")))
+                .andExpect(jsonPath("$.components.schemas.MyAssignmentDto.properties.paymentSecuredAt.format")
+                        .value("date-time"))
+                .andExpect(jsonPath("$.components.schemas.MyAssignmentDto.properties.application.$ref")
+                        .value(containsString("AssignmentApplicationDto")))
+                .andExpect(jsonPath("$.components.schemas.MyAssignmentDto.properties.employer.$ref")
+                        .value(containsString("SafeUserDto")))
+                .andExpect(jsonPath("$.components.schemas.MyAssignmentDto.properties.company.$ref")
+                        .value(containsString("CompanySummaryDto")))
+                .andExpect(jsonPath("$.components.schemas.MyAssignmentDto.properties.cancellation.$ref")
+                        .value(containsString("AssignmentCancellationDto")))
+                .andExpect(jsonPath("$.components.schemas.MyAssignmentDto.properties.payout.$ref")
+                        .value(containsString("AssignmentPayoutDto")))
+                .andExpect(jsonPath("$.components.schemas.AssignmentCancellationDto.properties.feeRate.type")
+                        .value("string"))
+                .andExpect(jsonPath("$.components.schemas.JobSummaryDto.properties.companyLogoUrl.description")
+                        .value(containsString("logo")))
+                .andExpect(jsonPath("$.components.schemas.JobApplicantDto.properties.answeredDateTime.format")
+                        .value("date-time"))
+                .andExpect(jsonPath("$.components.schemas.JobApplicantDto.properties.assignmentId.format")
+                        .value("uuid"))
+                .andExpect(jsonPath("$.components.schemas.JobApplicantDto.properties.rejectionReason").exists())
+                .andExpect(jsonPath("$.components.schemas.PayoutDto.properties.jobTitle").exists())
+                .andExpect(jsonPath("$.components.schemas.PayoutDto.properties.companyName").exists())
+                .andExpect(jsonPath("$.components.schemas.JobDetailDto.properties.applicationCount").exists())
+                .andExpect(jsonPath("$.components.schemas.JobDetailDto.properties.cancelledAt.format")
+                        .value("date-time"))
+                .andExpect(jsonPath("$.components.schemas.JobDetailDto.properties.updatedAt").exists())
+                .andExpect(jsonPath("$.components.schemas.PublicProfileDto.properties.completedJobCount").exists())
+                .andExpect(jsonPath("$.components.schemas.PublicProfileDto.properties.averageRating").exists())
+                .andExpect(jsonPath("$.components.schemas.PublicProfileDto.properties.reviewCount").exists())
+                .andExpect(jsonPath("$.components.schemas.PublicProfileDto.properties.badges.items.$ref")
+                        .value(containsString("BadgeDto")));
+    }
+
+    @Test
     void sitemapProjectionDocumentsItsPublicPrivacySafeContract() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())

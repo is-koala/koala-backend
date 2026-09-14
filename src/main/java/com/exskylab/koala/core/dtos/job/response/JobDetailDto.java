@@ -58,6 +58,14 @@ public class JobDetailDto {
     private JobCompanyDto company;
     private List<GalleryImageDto> images;
     private Instant createdAt;
+    @Schema(types = {"string", "null"}, format = "date-time",
+            description = "İlanın veri tabanında son değiştiği an. Eski kayıtlarda null olabilir.")
+    private Instant updatedAt;
+    @Schema(types = {"string", "null"}, format = "date-time",
+            description = "İlanın iptal edildiği an; iptal edilmemişse ya da bu alandan önce iptal edildiyse null.")
+    private Instant cancelledAt;
     private Integer headcount;
+    @Schema(description = "İlana yapılmış toplam başvuru sayısı, durumdan bağımsız.")
+    private long applicationCount;
     private long hiredCount;
 }

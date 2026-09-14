@@ -48,6 +48,9 @@ public class JobAssignment extends BaseEntity{
     @Column(name = "assignment_date_time")
     private Instant assignmentDateTime;
 
+    @Column(name = "confirmed_at")
+    private Instant confirmedAt;
+
     @Column(name = "expected_completion_date_time")
     private Instant expectedCompletionDateTime;
 

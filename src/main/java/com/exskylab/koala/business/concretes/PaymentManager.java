@@ -34,6 +34,9 @@ import org.springframework.transaction.annotation.Propagation;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -495,6 +498,20 @@ public class PaymentManager implements PaymentService {
         }
 
         return paymentDao.save(payment);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, Instant> securedAtForAssignments(Collection<UUID> jobAssignmentIds) {
+        if (jobAssignmentIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, Instant> securedAt = new HashMap<>();
+        for (PaymentDao.SecuredAtView view : paymentDao.findSecuredAtByJobAssignmentIds(jobAssignmentIds,
+                PaymentAttemptStatus.SUCCEEDED)) {
+            securedAt.put(view.getJobAssignmentId(), view.getSecuredAt());
+        }
+        return securedAt;
     }
 
     @Override

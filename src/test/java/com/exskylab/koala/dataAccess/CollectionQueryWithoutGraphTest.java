@@ -45,6 +45,9 @@ class CollectionQueryWithoutGraphTest {
             "AvailabilitySlotDao.findAllByUserIdOrderByDayOfWeekAscStartTimeAsc",
             "BankAccountDao.findAllByUserIdAndActiveTrue",
             "BankAccountDao.findAllByUserIdAndActiveTrueOrderByPrimaryAccountDescCreatedAtAsc",
+            // MyAssignmentDto renders the cancellation row and jobAssignment.id (proxy identifier, no query); the
+            // assignments themselves are already in the persistence context (#282).
+            "CancellationDao.findAllByJobAssignmentIdIn",
             "CityDao.findCitiesByCountryIdOrderByNameAsc",
             "CommercialMessageConsentDao.findAllByUserIdOrderByRecordedAtDesc",
             "CompanyContactInvitationDao.findByCompany",
@@ -88,9 +91,14 @@ class CollectionQueryWithoutGraphTest {
             "NotificationDao.findDueDispatchIds",
             "NotificationPreferenceDao.findAllByUserId",
             "PaymentDao.findDueVerificationIds",
+            // Aggregate MIN row per assignment, not an entity collection (#282).
+            "PaymentDao.findSecuredAtByJobAssignmentIds",
             "PaymentDao.findStuckInitiationIds",
             // Aggregate SUM/COUNT row, not an entity collection (#186).
             "PaymentDao.summarizeSucceeded",
+            // MyAssignmentDto renders id, status and completedAt of the payout row plus jobAssignment.id (proxy
+            // identifier, no query); the assignments are already in the persistence context (#282).
+            "PayoutDao.findAllByJobAssignmentIdIn",
             "PayoutDao.findIdsAwaitingSettlementSince",
             // Aggregate SUM/COUNT rows, not entity collections (#186).
             "PayoutDao.summarizeAwaiting",

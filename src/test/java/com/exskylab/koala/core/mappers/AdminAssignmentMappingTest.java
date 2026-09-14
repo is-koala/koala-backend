@@ -46,10 +46,10 @@ class AdminAssignmentMappingTest {
                 new CompanyContactMapperImpl(userMapper), addressMapper, galleryMapper, userMapper);
         PricingDtoMapper pricingDtoMapper = new PricingDtoMapper();
         JobMapper jobMapper = new JobMapperImpl(userMapper, new JobCategoryMapperImpl(), addressMapper,
-                companyMapper, galleryMapper, pricingDtoMapper);
+                companyMapper, galleryMapper, pricingDtoMapper, urls);
 
         jobAssignmentMapper = new JobAssignmentMapperImpl(jobMapper, userMapper, companyMapper, pricingDtoMapper,
-                new MessagingAvailability(new MessagingProperties()));
+                new MessagingAvailability(new MessagingProperties()), new CancellationMapperImpl());
     }
 
     private JobAssignment assignment() {

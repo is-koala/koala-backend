@@ -3,19 +3,28 @@ package com.exskylab.koala.webAPI;
 import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.support.AbstractIntegrationTest;
+import jakarta.persistence.EntityManagerFactory;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Set;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.endsWith;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.nullValue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -27,6 +36,9 @@ class AssignmentReadIT extends AbstractIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private EntityManagerFactory entityManagerFactory;
 
     private final UUID employerId = UUID.randomUUID();
     private final UUID workerId = UUID.randomUUID();
@@ -40,6 +52,15 @@ class AssignmentReadIT extends AbstractIntegrationTest {
     private final UUID categoryId = UUID.randomUUID();
     private final UUID jobId = UUID.randomUUID();
     private final UUID assignmentId = UUID.randomUUID();
+    private final UUID secondAssignmentId = UUID.randomUUID();
+    private final UUID secondWorkerId = UUID.randomUUID();
+    private final UUID applicationId = UUID.randomUUID();
+    private final UUID paymentId = UUID.randomUUID();
+    private final UUID payoutId = UUID.randomUUID();
+    private final UUID cancellationId = UUID.randomUUID();
+    private final UUID logoId = UUID.randomUUID();
+    private final UUID coverId = UUID.randomUUID();
+    private final UUID coverEntryId = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
@@ -85,7 +106,19 @@ class AssignmentReadIT extends AbstractIntegrationTest {
 
     @AfterEach
     void tearDown() {
-        jdbc.update("delete from job_assignments where id = ?", assignmentId);
+        jdbc.update("delete from notifications where recipient_id in (?, ?, ?, ?, ?) "
+                        + "or sender_id in (?, ?, ?, ?, ?) or created_by_id in (?, ?, ?, ?, ?)",
+                employerId, workerId, companyAdminId, outsiderId, secondWorkerId,
+                employerId, workerId, companyAdminId, outsiderId, secondWorkerId,
+                employerId, workerId, companyAdminId, outsiderId, secondWorkerId);
+        jdbc.update("delete from cancellations where id = ?", cancellationId);
+        jdbc.update("delete from payouts where id = ?", payoutId);
+        jdbc.update("delete from payments where id = ?", paymentId);
+        jdbc.update("delete from job_assignments where id in (?, ?)", assignmentId, secondAssignmentId);
+        jdbc.update("delete from job_applications where id = ?", applicationId);
+        jdbc.update("delete from job_images where id = ?", coverEntryId);
+        jdbc.update("update companies set logo_id = null where id = ?", companyId);
+        jdbc.update("delete from media where id in (?, ?)", logoId, coverId);
         jdbc.update("delete from jobs where id = ?", jobId);
         jdbc.update("delete from job_categories where id = ?", categoryId);
         jdbc.update("delete from addresses where id = ?", addressId);
@@ -94,10 +127,246 @@ class AssignmentReadIT extends AbstractIntegrationTest {
         jdbc.update("delete from countries where id = ?", countryId);
         jdbc.update("delete from company_contacts where company_id = ?", companyId);
         jdbc.update("delete from companies where id = ?", companyId);
-        jdbc.update("delete from authorities where user_id in (?, ?, ?, ?)",
-                employerId, workerId, companyAdminId, outsiderId);
-        jdbc.update("delete from users where id in (?, ?, ?, ?)",
-                employerId, workerId, companyAdminId, outsiderId);
+        jdbc.update("delete from authorities where user_id in (?, ?, ?, ?, ?)",
+                employerId, workerId, companyAdminId, outsiderId, secondWorkerId);
+        jdbc.update("delete from users where id in (?, ?, ?, ?, ?)",
+                employerId, workerId, companyAdminId, outsiderId, secondWorkerId);
+    }
+
+    @Test
+    void theTimelineFieldsAreNullUntilTheEventsHappen() throws Exception {
+        getAssignmentAs(workerId)
+                .andExpect(jsonPath("$.data.createdAt").isNotEmpty())
+                .andExpect(jsonPath("$.data.application").value(nullValue()))
+                .andExpect(jsonPath("$.data.confirmedAt").value(nullValue()))
+                .andExpect(jsonPath("$.data.expectedCompletionDateTime").value(nullValue()))
+                .andExpect(jsonPath("$.data.paymentSecuredAt").value(nullValue()))
+                .andExpect(jsonPath("$.data.cancellation").value(nullValue()))
+                .andExpect(jsonPath("$.data.payout").value(nullValue()))
+                .andExpect(jsonPath("$.data.employer.id").value(employerId.toString()))
+                .andExpect(jsonPath("$.data.employer.profilePictureUrl").value(nullValue()))
+                .andExpect(jsonPath("$.data.company.id").value(companyId.toString()))
+                .andExpect(jsonPath("$.data.company.name").value("Atama Şirketi " + companyId))
+                .andExpect(jsonPath("$.data.company.logoUrl").value(nullValue()))
+                .andExpect(jsonPath("$.data.job.employerType").value("COMPANY"))
+                .andExpect(jsonPath("$.data.job.companyLogoUrl").value(nullValue()));
+    }
+
+    @Test
+    void theTimelineFieldsCarryTheApplicationPaymentCancellationAndPayout() throws Exception {
+        attachCompanyLogo();
+        linkApplication();
+        jdbc.update("update job_assignments set confirmed_at = now() - interval '2 days', "
+                + "expected_completion_date_time = now() + interval '1 day' where id = ?", assignmentId);
+        insertSucceededPayment();
+        insertCancellation();
+        insertPayout();
+
+        getAssignmentAs(employerId)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.application.id").value(applicationId.toString()))
+                .andExpect(jsonPath("$.data.application.applicationDateTime").isNotEmpty())
+                .andExpect(jsonPath("$.data.application.answeredDateTime").isNotEmpty())
+                .andExpect(jsonPath("$.data.confirmedAt").isNotEmpty())
+                .andExpect(jsonPath("$.data.expectedCompletionDateTime").isNotEmpty())
+                .andExpect(jsonPath("$.data.paymentSecuredAt").isNotEmpty())
+                .andExpect(jsonPath("$.data.cancellation.cancelledByParty").value("EMPLOYER"))
+                .andExpect(jsonPath("$.data.cancellation.cancelledAt").isNotEmpty())
+                .andExpect(jsonPath("$.data.cancellation.feeRate").value("0.2500"))
+                .andExpect(jsonPath("$.data.cancellation.feeAmount").value("27.50"))
+                .andExpect(jsonPath("$.data.cancellation.refundAmount").value("82.50"))
+                .andExpect(jsonPath("$.data.payout.id").value(payoutId.toString()))
+                .andExpect(jsonPath("$.data.payout.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.payout.completedAt").isNotEmpty())
+                .andExpect(jsonPath("$.data.company.logoUrl").value(endsWith("logos/" + logoId + ".png")))
+                .andExpect(jsonPath("$.data.job.companyLogoUrl").value(endsWith("logos/" + logoId + ".png")));
+
+        mockMvc.perform(get("/users/me/assignments").with(user(principal(workerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].application.id").value(applicationId.toString()))
+                .andExpect(jsonPath("$.data.content[0].paymentSecuredAt").isNotEmpty())
+                .andExpect(jsonPath("$.data.content[0].cancellation.feeAmount").value("27.50"))
+                .andExpect(jsonPath("$.data.content[0].payout.id").value(payoutId.toString()))
+                .andExpect(jsonPath("$.data.content[0].employer.id").value(employerId.toString()))
+                .andExpect(jsonPath("$.data.content[0].company.id").value(companyId.toString()))
+                .andExpect(jsonPath("$.data.content[0].company.logoUrl").value(endsWith("logos/" + logoId + ".png")))
+                .andExpect(jsonPath("$.data.content[0].job.companyLogoUrl").value(endsWith("logos/" + logoId + ".png")));
+    }
+
+    @Test
+    void paymentSecuredAtIsTheFirstSucceededAttemptNotAFailedOne() throws Exception {
+        UUID failed = UUID.randomUUID();
+        jdbc.update("insert into payments (id, created_at, is_deleted, job_assignment_id, conversation_id, status, "
+                        + "currency, verification_attempts, completed_at) "
+                        + "values (?, now() - interval '3 hours', false, ?, ?, 'FAILED', 'TRY', 0, "
+                        + "now() - interval '3 hours')",
+                failed, assignmentId, "conv-failed-" + failed);
+        try {
+            getAssignmentAs(workerId).andExpect(jsonPath("$.data.paymentSecuredAt").value(nullValue()));
+
+            insertSucceededPayment();
+            getAssignmentAs(workerId).andExpect(jsonPath("$.data.paymentSecuredAt").isNotEmpty());
+        } finally {
+            jdbc.update("delete from payments where id = ?", failed);
+        }
+    }
+
+    @Test
+    void acceptingTheAssignmentAnswersWithTheTimelineDtoAndStampsConfirmedAt() throws Exception {
+        attachJobCover();
+        jdbc.update("update job_assignments set status = 'PENDING_CONFIRMATION', payment_status = null where id = ?",
+                assignmentId);
+
+        mockMvc.perform(post("/job-assignments/{assignmentId}/respond", assignmentId)
+                        .with(user(principal(workerId)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"accepted\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(assignmentId.toString()))
+                .andExpect(jsonPath("$.data.status").value("CONFIRMED"))
+                .andExpect(jsonPath("$.data.confirmedAt").isNotEmpty())
+                .andExpect(jsonPath("$.data.job.id").value(jobId.toString()))
+                .andExpect(jsonPath("$.data.employer.id").value(employerId.toString()))
+                .andExpect(jsonPath("$.data.job.coverImageUrl").value(endsWith("covers/" + coverId + ".jpg")))
+                .andExpect(jsonPath("$.data.messagingAvailableReason").value("PAYMENT_REQUIRED"));
+
+        assertEquals(1, jdbc.queryForObject(
+                "select count(*) from job_assignments where id = ? and confirmed_at is not null",
+                Integer.class, assignmentId));
+    }
+
+    @Test
+    void theEmployerAndTheCompanyAdminListTheJobsAssignments() throws Exception {
+        insertSecondAssignment();
+        attachJobCover();
+
+        for (UUID actorId : new UUID[]{employerId, companyAdminId}) {
+            mockMvc.perform(get("/jobs/{jobId}/assignments", jobId).with(user(principal(actorId))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content", hasSize(2)))
+                    .andExpect(jsonPath("$.data.content[0].id").value(secondAssignmentId.toString()))
+                    .andExpect(jsonPath("$.data.content[1].id").value(assignmentId.toString()))
+                    .andExpect(jsonPath("$.data.content[1].worker.id").value(workerId.toString()))
+                    .andExpect(jsonPath("$.data.content[1].company.id").value(companyId.toString()))
+                    .andExpect(jsonPath("$.data.content[1].job.coverImageUrl")
+                            .value(endsWith("covers/" + coverId + ".jpg")))
+                    .andExpect(jsonPath("$.data.totalElements").value(2));
+        }
+    }
+
+    @Test
+    void theWorkerAndAnOutsiderGetTheConcealedNotFoundForTheJobsAssignments() throws Exception {
+        for (UUID actorId : new UUID[]{workerId, outsiderId}) {
+            mockMvc.perform(get("/jobs/{jobId}/assignments", jobId).with(user(principal(actorId))))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.errorCode").value("JOB_NOT_FOUND"));
+        }
+    }
+
+    @Test
+    void anUnknownSortFieldOnTheJobsAssignmentsIsRejected() throws Exception {
+        mockMvc.perform(get("/jobs/{jobId}/assignments", jobId).with(user(principal(employerId)))
+                        .param("sort", "workHours,desc"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("PAGE_SORT_FIELD_NOT_ALLOWED"));
+    }
+
+    @Test
+    void theJobAssignmentListIsBuiltWithoutAQueryPerRow() throws Exception {
+        insertSecondAssignment();
+        attachCompanyLogo();
+        attachJobCover();
+        linkApplication();
+        insertSucceededPayment();
+        insertCancellation();
+        insertPayout();
+        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        boolean wasEnabled = statistics.isStatisticsEnabled();
+        statistics.setStatisticsEnabled(true);
+        try {
+            statistics.clear();
+            mockMvc.perform(get("/jobs/{jobId}/assignments", jobId).param("size", "1")
+                    .with(user(principal(employerId)))).andExpect(status().isOk());
+            long statementsForOneRow = statistics.getPrepareStatementCount();
+            long fetchesForOneRow = statistics.getEntityFetchCount();
+
+            statistics.clear();
+            mockMvc.perform(get("/jobs/{jobId}/assignments", jobId).param("size", "2")
+                            .with(user(principal(employerId))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content", hasSize(2)));
+            long statementsForTwoRows = statistics.getPrepareStatementCount();
+
+            assertEquals(statementsForOneRow, statementsForTwoRows,
+                    "ilanın atama listesi satır sayısıyla büyüyen sorgu atıyor (N+1)");
+            assertEquals(0, fetchesForOneRow, "atama listesi satır başına lazy entity yüklüyor");
+            assertEquals(0, statistics.getEntityFetchCount(), "atama listesi satır başına lazy entity yüklüyor");
+
+            statistics.clear();
+            mockMvc.perform(get("/users/me/assignments").param("asEmployer", "true").param("size", "2")
+                            .with(user(principal(employerId))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content", hasSize(2)));
+            assertEquals(0, statistics.getEntityFetchCount(), "atamalarım listesi satır başına lazy entity yüklüyor");
+        } finally {
+            statistics.setStatisticsEnabled(wasEnabled);
+        }
+    }
+
+    private void linkApplication() {
+        jdbc.update("insert into job_applications (id, created_at, is_deleted, job_id, user_id, status, "
+                        + "application_date_time, answered_date_time) "
+                        + "values (?, now(), false, ?, ?, 'ACCEPTED', now() - interval '3 days', now() - interval '2 days')",
+                applicationId, jobId, workerId);
+        jdbc.update("update job_assignments set job_application_id = ? where id = ?", applicationId, assignmentId);
+    }
+
+    private void insertSucceededPayment() {
+        jdbc.update("insert into payments (id, created_at, is_deleted, job_assignment_id, conversation_id, status, "
+                        + "currency, verification_attempts, completed_at) "
+                        + "values (?, now() - interval '1 hour', false, ?, ?, 'SUCCEEDED', 'TRY', 1, "
+                        + "now() - interval '1 hour')",
+                paymentId, assignmentId, "conv-" + paymentId);
+    }
+
+    private void insertCancellation() {
+        jdbc.update("insert into cancellations (id, created_at, is_deleted, job_assignment_id, cancelled_by_id, "
+                        + "cancelled_by_party, reason, notice_minutes, fee_rate, fee_amount, refund_amount, cancelled_at) "
+                        + "values (?, now(), false, ?, ?, 'EMPLOYER', 'Plan değişti', 120, 0.2500, 27.50, 82.50, now())",
+                cancellationId, assignmentId, employerId);
+    }
+
+    private void insertPayout() {
+        jdbc.update("insert into payouts (id, created_at, is_deleted, job_assignment_id, worker_id, amount, "
+                        + "currency, status, provider_reference, settlement_reference, processing_at, completed_at) "
+                        + "values (?, now(), false, ?, ?, 100.00, 'TRY', 'COMPLETED', ?, ?, now(), now())",
+                payoutId, assignmentId, workerId, "iyz-" + payoutId, "stl-" + payoutId);
+    }
+
+    private void insertSecondAssignment() {
+        insertUser(secondWorkerId, false);
+        jdbc.update("insert into job_assignments (id, created_at, is_deleted, job_id, worker_id, status, "
+                        + "payment_status, assignment_date_time, work_hours, worker_payout, commission_rate, "
+                        + "commission_amount, total_charged, pricing_version, currency) "
+                        + "values (?, now(), false, ?, ?, 'PENDING_CONFIRMATION', null, now() + interval '1 hour', "
+                        + "0, 100.00, 0.1000, 10.00, 110.00, 'v1', 'TRY')",
+                secondAssignmentId, jobId, secondWorkerId);
+    }
+
+    private void attachCompanyLogo() {
+        jdbc.update("insert into media (id, media_type, file_name, file_type, file_url, file_size, created_at, "
+                        + "is_deleted) values (?, 'IMAGE', 'logo.png', 'image/png', ?, 10, now(), false)",
+                logoId, "logos/" + logoId + ".png");
+        jdbc.update("update companies set logo_id = ? where id = ?", logoId, companyId);
+    }
+
+    private void attachJobCover() {
+        jdbc.update("insert into media (id, media_type, file_name, file_type, file_url, file_size, created_at, "
+                        + "is_deleted) values (?, 'IMAGE', 'cover.jpg', 'image/jpeg', ?, 10, now(), false)",
+                coverId, "covers/" + coverId + ".jpg");
+        jdbc.update("insert into job_images (id, created_at, is_deleted, job_id, image_id, sort_order, is_cover) "
+                        + "values (?, now(), false, ?, ?, 0, true)",
+                coverEntryId, jobId, coverId);
     }
 
     @Test

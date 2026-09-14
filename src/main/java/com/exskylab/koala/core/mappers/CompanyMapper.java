@@ -2,6 +2,7 @@ package com.exskylab.koala.core.mappers;
 
 import com.exskylab.koala.core.dtos.company.response.CompanyDto;
 import com.exskylab.koala.core.dtos.company.response.CompanyReviewDto;
+import com.exskylab.koala.core.dtos.company.response.CompanySummaryDto;
 import com.exskylab.koala.core.dtos.company.response.JobCompanyDto;
 import com.exskylab.koala.core.dtos.company.response.OnlyCompanyDto;
 import com.exskylab.koala.entities.Company;
@@ -40,6 +41,9 @@ public interface CompanyMapper {
 
     @Mapping(target = "logoUrl", source = "logo", qualifiedByName = "imageToPublicUrl")
     JobCompanyDto toJobCompanyDto(Company company);
+
+    @Mapping(target = "logoUrl", source = "logo", qualifiedByName = "imageToPublicUrl")
+    CompanySummaryDto toCompanySummaryDto(Company company);
 
     @Named("companyGalleryImageIds")
     default List<UUID> companyGalleryImageIds(List<CompanyImage> images) {

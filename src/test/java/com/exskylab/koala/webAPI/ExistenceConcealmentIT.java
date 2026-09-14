@@ -152,6 +152,13 @@ class ExistenceConcealmentIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void listingSomeoneElsesJobAssignmentsLooksExactlyLikeListingOnesOfAJobThatDoesNotExist() throws Exception {
+        assertIndistinguishable(jobId,
+                id -> mockMvc.perform(get("/jobs/{id}/assignments", id)
+                        .with(user(principal(outsiderId)))));
+    }
+
+    @Test
     void respondingToSomeoneElsesPendingAssignmentLooksExactlyLikeRespondingToOneThatDoesNotExist()
             throws Exception {
         jdbc.update("update job_assignments set status = 'PENDING_CONFIRMATION' where id = ?", assignmentId);

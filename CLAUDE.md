@@ -1227,8 +1227,9 @@ ikinci okuyanın damgası kendi satırına, ikili `read_at` + damga, ayrılan `l
 **Mesajlaşmanın bir penceresi var.** İş bittikten `messaging.grace-days-after-job` (7) gün sonra sohbet **salt okunur** olur: geçmiş okunur, yeni mesaj gönderilemez (409). Amaç ilişkinin süresiz açık kalıp platform dışına taşınmasını önlemek. `endDateTime` olmayan ilanlarda pencere hiç kapanmaz. `ConversationDto.closed` bunu istemciye söyler; karşılaştırma duvar saati olduğu için `messaging.zone-id` üzerinden yapılır. Hesap `MessagingAvailability.isWindowClosed` içinde, `MessagingManager`'da değil — mapper da aynı pencereyi okuyor.
 
 **İstemci ipucu atama yanıtlarında.** `MyAssignmentDto` (`GET /users/me/assignments`, `GET /users/me/work`
-içindeki `assignment`, `GET /job-assignments/{id}`, `POST /job-assignments/{id}/complete`), `JobAssignmentDto`
-(`POST /job-assignments/{id}/respond`) ve `ShortJobAssignmentDto` (`JobApplicationDetailDto.assignment` —
+içindeki `assignment`, `GET /job-assignments/{id}`, `GET /jobs/{jobId}/assignments`, `POST /job-assignments/{id}/respond`
+ve `/complete` — `JobAssignmentDto` #282 ile silindi, respond de aynı sözleşmeyi döndürüyor, §2ba) ve
+`ShortJobAssignmentDto` (`JobApplicationDetailDto.assignment` —
 `POST /job-applications/{id}/respond` ve `/withdraw`) `messagingAvailable` (boolean) ve
 `messagingAvailableReason` (`PAYMENT_REQUIRED` | `CLOSED` | `AVAILABLE`) taşıyor; MapStruct `uses =
 MessagingAvailability.class` ile `@Named` niteleyicilerden dolduruyor, ek sorgu yok. İstemci düğmeyi ödeme
@@ -4007,6 +4008,88 @@ Marketplace seed geri gelmez (ADR-0008). Gelen kutu kabulü #4'te insan işi.
 **Bu turda çıkan gerçek kusur: `result_type` çift kodlanıyordu.** URL `UriComponentsBuilder…encode().toUriString()` ile `String` olarak `RestTemplate.exchange`'e veriliyordu; `RestTemplate` string şablonu bir daha kodlar, `%7C` → `%257C` olur ve Google `street_address%7Cpremise` diye tek bir geçersiz tip görürdü. Artık `URI` nesnesi geçiliyor; `GoogleGeocodingAddressProviderTest` istek URI'sinde `%25` olmadığını sabitliyor. `GooglePlacesAddressProvider` de aynı turda `URI` geçişine alındı; place id ve oturum belirteci bugün `%` üretmese de kalıp tekrar etmesin.
 
 Testler: `GoogleGeocodingAddressProviderTest` (üç kademe, çoklu sonuçta en ayrıntılı seçim, REQUEST_DENIED ve taşıma hatası günlüğü, ikinci kademenin yalnız alan tiplerini istemesi), `AddressSearchManagerTest` (STREET/NEIGHBORHOOD adayı, ilçesiz aday → `REVERSE_NO_RESULT`, referans sorgusuna hiç gidilmez), `AddressReverseGeocodeIT` (gerçek HTTP ve seed Kadıköy referansıyla üç kademe + boş + REQUEST_DENIED 502; paylaşılan `RestTemplate`'e `MockRestServiceServer` bağlanır ve `@AfterEach` istek fabrikasını geri koyar — yeni context açılmaz), `LogMasksTest`.
+
+---
+
+## 2ba. Kullanıcı atama DTO'ları — zaman çizelgesi ve işveren kimliği (#282)
+
+14.09.2026 cihaz turu: kullanıcı kabul aldığı işin detayında "ne zaman başvurdum, ne zaman kabul edildim, işveren
+kim" göremiyordu. Veri entity'lerdeydi (`JobAssignment.application → JobApplication.applicationDateTime/
+answeredDateTime`, `createdAt`, `Job.creator`, `Cancellation`, `Payout`, `Payment`), DTO'lara çıkmıyordu.
+
+**`MyAssignmentDto` sekiz alan kazandı** (`/users/me/assignments`, `/users/me/work`.assignment, `/job-assignments/{id}`,
+`/jobs/{jobId}/assignments`, respond/complete yanıtları): `application {id, applicationDateTime, answeredDateTime}`
+(`AssignmentApplicationDto`; doğrudan atamada null — kabul anı `answeredDateTime`), `createdAt`, `confirmedAt`,
+`expectedCompletionDateTime`, `paymentSecuredAt`, `employer: SafeUserDto` (ilan sahibi kişi — bireysel ilanda gösterilecek
+ad), `company {id, name, logoUrl}` (`CompanySummaryDto`; bireysel ilanda null), `cancellation {cancelledByParty,
+cancelledAt, feeRate, feeAmount, refundAmount}` (`AssignmentCancellationDto`; para alanları §2p'deki gibi exact decimal
+string), `payout {id, status, completedAt}` (`AssignmentPayoutDto`). Olay yaşanmadıysa alan null; istemci satırı gizler.
+
+**`confirmedAt` yeni sütun (`job_assignments.confirmed_at`, `14-03-assignment-timeline-stamps.xml`).** İşçinin
+kabulü ile işverenin kabulü iki ayrı andır: işverenin kabulü başvurunun `answeredDateTime`'ı, işçininki
+`POST /job-assignments/{id}/respond` `accepted=true` anında damgalanır; ret damgalamaz, geçmiş kayıtlarda null kalır
+ve **geri doldurulmaz** — `updated_at` o satırın son değişikliği, kabul anı değildir. Aynı changelog `jobs.cancelled_at`
+ekler; `JobManager.cancelJob` damgalar, `JobDetailDto.cancelledAt` okur (iptal edilmemişse ya da bu sütundan önce
+iptal edildiyse null).
+
+**`paymentSecuredAt` = ilk `SUCCEEDED` ödemenin `completedAt`'i.** `PaymentDao.findSecuredAtByJobAssignmentIds`
+sayfa başına tek `min(completedAt) … group by` satırı (`CollectionQueryWithoutGraphTest` allowlist'inde, aggregate);
+başarısız denemeler sayılmaz. `PaymentService.securedAtForAssignments` ile servis üzerinden.
+
+**Bağlı kayıtlar sayfa başına üç toplu sorguyla, satır başına değil (§2af, §2o'daki `findLatestByJobsAndWorkers`
+kalıbı).** `JobAssignmentManager.linkedRecordsOf` sayfanın id'leriyle `CancellationDao.findAllByJobAssignmentIdIn`,
+`PayoutService.findForAssignments` ve `PaymentService.securedAtForAssignments` çağırır, sonuçları id'ye anahtarlar
+(şema atama başına tek iptal ve tek hakediş garanti ediyor, birleştirme yok) ve MapStruct'a dört kaynaklı
+`toMyAssignmentDto(assignment, cancellation, payout, paymentSecuredAt)` ile verir; iptal özeti `CancellationMapper.
+toAssignmentCancellationDto` ile (`CancellationDto`'nun exact-decimal ifadeleriyle aynı yerde). Beş üretici
+(`getMyAssignments`, `getAssignmentsForJob`, `getMyAssignment`, `answerToAssignment`, `completeAssignment`) iki
+private yardımcıdan geçer — sayfalar `toPage`, tekiller üç parametreli `toMyAssignmentDto` — ve ikisi de adres
+görünürlüğünü ve `galleryService.fillJobCovers`'ı uygular; respond yanıtı da `job.coverImageUrl` taşır. **`JobAssignmentManager → CancellationDao` yeni bir §2ae muafiyeti:**
+`CancellationManager` zaten `JobAssignmentService`'e bağlı, `CancellationService` üzerinden gitmek döngü olurdu; salt
+okuma, gerekçesi `AggregateBoundaryTest`'te. `PaymentService` ve `PayoutService` zaten enjekte edildiği için o ikisi
+servis üzerinden.
+
+**Grafikler büyüdü, muafiyetler düştü.** `findAllByWorkerId` / `findAllByJobCreatorId` / yeni `findAllByJobId` ve
+`findWithDetailsForPaymentById` artık `job.creator(.profilePicture)`, `job.company(.logo)`, `application` ve
+`job.address.city/district` çeker — son ikisi eskiden lazy'ydi ve `JobSummaryDto.cityName/districtName` her satırda
+iki sorgu attırıyordu; `JobApplicationDao.findAllByUserId(AndStatus)` de aynı düzeltmeyi aldı.
+`JobSummaryDto.companyLogoUrl` eklendiği için `JobDao.findAllByIdIn/findAllByCreatorId/findAllByCompanyId`
+grafiklerine `company.logo` girdi ve `EagerFetchCoverageIT`'nin "JobSummaryDto yalnızca companyName taşıyor"
+muafiyetleri silindi. `AssignmentReadIT.theJobAssignmentListIsBuiltWithoutAQueryPerRow` `size=1` ile `size=2`
+sayfanın statement sayısını eşitliyor ve `EntityFetchCount`'u sıfırlıyor (AdminDetailReadIT deseni).
+`GET /users/me/saved-jobs` bilerek dokunulmadı: `user.getSavedJobs()` koleksiyonundan geçiyor ve `companyName`
+için zaten satır başına yükleme yapıyordu; ayrı iş.
+
+**`POST /job-assignments/{id}/respond` artık `MyAssignmentDto` döndürüyor, `JobAssignmentDto` silindi.** İki istemci
+de yanıttan yalnız `status` okuyordu (mobil `assignment_service.dart` bunu yorumda yazıyordu); `MyAssignmentDto` üst
+düzeyde `JobAssignmentDto`'nun her alanını taşır, yalnız `company` alt şekli `OnlyCompanyDto` (vergi no, adres…)
+yerine `CompanySummaryDto`'dur — işçiye açılan yanıttan işverenin vergi numarası ve adresi düşmüş oldu.
+
+**`GET /jobs/{jobId}/assignments` yeni uç.** İlan sahibi ya da şirket ilanının güncel yetkilisi; `PageDto<MyAssignmentDto>`,
+`/users/me/assignments` ile aynı sıralama alanları ve varsayılan (`assignmentDateTime,desc`). İşveren istemcileri
+`/users/me/assignments?asEmployer=true` sayfalarını tarayıp ilana göre süzmeyi bırakır. Yetki `JobAssignmentManager`'da
+`JobService.getById` + `CompanyContactService` ile; başkasının ilanı ve olmayan ilan aynı `JOB_NOT_FOUND` 404 zarfını
+alır (`Concealment.notFound`, §2d2; `ExistenceConcealmentIT` ve `AssignmentReadIT` gövdeyi birebir karşılaştırıyor).
+İlan herkese açık bir kaynak olduğu için burada gizlenen varlık değil, "kimin ilanı" bilgisidir. Kimlikli okuma,
+hız sınırı kovası yok (§2j, `/jobs/{jobId}/applications` ile aynı). `JobAssignmentManager → JobService` döngü
+üretmiyor (JobManager `JobAssignmentDao`'ya doğrudan uzanıyor, servise değil).
+
+**Diğer DTO'lar.** `JobApplicantDto` (`GET /jobs/{jobId}/applications`): `answeredDateTime`, `assignmentId`
+(`assignment.id`, grafik zaten çekiyordu), `rejectionReason` — web'in tüm atamaları tarayarak eşlemesi biter.
+`PayoutDto` (`/users/me/payouts`): `jobTitle`, `companyName`; grafik `jobAssignment.job(.company)` kazandı,
+`company.logo` muafiyette (DTO çizmiyor). `JobDetailDto`: `applicationCount` (`countByJobId`, durumdan bağımsız),
+`updatedAt`, `cancelledAt`. `PublicProfileDto` (`GET /users/{id}`): `completedJobCount`
+(`JobAssignmentService.countCompletedForWorker`), `averageRating`/`reviewCount` (`ReviewService.getSummaryFor`,
+yoksa `0`/`0` — `EmployerStatsDto` ile aynı karar; `/users/{id}/rating-summary` ise özet yokken `null` döner),
+`badges[]` (`BadgeService.getBadgesOf`, `/users/{id}/badges` ile aynı liste ve grafik). `PublicProfileManager`
+orkestratör kaldı, DAO'ya uzanmaz.
+
+Testler: `AssignmentReadIT` (null hâl, dolu hâl, başarısız ödeme sayılmaz, respond `confirmedAt`, iki işveren rolü
+listeler / işçi ve yabancı 404 / bilinmeyen ilanla aynı gövde / bilinmeyen sıralama 400, N+1), `ExistenceConcealmentIT`,
+`ApplicationDecisionIT` (aday listesi üç alan, ilan detayı sayım ve iptal damgası), `PayoutQueueIT`, `PublicProfileIT`,
+`AssignmentOperationsAuthorizationTest` (kabul damgalar, ret damgalamaz), `MapperCharacterizationTest`,
+`OpenApiDocumentIT`, `EagerFetchCoverageIT`, `EntityGraphPathsIT`, `CollectionQueryWithoutGraphTest`,
+`AggregateBoundaryTest`. İstemci tarafı is-koala/koala#177, #178, is-koala/koala-web#165, #166.
 
 ---
 

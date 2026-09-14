@@ -94,8 +94,17 @@ class AssignmentOperationsAuthorizationTest {
                 new com.exskylab.koala.core.helpers.TimesheetEventPolicy(
                         new com.exskylab.koala.core.properties.TimesheetProperties()),
                 java.time.Clock.systemUTC());
+        com.exskylab.koala.core.mappers.JobAssignmentMapper jobAssignmentMapper =
+                mock(com.exskylab.koala.core.mappers.JobAssignmentMapper.class);
+        when(jobAssignmentMapper.toMyAssignmentDto(any(), any(), any(), any())).thenAnswer(call -> {
+            JobAssignment source = call.getArgument(0);
+            return new com.exskylab.koala.core.dtos.jobAssignment.response.MyAssignmentDto(source.getId(),
+                    new com.exskylab.koala.core.dtos.job.response.JobSummaryDto(), null, source.getStatus(),
+                    source.getPaymentStatus(), null, source.getActualCompletionDateTime(), 0, null, null, null,
+                    false, null, null, null, source.getConfirmedAt(), null, null, null, null, null, null);
+        });
         jobAssignmentManager = new JobAssignmentManager(jobAssignmentDao, securityService,
-                mock(com.exskylab.koala.core.mappers.JobAssignmentMapper.class),
+                jobAssignmentMapper,
                 mock(com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService.class),
                 mock(CompanyContactService.class), mock(com.exskylab.koala.business.abstracts.UserService.class),
                 new PricingManager(FallbackSettings.commissionCalculator()),
@@ -107,7 +116,8 @@ class AssignmentOperationsAuthorizationTest {
                 payoutService, new com.exskylab.koala.core.properties.AutoCompletionProperties(),
                 new com.exskylab.koala.core.properties.UnpaidExpiryProperties(), passthroughSettings(),
                 mock(com.exskylab.koala.business.abstracts.GalleryService.class), mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class), mock(org.springframework.context.ApplicationEventPublisher.class),
-                new com.exskylab.koala.core.monitoring.PaymentMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()));
+                new com.exskylab.koala.core.monitoring.PaymentMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()),
+                cancellationDao, mock(com.exskylab.koala.business.abstracts.JobService.class));
 
         when(cancellationDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(disputeDaoStub.save(any())).thenAnswer(i -> i.getArgument(0));
@@ -432,6 +442,34 @@ class AssignmentOperationsAuthorizationTest {
         assertEquals(AssignmentStatus.COMPLETED, a.getStatus());
         assertNotNull(a.getActualCompletionDateTime());
         verify(badgeService).evaluate(worker.getId());
+    }
+
+    @Test
+    void acceptingTheAssignmentStampsConfirmedAtAndAnswersWithTheTimelineDto() {
+        JobAssignment a = assignment(AssignmentStatus.PENDING_CONFIRMATION, null, inHours(24));
+        when(securityService.getAuthenticatedUser()).thenReturn(worker);
+        var answer = new com.exskylab.koala.core.dtos.jobAssignment.request.AnswerAssignmentDto();
+        answer.setAccepted(true);
+
+        var dto = jobAssignmentManager.answerToAssignment(a.getId(), answer);
+
+        assertEquals(AssignmentStatus.CONFIRMED, a.getStatus());
+        assertNotNull(a.getConfirmedAt());
+        assertEquals(a.getId(), dto.id());
+    }
+
+    @Test
+    void rejectingTheAssignmentLeavesConfirmedAtEmpty() {
+        JobAssignment a = assignment(AssignmentStatus.PENDING_CONFIRMATION, null, inHours(24));
+        when(securityService.getAuthenticatedUser()).thenReturn(worker);
+        var answer = new com.exskylab.koala.core.dtos.jobAssignment.request.AnswerAssignmentDto();
+        answer.setAccepted(false);
+
+        var dto = jobAssignmentManager.answerToAssignment(a.getId(), answer);
+
+        assertEquals(AssignmentStatus.REJECTED, a.getStatus());
+        assertNull(a.getConfirmedAt());
+        assertNull(dto.confirmedAt());
     }
 
     @Test

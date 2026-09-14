@@ -24,6 +24,7 @@ public interface JobApplicationMapper {
     @Mapping(target = "applicant", source = "user")
     @Mapping(target = "cvUrl", source = "user.cv", qualifiedByName = "mediaToPublicUrl")
     @Mapping(target = "jobTitle", source = "user.jobTitle")
+    @Mapping(target = "assignmentId", source = "assignment.id")
     JobApplicantDto toJobsJobIdApplicationsGetResponseDto(JobApplication jobApplication);
 
     List<JobApplicantDto> toJobsJobIdApplicationsGetResponseDtoList(

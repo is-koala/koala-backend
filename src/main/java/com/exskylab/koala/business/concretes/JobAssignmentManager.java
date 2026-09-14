@@ -14,7 +14,9 @@ import com.exskylab.koala.core.exceptions.ExternalServiceException;
 import com.exskylab.koala.core.helpers.Concealment;
 import com.exskylab.koala.core.dtos.jobAssignment.request.AnswerAssignmentDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.PaymentSessionDto;
-import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentDto;
+import com.exskylab.koala.core.constants.JobMessages;
+import com.exskylab.koala.business.abstracts.JobService;
+import com.exskylab.koala.dataAccess.CancellationDao;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.business.abstracts.PaymentService;
@@ -65,6 +67,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.BinaryOperator;
+import java.util.function.Predicate;
 
 @Service
 @Slf4j
@@ -111,6 +114,8 @@ public class JobAssignmentManager implements JobAssignmentService {
     private final ActivityNotificationService activityNotificationService;
     private final ApplicationEventPublisher eventPublisher;
     private final PaymentMetrics paymentMetrics;
+    private final CancellationDao cancellationDao;
+    private final JobService jobService;
     private final JobAddressVisibility addressVisibility = new JobAddressVisibility();
 
 
@@ -124,7 +129,8 @@ public class JobAssignmentManager implements JobAssignmentService {
                                UnpaidExpiryProperties unpaidExpiryProperties,
                                SettingsService settingsService, GalleryService galleryService,
                                ActivityNotificationService activityNotificationService,
-                               ApplicationEventPublisher eventPublisher, PaymentMetrics paymentMetrics) {
+                               ApplicationEventPublisher eventPublisher, PaymentMetrics paymentMetrics,
+                               CancellationDao cancellationDao, JobService jobService) {
         this.jobAssignmentDao = jobAssignmentDao;
         this.securityService = securityService;
         this.jobAssignmentMapper = jobAssignmentMapper;
@@ -147,6 +153,8 @@ public class JobAssignmentManager implements JobAssignmentService {
         this.activityNotificationService = activityNotificationService;
         this.eventPublisher = eventPublisher;
         this.paymentMetrics = paymentMetrics;
+        this.cancellationDao = cancellationDao;
+        this.jobService = jobService;
     }
 
 
@@ -158,7 +166,7 @@ public class JobAssignmentManager implements JobAssignmentService {
 
     @Override
     @Transactional
-    public JobAssignmentDto answerToAssignment(UUID assignmentId, AnswerAssignmentDto jobAssignmentsAssignmentIdStatusPatchRequestDto) {
+    public MyAssignmentDto answerToAssignment(UUID assignmentId, AnswerAssignmentDto jobAssignmentsAssignmentIdStatusPatchRequestDto) {
         log.info("Answering to job assignment from");
         var assignment = jobAssignmentDao.findWithDetailsForPaymentById(assignmentId).orElseThrow(() -> {
             log.info("Assignment with id {} not found", assignmentId);
@@ -182,6 +190,7 @@ public class JobAssignmentManager implements JobAssignmentService {
         if (Boolean.TRUE.equals(jobAssignmentsAssignmentIdStatusPatchRequestDto.getAccepted())){
             assignment.setStatus(AssignmentStatus.CONFIRMED);
             assignment.setPaymentStatus(PaymentStatus.PENDING_COLLECTION);
+            assignment.setConfirmedAt(Instant.now());
             log.info("Job assignment with id {} has been accepted", assignmentId);
         }else{
             assignment.setStatus(AssignmentStatus.REJECTED);
@@ -199,7 +208,8 @@ public class JobAssignmentManager implements JobAssignmentService {
 
         activityNotificationService.assignmentAnswered(assignment);
 
-        return jobAssignmentMapper.toJobAssignmentsAssignmentIdStatusPatchResponseDto(assignment);
+        return toMyAssignmentDto(assignment, authenticatedUserFromContext.getId(),
+                LIVE_ASSIGNMENT_STATUSES.contains(assignment.getStatus()));
 
     }
 
@@ -447,13 +457,27 @@ public class JobAssignmentManager implements JobAssignmentService {
                 ? jobAssignmentDao.findAllByJobCreatorId(userId, pageable)
                 : jobAssignmentDao.findAllByWorkerId(userId, pageable);
 
-        List<MyAssignmentDto> summaries = page.getContent().stream().map(assignment -> {
-            boolean activeWorker = !asEmployer && LIVE_ASSIGNMENT_STATUSES.contains(assignment.getStatus());
-            return toMyAssignmentDto(assignment, userId, activeWorker);
-        }).toList();
-        PageDto<MyAssignmentDto> result = PageDto.of(page, summaries);
-        galleryService.fillJobCovers(result.content().stream().map(MyAssignmentDto::job).toList());
-        return result;
+        return toPage(page, userId,
+                assignment -> !asEmployer && LIVE_ASSIGNMENT_STATUSES.contains(assignment.getStatus()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageDto<MyAssignmentDto> getAssignmentsForJob(UUID jobId, Pageable requested) {
+        pageableSanitizer.rejectUnknownSort(requested, MY_ASSIGNMENTS_SORTABLE);
+        Pageable pageable = pageableSanitizer.sanitize(requested, MY_ASSIGNMENTS_SORTABLE,
+                Sort.by(Sort.Direction.DESC, "assignmentDateTime"));
+
+        Job job = jobService.getById(jobId);
+        UUID actorId = securityService.getAuthenticatedUserId();
+        boolean owner = job.getCreator() != null && job.getCreator().getId().equals(actorId);
+        boolean companyContact = job.getCompany() != null
+                && companyContactService.isUserAContactOfCompany(job.getCompany().getId(), actorId);
+        if (!owner && !companyContact) {
+            throw Concealment.notFound(JobMessages.JOB_NOT_FOUND, actorId, jobId, "not the employer of the job");
+        }
+
+        return toPage(jobAssignmentDao.findAllByJobId(jobId, pageable), actorId, assignment -> false);
     }
 
     @Override
@@ -466,20 +490,61 @@ public class JobAssignmentManager implements JobAssignmentService {
                         "not a party of the assignment"));
         boolean activeWorker = party == CancellationParty.WORKER
                 && LIVE_ASSIGNMENT_STATUSES.contains(assignment.getStatus());
-        MyAssignmentDto result = toMyAssignmentDto(assignment, actorId, activeWorker);
-        galleryService.fillJobCovers(List.of(result.job()));
-        return result;
+        return toMyAssignmentDto(assignment, actorId, activeWorker);
+    }
+
+    private PageDto<MyAssignmentDto> toPage(Page<JobAssignment> page, UUID viewerId,
+                                            Predicate<JobAssignment> activeWorker) {
+        LinkedRecords linked = linkedRecordsOf(page.getContent());
+        List<MyAssignmentDto> content = page.getContent().stream()
+                .map(assignment -> toMyAssignmentDto(assignment, linked, viewerId, activeWorker.test(assignment)))
+                .toList();
+        galleryService.fillJobCovers(content.stream().map(MyAssignmentDto::job).toList());
+        return PageDto.of(page, content);
     }
 
     private MyAssignmentDto toMyAssignmentDto(JobAssignment assignment, UUID viewerId, boolean activeWorker) {
-        MyAssignmentDto dto = jobAssignmentMapper.toMyAssignmentDto(assignment);
+        MyAssignmentDto dto = toMyAssignmentDto(assignment, linkedRecordsOf(List.of(assignment)), viewerId,
+                activeWorker);
+        galleryService.fillJobCovers(List.of(dto.job()));
+        return dto;
+    }
+
+    private MyAssignmentDto toMyAssignmentDto(JobAssignment assignment, LinkedRecords linked, UUID viewerId,
+                                              boolean activeWorker) {
+        UUID id = assignment.getId();
+        MyAssignmentDto dto = jobAssignmentMapper.toMyAssignmentDto(assignment,
+                linked.cancellations().get(id), linked.payouts().get(id), linked.paymentSecuredAt().get(id));
         addressVisibility.protect(assignment.getJob(), dto.job(), viewerId, activeWorker);
         return dto;
     }
 
+    private LinkedRecords linkedRecordsOf(List<JobAssignment> assignments) {
+        if (assignments.isEmpty()) {
+            return new LinkedRecords(Map.of(), Map.of(), Map.of());
+        }
+        List<UUID> ids = assignments.stream().map(JobAssignment::getId).toList();
+
+        Map<UUID, Cancellation> cancellations = new HashMap<>();
+        for (Cancellation cancellation : cancellationDao.findAllByJobAssignmentIdIn(ids)) {
+            cancellations.put(cancellation.getJobAssignment().getId(), cancellation);
+        }
+
+        Map<UUID, Payout> payouts = new HashMap<>();
+        for (Payout payout : payoutService.findForAssignments(ids)) {
+            payouts.put(payout.getJobAssignment().getId(), payout);
+        }
+
+        return new LinkedRecords(cancellations, payouts, paymentService.securedAtForAssignments(ids));
+    }
+
+    private record LinkedRecords(Map<UUID, Cancellation> cancellations, Map<UUID, Payout> payouts,
+                                 Map<UUID, Instant> paymentSecuredAt) {
+    }
+
     @Override
     @Transactional
-    public JobAssignment completeAssignment(UUID assignmentId) {
+    public MyAssignmentDto completeAssignment(UUID assignmentId) {
         JobAssignment assignment = jobAssignmentDao.findWithDetailsForPaymentById(assignmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(JobAssignmentMessages.NOT_FOUND));
 
@@ -503,10 +568,9 @@ public class JobAssignmentManager implements JobAssignmentService {
 
         JobAssignment saved = markCompleted(assignment);
 
-        log.info("Assignment {} marked completed by employer {}", assignmentId,
-                securityService.getAuthenticatedUserId());
+        log.info("Assignment {} marked completed by employer {}", assignmentId, actorId);
         activityNotificationService.assignmentCompleted(assignment);
-        return saved;
+        return toMyAssignmentDto(saved, actorId, false);
     }
 
     @Override

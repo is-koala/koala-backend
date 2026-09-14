@@ -11,7 +11,10 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 import com.exskylab.koala.business.abstracts.JobApplicationService;
+import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.JobService;
+import com.exskylab.koala.core.constants.JobAssignmentMessages;
+import com.exskylab.koala.core.dtos.jobAssignment.response.MyAssignmentDto;
 import com.exskylab.koala.core.constants.JobApplicationMessages;
 import com.exskylab.koala.core.dtos.jobApplication.request.CreateJobApplicationDto;
 import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicantDto;
@@ -52,13 +55,17 @@ public class JobsController {
 
     private final JobService jobService;
     private final JobApplicationService jobApplicationService;
+    private final JobAssignmentService jobAssignmentService;
     private final JobApplicationMapper jobApplicationMapper;
     private final JobMapper jobMapper;
 
 
-    public JobsController(JobService jobService, JobApplicationService jobApplicationService, JobApplicationMapper jobApplicationMapper, JobMapper jobMapper) {
+    public JobsController(JobService jobService, JobApplicationService jobApplicationService,
+                          JobAssignmentService jobAssignmentService, JobApplicationMapper jobApplicationMapper,
+                          JobMapper jobMapper) {
         this.jobService = jobService;
         this.jobApplicationService = jobApplicationService;
+        this.jobAssignmentService = jobAssignmentService;
         this.jobApplicationMapper = jobApplicationMapper;
         this.jobMapper = jobMapper;
     }
@@ -224,7 +231,7 @@ public class JobsController {
 
 
     @Operation(summary = "İlana gelen başvurular",
-            description = "Yalnızca ilan sahibi ya da şirket yetkilisi görebilir.")
+            description = "Yalnızca ilan sahibi ya da şirket yetkilisi görebilir. Her başvuruda answeredDateTime (cevap anı), assignmentId (kabulle doğan atama) ve rejectionReason taşınır; ilgili olay yoksa null.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Başvurular listelendi"),
             @ApiResponse(responseCode = "404", description = "İlan bulunamadı ya da yetki yok",
@@ -244,5 +251,23 @@ public class JobsController {
 
     }
 
+    @Operation(summary = "İlanın atamaları",
+            description = "Yalnızca ilan sahibi ya da şirket ilanının güncel yetkilisi okuyabilir; başkası ve olmayan ilan aynı 404 yanıtını alır. GET /users/me/assignments ile aynı MyAssignmentDto sözleşmesi ve sıralama alanları (assignmentDateTime, actualCompletionDateTime, status); varsayılan sıralama assignmentDateTime azalan. Sayfalıdır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Atamalar listelendi"),
+            @ApiResponse(responseCode = "400", description = "Sıralama alanı desteklenmiyor",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "İlan bulunamadı ya da yetki yok",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @GetMapping("/{jobId}/assignments")
+    public ResponseEntity<SuccessDataResult<PageDto<MyAssignmentDto>>> getJobAssignments(
+            @PathVariable UUID jobId,
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                jobAssignmentService.getAssignmentsForJob(jobId, pageable),
+                JobAssignmentMessages.LISTED,
+                HttpStatus.OK));
+    }
 
 }

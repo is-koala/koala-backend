@@ -146,8 +146,8 @@ class StaffPayoutMappingTest {
         PayoutDto mine = mapper.toPayoutDto(processingPayout(account(FULL_IBAN)));
         JsonNode row = json.valueToTree(mine);
 
-        assertEquals(Set.of("id", "jobAssignmentId", "amount", "currency", "status", "failureReason",
-                "completedAt", "createdAt"), fieldNames(row));
+        assertEquals(Set.of("id", "jobAssignmentId", "jobTitle", "companyName", "amount", "currency", "status",
+                "failureReason", "completedAt", "createdAt"), fieldNames(row));
         assertFalse(json.writeValueAsString(mine).contains("4711"),
                 "sağlayıcı referansı işçiye açılan DTO'ya sızdı");
     }

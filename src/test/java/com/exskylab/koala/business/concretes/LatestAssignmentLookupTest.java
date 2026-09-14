@@ -70,7 +70,9 @@ class LatestAssignmentLookupTest {
                 mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class),
                 mock(org.springframework.context.ApplicationEventPublisher.class),
                 new com.exskylab.koala.core.monitoring.PaymentMetrics(
-                        new io.micrometer.core.instrument.simple.SimpleMeterRegistry()));
+                        new io.micrometer.core.instrument.simple.SimpleMeterRegistry()),
+                mock(com.exskylab.koala.dataAccess.CancellationDao.class),
+                mock(com.exskylab.koala.business.abstracts.JobService.class));
     }
 
     private static Job job() {

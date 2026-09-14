@@ -7,6 +7,7 @@ public class JobAssignmentMessages {
     public static final String STATUS_NOT_BLANK = "{job.assignment.status.not.blank}";
     public static final String ANSWER_SUCCESS = "{job.assignment.answer.success}";
     public static final String RETRIEVED = "{job.assignment.retrieved}";
+    public static final String LISTED = "{job.assignments.listed}";
     public static final String NOT_FOUND = "{job.assignment.not.found}";
     public static final String ALREADY_ANSWERED = "{job.assignment.already.answered}";
     public static final String PAYMENT_SESSION_INITIATED = "{job.assignment.payment.session.initiated}";

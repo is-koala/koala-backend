@@ -53,6 +53,10 @@ public class JobSummaryDto {
             description = "İlanı açan şirket. Bireysel ilanlarda null.")
     private UUID companyId;
 
+    @Schema(types = {"string", "null"},
+            description = "İlanı açan şirketin logosu. Bireysel ilanda ya da logo yüklenmemişse null.")
+    private String companyLogoUrl;
+
     private String coverImageUrl;
 
     private long applicationCount;
