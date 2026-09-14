@@ -1,13 +1,14 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.business.abstracts.AdminDetailService;
 import com.exskylab.koala.business.abstracts.LegalService;
 import com.exskylab.koala.core.constants.LegalMessages;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.legal.request.RejectDeletionDto;
 import com.exskylab.koala.core.dtos.legal.response.AccountDeletionDto;
-import com.exskylab.koala.core.helpers.MessageResolver;
-import com.exskylab.koala.core.mappers.LegalMapper;
 import com.exskylab.koala.core.security.RequiresPermission;
+import com.exskylab.koala.core.security.StaffPrincipal;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.entities.AccountDeletionStatus;
 import com.exskylab.koala.entities.StaffPermission;
@@ -37,14 +38,11 @@ import java.util.UUID;
 public class AccountDeletionController {
 
     private final LegalService legalService;
-    private final LegalMapper legalMapper;
-    private final MessageResolver messageResolver;
+    private final AdminDetailService adminDetailService;
 
-    public AccountDeletionController(LegalService legalService, LegalMapper legalMapper,
-                                     MessageResolver messageResolver) {
+    public AccountDeletionController(LegalService legalService, AdminDetailService adminDetailService) {
         this.legalService = legalService;
-        this.legalMapper = legalMapper;
-        this.messageResolver = messageResolver;
+        this.adminDetailService = adminDetailService;
     }
 
     @Operation(summary = "Hesap silme taleplerini listele",
@@ -63,12 +61,16 @@ public class AccountDeletionController {
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
         var page = legalService.getDeletionRequests(status, query, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
-                PageDto.of(page, legalMapper.toAccountDeletionDtoList(page.getContent(), messageResolver)),
+                PageDto.of(page, adminDetailService.deletionRequests(page.getContent())),
                 LegalMessages.DELETIONS_LISTED, HttpStatus.OK));
     }
 
     @Operation(summary = "Hesap silme talebi",
-            description = "Kuyruk satırıyla aynı AccountDeletionDto. Ret ayrı uçtan; bu GET yalnız okur.")
+            description = "Kuyruk satırıyla aynı AccountDeletionDto: rejectionReason ve rejectedByStaffId reddedilmiş "
+                    + "talepte dolar; blockers yalnız REQUESTED talepte canlı hesaplanır ve silmeyi bugün engelleyen "
+                    + "kayıtları tipiyle (PENDING_PAYMENT ödeme, ESCROW ve ACTIVE_WORK atama, DISPUTE uyuşmazlık id'si) "
+                    + "listeler; blockedReason ise zamanlayıcının son denemesinde bulduğu ilk engelin metnidir. "
+                    + "Ret ayrı uçtan; bu GET yalnız okur.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Hesap silme talebi getirildi"),
             @ApiResponse(responseCode = "404", description = "Hesap silme talebi bulunamadı")
@@ -78,7 +80,7 @@ public class AccountDeletionController {
     public ResponseEntity<SuccessDataResult<AccountDeletionDto>> get(
             @PathVariable UUID requestId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
-                legalMapper.toAccountDeletionDto(legalService.getDeletionRequest(requestId), messageResolver),
+                adminDetailService.deletionRequest(legalService.getDeletionRequest(requestId)),
                 LegalMessages.DELETION_FETCHED, HttpStatus.OK));
     }
 
@@ -91,10 +93,11 @@ public class AccountDeletionController {
     @PostMapping("/{requestId}/reject")
     @RequiresPermission(value = StaffPermission.USER_DELETION_MANAGE, action = "user.deletion.reject")
     public ResponseEntity<SuccessDataResult<AccountDeletionDto>> reject(
-            @PathVariable UUID requestId, @RequestBody @Valid RejectDeletionDto body) {
-        var deletion = legalService.rejectDeletionRequest(requestId, body.reason());
+            @PathVariable UUID requestId, @RequestBody @Valid RejectDeletionDto body,
+            @AuthenticationPrincipal StaffPrincipal actor) {
+        var deletion = legalService.rejectDeletionRequest(actor, requestId, body.reason());
         return ResponseEntity.ok(new SuccessDataResult<>(
-                legalMapper.toAccountDeletionDto(deletion, messageResolver),
+                adminDetailService.deletionRequest(deletion),
                 LegalMessages.DELETION_REJECTED, HttpStatus.OK));
     }
 }

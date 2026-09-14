@@ -90,6 +90,8 @@ public interface PaymentDao extends JpaRepository<Payment, UUID> {
 
     List<Payment> findAllByJobAssignmentIdOrderByCreatedAtDesc(UUID jobAssignmentId);
 
+    long countByJobAssignmentJobCreatorId(UUID creatorId);
+
     @EntityGraph(attributePaths = {"jobAssignment", "jobAssignment.worker", "jobAssignment.job",
             "jobAssignment.job.creator", "jobAssignment.job.company"})
     @Query("select p from Payment p where p.id = :id")
@@ -100,12 +102,13 @@ public interface PaymentDao extends JpaRepository<Payment, UUID> {
     boolean existsByJobAssignmentIdAndStatusIn(UUID jobAssignmentId, List<PaymentAttemptStatus> statuses);
 
     @Query("""
-            select (count(p) > 0) from Payment p
+            select p.id as id, a.worker.id as workerId, a.job.creator.id as employerId
+            from Payment p join p.jobAssignment a
             where p.status in :statuses
-              and (p.jobAssignment.worker.id = :userId or p.jobAssignment.job.creator.id = :userId)
+              and (a.worker.id in :userIds or a.job.creator.id in :userIds)
             """)
-    boolean existsPendingForUser(@Param("userId") UUID userId,
-                                 @Param("statuses") List<PaymentAttemptStatus> statuses);
+    List<PartyLink> findPendingLinksForUsers(@Param("userIds") Collection<UUID> userIds,
+                                             @Param("statuses") List<PaymentAttemptStatus> statuses);
 
     @Query("""
             select coalesce(sum(p.totalCharged), 0),

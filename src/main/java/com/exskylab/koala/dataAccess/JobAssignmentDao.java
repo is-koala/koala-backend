@@ -38,15 +38,23 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
     })
     Optional<JobAssignment> findWithDetailsForPaymentById(UUID id);
 
-    @Query("select count(a) > 0 from JobAssignment a where "
-            + "(a.worker.id = :userId or a.job.creator.id = :userId) and a.paymentStatus = :paymentStatus")
-    boolean existsMoneyForUser(@Param("userId") UUID userId,
-                               @Param("paymentStatus") PaymentStatus paymentStatus);
+    @Query("""
+            select a.id as id, a.worker.id as workerId, a.job.creator.id as employerId
+            from JobAssignment a
+            where a.paymentStatus = :paymentStatus
+              and (a.worker.id in :userIds or a.job.creator.id in :userIds)
+            """)
+    List<PartyLink> findMoneyLinksForUsers(@Param("userIds") java.util.Collection<UUID> userIds,
+                                           @Param("paymentStatus") PaymentStatus paymentStatus);
 
-    @Query("select count(a) > 0 from JobAssignment a where "
-            + "(a.worker.id = :userId or a.job.creator.id = :userId) and a.status in :statuses")
-    boolean existsActiveForUser(@Param("userId") UUID userId,
-                                @Param("statuses") java.util.List<AssignmentStatus> statuses);
+    @Query("""
+            select a.id as id, a.worker.id as workerId, a.job.creator.id as employerId
+            from JobAssignment a
+            where a.status in :statuses
+              and (a.worker.id in :userIds or a.job.creator.id in :userIds)
+            """)
+    List<PartyLink> findActiveLinksForUsers(@Param("userIds") java.util.Collection<UUID> userIds,
+                                            @Param("statuses") java.util.List<AssignmentStatus> statuses);
 
     @EntityGraph(attributePaths = {"job", "job.category", "job.address", "job.address.city", "job.address.district",
             "job.creator", "job.creator.profilePicture", "job.company", "job.company.logo",
@@ -68,15 +76,18 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
             left join assignment.worker worker
             left join assignment.job job
             left join job.creator creator
-            where cast(:query as string) is null
-               or cast(assignment.id as string) like lower(concat('%', cast(:query as string), '%'))
-               or unaccent(lower(job.title)) like unaccent(lower(concat('%', cast(:query as string), '%')))
-               or unaccent(lower(worker.email)) like unaccent(lower(concat('%', cast(:query as string), '%')))
-               or unaccent(lower(concat(worker.firstName, ' ', worker.lastName)))
-                  like unaccent(lower(concat('%', cast(:query as string), '%')))
-               or unaccent(lower(creator.email)) like unaccent(lower(concat('%', cast(:query as string), '%')))
-               or unaccent(lower(concat(creator.firstName, ' ', creator.lastName)))
-                  like unaccent(lower(concat('%', cast(:query as string), '%')))
+            where (:workerId is null or worker.id = :workerId)
+              and (:employerId is null or creator.id = :employerId)
+              and (:jobId is null or job.id = :jobId)
+              and (cast(:query as string) is null
+                   or cast(assignment.id as string) like lower(concat('%', cast(:query as string), '%'))
+                   or unaccent(lower(job.title)) like unaccent(lower(concat('%', cast(:query as string), '%')))
+                   or unaccent(lower(worker.email)) like unaccent(lower(concat('%', cast(:query as string), '%')))
+                   or unaccent(lower(concat(worker.firstName, ' ', worker.lastName)))
+                      like unaccent(lower(concat('%', cast(:query as string), '%')))
+                   or unaccent(lower(creator.email)) like unaccent(lower(concat('%', cast(:query as string), '%')))
+                   or unaccent(lower(concat(creator.firstName, ' ', creator.lastName)))
+                      like unaccent(lower(concat('%', cast(:query as string), '%'))))
             """)
     @EntityGraph(attributePaths = {
             "worker",
@@ -86,9 +97,15 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
             "job.creator.profilePicture",
             "job.company"
     })
-    Page<JobAssignment> findAllForStaff(@Param("query") String query, Pageable pageable);
+    Page<JobAssignment> findAllForStaff(@Param("query") String query, @Param("workerId") UUID workerId,
+                                        @Param("employerId") UUID employerId, @Param("jobId") UUID jobId,
+                                        Pageable pageable);
 
     long countByWorkerIdAndStatus(UUID workerId, AssignmentStatus status);
+
+    long countByWorkerId(UUID workerId);
+
+    long countByJobCreatorId(UUID creatorId);
 
     boolean existsByJobIdAndStatusIn(UUID jobId, java.util.Collection<AssignmentStatus> statuses);
 

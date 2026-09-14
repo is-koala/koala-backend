@@ -10,6 +10,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.exskylab.koala.dataAccess.PartyLink;
+
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -23,13 +26,11 @@ public interface DisputeService {
 
     List<Dispute> findAllForAssignment(UUID jobAssignmentId);
 
-    Page<Dispute> searchForStaff(DisputeStatus status, String query, Pageable pageable);
+    Page<Dispute> searchForStaff(DisputeStatus status, String query, UUID userId, Pageable pageable);
 
     Dispute getForStaff(UUID disputeId);
 
     boolean hasActiveDispute(UUID jobAssignmentId);
-
-    boolean hasActiveDisputeForUser(UUID userId);
 
     DisputeEvidence attachEvidence(UUID disputeId, MultipartFile file);
 
@@ -40,4 +41,8 @@ public interface DisputeService {
     List<StaffDisputeEvidenceDto> getEvidenceForStaff(UUID disputeId);
 
     DisputeEvidence getEvidenceForStaffDownload(UUID disputeId, UUID evidenceId);
+
+    long countInvolving(UUID userId);
+
+    List<PartyLink> findActiveLinksForUsers(Collection<UUID> userIds);
 }

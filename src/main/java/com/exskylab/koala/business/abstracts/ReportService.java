@@ -24,10 +24,14 @@ public interface ReportService {
     Page<Report> getMyReports(Pageable pageable);
 
     Page<AdminReportDto> searchForModeration(ReportStatus status, ReportReason reason,
-                                             ReportTargetType targetType, UUID reportedUserId,
+                                             ReportTargetType targetType, UUID reportedUserId, UUID reporterId,
                                              String query, Pageable pageable);
 
     AdminReportDetailDto getForModeration(UUID reportId);
 
     List<Report> findAllBetweenAssignmentParties(UUID jobId, Collection<UUID> partyIds);
+
+    long countReceivedBy(UUID userId);
+
+    long countMadeBy(UUID userId);
 }

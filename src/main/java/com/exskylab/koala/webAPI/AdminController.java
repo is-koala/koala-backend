@@ -44,8 +44,8 @@ import com.exskylab.koala.business.abstracts.JobService;
 import com.exskylab.koala.entities.JobStatus;
 import com.exskylab.koala.core.dtos.user.request.GrantRoleDto;
 import com.exskylab.koala.core.dtos.user.response.RoleGrantDto;
+import com.exskylab.koala.core.dtos.user.response.AdminUserDetailDto;
 import com.exskylab.koala.core.dtos.user.response.SafeUserDto;
-import com.exskylab.koala.core.mappers.CompanyMapper;
 import com.exskylab.koala.core.mappers.RoleGrantMapper;
 import com.exskylab.koala.core.mappers.UserMapper;
 import com.exskylab.koala.entities.Image;
@@ -74,7 +74,6 @@ public class AdminController {
 
     private final CompanyService companyService;
     private final UserService userService;
-    private final CompanyMapper companyMapper;
     private final UserMapper userMapper;
     private final GalleryService galleryService;
     private final RoleGrantMapper roleGrantMapper;
@@ -86,8 +85,7 @@ public class AdminController {
     private final AdminDetailService adminDetailService;
     private final JobService jobService;
 
-    public AdminController(CompanyService companyService, UserService userService,
-                           CompanyMapper companyMapper, UserMapper userMapper,
+    public AdminController(CompanyService companyService, UserService userService, UserMapper userMapper,
                            GalleryService galleryService, RoleGrantMapper roleGrantMapper,
                            JobAssignmentService jobAssignmentService,
                            BankAccountService bankAccountService, BankAccountMapper bankAccountMapper,
@@ -96,7 +94,6 @@ public class AdminController {
                            JobService jobService) {
         this.companyService = companyService;
         this.userService = userService;
-        this.companyMapper = companyMapper;
         this.userMapper = userMapper;
         this.galleryService = galleryService;
         this.roleGrantMapper = roleGrantMapper;
@@ -113,7 +110,8 @@ public class AdminController {
             description = "Son atamaları sayfalar. Yanıt AdminAssignmentDto'dur; UUID bakışı ile aynı SafeUser ve fiyat dökümü. "
                     + "Emanet kuralları değişmez. query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) atama id'si, "
                     + "ilan başlığı, işveren ve çalışanın ad-soyadı ile e-postasında büyük-küçük harf ve Türkçe karakter "
-                    + "duyarsız arar; 100 karakteri aşarsa 400.")
+                    + "duyarsız arar; 100 karakteri aşarsa 400. workerId, employerId ve jobId süzgeçleri birbirleriyle ve "
+                    + "query ile kesişir; kullanıcı ve ilan detayları bu süzgeçlerle buraya bağlanır.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Atamalar listelendi"),
             @ApiResponse(responseCode = "400", description = "query 100 karakteri aşıyor ya da bilinmeyen sıralama alanı",
@@ -123,8 +121,11 @@ public class AdminController {
     @GetMapping("/job-assignments")
     public ResponseEntity<SuccessDataResult<PageDto<AdminAssignmentDto>>> assignments(
             @RequestParam(required = false) String query,
+            @RequestParam(required = false) UUID workerId,
+            @RequestParam(required = false) UUID employerId,
+            @RequestParam(required = false) UUID jobId,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
-        var page = jobAssignmentService.listForStaff(query, pageable);
+        var page = jobAssignmentService.listForStaff(query, workerId, employerId, jobId, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
                 PageDto.of(page, page.getContent()),
                 AdminMessages.ASSIGNMENTS_LISTED, HttpStatus.OK));
@@ -134,8 +135,12 @@ public class AdminController {
             description = "Uyuşmazlık ve emanet ekranlarının ihtiyaç duyduğu okuma: taraflar, atama ve ödeme durumu, "
                     + "fiyat dökümü. Liste satırının alanlarına ek olarak bağlı kayıtların özetini (id + durum + oluşturulma) "
                     + "taşır: ödeme denemeleri (payments), hakediş (payout, yoksa null), uyuşmazlıklar (disputes) ve "
-                    + "taraflar arasındaki ya da ilana bağlı şikayetler (reports). Emanetteki tutar finansal veridir; "
-                    + "uç payment.read ile korunur.")
+                    + "taraflar arasındaki ya da ilana bağlı şikayetler (reports). Zaman çizelgesi için application "
+                    + "(başvuru; durum, başvuru ve yanıt anı, ret gerekçesi), workSessions (giriş/çıkış anları, dakika, "
+                    + "plausibility bayrakları), cancellation (iptal eden taraf ve kullanıcı, gerekçe, bildirim süresi, "
+                    + "kesinti ve iade tutarı, refundId; iptal yoksa null) ve reviews (yazar, konu, puan, yorum) ile "
+                    + "createdAt, expectedCompletionDateTime, employerType ve notes taşınır. Emanetteki tutar finansal "
+                    + "veridir; uç payment.read ile korunur.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Atama detayı döndürüldü"),
             @ApiResponse(responseCode = "404", description = "Atama bulunamadı",
@@ -152,8 +157,11 @@ public class AdminController {
     @Operation(summary = "Atamanın ödeme denemeleri (personel)",
             description = "Atamaya ait her ödeme denemesini yeniden eskiye sıralar. Her satır durum, tutar dökümü, "
                     + "sağlayıcı referansları (conversationId, providerPaymentId, providerTransactionId), doğrulama "
-                    + "sayacı, oluşturulma/güncellenme anları ve iade kayıtlarını taşır. Kart verisi ya da ödeme "
-                    + "token'ı dönmez. Uç payment.read ile korunur.")
+                    + "sayacı, oluşturulma/güncellenme anları ve iade kayıtlarını taşır. payoutId atamanın hakedişi bu "
+                    + "denemeye bağlıysa dolar, diğer denemelerde null. Her iade origin ve originId taşır: iptal kaydı "
+                    + "iadeyi gösteriyorsa CANCELLATION (iptal id'si), atamanın REFUND_EMPLOYER ile çözülmüş uyuşmazlığı "
+                    + "varsa DISPUTE (uyuşmazlık id'si), aksi hâlde personel iadesi STAFF (originId null). Kart verisi ya "
+                    + "da ödeme token'ı dönmez. Uç payment.read ile korunur.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Ödeme denemeleri listelendi"),
             @ApiResponse(responseCode = "404", description = "Atama bulunamadı",
@@ -170,8 +178,10 @@ public class AdminController {
 
     @Operation(summary = "Ödeme denemesi detayı",
             description = "Tek bir ödeme denemesi: bağlı atama/ilan/taraflar (SafeUser; e-posta yok), durum, tutar dökümü, "
-                    + "sağlayıcı referansları, doğrulama sayacı, oluşturulma/güncellenme anları ve iade kayıtları. "
-                    + "Kart verisi ya da ödeme token'ı dönmez. Uç payment.read ile korunur.")
+                    + "sağlayıcı referansları, doğrulama sayacı, oluşturulma/güncellenme anları, payoutId (hakediş bu "
+                    + "ödemeye bağlıysa) ve iade kayıtları; iadelerde origin/originId listedeki kuralla türetilir "
+                    + "(CANCELLATION, DISPUTE ya da STAFF). Kart verisi ya da ödeme token'ı dönmez. Uç payment.read ile "
+                    + "korunur.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Ödeme denemesi getirildi"),
             @ApiResponse(responseCode = "404", description = "Ödeme kaydı bulunamadı",
@@ -189,8 +199,9 @@ public class AdminController {
             description = "İlanları durum süzgeci ve aramayla sayfalar; status verilmezse her durum döner. "
                     + "query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) ilan id'si, ilan başlığı, şirket adı, "
                     + "işverenin ad-soyadı ile e-postasında büyük-küçük harf ve Türkçe karakter duyarsız arar; "
-                    + "100 karakteri aşarsa 400. Satır işvereni id, ad ve e-postayla, başvuru ve atama sayılarıyla "
-                    + "taşır. Uç job.read ile korunur.")
+                    + "100 karakteri aşarsa 400. companyId ve employerId süzgeçleri status ve query ile kesişir; "
+                    + "şirket ve kullanıcı detayları ilanlarına bu süzgeçlerle bağlanır. Satır işvereni id, ad ve "
+                    + "e-postayla, başvuru ve atama sayılarıyla taşır. Uç job.read ile korunur.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "İlanlar listelendi"),
             @ApiResponse(responseCode = "400", description = "query 100 karakteri aşıyor ya da bilinmeyen sıralama alanı",
@@ -201,9 +212,11 @@ public class AdminController {
     public ResponseEntity<SuccessDataResult<PageDto<AdminJobDto>>> jobs(
             @RequestParam(required = false) List<JobStatus> status,
             @RequestParam(required = false) String query,
+            @RequestParam(required = false) UUID companyId,
+            @RequestParam(required = false) UUID employerId,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
         return ResponseEntity.ok(new SuccessDataResult<>(
-                jobService.searchForStaff(status, query, pageable),
+                jobService.searchForStaff(status, query, companyId, employerId, pageable),
                 AdminMessages.JOBS_LISTED, HttpStatus.OK));
     }
 
@@ -259,8 +272,11 @@ public class AdminController {
             throw new ValidationException(BankAccountMessages.PENDING_QUEUE_ONLY);
         }
         var page = bankAccountService.listPendingForStaff(query, pageable);
+        int attemptsAllowed = bankAccountService.verificationAttemptsAllowed();
         return ResponseEntity.ok(new SuccessDataResult<>(
-                PageDto.of(page, page.getContent().stream().map(bankAccountMapper::toIbanPendingDto).toList()),
+                PageDto.of(page, page.getContent().stream()
+                        .map(account -> bankAccountMapper.toIbanPendingDto(account, attemptsAllowed))
+                        .toList()),
                 BankAccountMessages.PENDING_LISTED, HttpStatus.OK));
     }
 
@@ -298,9 +314,9 @@ public class AdminController {
             @RequestParam(required = false) String query,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
-        var page = companyService.searchCompanies(status, query, pageable);
+        var page = adminDetailService.searchCompanies(status, query, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
-                PageDto.of(page, page.getContent().stream().map(companyMapper::toCompanyReviewDto).toList()),
+                PageDto.of(page, page.getContent()),
                 AdminMessages.COMPANIES_LISTED, HttpStatus.OK));
     }
 
@@ -316,7 +332,7 @@ public class AdminController {
     @GetMapping("/companies/{companyId}")
     public ResponseEntity<SuccessDataResult<CompanyReviewDto>> company(@PathVariable UUID companyId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
-                companyMapper.toCompanyReviewDto(companyService.getCompanyById(companyId)),
+                adminDetailService.getCompany(companyId),
                 AdminMessages.COMPANY_FETCHED, HttpStatus.OK));
     }
 
@@ -356,8 +372,9 @@ public class AdminController {
             @AuthenticationPrincipal StaffPrincipal actor) {
 
         String note = request == null ? null : request.getNote();
+        companyService.approveCompany(actor, companyId, note);
         return ResponseEntity.ok(new SuccessDataResult<>(
-                companyMapper.toCompanyReviewDto(companyService.approveCompany(actor, companyId, note)),
+                adminDetailService.getCompany(companyId),
                 AdminMessages.COMPANY_APPROVED, HttpStatus.OK));
     }
 
@@ -380,8 +397,9 @@ public class AdminController {
             @RequestBody @Valid RejectCompanyDto request,
             @AuthenticationPrincipal StaffPrincipal actor) {
 
+        companyService.rejectCompany(actor, companyId, request.getReason());
         return ResponseEntity.ok(new SuccessDataResult<>(
-                companyMapper.toCompanyReviewDto(companyService.rejectCompany(actor, companyId, request.getReason())),
+                adminDetailService.getCompany(companyId),
                 AdminMessages.COMPANY_REJECTED, HttpStatus.OK));
     }
 
@@ -402,9 +420,16 @@ public class AdminController {
                 AdminMessages.USERS_LISTED, HttpStatus.OK));
     }
 
-    @Operation(summary = "Kullanıcı özeti",
-            description = "Kuyruk satırıyla aynı SafeUserDto. Rol listesi /users/{userId}/roles'ta kalır; "
-                    + "tekil GET daha spesifik /roles eşleşmesini bozmaz.")
+    @Operation(summary = "Kullanıcı detayı",
+            description = "SafeUserDto'nun üst kümesi: doğrulama bayrakları (e-posta, telefon, kimlik), işveren "
+                    + "bayrağı, kayıt tarihi, şirket üyelikleri (id, ad, rol), rozetler, geçmiş sayaçları "
+                    + "(başvuru, işçi/işveren olarak atama, ödeme, hakediş, uyuşmazlık, alınan/yapılan şikayet), "
+                    + "son kimlik incelemesinin durumu ve açık hesap silme talebinin id'si. email ve phoneNumber "
+                    + "yalnız user.read_pii taşıyan personele döner; taşımayana null gelir ve gövde aynı şekildedir. "
+                    + "PII döndüğünde denetim satırı user.read_pii izniyle (PERSONAL_DATA) yazılır. Sayaçlar "
+                    + "süzgeçli listelere bağlanır: /admin/job-assignments?workerId=|employerId=, "
+                    + "/admin/payouts?workerId=, /admin/disputes?userId=, /admin/reports?reportedUserId=|reporterId=. "
+                    + "Rol listesi /users/{userId}/roles'ta kalır.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Kullanıcı getirildi"),
             @ApiResponse(responseCode = "404", description = "Kullanıcı bulunamadı",
@@ -412,9 +437,10 @@ public class AdminController {
     })
     @RequiresPermission(StaffPermission.USER_READ)
     @GetMapping("/users/{userId}")
-    public ResponseEntity<SuccessDataResult<SafeUserDto>> user(@PathVariable UUID userId) {
+    public ResponseEntity<SuccessDataResult<AdminUserDetailDto>> user(@PathVariable UUID userId,
+                                                                      @AuthenticationPrincipal StaffPrincipal actor) {
         return ResponseEntity.ok(new SuccessDataResult<>(
-                userMapper.toSafeUserDto(userService.getById(userId)),
+                adminDetailService.getUserDetail(actor, userId),
                 AdminMessages.USER_FETCHED, HttpStatus.OK));
     }
 
@@ -492,7 +518,7 @@ public class AdminController {
 
         var page = identityDocumentReviewService.search(status, query, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
-                PageDto.of(page, page.getContent().stream().map(IdentityReviewDto::from).toList()),
+                PageDto.of(page, adminDetailService.identityReviews(page.getContent())),
                 AdminMessages.IDENTITY_REVIEWS_LISTED, HttpStatus.OK));
     }
 
@@ -507,7 +533,7 @@ public class AdminController {
     @GetMapping("/identity-verifications/{reviewId}")
     public ResponseEntity<SuccessDataResult<IdentityReviewDto>> identityReview(@PathVariable UUID reviewId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
-                IdentityReviewDto.from(identityDocumentReviewService.getById(reviewId)),
+                adminDetailService.identityReview(identityDocumentReviewService.getById(reviewId)),
                 AdminMessages.IDENTITY_REVIEW_FETCHED, HttpStatus.OK));
     }
 
@@ -532,7 +558,7 @@ public class AdminController {
             @AuthenticationPrincipal StaffPrincipal actor) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
-                IdentityReviewDto.from(identityDocumentReviewService.approve(actor, reviewId)),
+                adminDetailService.identityReview(identityDocumentReviewService.approve(actor, reviewId)),
                 AdminMessages.IDENTITY_REVIEW_APPROVED, HttpStatus.OK));
     }
 
@@ -555,7 +581,7 @@ public class AdminController {
             @AuthenticationPrincipal StaffPrincipal actor) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
-                IdentityReviewDto.from(identityDocumentReviewService.reject(actor, reviewId, request.getReason())),
+                adminDetailService.identityReview(identityDocumentReviewService.reject(actor, reviewId, request.getReason())),
                 AdminMessages.IDENTITY_REVIEW_REJECTED, HttpStatus.OK));
     }
 

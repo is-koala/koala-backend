@@ -107,7 +107,7 @@ class DisputeEvidenceIT extends AbstractStaffIntegrationTest {
         jdbc.update("delete from admin_audit_entries");
         jdbc.update("delete from staff_member_roles where staff_member_id in "
                 + "(select id from staff_members where email like 'evidence-%@iskoala.com')");
-        jdbc.update("delete from staff_members where email like 'evidence-%@iskoala.com'");
+        deleteStaffMembersLike("evidence-%@iskoala.com");
         jdbc.update("delete from users where id in (?, ?, ?, ?)",
                 employerId, workerId, companyContactId, operatorId);
     }

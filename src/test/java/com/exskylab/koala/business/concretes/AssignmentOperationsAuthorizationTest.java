@@ -285,7 +285,7 @@ class AssignmentOperationsAuthorizationTest {
                 DisputeResolution.RELEASE_TO_WORKER, "işçi haklı");
 
         assertEquals(DisputeStatus.RESOLVED, dispute.getStatus());
-        verify(payoutService).releaseToWorker(a.getId());
+        verify(payoutService).releaseToWorker(a.getId(), PayoutReleaseOrigin.DISPUTE);
         verify(payoutService, never()).refundEmployer(any(), any(), any());
     }
 
@@ -297,7 +297,7 @@ class AssignmentOperationsAuthorizationTest {
 
         disputeManager.resolveDispute(null, dispute.getId(), DisputeResolution.DISMISSED, "dayanaksız");
 
-        verify(payoutService, never()).releaseToWorker(any());
+        verify(payoutService, never()).releaseToWorker(any(), any());
         verify(payoutService, never()).refundEmployer(any(), any(), any());
     }
 

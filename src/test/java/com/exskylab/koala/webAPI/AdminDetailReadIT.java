@@ -1,6 +1,9 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.core.security.UserPrincipal;
+import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
+import org.springframework.http.MediaType;
 import jakarta.persistence.EntityManagerFactory;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
@@ -14,6 +17,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -23,7 +27,9 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -64,6 +70,13 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
     private final UUID unrelatedReportId = UUID.randomUUID();
     private final UUID otherJobId = UUID.randomUUID();
     private final UUID otherJobReportId = UUID.randomUUID();
+    private final UUID applicationId = UUID.randomUUID();
+    private final UUID workSessionId = UUID.randomUUID();
+    private final UUID reviewId = UUID.randomUUID();
+    private final UUID cancelledAssignmentId = UUID.randomUUID();
+    private final UUID cancelledPaymentId = UUID.randomUUID();
+    private final UUID cancellationRefundId = UUID.randomUUID();
+    private final UUID cancellationId = UUID.randomUUID();
 
     private String employerEmail;
     private String workerEmail;
@@ -119,9 +132,24 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
                 """, assignmentId, jobId, workerId);
         jdbcTemplate.update("""
                 insert into job_applications (id, created_at, is_deleted, job_id, user_id, status,
-                                              application_date_time)
-                values (?, now(), false, ?, ?, 'ACCEPTED', now())
-                """, UUID.randomUUID(), jobId, workerId);
+                                              application_date_time, answered_date_time)
+                values (?, now() - interval '3 days', false, ?, ?, 'ACCEPTED', now() - interval '3 days',
+                        now() - interval '2 days')
+                """, applicationId, jobId, workerId);
+        jdbcTemplate.update("update job_assignments set job_application_id = ?, notes = 'Kapıdan giriş', "
+                + "expected_completion_date_time = now() + interval '1 day' where id = ?", applicationId, assignmentId);
+        jdbcTemplate.update("""
+                insert into work_sessions (id, created_at, is_deleted, job_assignment_id, check_in_at, check_out_at,
+                                           check_in_plausibility_flags, check_out_plausibility_flags, minutes)
+                values (?, now(), false, ?, now() - interval '9 hours', now() - interval '1 hour',
+                        'OUTSIDE_JOB_WINDOW', '', 480)
+                """, workSessionId, assignmentId);
+        jdbcTemplate.update("""
+                insert into reviews (id, created_at, is_deleted, job_assignment_id, author_id, subject_id, rating,
+                                     comment, anonymous)
+                values (?, now(), false, ?, ?, ?, 4, 'Dakik ve düzenli', false)
+                """, reviewId, assignmentId, employerId, workerId);
+
 
         jdbcTemplate.update("""
                 insert into payments (id, created_at, is_deleted, job_assignment_id, conversation_id, status,
@@ -181,6 +209,30 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
                 values (?, now(), false, ?, 'Başka ilan', 'OPEN', 'INDIVIDUAL', false, false, false, 18, 65)
                 """, otherJobId, employerId);
         jdbcTemplate.update("""
+                insert into job_assignments (id, created_at, is_deleted, job_id, worker_id, status, payment_status,
+                                             assignment_date_time, work_hours, pricing_version, currency,
+                                             worker_payout, commission_rate, commission_amount, total_charged)
+                values (?, now(), false, ?, ?, 'CANCELLED', 'REFUNDED', now(), 8, '2026-09-v1', 'TRY',
+                        1000.00, 0.0750, 75.00, 1075.00)
+                """, cancelledAssignmentId, otherJobId, workerId);
+        jdbcTemplate.update("""
+                insert into payments (id, created_at, is_deleted, job_assignment_id, conversation_id, status,
+                                      currency, pricing_version, worker_payout, commission_rate,
+                                      commission_amount, total_charged, completed_at, verification_attempts)
+                values (?, now(), false, ?, ?, 'SUCCEEDED', 'TRY', '2026-09-v1', 1000.00, 0.0750, 75.00, 1075.00,
+                        now(), 1)
+                """, cancelledPaymentId, cancelledAssignmentId, "conv-cancelled-" + cancelledPaymentId);
+        jdbcTemplate.update("""
+                insert into refunds (id, created_at, is_deleted, payment_id, amount, currency, status, reason)
+                values (?, now(), false, ?, 1075.00, 'TRY', 'COMPLETED', 'İşveren iptal etti')
+                """, cancellationRefundId, cancelledPaymentId);
+        jdbcTemplate.update("""
+                insert into cancellations (id, created_at, is_deleted, job_assignment_id, cancelled_by_id,
+                                           cancelled_by_party, reason, notice_minutes, fee_rate, fee_amount,
+                                           refund_amount, refund_id, cancelled_at)
+                values (?, now(), false, ?, ?, 'EMPLOYER', 'Vardiya iptal', 2880, 0.0000, 0.00, 1075.00, ?, now())
+                """, cancellationId, cancelledAssignmentId, employerId, cancellationRefundId);
+        jdbcTemplate.update("""
                 insert into reports (id, created_at, is_deleted, reporter_id, reported_user_id, job_id,
                                      reason, description, status)
                 values (?, now(), false, ?, ?, ?, 'FRAUD', 'aynı taraflar, başka ilan', 'OPEN')
@@ -190,21 +242,27 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
     @AfterEach
     void cleanUp() {
         jdbcTemplate.update("delete from admin_audit_entries");
-        jdbcTemplate.update("delete from staff_members where email like 'detail-read-%@iskoala.com'");
         jdbcTemplate.update("delete from reports where id in (?, ?, ?)", reportId, unrelatedReportId,
                 otherJobReportId);
         jdbcTemplate.update("delete from disputes where id = ?", disputeId);
+        jdbcTemplate.update("delete from cancellations where id = ?", cancellationId);
+        jdbcTemplate.update("delete from refunds where id = ?", cancellationRefundId);
+        jdbcTemplate.update("delete from payments where job_assignment_id = ?", cancelledAssignmentId);
+        jdbcTemplate.update("delete from reviews where id = ?", reviewId);
+        jdbcTemplate.update("delete from work_sessions where id = ?", workSessionId);
+        jdbcTemplate.update("update job_assignments set job_application_id = null where id = ?", assignmentId);
         jdbcTemplate.update("delete from settlement_tasks where id = ?", settlementTaskId);
         jdbcTemplate.update("delete from payouts where id = ?", payoutId);
         jdbcTemplate.update("delete from bank_accounts where id = ?", bankAccountId);
         jdbcTemplate.update("delete from refunds where id = ?", refundId);
         jdbcTemplate.update("delete from payments where job_assignment_id = ?", assignmentId);
         jdbcTemplate.update("delete from job_applications where job_id = ?", jobId);
-        jdbcTemplate.update("delete from job_assignments where id = ?", assignmentId);
+        jdbcTemplate.update("delete from job_assignments where id in (?, ?)", assignmentId, cancelledAssignmentId);
         jdbcTemplate.update("delete from jobs where id in (?, ?, ?)", jobId, companyJobId, otherJobId);
         jdbcTemplate.update("delete from addresses where id = ?", addressId);
         jdbcTemplate.update("delete from companies where id = ?", companyId);
         jdbcTemplate.update("delete from users where id in (?, ?, ?)", employerId, workerId, strangerId);
+        deleteStaffMembersLike("detail-read-%@iskoala.com");
     }
 
     private void insertUser(UUID id, String email, boolean employer, String firstName, String lastName) {
@@ -513,5 +571,245 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
         } finally {
             statistics.setStatisticsEnabled(wasEnabled);
         }
+    }
+
+    @Test
+    void theAssignmentDetailDrawsTheTimelineFromApplicationToReview() throws Exception {
+        read("/admin/job-assignments/" + assignmentId, tokenFor("FINANCE_ANALYST"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.employerType").value("INDIVIDUAL"))
+                .andExpect(jsonPath("$.data.notes").value("Kapıdan giriş"))
+                .andExpect(jsonPath("$.data.createdAt").isNotEmpty())
+                .andExpect(jsonPath("$.data.expectedCompletionDateTime").isNotEmpty())
+                .andExpect(jsonPath("$.data.application.id").value(applicationId.toString()))
+                .andExpect(jsonPath("$.data.application.status").value("ACCEPTED"))
+                .andExpect(jsonPath("$.data.application.applicationDateTime").isNotEmpty())
+                .andExpect(jsonPath("$.data.application.answeredDateTime").isNotEmpty())
+                .andExpect(jsonPath("$.data.application.rejectionReason").value(nullValue()))
+                .andExpect(jsonPath("$.data.workSessions", hasSize(1)))
+                .andExpect(jsonPath("$.data.workSessions[0].id").value(workSessionId.toString()))
+                .andExpect(jsonPath("$.data.workSessions[0].minutes").value(480))
+                .andExpect(jsonPath("$.data.workSessions[0].checkInPlausibilityFlags[0]").value("OUTSIDE_JOB_WINDOW"))
+                .andExpect(jsonPath("$.data.workSessions[0].checkOutPlausibilityFlags", hasSize(0)))
+                .andExpect(jsonPath("$.data.cancellation").value(nullValue()))
+                .andExpect(jsonPath("$.data.reviews", hasSize(1)))
+                .andExpect(jsonPath("$.data.reviews[0].id").value(reviewId.toString()))
+                .andExpect(jsonPath("$.data.reviews[0].authorId").value(employerId.toString()))
+                .andExpect(jsonPath("$.data.reviews[0].subjectId").value(workerId.toString()))
+                .andExpect(jsonPath("$.data.reviews[0].rating").value(4))
+                .andExpect(jsonPath("$.data.reviews[0].comment").value("Dakik ve düzenli"));
+    }
+
+    @Test
+    void aCancelledAssignmentCarriesItsCancellationAndTheRefundNamesIt() throws Exception {
+        String token = tokenFor("FINANCE_ANALYST");
+
+        read("/admin/job-assignments/" + cancelledAssignmentId, token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.data.application").value(nullValue()))
+                .andExpect(jsonPath("$.data.cancellation.id").value(cancellationId.toString()))
+                .andExpect(jsonPath("$.data.cancellation.cancelledByParty").value("EMPLOYER"))
+                .andExpect(jsonPath("$.data.cancellation.cancelledBy.id").value(employerId.toString()))
+                .andExpect(jsonPath("$.data.cancellation.cancelledBy.firstName").value("Şükrü"))
+                .andExpect(jsonPath("$.data.cancellation.reason").value("Vardiya iptal"))
+                .andExpect(jsonPath("$.data.cancellation.noticeMinutes").value(2880))
+                .andExpect(jsonPath("$.data.cancellation.feeAmount").value("0.00"))
+                .andExpect(jsonPath("$.data.cancellation.refundAmount").value("1075.00"))
+                .andExpect(jsonPath("$.data.cancellation.refundId").value(cancellationRefundId.toString()))
+                .andExpect(jsonPath("$.data.cancellation.cancelledAt").isNotEmpty());
+
+        read("/admin/job-assignments/" + cancelledAssignmentId + "/payments", token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(1)))
+                .andExpect(jsonPath("$.data[0].payoutId").value(nullValue()))
+                .andExpect(jsonPath("$.data[0].refunds", hasSize(1)))
+                .andExpect(jsonPath("$.data[0].refunds[0].origin").value("CANCELLATION"))
+                .andExpect(jsonPath("$.data[0].refunds[0].originId").value(cancellationId.toString()));
+    }
+
+    @Test
+    void aRefundWithoutACancellationIsAttributedToTheDisputeOrToStaff() throws Exception {
+        String token = tokenFor("FINANCE_ANALYST");
+
+        read("/admin/payments/" + paymentId, token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.payoutId").value(payoutId.toString()))
+                .andExpect(jsonPath("$.data.refunds[0].origin").value("STAFF"))
+                .andExpect(jsonPath("$.data.refunds[0].originId").value(nullValue()));
+        read("/admin/payments/" + failedPaymentId, token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.payoutId").value(nullValue()));
+
+        jdbcTemplate.update("update disputes set status = 'RESOLVED', resolution = 'REFUND_EMPLOYER', "
+                + "resolved_at = now() where id = ?", disputeId);
+
+        read("/admin/payments/" + paymentId, token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.refunds[0].origin").value("DISPUTE"))
+                .andExpect(jsonPath("$.data.refunds[0].originId").value(disputeId.toString()));
+    }
+
+    @Test
+    void thePayoutDetailNamesItsReleaseOriginBankAccountAndReconciler() throws Exception {
+        String token = tokenFor("FINANCE_OFFICER");
+        jdbcTemplate.update("update payouts set release_origin = 'AUTO_COMPLETION' where id = ?", payoutId);
+
+        read("/admin/payouts/" + payoutId, token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.bankAccountId").value(bankAccountId.toString()))
+                .andExpect(jsonPath("$.data.releaseOrigin").value("AUTO_COMPLETION"))
+                .andExpect(jsonPath("$.data.settledAt").value(nullValue()))
+                .andExpect(jsonPath("$.data.reconciledByStaffId").value(nullValue()));
+
+        UUID reconciler = createStaffMember("detail-read-reconciler-" + UUID.randomUUID() + "@iskoala.com",
+                "Mutabakatçı", "FINANCE_OFFICER");
+        String settledAt = java.time.Instant.now().toString();
+        mockMvc.perform(post("/admin/payouts/" + payoutId + "/reconcile")
+                        .header("Authorization", "Bearer " + staffAccessToken(reconciler))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"settlementReference": "TRF-283-%s", "providerReference": "iyz-transaction-4711",
+                                 "amount": 1000.00, "currency": "TRY", "settledAt": "%s"}
+                                """.formatted(payoutId, settledAt)))
+                .andExpect(status().isOk());
+
+        read("/admin/payouts/" + payoutId, token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.settledAt").isNotEmpty())
+                .andExpect(jsonPath("$.data.reconciledByStaffId").value(reconciler.toString()));
+        assertEquals(reconciler, jdbcTemplate.queryForObject(
+                "select reconciled_by_staff_id from payouts where id = ?", UUID.class, payoutId));
+    }
+
+    @Test
+    void theJobDetailNamesItsCreatorAndCancellation() throws Exception {
+        String token = tokenFor("SUPPORT_AGENT");
+
+        read("/admin/jobs/" + jobId, token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.creator.id").value(employerId.toString()))
+                .andExpect(jsonPath("$.data.creator.firstName").value("Şükrü"))
+                .andExpect(jsonPath("$.data.creator.email").doesNotExist())
+                .andExpect(jsonPath("$.data.cancelledAt").value(nullValue()))
+                .andExpect(jsonPath("$.data.cancelReason").value(nullValue()));
+
+        var employer = user(new UserPrincipal(employerId, employerEmail, Set.of(Role.ROLE_USER), null));
+
+        mockMvc.perform(post("/jobs/" + otherJobId + "/cancel").with(employer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"" + "x".repeat(501) + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details[0].field").value("reason"))
+                .andExpect(jsonPath("$.details[0].message").value("İptal gerekçesi en fazla 500 karakter olabilir."));
+        read("/admin/jobs/" + otherJobId, token)
+                .andExpect(jsonPath("$.data.status").value("OPEN"))
+                .andExpect(jsonPath("$.data.cancelledAt").value(nullValue()));
+
+        mockMvc.perform(post("/jobs/" + otherJobId + "/cancel").with(employer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"  Etkinlik ertelendi  \"}"))
+                .andExpect(status().isOk());
+        read("/admin/jobs/" + otherJobId, token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.data.cancelledAt").isNotEmpty())
+                .andExpect(jsonPath("$.data.cancelReason").value("Etkinlik ertelendi"));
+
+        mockMvc.perform(post("/jobs/" + companyJobId + "/cancel").with(employer))
+                .andExpect(status().isOk());
+        read("/admin/jobs/" + companyJobId, token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.data.cancelledAt").isNotEmpty())
+                .andExpect(jsonPath("$.data.cancelReason").value(nullValue()));
+
+        UUID blankReasonJobId = UUID.randomUUID();
+        jdbcTemplate.update("""
+                insert into jobs (id, created_at, is_deleted, creator_id, title, status, employer_type,
+                                  insurance_required, address_public, experience_required, min_age, max_age)
+                values (?, now(), false, ?, 'Boş gerekçe', 'OPEN', 'INDIVIDUAL', false, false, false, 18, 65)
+                """, blankReasonJobId, employerId);
+        try {
+            mockMvc.perform(post("/jobs/" + blankReasonJobId + "/cancel").with(employer)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"reason\":\"   \"}"))
+                    .andExpect(status().isOk());
+            read("/admin/jobs/" + blankReasonJobId, token)
+                    .andExpect(jsonPath("$.data.cancelledAt").isNotEmpty())
+                    .andExpect(jsonPath("$.data.cancelReason").value(nullValue()));
+        } finally {
+            jdbcTemplate.update("delete from jobs where id = ?", blankReasonJobId);
+        }
+    }
+
+    @Test
+    void theUserDetailCarriesContextAndRevealsContactDetailsOnlyWithThePiiPermission() throws Exception {
+        read("/admin/users/" + employerId, tokenFor("SUPPORT_AGENT"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(employerId.toString()))
+                .andExpect(jsonPath("$.data.firstName").value("Şükrü"))
+                .andExpect(jsonPath("$.data.email").value(nullValue()))
+                .andExpect(jsonPath("$.data.phoneNumber").value(nullValue()))
+                .andExpect(jsonPath("$.data.emailVerified").value(true))
+                .andExpect(jsonPath("$.data.phoneVerified").value(false))
+                .andExpect(jsonPath("$.data.identityVerified").value(true))
+                .andExpect(jsonPath("$.data.isEmployer").value(true))
+                .andExpect(jsonPath("$.data.createdAt").isNotEmpty())
+                .andExpect(jsonPath("$.data.companies", hasSize(0)))
+                .andExpect(jsonPath("$.data.badges", hasSize(0)))
+                .andExpect(jsonPath("$.data.counts.applications").value(0))
+                .andExpect(jsonPath("$.data.counts.assignmentsAsWorker").value(0))
+                .andExpect(jsonPath("$.data.counts.assignmentsAsEmployer").value(2))
+                .andExpect(jsonPath("$.data.counts.payments").value(3))
+                .andExpect(jsonPath("$.data.counts.payouts").value(0))
+                .andExpect(jsonPath("$.data.counts.disputes").value(1))
+                .andExpect(jsonPath("$.data.counts.reportsReceived").value(3))
+                .andExpect(jsonPath("$.data.counts.reportsMade").value(0))
+                .andExpect(jsonPath("$.data.identityReviewStatus").value(nullValue()))
+                .andExpect(jsonPath("$.data.pendingDeletionRequestId").value(nullValue()))
+                .andExpect(content().string(not(containsString(employerEmail))));
+
+        read("/admin/users/" + workerId, tokenFor("TRUST_LEAD"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.email").value(workerEmail))
+                .andExpect(jsonPath("$.data.isEmployer").value(false))
+                .andExpect(jsonPath("$.data.counts.applications").value(1))
+                .andExpect(jsonPath("$.data.counts.assignmentsAsWorker").value(2))
+                .andExpect(jsonPath("$.data.counts.assignmentsAsEmployer").value(0))
+                .andExpect(jsonPath("$.data.counts.payouts").value(1))
+                .andExpect(jsonPath("$.data.counts.disputes").value(1))
+                .andExpect(jsonPath("$.data.counts.reportsMade").value(2));
+
+        List<String> permissions = jdbcTemplate.queryForList(
+                "select permission from admin_audit_entries where resource_id in (?, ?) order by occurred_at",
+                String.class, employerId.toString(), workerId.toString());
+        assertEquals(List.of("user.read", "user.read_pii"), permissions,
+                "PII dönen okuma user.read_pii izniyle, dönmeyen user.read ile denetlenmeli");
+    }
+
+    @Test
+    void theDisputeCounterAndTheDisputeFilterAgreeOnWhoIsInvolved() throws Exception {
+        UUID openedByStranger = UUID.randomUUID();
+        jdbcTemplate.update("insert into disputes (id, created_at, is_deleted, job_assignment_id, opened_by_id, "
+                        + "status, reason) values (?, now(), false, ?, ?, 'OPEN', ?)",
+                openedByStranger, cancelledAssignmentId, strangerId, "Üçüncü kişi açtı");
+        try {
+            read("/admin/users/" + strangerId, tokenFor("SUPPORT_AGENT"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.counts.disputes").value(1));
+            read("/admin/disputes?userId=" + strangerId + "&size=100", tokenFor("DISPUTE_HANDLER"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.totalElements").value(1))
+                    .andExpect(jsonPath("$.data.content[0].id").value(openedByStranger.toString()));
+        } finally {
+            jdbcTemplate.update("delete from disputes where id = ?", openedByStranger);
+        }
+    }
+
+    @Test
+    void theUserDetailIsRefusedWithoutUserReadWhetherOrNotTheUserExists() throws Exception {
+        assertRefusedIdentically(id -> "/admin/users/" + id, workerId, tokenFor("CATALOG_EDITOR"));
     }
 }

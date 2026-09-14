@@ -67,4 +67,11 @@ public class Payout extends BaseEntity {
 
     @Column(name = "completed_at")
     private Instant completedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "release_origin", length = 32)
+    private PayoutReleaseOrigin releaseOrigin;
+
+    @Column(name = "reconciled_by_staff_id")
+    private UUID reconciledByStaffId;
 }

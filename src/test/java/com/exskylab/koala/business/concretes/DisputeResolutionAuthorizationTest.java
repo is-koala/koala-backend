@@ -16,6 +16,7 @@ import com.exskylab.koala.entities.Dispute;
 import com.exskylab.koala.entities.DisputeResolution;
 import com.exskylab.koala.entities.DisputeStatus;
 import com.exskylab.koala.entities.JobAssignment;
+import com.exskylab.koala.entities.PayoutReleaseOrigin;
 import com.exskylab.koala.entities.PermissionSensitivity;
 import com.exskylab.koala.entities.StaffMember;
 import com.exskylab.koala.entities.StaffPermission;
@@ -150,7 +151,7 @@ class DisputeResolutionAuthorizationTest {
 
         disputeManager.resolveDispute(owner, disputeId, DisputeResolution.RELEASE_TO_WORKER, "işçi haklı");
 
-        verify(payoutService, times(1)).releaseToWorker(assignmentId);
+        verify(payoutService, times(1)).releaseToWorker(assignmentId, PayoutReleaseOrigin.DISPUTE);
         assertEquals(DisputeStatus.RESOLVED, dispute.getStatus());
     }
 

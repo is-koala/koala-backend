@@ -8,6 +8,8 @@ import com.exskylab.koala.entities.StaffMember;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -40,4 +42,6 @@ public interface StaffAccountService {
     void resetPassword(StaffPrincipal actor, UUID staffId, String rawPassword);
 
     StaffBootstrapResult bootstrapOwner(String email, String rawPassword);
+
+    Map<UUID, String> displayNamesOf(Collection<UUID> staffIds);
 }

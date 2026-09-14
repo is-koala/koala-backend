@@ -12,6 +12,9 @@ import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.dataAccess.AccountDeletionRequestDao;
 import com.exskylab.koala.dataAccess.AgreementVersionDao;
 import com.exskylab.koala.dataAccess.ConsentRecordDao;
+import com.exskylab.koala.core.dtos.legal.response.DeletionBlockerDto;
+import com.exskylab.koala.core.security.StaffPrincipal;
+import com.exskylab.koala.dataAccess.PartyLink;
 import com.exskylab.koala.entities.*;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
@@ -26,8 +29,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -189,14 +197,17 @@ public class LegalManager implements LegalService {
 
     @Override
     @Transactional
-    public AccountDeletionRequest rejectDeletionRequest(UUID requestId, String reason) {
+    public AccountDeletionRequest rejectDeletionRequest(StaffPrincipal actor, UUID requestId, String reason) {
         AccountDeletionRequest request = lockedRequest(requestId);
         if (request.getStatus() != AccountDeletionStatus.REQUESTED) {
             throw new ConflictException(LegalMessages.DELETION_ALREADY_PROCESSED);
         }
         request.setStatus(AccountDeletionStatus.REJECTED);
-        request.setBlockedReason(reason);
+        request.setRejectionReason(reason);
+        request.setRejectedByStaffId(actor == null ? null : actor.staffId());
         request.setProcessedAt(Instant.now());
+        log.info("Account deletion request {} rejected by {}", requestId,
+                actor == null ? "bridge admin" : "staff " + actor.staffId());
         return accountDeletionRequestDao.save(request);
     }
 
@@ -241,30 +252,69 @@ public class LegalManager implements LegalService {
     }
 
     private String findBlockedReason(UUID userId) {
-        if (paymentService.hasPendingPaymentForUser(userId)) {
-            return LegalMessages.DELETION_BLOCKED_BY_PENDING_PAYMENT;
-        }
-
-        boolean hasEscrowedMoney = jobAssignmentService.hasMoneyInEscrowFor(userId);
-
-        if (hasEscrowedMoney) {
-            return LegalMessages.DELETION_BLOCKED_BY_ESCROW;
-        }
-
-        boolean hasActiveWork = jobAssignmentService.hasActiveWorkFor(userId);
-
-        if (hasActiveWork) {
-            return LegalMessages.DELETION_BLOCKED_BY_ACTIVE_WORK;
-        }
-
-        if (disputeService.hasActiveDisputeForUser(userId)) {
-            return LegalMessages.DELETION_BLOCKED_BY_DISPUTE;
-        }
-
-        return null;
+        return blockersOf(Set.of(userId)).getOrDefault(userId, List.of()).stream()
+                .findFirst()
+                .map(blocker -> blocker.type().getMessageKey())
+                .orElse(null);
     }
 
     private String truncate(String value) {
         return value == null ? null : value.substring(0, Math.min(value.length(), 512));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<UUID> findOpenDeletionRequestId(UUID userId) {
+        return accountDeletionRequestDao
+                .findFirstByUserIdAndStatusOrderByRequestedAtDesc(userId, AccountDeletionStatus.REQUESTED)
+                .map(AccountDeletionRequest::getId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, List<DeletionBlockerDto>> findDeletionBlockers(Collection<AccountDeletionRequest> requests) {
+        Map<UUID, UUID> userByRequest = new LinkedHashMap<>();
+        for (AccountDeletionRequest request : requests) {
+            if (request.getStatus() == AccountDeletionStatus.REQUESTED && request.getUser() != null) {
+                userByRequest.put(request.getId(), request.getUser().getId());
+            }
+        }
+        if (userByRequest.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, List<DeletionBlockerDto>> byUser = blockersOf(new HashSet<>(userByRequest.values()));
+
+        Map<UUID, List<DeletionBlockerDto>> byRequest = new HashMap<>();
+        userByRequest.forEach((requestId, userId) ->
+                byRequest.put(requestId, byUser.getOrDefault(userId, List.of())));
+        return byRequest;
+    }
+
+    private Map<UUID, List<DeletionBlockerDto>> blockersOf(Set<UUID> userIds) {
+        Map<UUID, List<DeletionBlockerDto>> byUser = new HashMap<>();
+        collectBlockers(byUser, userIds, DeletionBlockerType.PENDING_PAYMENT,
+                paymentService.findPendingLinksForUsers(userIds));
+        collectBlockers(byUser, userIds, DeletionBlockerType.ESCROW,
+                jobAssignmentService.findEscrowLinksForUsers(userIds));
+        collectBlockers(byUser, userIds, DeletionBlockerType.ACTIVE_WORK,
+                jobAssignmentService.findActiveWorkLinksForUsers(userIds));
+        collectBlockers(byUser, userIds, DeletionBlockerType.DISPUTE,
+                disputeService.findActiveLinksForUsers(userIds));
+        return byUser;
+    }
+
+    private static void collectBlockers(Map<UUID, List<DeletionBlockerDto>> byUser, Set<UUID> userIds,
+                                        DeletionBlockerType type, List<PartyLink> links) {
+        for (PartyLink link : links) {
+            for (UUID party : List.of(link.getWorkerId(), link.getEmployerId())) {
+                if (userIds.contains(party)) {
+                    List<DeletionBlockerDto> blockers = byUser.computeIfAbsent(party, ignored -> new ArrayList<>());
+                    DeletionBlockerDto blocker = new DeletionBlockerDto(type, link.getId());
+                    if (!blockers.contains(blocker)) {
+                        blockers.add(blocker);
+                    }
+                }
+            }
+        }
     }
 }

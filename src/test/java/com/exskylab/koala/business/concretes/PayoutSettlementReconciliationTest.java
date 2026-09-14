@@ -45,6 +45,7 @@ class PayoutSettlementReconciliationTest {
 
     private static final String PROVIDER_REFERENCE = "iyz-transaction-4711";
     private static final String STATEMENT_LINE = "TRF-2026-09-08-000913";
+    private static final UUID RECONCILER = UUID.randomUUID();
 
     private PayoutDao payoutDao;
     private SimpleMeterRegistry registry;
@@ -98,7 +99,7 @@ class PayoutSettlementReconciliationTest {
     void matchingStatementEvidenceCompletesThePayoutAndStampsTheTransferTime() {
         payout(PayoutStatus.PROCESSING);
 
-        Payout settled = payoutManager.confirmSettlement(payoutId, evidence());
+        Payout settled = payoutManager.confirmSettlement(payoutId, evidence(), RECONCILER);
 
         assertEquals(PayoutStatus.COMPLETED, settled.getStatus());
         assertEquals(STATEMENT_LINE, settled.getSettlementReference());
@@ -115,7 +116,7 @@ class PayoutSettlementReconciliationTest {
         ConfirmPayoutSettlementDto replay = evidence();
         replay.setSettledAt(settledAt.plus(2, ChronoUnit.DAYS));
 
-        Payout again = payoutManager.confirmSettlement(payoutId, replay);
+        Payout again = payoutManager.confirmSettlement(payoutId, replay, RECONCILER);
 
         assertSame(completed, again);
         assertEquals(settledAt, again.getCompletedAt(),
@@ -134,7 +135,7 @@ class PayoutSettlementReconciliationTest {
         other.setSettlementReference("TRF-2026-09-08-000914");
 
         ConflictException conflict = assertThrows(ConflictException.class,
-                () -> payoutManager.confirmSettlement(payoutId, other));
+                () -> payoutManager.confirmSettlement(payoutId, other, RECONCILER));
 
         assertEquals("PAYOUT_SETTLEMENT_REFERENCE_CONFLICT", conflict.getErrorCode());
         verify(payoutDao, never()).saveAndFlush(any());
@@ -145,7 +146,7 @@ class PayoutSettlementReconciliationTest {
         payout(PayoutStatus.PENDING);
 
         ConflictException conflict = assertThrows(ConflictException.class,
-                () -> payoutManager.confirmSettlement(payoutId, evidence()));
+                () -> payoutManager.confirmSettlement(payoutId, evidence(), RECONCILER));
 
         assertEquals("PAYOUT_NOT_AWAITING_SETTLEMENT", conflict.getErrorCode());
         verify(payoutDao, never()).saveAndFlush(any());
@@ -155,7 +156,7 @@ class PayoutSettlementReconciliationTest {
     void aFailedPayoutIsNotResurrectedByAStatementLine() {
         payout(PayoutStatus.FAILED);
 
-        assertThrows(ConflictException.class, () -> payoutManager.confirmSettlement(payoutId, evidence()));
+        assertThrows(ConflictException.class, () -> payoutManager.confirmSettlement(payoutId, evidence(), RECONCILER));
         verify(payoutDao, never()).saveAndFlush(any());
     }
 
@@ -165,7 +166,7 @@ class PayoutSettlementReconciliationTest {
         payout.setProviderReference(null);
 
         ConflictException conflict = assertThrows(ConflictException.class,
-                () -> payoutManager.confirmSettlement(payoutId, evidence()));
+                () -> payoutManager.confirmSettlement(payoutId, evidence(), RECONCILER));
 
         assertEquals("PAYOUT_NO_PROVIDER_REFERENCE", conflict.getErrorCode());
         assertEquals(PayoutStatus.PROCESSING, payout.getStatus());
@@ -178,7 +179,7 @@ class PayoutSettlementReconciliationTest {
         wrong.setProviderReference("iyz-transaction-9999");
 
         ValidationException rejected = assertThrows(ValidationException.class,
-                () -> payoutManager.confirmSettlement(payoutId, wrong));
+                () -> payoutManager.confirmSettlement(payoutId, wrong, RECONCILER));
 
         assertEquals("PAYOUT_SETTLEMENT_EVIDENCE_MISMATCH", rejected.getErrorCode());
         assertEquals(PayoutStatus.PROCESSING, payout.getStatus());
@@ -194,7 +195,7 @@ class PayoutSettlementReconciliationTest {
         ConfirmPayoutSettlementDto short_ = evidence();
         short_.setAmount(new BigDecimal("999.99"));
 
-        assertThrows(ValidationException.class, () -> payoutManager.confirmSettlement(payoutId, short_));
+        assertThrows(ValidationException.class, () -> payoutManager.confirmSettlement(payoutId, short_, RECONCILER));
 
         assertEquals(PayoutStatus.PROCESSING, payout.getStatus());
         assertEquals(1.0, counted("evidence_mismatch"));
@@ -206,7 +207,7 @@ class PayoutSettlementReconciliationTest {
         ConfirmPayoutSettlementDto sameMoney = evidence();
         sameMoney.setAmount(new BigDecimal("1000.0"));
 
-        Payout settled = payoutManager.confirmSettlement(payoutId, sameMoney);
+        Payout settled = payoutManager.confirmSettlement(payoutId, sameMoney, RECONCILER);
 
         assertEquals(PayoutStatus.COMPLETED, settled.getStatus(),
                 "Para karsilastirmasi compareTo ile yapilmali; 1000.0 ile 1000.00 ayni tutardir.");
@@ -218,7 +219,7 @@ class PayoutSettlementReconciliationTest {
         ConfirmPayoutSettlementDto foreign = evidence();
         foreign.setCurrency("EUR");
 
-        assertThrows(ValidationException.class, () -> payoutManager.confirmSettlement(payoutId, foreign));
+        assertThrows(ValidationException.class, () -> payoutManager.confirmSettlement(payoutId, foreign, RECONCILER));
 
         assertEquals(PayoutStatus.PROCESSING, payout.getStatus());
     }
@@ -229,7 +230,7 @@ class PayoutSettlementReconciliationTest {
         ConfirmPayoutSettlementDto lowercase = evidence();
         lowercase.setCurrency("try");
 
-        Payout settled = payoutManager.confirmSettlement(payoutId, lowercase);
+        Payout settled = payoutManager.confirmSettlement(payoutId, lowercase, RECONCILER);
 
         assertEquals(PayoutStatus.COMPLETED, settled.getStatus());
     }
@@ -240,7 +241,7 @@ class PayoutSettlementReconciliationTest {
         ConfirmPayoutSettlementDto tooEarly = evidence();
         tooEarly.setSettledAt(releasedAt.minus(1, ChronoUnit.HOURS));
 
-        assertThrows(ValidationException.class, () -> payoutManager.confirmSettlement(payoutId, tooEarly));
+        assertThrows(ValidationException.class, () -> payoutManager.confirmSettlement(payoutId, tooEarly, RECONCILER));
 
         assertEquals(PayoutStatus.PROCESSING, payout.getStatus());
     }
@@ -250,7 +251,7 @@ class PayoutSettlementReconciliationTest {
         when(payoutDao.findByIdForUpdate(payoutId)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class,
-                () -> payoutManager.confirmSettlement(payoutId, evidence()));
+                () -> payoutManager.confirmSettlement(payoutId, evidence(), RECONCILER));
     }
 
     @Test
@@ -274,7 +275,7 @@ class PayoutSettlementReconciliationTest {
         notYetHappened.setSettledAt(Instant.now().plus(1, ChronoUnit.DAYS));
 
         ValidationException refused = assertThrows(ValidationException.class,
-                () -> payoutManager.confirmSettlement(payoutId, notYetHappened));
+                () -> payoutManager.confirmSettlement(payoutId, notYetHappened, RECONCILER));
 
         assertEquals("PAYOUT_SETTLED_AT_REQUIRED", refused.getErrorCode(),
                 "Kural yalnizca controller'daki @Valid ile isliyorsa, tasarlandigi soylenen otomatik ayak "
@@ -290,25 +291,20 @@ class PayoutSettlementReconciliationTest {
         payout(PayoutStatus.PROCESSING);
 
         assertEquals("PAYOUT_SETTLEMENT_REFERENCE_REQUIRED", assertThrows(ValidationException.class,
-                () -> payoutManager.confirmSettlement(payoutId,
-                        new ConfirmPayoutSettlementDto(null, PROVIDER_REFERENCE,
-                                new BigDecimal("1000.00"), "TRY", settledAt))).getErrorCode());
+                () -> payoutManager.confirmSettlement(payoutId, new ConfirmPayoutSettlementDto(null, PROVIDER_REFERENCE,
+                                new BigDecimal("1000.00"), "TRY", settledAt), RECONCILER)).getErrorCode());
         assertEquals("PAYOUT_PROVIDER_REFERENCE_REQUIRED", assertThrows(ValidationException.class,
-                () -> payoutManager.confirmSettlement(payoutId,
-                        new ConfirmPayoutSettlementDto(STATEMENT_LINE, null,
-                                new BigDecimal("1000.00"), "TRY", settledAt))).getErrorCode());
+                () -> payoutManager.confirmSettlement(payoutId, new ConfirmPayoutSettlementDto(STATEMENT_LINE, null,
+                                new BigDecimal("1000.00"), "TRY", settledAt), RECONCILER)).getErrorCode());
         assertEquals("PAYOUT_SETTLED_AMOUNT_REQUIRED", assertThrows(ValidationException.class,
-                () -> payoutManager.confirmSettlement(payoutId,
-                        new ConfirmPayoutSettlementDto(STATEMENT_LINE, PROVIDER_REFERENCE,
-                                null, "TRY", settledAt))).getErrorCode());
+                () -> payoutManager.confirmSettlement(payoutId, new ConfirmPayoutSettlementDto(STATEMENT_LINE, PROVIDER_REFERENCE,
+                                null, "TRY", settledAt), RECONCILER)).getErrorCode());
         assertEquals("PAYOUT_SETTLED_CURRENCY_REQUIRED", assertThrows(ValidationException.class,
-                () -> payoutManager.confirmSettlement(payoutId,
-                        new ConfirmPayoutSettlementDto(STATEMENT_LINE, PROVIDER_REFERENCE,
-                                new BigDecimal("1000.00"), null, settledAt))).getErrorCode());
+                () -> payoutManager.confirmSettlement(payoutId, new ConfirmPayoutSettlementDto(STATEMENT_LINE, PROVIDER_REFERENCE,
+                                new BigDecimal("1000.00"), null, settledAt), RECONCILER)).getErrorCode());
         assertEquals("PAYOUT_SETTLED_AT_REQUIRED", assertThrows(ValidationException.class,
-                () -> payoutManager.confirmSettlement(payoutId,
-                        new ConfirmPayoutSettlementDto(STATEMENT_LINE, PROVIDER_REFERENCE,
-                                new BigDecimal("1000.00"), "TRY", null))).getErrorCode());
+                () -> payoutManager.confirmSettlement(payoutId, new ConfirmPayoutSettlementDto(STATEMENT_LINE, PROVIDER_REFERENCE,
+                                new BigDecimal("1000.00"), "TRY", null), RECONCILER)).getErrorCode());
 
         verify(payoutDao, never()).saveAndFlush(any());
     }
@@ -320,6 +316,6 @@ class PayoutSettlementReconciliationTest {
         tooPrecise.setAmount(new BigDecimal("1000.005"));
 
         assertEquals("PAYOUT_SETTLED_AMOUNT_REQUIRED", assertThrows(ValidationException.class,
-                () -> payoutManager.confirmSettlement(payoutId, tooPrecise)).getErrorCode());
+                () -> payoutManager.confirmSettlement(payoutId, tooPrecise, RECONCILER)).getErrorCode());
     }
 }

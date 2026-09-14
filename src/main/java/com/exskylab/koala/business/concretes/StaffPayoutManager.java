@@ -9,6 +9,7 @@ import com.exskylab.koala.core.dtos.payout.response.AdminPayoutDetailDto;
 import com.exskylab.koala.core.dtos.payout.response.StaffPayoutDto;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.security.StaffPrincipal;
+import com.exskylab.koala.entities.PayoutReleaseOrigin;
 import com.exskylab.koala.entities.Payout;
 import com.exskylab.koala.entities.PayoutStatus;
 import com.exskylab.koala.entities.Refund;
@@ -32,9 +33,10 @@ public class StaffPayoutManager implements StaffPayoutService {
     }
 
     @Override
-    public Payout releaseToWorker(StaffPrincipal actor, UUID jobAssignmentId, String reason) {
+    public Payout releaseToWorker(StaffPrincipal actor, UUID jobAssignmentId, String reason,
+                                  PayoutReleaseOrigin origin) {
         requirePermission(actor, StaffPermission.PAYOUT_RELEASE, jobAssignmentId, null, reason);
-        return payoutService.releaseToWorker(jobAssignmentId);
+        return payoutService.releaseToWorker(jobAssignmentId, origin);
     }
 
     @Override
@@ -47,18 +49,18 @@ public class StaffPayoutManager implements StaffPayoutService {
     public Payout confirmSettlement(StaffPrincipal actor, UUID payoutId, ConfirmPayoutSettlementDto evidence) {
         requirePermission(actor, StaffPermission.PAYOUT_RECONCILE, payoutId, evidence.getAmount(),
                 evidence.getSettlementReference());
-        return payoutService.confirmSettlement(payoutId, evidence);
+        return payoutService.confirmSettlement(payoutId, evidence, actor.staffId());
     }
 
     @Override
     public PageDto<StaffPayoutDto> listForStaff(StaffPrincipal actor, List<PayoutStatus> statuses, String query,
-                                                Pageable pageable) {
+                                                UUID workerId, Pageable pageable) {
         if (lacks(actor, StaffPermission.PAYOUT_RECONCILE)) {
             log.warn("Payout queue read refused without staff permission: permission={} statuses={}",
                     StaffPermission.PAYOUT_RECONCILE.getCode(), statuses);
             throw new ForbiddenException(StaffMessages.PERMISSION_DENIED);
         }
-        return payoutService.listForStaff(statuses, query, pageable);
+        return payoutService.listForStaff(statuses, query, workerId, pageable);
     }
 
     @Override

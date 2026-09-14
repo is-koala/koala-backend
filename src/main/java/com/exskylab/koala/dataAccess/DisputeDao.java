@@ -12,6 +12,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -31,12 +32,21 @@ public interface DisputeDao extends JpaRepository<Dispute, UUID> {
     boolean existsByJobAssignmentIdAndStatusIn(UUID jobAssignmentId, List<DisputeStatus> statuses);
 
     @Query("""
-            select (count(d) > 0) from Dispute d
-            where d.status in :statuses
-              and (d.jobAssignment.worker.id = :userId or d.jobAssignment.job.creator.id = :userId)
+            select count(d) from Dispute d
+            where d.jobAssignment.worker.id = :userId
+               or d.jobAssignment.job.creator.id = :userId
+               or d.openedBy.id = :userId
             """)
-    boolean existsActiveForUser(@Param("userId") UUID userId,
-                                @Param("statuses") List<DisputeStatus> statuses);
+    long countInvolving(@Param("userId") UUID userId);
+
+    @Query("""
+            select d.id as id, a.worker.id as workerId, a.job.creator.id as employerId
+            from Dispute d join d.jobAssignment a
+            where d.status in :statuses
+              and (a.worker.id in :userIds or a.job.creator.id in :userIds)
+            """)
+    List<PartyLink> findActiveLinksForUsers(@Param("userIds") Collection<UUID> userIds,
+                                            @Param("statuses") List<DisputeStatus> statuses);
 
     @Query("""
             select d from Dispute d
@@ -46,6 +56,7 @@ public interface DisputeDao extends JpaRepository<Dispute, UUID> {
             left join job.creator creator
             left join d.openedBy opener
             where d.status in :statuses
+              and (:userId is null or worker.id = :userId or creator.id = :userId or opener.id = :userId)
               and (cast(:query as string) is null
                    or cast(d.id as string) like lower(concat('%', cast(:query as string), '%'))
                    or cast(assignment.id as string) like lower(concat('%', cast(:query as string), '%'))
@@ -61,7 +72,7 @@ public interface DisputeDao extends JpaRepository<Dispute, UUID> {
             """)
     @EntityGraph(attributePaths = {"openedBy", "openedBy.profilePicture", "jobAssignment"})
     Page<Dispute> searchForStaff(@Param("statuses") List<DisputeStatus> statuses, @Param("query") String query,
-                                 Pageable pageable);
+                                 @Param("userId") UUID userId, Pageable pageable);
 
     @EntityGraph(attributePaths = {"openedBy", "openedBy.profilePicture", "jobAssignment"})
     @Query("select d from Dispute d where d.id = :id")

@@ -27,7 +27,7 @@ class StaffIdentityIT extends AbstractStaffIntegrationTest {
 
     @AfterEach
     void removeTestStaff() {
-        jdbcTemplate.update("delete from staff_members where email like 'identity-%@iskoala.com'");
+        deleteStaffMembersLike("identity-%@iskoala.com");
     }
 
     private String emailFor(String marker) {

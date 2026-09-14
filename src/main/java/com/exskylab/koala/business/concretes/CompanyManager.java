@@ -330,7 +330,7 @@ public class CompanyManager implements CompanyService {
             throw new ConflictException(AdminMessages.COMPANY_ALREADY_APPROVED);
         }
 
-        Company saved = decide(company, CompanyApprovalStatus.APPROVED, note);
+        Company saved = decide(company, CompanyApprovalStatus.APPROVED, note, actor);
         log.info("Company {} approved by {}", companyId, actorLabel(actor));
         activityNotificationService.companyApprovalDecided(saved);
         return saved;
@@ -348,7 +348,7 @@ public class CompanyManager implements CompanyService {
             throw new ConflictException(AdminMessages.COMPANY_ALREADY_REJECTED);
         }
 
-        Company saved = decide(company, CompanyApprovalStatus.REJECTED, reason);
+        Company saved = decide(company, CompanyApprovalStatus.REJECTED, reason, actor);
         log.info("Company {} rejected by {}", companyId, actorLabel(actor));
         activityNotificationService.companyApprovalDecided(saved);
         return saved;
@@ -358,10 +358,11 @@ public class CompanyManager implements CompanyService {
         return actor == null ? "bridge admin " + securityService.getAuthenticatedUserId() : "staff " + actor.staffId();
     }
 
-    private Company decide(Company company, CompanyApprovalStatus status, String note) {
+    private Company decide(Company company, CompanyApprovalStatus status, String note, StaffPrincipal actor) {
         company.setApprovalStatus(status);
         company.setApprovalNote(note == null || note.isBlank() ? null : note.trim());
         company.setApprovalDecidedAt(Instant.now());
+        company.setApprovedByStaffId(actor == null ? null : actor.staffId());
         return companyDao.save(company);
     }
 

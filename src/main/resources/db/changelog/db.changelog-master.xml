@@ -95,4 +95,5 @@
     <include file="db/changelog/2026/09/14-01-job-read-staff-permission.xml"/>
     <include file="db/changelog/2026/09/14-02-participant-last-read.xml"/>
     <include file="db/changelog/2026/09/14-03-assignment-timeline-stamps.xml"/>
+    <include file="db/changelog/2026/09/14-04-staff-decision-provenance.xml"/>
 </databaseChangeLog>

@@ -35,7 +35,7 @@ class StaffAuthenticationIT extends AbstractStaffIntegrationTest {
     void removeTestStaff() {
         jdbcTemplate.update("delete from staff_member_roles where staff_member_id in "
                 + "(select id from staff_members where email like 'chain-%@iskoala.com')");
-        jdbcTemplate.update("delete from staff_members where email like 'chain-%@iskoala.com'");
+        deleteStaffMembersLike("chain-%@iskoala.com");
     }
 
     private String tokenFor(String... roles) {

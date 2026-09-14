@@ -29,7 +29,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -216,5 +218,20 @@ public class CancellationManager implements CancellationService {
         }
 
         return cancellationDao.findByJobAssignmentId(jobAssignmentId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Cancellation> findForStaff(UUID jobAssignmentId) {
+        return cancellationDao.findWithCancellerByJobAssignmentId(jobAssignmentId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Cancellation> findAllByRefundIds(Collection<UUID> refundIds) {
+        if (refundIds.isEmpty()) {
+            return List.of();
+        }
+        return cancellationDao.findAllByRefundIdIn(refundIds);
     }
 }

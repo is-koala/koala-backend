@@ -7,6 +7,8 @@ import com.exskylab.koala.entities.PaymentAttemptStatus;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import com.exskylab.koala.dataAccess.PartyLink;
+
 import java.util.Collection;
 import java.util.Map;
 import java.util.List;
@@ -49,8 +51,6 @@ public interface PaymentService {
 
     boolean hasPendingAttemptForAssignment(UUID jobAssignmentId);
 
-    boolean hasPendingPaymentForUser(UUID userId);
-
     SucceededVolume succeededVolume(Instant fromInclusive, Instant toExclusive, String currency);
 
     record SucceededVolume(BigDecimal employerVolume, BigDecimal koalaFee,
@@ -59,4 +59,8 @@ public interface PaymentService {
 
     record RecordedOutcome(PaymentAttemptStatus status, UUID jobAssignmentId) {
     }
+
+    long countForEmployer(UUID employerId);
+
+    List<PartyLink> findPendingLinksForUsers(Collection<UUID> userIds);
 }

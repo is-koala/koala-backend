@@ -77,6 +77,9 @@ public class Company extends BaseEntity{
     @Column(name = "approval_decided_at")
     private Instant approvalDecidedAt;
 
+    @Column(name = "approved_by_staff_id")
+    private UUID approvedByStaffId;
+
     @Column(name = "iyzico_submerchant_key")
     private String iyzicoSubmerchantKey;
 

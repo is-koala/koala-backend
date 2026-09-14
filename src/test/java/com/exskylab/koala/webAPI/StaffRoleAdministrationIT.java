@@ -35,7 +35,7 @@ class StaffRoleAdministrationIT extends AbstractStaffIntegrationTest {
     @AfterEach
     void restoreTheSeededGraph() {
         jdbcTemplate.update("delete from admin_audit_entries");
-        jdbcTemplate.update("delete from staff_members where email like 'roles-%@iskoala.com'");
+        deleteStaffMembersLike("roles-%@iskoala.com");
         jdbcTemplate.update("delete from staff_role_permissions where staff_role_id in "
                 + "(select id from staff_roles where code like 'TEST_%')");
         jdbcTemplate.update("delete from staff_role_includes where parent_role_id in "

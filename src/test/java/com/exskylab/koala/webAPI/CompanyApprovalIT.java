@@ -13,6 +13,9 @@ import com.exskylab.koala.entities.NotificationChannel;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.entities.User;
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
+import jakarta.persistence.EntityManagerFactory;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,10 +27,13 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -59,6 +65,9 @@ class CompanyApprovalIT extends AbstractStaffIntegrationTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private EntityManagerFactory entityManagerFactory;
+
     private User operator;
     private User founder;
     private User outsider;
@@ -82,9 +91,7 @@ class CompanyApprovalIT extends AbstractStaffIntegrationTest {
         jdbcTemplate.update("delete from companies where tax_number like ?", TAX_PREFIX + "%");
         jdbcTemplate.update("delete from notifications where recipient_id = ?", founder.getId());
         jdbcTemplate.update("delete from admin_audit_entries");
-        jdbcTemplate.update("delete from staff_member_roles where staff_member_id in "
-                + "(select id from staff_members where email like 'company-approval-%@iskoala.com')");
-        jdbcTemplate.update("delete from staff_members where email like 'company-approval-%@iskoala.com'");
+        deleteStaffMembersLike("company-approval-%@iskoala.com");
 
         operatorToken = staffTokenFor("company-approval-" + UUID.randomUUID() + "@iskoala.com",
                 "Şirket Onaylayıcısı", "COMPANY_APPROVER");
@@ -193,6 +200,93 @@ class CompanyApprovalIT extends AbstractStaffIntegrationTest {
                 .content("{\"note\":\"Vergi levhası doğrulandı\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.approvalNote").value("Vergi levhası doğrulandı"));
+    }
+
+    @Test
+    void theReviewCarriesContactsJobCountProfileFieldsAndTheDecidingStaffMember() throws Exception {
+        Company company = pendingCompany("Yetkilili Nakliyat AŞ", "6200000014");
+        jdbcTemplate.update("update companies set website = 'https://nakliyat.example', "
+                + "description = 'Şehir içi nakliye' where id = ?", company.getId());
+        UUID jobId = UUID.randomUUID();
+        jdbcTemplate.update("""
+                insert into jobs (id, created_at, is_deleted, creator_id, company_id, title, status, employer_type,
+                                  insurance_required, address_public, experience_required, min_age, max_age)
+                values (?, now(), false, ?, ?, 'Şoför', 'OPEN', 'COMPANY', false, true, false, 18, 65)
+                """, jobId, founder.getId(), company.getId());
+        UUID operatorStaffId = jdbcTemplate.queryForObject(
+                "select id from staff_members where email like 'company-approval-%@iskoala.com' limit 1", UUID.class);
+
+        try {
+            asOperator(get("/admin/companies").param("query", "6200000014"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content[0].website").value("https://nakliyat.example"))
+                    .andExpect(jsonPath("$.data.content[0].description").value("Şehir içi nakliye"))
+                    .andExpect(jsonPath("$.data.content[0].jobCount").value(1))
+                    .andExpect(jsonPath("$.data.content[0].companyContacts", hasSize(1)))
+                    .andExpect(jsonPath("$.data.content[0].companyContacts[0].role").value("ADMIN"))
+                    .andExpect(jsonPath("$.data.content[0].companyContacts[0].user.id")
+                            .value(founder.getId().toString()))
+                    .andExpect(jsonPath("$.data.content[0].approvedByStaffId").value(nullValue()));
+
+            asOperator(post("/admin/companies/" + company.getId() + "/approve"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.approvalStatus").value("APPROVED"))
+                    .andExpect(jsonPath("$.data.approvedByStaffId").value(operatorStaffId.toString()))
+                    .andExpect(jsonPath("$.data.jobCount").value(1))
+                    .andExpect(jsonPath("$.data.companyContacts", hasSize(1)));
+
+            asOperator(get("/admin/companies/" + company.getId()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.approvedByStaffId").value(operatorStaffId.toString()))
+                    .andExpect(jsonPath("$.data.companyContacts[0].user.firstName").value("Elif"))
+                    .andExpect(jsonPath("$.data.jobCount").value(1));
+        } finally {
+            jdbcTemplate.update("delete from jobs where id = ?", jobId);
+        }
+    }
+
+    @Test
+    void theQueueResolvesContactsAndJobCountsWithoutAQueryPerRow() throws Exception {
+        Company first = pendingCompany("Sayım Bir AŞ", "6200000015");
+        Company second = pendingCompany("Sayım İki AŞ", "6200000016");
+        List<UUID> jobIds = new ArrayList<>();
+        for (Company company : List.of(first, second)) {
+            UUID jobId = UUID.randomUUID();
+            jobIds.add(jobId);
+            jdbcTemplate.update("""
+                    insert into jobs (id, created_at, is_deleted, creator_id, company_id, title, status, employer_type,
+                                      insurance_required, address_public, experience_required, min_age, max_age)
+                    values (?, now(), false, ?, ?, 'Sayım', 'OPEN', 'COMPANY', false, true, false, 18, 65)
+                    """, jobId, founder.getId(), company.getId());
+        }
+        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        boolean wasEnabled = statistics.isStatisticsEnabled();
+        statistics.setStatisticsEnabled(true);
+        try {
+            statistics.clear();
+            asOperator(get("/admin/companies").param("query", "sayım").param("size", "1"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content", hasSize(1)))
+                    .andExpect(jsonPath("$.data.content[0].companyContacts", hasSize(1)))
+                    .andExpect(jsonPath("$.data.content[0].jobCount").value(1));
+            long statementsForOneRow = statistics.getPrepareStatementCount();
+
+            statistics.clear();
+            asOperator(get("/admin/companies").param("query", "sayım").param("size", "2"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content", hasSize(2)))
+                    .andExpect(jsonPath("$.data.content[1].companyContacts", hasSize(1)))
+                    .andExpect(jsonPath("$.data.content[1].jobCount").value(1));
+            long statementsForTwoRows = statistics.getPrepareStatementCount();
+
+            assertEquals(statementsForOneRow, statementsForTwoRows,
+                    "şirket kuyruğu yetkilileri ya da ilan sayılarını satır başına sorguyla çekiyor (N+1)");
+        } finally {
+            statistics.setStatisticsEnabled(wasEnabled);
+            for (UUID jobId : jobIds) {
+                jdbcTemplate.update("delete from jobs where id = ?", jobId);
+            }
+        }
     }
 
     @Test

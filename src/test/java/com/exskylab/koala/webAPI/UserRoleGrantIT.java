@@ -73,7 +73,7 @@ class UserRoleGrantIT extends AbstractStaffIntegrationTest {
         jdbcTemplate.update("delete from admin_audit_entries");
         jdbcTemplate.update("delete from staff_member_roles where staff_member_id in "
                 + "(select id from staff_members where email like 'role-grant-%@iskoala.com')");
-        jdbcTemplate.update("delete from staff_members where email like 'role-grant-%@iskoala.com'");
+        deleteStaffMembersLike("role-grant-%@iskoala.com");
     }
 
     @Test

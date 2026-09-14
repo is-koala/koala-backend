@@ -7,12 +7,15 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.UUID;
 
 @Repository
 public interface ReviewDao extends JpaRepository<Review, UUID> {
 
     boolean existsByJobAssignmentIdAndAuthorId(UUID jobAssignmentId, UUID authorId);
+
+    List<Review> findAllByJobAssignmentIdOrderByCreatedAtAsc(UUID jobAssignmentId);
 
     @EntityGraph(attributePaths = {"author", "author.profilePicture"})
     Page<Review> findAllBySubjectIdOrderByCreatedAtDesc(UUID subjectId, Pageable pageable);

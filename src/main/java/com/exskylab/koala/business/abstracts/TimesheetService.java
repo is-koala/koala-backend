@@ -13,4 +13,6 @@ public interface TimesheetService {
     WorkSession checkOut(UUID jobAssignmentId, CheckPointDto point);
 
     List<WorkSession> getSessions(UUID jobAssignmentId);
+
+    List<WorkSession> getSessionsForStaff(UUID jobAssignmentId);
 }

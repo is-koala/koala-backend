@@ -34,6 +34,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -252,5 +253,12 @@ public class IdentityVerificationManager implements IdentityDocumentReviewServic
         }
         String trimmed = input.trim();
         return trimmed.substring(0, 1).toUpperCase(TURKISH) + trimmed.substring(1).toLowerCase(TURKISH);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<IdentityReviewStatus> findLatestStatusFor(UUID userId) {
+        return identityVerificationDao.findTopByUser_IdOrderByCreatedAtDesc(userId)
+                .map(IdentityVerification::reviewStatus);
     }
 }

@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-14-04-01-company-approval-decided-by-staff" author="koala">
+        <addColumn tableName="companies">
+            <column name="approved_by_staff_id" type="UUID"/>
+        </addColumn>
+        <addForeignKeyConstraint baseTableName="companies"
+                                 baseColumnNames="approved_by_staff_id"
+                                 constraintName="fk_companies_approved_by_staff"
+                                 referencedTableName="staff_members" referencedColumnNames="id"/>
+        <rollback>
+            <dropForeignKeyConstraint baseTableName="companies" constraintName="fk_companies_approved_by_staff"/>
+            <dropColumn tableName="companies" columnName="approved_by_staff_id"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-14-04-02-job-cancel-reason" author="koala">
+        <addColumn tableName="jobs">
+            <column name="cancel_reason" type="VARCHAR(500)"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="jobs" columnName="cancel_reason"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-14-04-03-payout-release-origin-and-reconciler" author="koala">
+        <addColumn tableName="payouts">
+            <column name="release_origin" type="VARCHAR(32)"/>
+            <column name="reconciled_by_staff_id" type="UUID"/>
+        </addColumn>
+        <addForeignKeyConstraint baseTableName="payouts"
+                                 baseColumnNames="reconciled_by_staff_id"
+                                 constraintName="fk_payouts_reconciled_by_staff"
+                                 referencedTableName="staff_members" referencedColumnNames="id"/>
+        <sql>
+            UPDATE payouts p
+            SET release_origin = 'DISPUTE'
+            WHERE p.release_origin IS NULL
+              AND EXISTS (SELECT 1 FROM disputes d
+                          WHERE d.job_assignment_id = p.job_assignment_id
+                            AND d.status = 'RESOLVED'
+                            AND d.resolution = 'RELEASE_TO_WORKER'
+                            AND d.is_deleted = false);
+        </sql>
+        <rollback>
+            <dropForeignKeyConstraint baseTableName="payouts" constraintName="fk_payouts_reconciled_by_staff"/>
+            <dropColumn tableName="payouts" columnName="reconciled_by_staff_id"/>
+            <dropColumn tableName="payouts" columnName="release_origin"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-14-04-04-account-deletion-rejection-trace" author="koala">
+        <addColumn tableName="account_deletion_requests">
+            <column name="rejection_reason" type="VARCHAR(512)"/>
+            <column name="rejected_by_staff_id" type="UUID"/>
+        </addColumn>
+        <addForeignKeyConstraint baseTableName="account_deletion_requests"
+                                 baseColumnNames="rejected_by_staff_id"
+                                 constraintName="fk_account_deletion_requests_rejected_by_staff"
+                                 referencedTableName="staff_members" referencedColumnNames="id"/>
+        <sql>
+            UPDATE account_deletion_requests
+            SET rejection_reason = blocked_reason,
+                blocked_reason = NULL
+            WHERE status = 'REJECTED'
+              AND rejection_reason IS NULL
+              AND blocked_reason IS NOT NULL;
+        </sql>
+        <rollback>
+            <sql>
+                UPDATE account_deletion_requests
+                SET blocked_reason = COALESCE(blocked_reason, rejection_reason)
+                WHERE status = 'REJECTED';
+            </sql>
+            <dropForeignKeyConstraint baseTableName="account_deletion_requests"
+                                      constraintName="fk_account_deletion_requests_rejected_by_staff"/>
+            <dropColumn tableName="account_deletion_requests" columnName="rejected_by_staff_id"/>
+            <dropColumn tableName="account_deletion_requests" columnName="rejection_reason"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

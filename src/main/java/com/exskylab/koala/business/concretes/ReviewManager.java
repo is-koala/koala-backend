@@ -25,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -150,5 +151,11 @@ public class ReviewManager implements ReviewService {
                 .divide(BigDecimal.valueOf(summary.getReviewCount()), 2, RoundingMode.HALF_UP));
 
         ratingSummaryDao.save(summary);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Review> getReviewsForStaff(UUID jobAssignmentId) {
+        return reviewDao.findAllByJobAssignmentIdOrderByCreatedAtAsc(jobAssignmentId);
     }
 }

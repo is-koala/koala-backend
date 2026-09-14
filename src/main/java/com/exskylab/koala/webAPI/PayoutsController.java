@@ -26,6 +26,7 @@ import com.exskylab.koala.core.dtos.payout.response.StaffPayoutDto;
 import com.exskylab.koala.core.mappers.PayoutMapper;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.core.utilities.results.SuccessResult;
+import com.exskylab.koala.entities.PayoutReleaseOrigin;
 import com.exskylab.koala.entities.PayoutStatus;
 import jakarta.validation.Valid;
 import org.springdoc.core.annotations.ParameterObject;
@@ -86,7 +87,7 @@ public class PayoutsController {
                                                                 @AuthenticationPrincipal StaffPrincipal actor) {
         String reason = request == null ? null : request.getReason();
         PayoutDto payout = payoutMapper.toPayoutDto(
-                staffPayoutService.releaseToWorker(actor, assignmentId, reason));
+                staffPayoutService.releaseToWorker(actor, assignmentId, reason, PayoutReleaseOrigin.STAFF));
 
         return ResponseEntity.status(HttpStatus.OK).body(new SuccessDataResult<>(
                 payout, PayoutMessages.RELEASED, HttpStatus.OK));
@@ -100,7 +101,7 @@ public class PayoutsController {
                     + "Onay mevcut reconcile ucundan yapılır; bu GET yalnız okur. "
                     + "query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) hakediş id'si, atama id'si ve alıcının "
                     + "ad-soyadı ile e-postasında büyük-küçük harf ve Türkçe karakter duyarsız arar; status süzgeciyle "
-                    + "kesişir; 100 karakteri aşarsa 400.")
+                    + "kesişir; 100 karakteri aşarsa 400. workerId verilirse yalnız o işçinin hakedişleri döner.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Hakedişler listelendi"),
             @ApiResponse(responseCode = "400", description = "query 100 karakteri aşıyor",
@@ -111,11 +112,12 @@ public class PayoutsController {
     public ResponseEntity<SuccessDataResult<PageDto<StaffPayoutDto>>> list(
             @RequestParam(required = false) List<PayoutStatus> status,
             @RequestParam(required = false) String query,
+            @RequestParam(required = false) UUID workerId,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable,
             @AuthenticationPrincipal StaffPrincipal actor) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
-                staffPayoutService.listForStaff(actor, status, query, pageable),
+                staffPayoutService.listForStaff(actor, status, query, workerId, pageable),
                 PayoutMessages.LISTED, HttpStatus.OK));
     }
 
@@ -124,8 +126,12 @@ public class PayoutsController {
                     + "(ilk 4 + son 4; tam IBAN dönmez), sağlayıcı ve ekstre referansları, tutar (ondalık metin), "
                     + "durum ve zaman damgaları. settlementTasks hakedişin ödemesine bağlı sağlayıcı mutabakat "
                     + "görevlerini (işlem, durum, deneme sayısı, son hata, sonraki deneme) taşır; paymentAttempts "
-                    + "atamanın ödeme denemelerinin özetidir (id + durum). İşçi hesabını silmişse worker null döner. "
-                    + "Uç payout.reconcile ile korunur.")
+                    + "atamanın ödeme denemelerinin özetidir (id + durum). releaseOrigin hakedişin nasıl açıldığını "
+                    + "söyler (AUTO_COMPLETION zamanlayıcı, DISPUTE uyuşmazlık çözümü, STAFF personel; bu alan eklenmeden "
+                    + "önce açılmış ve uyuşmazlığa bağlanamayan kayıtlarda null). settledAt ekstrede bildirilen "
+                    + "gerçekleşme anıdır ve completedAt ile aynı değerdir (yalnız mutabakat onayı yazar); "
+                    + "reconciledByStaffId onayı veren personel, bankAccountId hedef hesap. İşçi hesabını silmişse worker "
+                    + "null döner. Uç payout.reconcile ile korunur.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Hakediş detayı getirildi"),
             @ApiResponse(responseCode = "404", description = "Hakediş bulunamadı",

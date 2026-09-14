@@ -64,7 +64,7 @@ class IbanVerificationIT extends AbstractStaffIntegrationTest {
     @AfterEach
     void tearDown() {
         jdbcTemplate.update("delete from admin_audit_entries");
-        jdbcTemplate.update("delete from staff_members where email like 'iban-verification-%@iskoala.com'");
+        deleteStaffMembersLike("iban-verification-%@iskoala.com");
         jdbcTemplate.update("delete from bank_accounts where user_id = ?", userId);
         jdbcTemplate.update("delete from authorities where user_id = ?", userId);
         jdbcTemplate.update("delete from users where id = ?", userId);
@@ -225,6 +225,10 @@ class IbanVerificationIT extends AbstractStaffIntegrationTest {
                         org.hamcrest.Matchers.hasItem(verification.get("reference").asString())))
                 .andExpect(jsonPath("$.data.content[*].maskedIban",
                         org.hamcrest.Matchers.hasItem("TR18***2315")))
+                .andExpect(jsonPath("$.data.content[?(@.accountId == '" + accountId + "')].status")
+                        .value("PENDING"))
+                .andExpect(jsonPath("$.data.content[?(@.accountId == '" + accountId + "')].attemptsLeft")
+                        .value(verification.get("attemptsLeft").asInt()))
                 .andExpect(jsonPath("$.data.content[0].iban").doesNotExist())
                 .andExpect(content().string(not(containsString(OWN_IBAN_NORMALISED))));
 

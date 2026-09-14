@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Repository;
@@ -23,6 +24,9 @@ public interface CompanyContactDao extends JpaRepository<CompanyContact, UUID> {
 
     @EntityGraph(attributePaths = {"user", "user.profilePicture"})
     List<CompanyContact> findAllByCompanyId(UUID companyId);
+
+    @EntityGraph(attributePaths = {"user", "user.profilePicture"})
+    List<CompanyContact> findAllByCompanyIdIn(Collection<UUID> companyIds);
 
     Optional<CompanyContact> findByCompanyIdAndUserId(UUID companyId, UUID userId);
 

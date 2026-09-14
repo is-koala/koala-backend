@@ -14,6 +14,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -103,6 +104,18 @@ public interface JobDao extends JpaRepository<Job, UUID> {
 
     long countByCreatorId(UUID creatorId);
 
+    long countByCompanyId(UUID companyId);
+
+    @Query("select j.company.id as companyId, count(j) as total from Job j "
+            + "where j.company.id in :companyIds group by j.company.id")
+    List<CompanyJobCount> countByCompanyIds(@Param("companyIds") Collection<UUID> companyIds);
+
+    interface CompanyJobCount {
+        UUID getCompanyId();
+
+        long getTotal();
+    }
+
     @EntityGraph(attributePaths = {"category", "company", "company.logo", "address", "address.city", "address.district"})
     Page<Job> findAllByCreatorId(UUID creatorId, Pageable pageable);
 
@@ -114,6 +127,8 @@ public interface JobDao extends JpaRepository<Job, UUID> {
             left join j.creator creator
             left join j.company company
             where j.status in :statuses
+              and (:companyId is null or company.id = :companyId)
+              and (:employerId is null or creator.id = :employerId)
               and (cast(:query as string) is null
                    or cast(j.id as string) like lower(concat('%', cast(:query as string), '%'))
                    or unaccent(lower(j.title)) like unaccent(lower(concat('%', cast(:query as string), '%')))
@@ -125,6 +140,7 @@ public interface JobDao extends JpaRepository<Job, UUID> {
     @EntityGraph(attributePaths = {"category", "creator", "company", "company.address", "address",
             "address.city", "address.district"})
     Page<Job> searchForStaff(@Param("statuses") List<JobStatus> statuses, @Param("query") String query,
+                             @Param("companyId") UUID companyId, @Param("employerId") UUID employerId,
                              Pageable pageable);
 
     @Query(value = "select exists(select 1 from jobs where job_category_id = :categoryId)",

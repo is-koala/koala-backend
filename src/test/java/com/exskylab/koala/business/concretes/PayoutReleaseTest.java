@@ -160,11 +160,23 @@ class PayoutReleaseTest {
         JobAssignment assignment = assignment(AssignmentStatus.COMPLETED, PaymentStatus.HELD_IN_ESCROW);
         settledPaymentExists();
 
-        Payout payout = payoutManager.releaseToWorker(assignmentId);
+        Payout payout = payoutManager.releaseToWorker(assignmentId, PayoutReleaseOrigin.STAFF);
 
         assertEquals(PayoutStatus.PENDING, payout.getStatus());
         assertEquals(new BigDecimal("1000.00"), payout.getAmount());
+        assertEquals(PayoutReleaseOrigin.STAFF, payout.getReleaseOrigin());
         assertEquals(PaymentStatus.RELEASED_TO_WORKER, assignment.getPaymentStatus());
+    }
+
+    @Test
+    void everyReleaseOriginIsWrittenOnThePayoutItCreates() {
+        for (PayoutReleaseOrigin origin : PayoutReleaseOrigin.values()) {
+            assignment(AssignmentStatus.COMPLETED, PaymentStatus.HELD_IN_ESCROW);
+            settledPaymentExists();
+
+            assertEquals(origin, payoutManager.releaseToWorker(assignmentId, origin).getReleaseOrigin(),
+                    "hakedişin kaynağı çağıranın söylediği değer olmalı");
+        }
     }
 
     @Test
@@ -172,7 +184,7 @@ class PayoutReleaseTest {
         JobAssignment assignment = assignment(AssignmentStatus.CONFIRMED, PaymentStatus.HELD_IN_ESCROW);
         settledPaymentExists();
 
-        assertThrows(ConflictException.class, () -> payoutManager.releaseToWorker(assignmentId));
+        assertThrows(ConflictException.class, () -> payoutManager.releaseToWorker(assignmentId, PayoutReleaseOrigin.STAFF));
 
         assertEquals(PaymentStatus.HELD_IN_ESCROW, assignment.getPaymentStatus());
         verify(payoutDao, never()).save(any());
@@ -185,7 +197,7 @@ class PayoutReleaseTest {
         when(settlementService.enqueue(any(), any(), eq(SettlementOperation.APPROVE)))
                 .thenReturn(Optional.empty());
 
-        assertThrows(ExternalServiceException.class, () -> payoutManager.releaseToWorker(assignmentId));
+        assertThrows(ExternalServiceException.class, () -> payoutManager.releaseToWorker(assignmentId, PayoutReleaseOrigin.STAFF));
 
         assertEquals(PaymentStatus.HELD_IN_ESCROW, assignment.getPaymentStatus());
         verify(payoutDao, never()).save(any());
@@ -197,7 +209,7 @@ class PayoutReleaseTest {
         when(paymentService.getSettledPaymentFor(assignmentId))
                 .thenThrow(new ResourceNotFoundException("odeme yok"));
 
-        assertThrows(ResourceNotFoundException.class, () -> payoutManager.releaseToWorker(assignmentId));
+        assertThrows(ResourceNotFoundException.class, () -> payoutManager.releaseToWorker(assignmentId, PayoutReleaseOrigin.STAFF));
         verify(payoutDao, never()).save(any());
     }
 
@@ -208,7 +220,7 @@ class PayoutReleaseTest {
         when(payoutDao.existsByJobAssignmentId(assignmentId)).thenReturn(true);
         when(payoutDao.findByPaymentId(any())).thenReturn(Optional.of(new Payout()));
 
-        payoutManager.releaseToWorker(assignmentId);
+        payoutManager.releaseToWorker(assignmentId, PayoutReleaseOrigin.STAFF);
 
         verify(payoutDao, never()).save(any());
     }
@@ -221,7 +233,7 @@ class PayoutReleaseTest {
         unverified.setVerificationStatus(BankAccountVerificationStatus.UNVERIFIED);
         when(bankAccountService.findPrimaryAccount(any())).thenReturn(Optional.of(unverified));
 
-        Payout payout = payoutManager.releaseToWorker(assignmentId);
+        Payout payout = payoutManager.releaseToWorker(assignmentId, PayoutReleaseOrigin.STAFF);
 
         assertEquals(BankAccountVerificationStatus.UNVERIFIED, payout.getBankAccount().getVerificationStatus());
         assertEquals(PaymentStatus.RELEASED_TO_WORKER, assignment.getPaymentStatus());
@@ -233,7 +245,7 @@ class PayoutReleaseTest {
         settledPaymentExists();
         when(bankAccountService.findPrimaryAccount(any())).thenReturn(Optional.empty());
 
-        assertThrows(ConflictException.class, () -> payoutManager.releaseToWorker(assignmentId));
+        assertThrows(ConflictException.class, () -> payoutManager.releaseToWorker(assignmentId, PayoutReleaseOrigin.STAFF));
 
         assertEquals(PaymentStatus.HELD_IN_ESCROW, assignment.getPaymentStatus());
         verify(payoutDao, never()).save(any());
@@ -245,7 +257,7 @@ class PayoutReleaseTest {
         assignment(AssignmentStatus.COMPLETED, PaymentStatus.HELD_IN_ESCROW);
         settledPaymentExists();
 
-        Payout payout = payoutManager.releaseToWorker(assignmentId);
+        Payout payout = payoutManager.releaseToWorker(assignmentId, PayoutReleaseOrigin.STAFF);
 
         assertEquals(BankAccountVerificationStatus.VERIFIED, payout.getBankAccount().getVerificationStatus());
     }
@@ -269,7 +281,7 @@ class PayoutReleaseTest {
         JobAssignment assignment = assignment(AssignmentStatus.COMPLETED, PaymentStatus.HELD_IN_ESCROW);
         settledPaymentFor(assignment).setProviderTransactionId("txn-789");
 
-        payoutManager.releaseToWorker(assignmentId);
+        payoutManager.releaseToWorker(assignmentId, PayoutReleaseOrigin.STAFF);
 
         verifyNoInteractions(eventPublisher);
     }
@@ -312,7 +324,7 @@ class PayoutReleaseTest {
         when(payoutDao.existsByJobAssignmentId(assignmentId)).thenReturn(false);
         when(disputeDao.existsByJobAssignmentIdAndStatusIn(eq(assignmentId), any())).thenReturn(true);
 
-        assertThrows(ConflictException.class, () -> payoutManager.releaseToWorker(assignmentId));
+        assertThrows(ConflictException.class, () -> payoutManager.releaseToWorker(assignmentId, PayoutReleaseOrigin.STAFF));
 
         verify(payoutDao, never()).save(any());
         assertEquals(PaymentStatus.HELD_IN_ESCROW, assignment.getPaymentStatus());
@@ -324,7 +336,7 @@ class PayoutReleaseTest {
         Payment payment = settledPaymentExists();
         payment.setProviderTransactionId("txn-123");
 
-        payoutManager.releaseToWorker(assignmentId);
+        payoutManager.releaseToWorker(assignmentId, PayoutReleaseOrigin.STAFF);
 
         verify(settlementService).enqueue(eq(payment), eq(assignment), eq(SettlementOperation.APPROVE));
     }
@@ -334,7 +346,7 @@ class PayoutReleaseTest {
         assignment(AssignmentStatus.COMPLETED, PaymentStatus.HELD_IN_ESCROW);
         settledPaymentExists().setProviderTransactionId("txn-123");
 
-        assertEquals(PayoutStatus.PENDING, payoutManager.releaseToWorker(assignmentId).getStatus());
+        assertEquals(PayoutStatus.PENDING, payoutManager.releaseToWorker(assignmentId, PayoutReleaseOrigin.STAFF).getStatus());
     }
 
     @Test
@@ -381,12 +393,12 @@ class PayoutReleaseTest {
         ofVisible.setWorker(visible);
         Payout ofDeparted = new Payout();
         ofDeparted.setWorker(departed);
-        when(payoutDao.searchForStaff(eq(PayoutStatus.AWAITING_SETTLEMENT), isNull(), any(Pageable.class)))
+        when(payoutDao.searchForStaff(eq(PayoutStatus.AWAITING_SETTLEMENT), isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(ofVisible, ofDeparted)));
         when(userService.getAllByIdIn(java.util.Set.of(visible.getId(), departed.getId())))
                 .thenReturn(List.of(visible));
 
-        payoutManager.listForStaff(null, null, org.springframework.data.domain.PageRequest.of(0, 20));
+        payoutManager.listForStaff(null, null, null, org.springframework.data.domain.PageRequest.of(0, 20));
 
         verify(userService, times(1)).getAllByIdIn(any());
         verify(payoutMapper).toStaffPayoutDto(ofVisible, visible);
@@ -395,13 +407,13 @@ class PayoutReleaseTest {
 
     @Test
     void staffListDefaultsToAwaitingSettlementAndCapsSize() {
-        when(payoutDao.searchForStaff(eq(PayoutStatus.AWAITING_SETTLEMENT), isNull(), any(Pageable.class)))
+        when(payoutDao.searchForStaff(eq(PayoutStatus.AWAITING_SETTLEMENT), isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(org.springframework.data.domain.Page.empty());
 
-        payoutManager.listForStaff(List.of(), " ", org.springframework.data.domain.PageRequest.of(0, 500));
+        payoutManager.listForStaff(List.of(), " ", null, org.springframework.data.domain.PageRequest.of(0, 500));
 
         ArgumentCaptor<Pageable> requested = ArgumentCaptor.forClass(Pageable.class);
-        verify(payoutDao).searchForStaff(eq(PayoutStatus.AWAITING_SETTLEMENT), isNull(), requested.capture());
+        verify(payoutDao).searchForStaff(eq(PayoutStatus.AWAITING_SETTLEMENT), isNull(), isNull(), requested.capture());
         assertEquals(50, requested.getValue().getPageSize());
         assertEquals(org.springframework.data.domain.Sort.Direction.DESC,
                 requested.getValue().getSort().getOrderFor("createdAt").getDirection());

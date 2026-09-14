@@ -13,6 +13,7 @@ import java.util.UUID;
 
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -90,7 +91,7 @@ class DisputeQueueIT extends AbstractStaffIntegrationTest {
         jdbc.update("delete from companies where id = ?", companyId);
         jdbc.update("delete from staff_member_roles where staff_member_id in "
                 + "(select id from staff_members where email like 'dispute-queue-%@iskoala.com')");
-        jdbc.update("delete from staff_members where email like 'dispute-queue-%@iskoala.com'");
+        deleteStaffMembersLike("dispute-queue-%@iskoala.com");
         jdbc.update("delete from users where id in (?, ?)", employerId, workerId);
     }
 
@@ -141,6 +142,34 @@ class DisputeQueueIT extends AbstractStaffIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content[*].id", hasItem(resolvedDisputeId.toString())))
                 .andExpect(jsonPath("$.data.content[*].id", not(hasItem(openDisputeId.toString()))));
+    }
+
+    @Test
+    void theRowNamesTheOpeningSideAndTheResolvingStaffMember() throws Exception {
+        UUID resolver = jdbc.queryForObject(
+                "select id from staff_members where email like 'dispute-queue-%@iskoala.com' limit 1", UUID.class);
+        jdbc.update("update disputes set resolved_by_staff_id = ? where id = ?", resolver, resolvedDisputeId);
+        jdbc.update("update disputes set opened_by_id = ? where id = ?", employerId, reviewDisputeId);
+
+        mockMvc.perform(get("/admin/disputes/" + resolvedDisputeId)
+                        .header("Authorization", "Bearer " + handlerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.openedBySide").value("WORKER"))
+                .andExpect(jsonPath("$.data.resolvedByStaffId").value(resolver.toString()));
+
+        mockMvc.perform(get("/admin/disputes")
+                        .param("status", "UNDER_REVIEW")
+                        .param("size", "100")
+                        .header("Authorization", "Bearer " + handlerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[?(@.id == '" + reviewDisputeId + "')].openedBySide")
+                        .value("EMPLOYER"));
+
+        mockMvc.perform(get("/admin/disputes/" + reviewDisputeId)
+                        .header("Authorization", "Bearer " + handlerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.openedBySide").value("EMPLOYER"))
+                .andExpect(jsonPath("$.data.resolvedByStaffId").value(nullValue()));
     }
 
     @Test

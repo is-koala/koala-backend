@@ -305,4 +305,9 @@ public class BankAccountManager implements BankAccountService {
         account.setPrimaryAccount(true);
         return bankAccountDao.save(account);
     }
+
+    @Override
+    public int verificationAttemptsAllowed() {
+        return verificationProperties.getMaxAttempts();
+    }
 }

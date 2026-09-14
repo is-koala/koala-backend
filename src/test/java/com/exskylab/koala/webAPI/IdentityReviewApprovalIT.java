@@ -36,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -91,9 +92,7 @@ class IdentityReviewApprovalIT extends AbstractStaffIntegrationTest {
             jdbc.update("delete from media where id = ?", mediaId);
         }
         jdbc.update("delete from users where id = ?", userId);
-        jdbc.update("delete from staff_member_roles where staff_member_id in "
-                + "(select id from staff_members where email like ?)", STAFF_EMAIL_PREFIX + "%");
-        jdbc.update("delete from staff_members where email like ?", STAFF_EMAIL_PREFIX + "%");
+        deleteStaffMembersLike(STAFF_EMAIL_PREFIX + "%");
     }
 
     @Test
@@ -104,12 +103,23 @@ class IdentityReviewApprovalIT extends AbstractStaffIntegrationTest {
                         .header("Authorization", "Bearer " + trustLeadToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("APPROVED"))
-                .andExpect(jsonPath("$.data.reviewedByStaffId").value(staffId.toString()));
+                .andExpect(jsonPath("$.data.reviewedByStaffId").value(staffId.toString()))
+                .andExpect(jsonPath("$.data.reviewedByStaffName").value("Trust Lideri"));
 
         assertEquals(Boolean.TRUE, jdbc.queryForObject(
                 "select is_verified from user_verifications where id = ?", Boolean.class, reviewId));
         assertEquals(Boolean.TRUE, jdbc.queryForObject(
                 "select identity_verified from users where id = ?", Boolean.class, userId));
+
+        mockMvc.perform(get("/admin/identity-verifications/" + reviewId)
+                        .header("Authorization", "Bearer " + trustLeadToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reviewedByStaffName").value("Trust Lideri"));
+        mockMvc.perform(get("/admin/identity-verifications").param("status", "APPROVED").param("size", "100")
+                        .header("Authorization", "Bearer " + trustLeadToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[?(@.id == '" + reviewId + "')].reviewedByStaffName")
+                        .value("Trust Lideri"));
     }
 
     @Test

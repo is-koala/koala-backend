@@ -5,6 +5,7 @@ import com.exskylab.koala.entities.Review;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -15,4 +16,6 @@ public interface ReviewService {
     Page<Review> getReviewsAbout(UUID userId, Pageable pageable);
 
     Optional<RatingSummary> getSummaryFor(UUID userId);
+
+    List<Review> getReviewsForStaff(UUID jobAssignmentId);
 }

@@ -25,7 +25,7 @@ class AdminObjectReadIT extends AbstractStaffIntegrationTest {
     @AfterEach
     void cleanUp() {
         jdbcTemplate.update("delete from admin_audit_entries");
-        jdbcTemplate.update("delete from staff_members where email like 'object-read-%@iskoala.com'");
+        deleteStaffMembersLike("object-read-%@iskoala.com");
     }
 
     private String tokenFor(String... roles) {

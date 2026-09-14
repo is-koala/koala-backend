@@ -77,7 +77,7 @@ class PayoutReconciliationIT extends AbstractStaffIntegrationTest {
     @AfterEach
     void tearDown() {
         jdbcTemplate.update("delete from admin_audit_entries");
-        jdbcTemplate.update("delete from staff_members where email like 'payout-reconcile-%@iskoala.com'");
+        deleteStaffMembersLike("payout-reconcile-%@iskoala.com");
         jdbcTemplate.update("delete from payouts where job_assignment_id = ?", assignmentId);
         jdbcTemplate.update("delete from job_assignments where id = ?", assignmentId);
         jdbcTemplate.update("delete from jobs where id = ?", jobId);

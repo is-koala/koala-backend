@@ -32,6 +32,7 @@ public class JobMessages {
     public static final String JOB_RETRIEVED = "{job.retrieved}";
     public static final String JOB_CLOSED = "{job.closed}";
     public static final String JOB_CANCELLED = "{job.cancelled}";
+    public static final String CANCEL_REASON_TOO_LONG = "{job.cancel.reason.too.long}";
     public static final String JOB_NOT_CANCELLABLE = "{job.not.cancellable}";
     public static final String JOB_HAS_LIVE_ASSIGNMENT = "{job.has.live.assignment}";
     public static final String JOB_CANCELLED_NOTICE = "{job.cancelled.notice}";

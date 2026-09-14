@@ -36,6 +36,8 @@ public interface JobApplicationDao extends JpaRepository<JobApplication, UUID> {
 
     long countByJobId(UUID jobId);
 
+    long countByUserId(UUID userId);
+
     interface JobApplicationCount {
         UUID getJobId();
 

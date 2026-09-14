@@ -56,6 +56,8 @@ class CollectionQueryWithoutGraphTest {
             // Native read model for ConversationDto.participants: one query per page, includes soft-deleted
             // (left) participants the entity's @SQLRestriction hides, joins users/media itself (#281).
             "ConversationDao.findParticipantRows",
+            // Deletion blockers: id + party projection rows, not entities (#283).
+            "DisputeDao.findActiveLinksForUsers",
             "CountryDao.findCountriesByOrderByNameAsc",
             "DepartmentDao.findAllByFacultyIdOrderByNameAsc",
             "DeviceDao.findAllByUser_IdAndPushTokenIsNotNull",
@@ -76,6 +78,11 @@ class CollectionQueryWithoutGraphTest {
             "JobAssignmentDao.findAutoCompletableIds",
             "JobAssignmentDao.findUnpaidExpiringIds",
             "JobAssignmentDao.countHiredByJobIds",
+            // Deletion blockers: id + party projection rows, not entities (#283).
+            "JobAssignmentDao.findActiveLinksForUsers",
+            "JobAssignmentDao.findMoneyLinksForUsers",
+            // Aggregate COUNT rows per company for CompanyReviewDto.jobCount (#283).
+            "JobDao.countByCompanyIds",
             "JobDao.searchIds",
             "MessageDao.countUnreadByConversationIds",
             // Message pages fetch no sender: with Message.sender nullable=false and User @SQLRestriction the graph
@@ -93,6 +100,8 @@ class CollectionQueryWithoutGraphTest {
             "PaymentDao.findDueVerificationIds",
             // Aggregate MIN row per assignment, not an entity collection (#282).
             "PaymentDao.findSecuredAtByJobAssignmentIds",
+            // Deletion blockers: id + party projection rows, not entities (#283).
+            "PaymentDao.findPendingLinksForUsers",
             "PaymentDao.findStuckInitiationIds",
             // Aggregate SUM/COUNT row, not an entity collection (#186).
             "PaymentDao.summarizeSucceeded",
@@ -111,6 +120,8 @@ class CollectionQueryWithoutGraphTest {
             "ReportDao.findAllBetweenAssignmentParties",
             "ReportDao.findAllByReporterId",
             "ReportDao.tallyByReportedUser",
+            // Staff assignment detail renders review rows with author/subject ids only (proxy identifiers) (#283).
+            "ReviewDao.findAllByJobAssignmentIdOrderByCreatedAtAsc",
             "SettlementTaskDao.findDueIds",
             // Staff payout detail renders the task row only; payment/jobAssignment proxies are never touched (#255).
             "SettlementTaskDao.findAllByPaymentIdOrderByCreatedAtAsc",

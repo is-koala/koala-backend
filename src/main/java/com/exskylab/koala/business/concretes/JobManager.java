@@ -43,9 +43,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
@@ -429,7 +431,7 @@ public class JobManager implements JobService {
 
     @Override
     @Transactional
-    public void cancelJob(UUID jobId) {
+    public void cancelJob(UUID jobId, String reason) {
         Job job = requireJobEditor(jobId);
 
         if (job.getStatus() == JobStatus.CANCELLED) {
@@ -442,6 +444,7 @@ public class JobManager implements JobService {
 
         job.setStatus(JobStatus.CANCELLED);
         job.setCancelledAt(Instant.now());
+        job.setCancelReason(reason == null || reason.isBlank() ? null : reason.trim());
         jobDao.save(job);
 
         log.info("Job {} cancelled by user {}", jobId, securityService.getAuthenticatedUserId());
@@ -507,14 +510,16 @@ public class JobManager implements JobService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageDto<AdminJobDto> searchForStaff(List<JobStatus> statuses, String query, Pageable requested) {
+    public PageDto<AdminJobDto> searchForStaff(List<JobStatus> statuses, String query, UUID companyId,
+                                               UUID employerId, Pageable requested) {
         pageableSanitizer.rejectUnknownSort(requested, SORTABLE_FIELDS);
         Pageable pageable = pageableSanitizer.sanitize(requested, SORTABLE_FIELDS, DEFAULT_SORT);
         List<JobStatus> filter = statuses == null || statuses.isEmpty()
                 ? List.of(JobStatus.values())
                 : List.copyOf(statuses);
 
-        Page<Job> jobs = jobDao.searchForStaff(filter, StaffSearchQuery.normalize(query), pageable);
+        Page<Job> jobs = jobDao.searchForStaff(filter, StaffSearchQuery.normalize(query), companyId, employerId,
+                pageable);
         List<UUID> ids = jobs.getContent().stream().map(Job::getId).toList();
         Map<UUID, Long> applications = ids.isEmpty() ? Map.of() : jobApplicationDao.countByJobIds(ids).stream()
                 .collect(Collectors.toMap(JobApplicationDao.JobApplicationCount::getJobId,
@@ -620,4 +625,19 @@ public class JobManager implements JobService {
                         jobIds, viewerId, ADDRESS_VISIBLE_ASSIGNMENT_STATUSES));
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public long countForCompany(UUID companyId) {
+        return jobDao.countByCompanyId(companyId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, Long> countForCompanies(Collection<UUID> companyIds) {
+        if (companyIds.isEmpty()) {
+            return Map.of();
+        }
+        return jobDao.countByCompanyIds(companyIds).stream()
+                .collect(Collectors.toMap(JobDao.CompanyJobCount::getCompanyId, JobDao.CompanyJobCount::getTotal));
+    }
 }

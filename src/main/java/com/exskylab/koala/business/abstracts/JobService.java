@@ -2,7 +2,9 @@ package com.exskylab.koala.business.abstracts;
 import com.exskylab.koala.core.dtos.gallery.request.UpdateGalleryDto;
 import com.exskylab.koala.core.dtos.gallery.response.GalleryImageDto;
 import org.springframework.web.multipart.MultipartFile;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import com.exskylab.koala.core.dtos.job.request.CreateCompanyJobDto;
 import com.exskylab.koala.core.dtos.job.request.CreateIndividualJobDto;
 import com.exskylab.koala.core.dtos.job.response.CompanyJobDto;
@@ -55,14 +57,18 @@ public interface JobService {
 
     void closeJob(UUID jobId);
 
-    void cancelJob(UUID jobId);
+    void cancelJob(UUID jobId, String reason);
 
     boolean existsById(UUID jobId);
 
     long countJobsCreatedBy(UUID userId);
 
-    PageDto<AdminJobDto> searchForStaff(List<JobStatus> statuses, String query, Pageable pageable);
+    PageDto<AdminJobDto> searchForStaff(List<JobStatus> statuses, String query, UUID companyId, UUID employerId,
+                                        Pageable pageable);
 
     AdminJobDetailDto getAdminDetail(UUID jobId);
 
+    long countForCompany(UUID companyId);
+
+    Map<UUID, Long> countForCompanies(Collection<UUID> companyIds);
 }

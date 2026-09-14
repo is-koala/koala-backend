@@ -23,6 +23,7 @@ import com.exskylab.koala.core.utilities.storage.FolderType;
 import com.exskylab.koala.core.utilities.storage.StorageService;
 import com.exskylab.koala.dataAccess.DisputeDao;
 import com.exskylab.koala.dataAccess.DisputeEvidenceDao;
+import com.exskylab.koala.dataAccess.PartyLink;
 import org.springframework.http.MediaType;
 import org.springframework.http.MediaTypeFactory;
 import org.springframework.web.multipart.MultipartFile;
@@ -42,6 +43,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -160,7 +162,8 @@ public class DisputeManager implements DisputeService {
         Dispute saved = disputeDao.save(dispute);
 
         switch (resolution) {
-            case RELEASE_TO_WORKER -> staffPayoutService.releaseToWorker(actor, assignmentId, note);
+            case RELEASE_TO_WORKER -> staffPayoutService.releaseToWorker(actor, assignmentId, note,
+                    PayoutReleaseOrigin.DISPUTE);
             case REFUND_EMPLOYER -> staffPayoutService.refundEmployer(actor, assignmentId, null, note);
             case DISMISSED -> log.info("Dispute {} dismissed, escrow untouched.", disputeId);
         }
@@ -191,10 +194,10 @@ public class DisputeManager implements DisputeService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Dispute> searchForStaff(DisputeStatus status, String query, Pageable requested) {
+    public Page<Dispute> searchForStaff(DisputeStatus status, String query, UUID userId, Pageable requested) {
         pageableSanitizer.rejectUnknownSort(requested, SORTABLE);
         List<DisputeStatus> statuses = status == null ? ACTIVE : List.of(status);
-        return disputeDao.searchForStaff(statuses, StaffSearchQuery.normalize(query),
+        return disputeDao.searchForStaff(statuses, StaffSearchQuery.normalize(query), userId,
                 pageableSanitizer.sanitize(requested, SORTABLE, DEFAULT_SORT));
     }
 
@@ -209,12 +212,6 @@ public class DisputeManager implements DisputeService {
     @Transactional(readOnly = true)
     public boolean hasActiveDispute(UUID jobAssignmentId) {
         return disputeDao.existsByJobAssignmentIdAndStatusIn(jobAssignmentId, ACTIVE);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public boolean hasActiveDisputeForUser(UUID userId) {
-        return disputeDao.existsActiveForUser(userId, ACTIVE);
     }
 
     @Override
@@ -325,5 +322,20 @@ public class DisputeManager implements DisputeService {
             log.error("Dispute evidence could not be read for user {}", actorId, e);
             throw new ValidationException(DisputeMessages.EVIDENCE_UPLOAD_FAILED);
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countInvolving(UUID userId) {
+        return disputeDao.countInvolving(userId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PartyLink> findActiveLinksForUsers(Collection<UUID> userIds) {
+        if (userIds.isEmpty()) {
+            return List.of();
+        }
+        return disputeDao.findActiveLinksForUsers(userIds, ACTIVE);
     }
 }

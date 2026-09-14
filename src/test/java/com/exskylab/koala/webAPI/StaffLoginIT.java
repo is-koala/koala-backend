@@ -40,7 +40,7 @@ class StaffLoginIT extends AbstractStaffIntegrationTest {
     void removeTestStaff() {
         jdbcTemplate.update("delete from staff_member_roles where staff_member_id in "
                 + "(select id from staff_members where email like 'login-%@iskoala.com')");
-        jdbcTemplate.update("delete from staff_members where email like 'login-%@iskoala.com'");
+        deleteStaffMembersLike("login-%@iskoala.com");
     }
 
     private String email() {

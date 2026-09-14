@@ -18,6 +18,7 @@ import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoPaymentResultRequestDto;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoPaymentResultResponseDto;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
+import com.exskylab.koala.dataAccess.PartyLink;
 import com.exskylab.koala.dataAccess.PaymentDao;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.Payment;
@@ -525,12 +526,6 @@ public class PaymentManager implements PaymentService {
 
     @Override
     @Transactional(readOnly = true)
-    public boolean hasPendingPaymentForUser(UUID userId) {
-        return paymentDao.existsPendingForUser(userId, PENDING_STATUSES);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
     public SucceededVolume succeededVolume(Instant fromInclusive, Instant toExclusive, String currency) {
         List<Object[]> rows = paymentDao.summarizeSucceeded(
                 PaymentAttemptStatus.SUCCEEDED, currency, fromInclusive, toExclusive);
@@ -550,5 +545,20 @@ public class PaymentManager implements PaymentService {
 
     private static long count(Object value) {
         return value == null ? 0L : ((Number) value).longValue();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countForEmployer(UUID employerId) {
+        return paymentDao.countByJobAssignmentJobCreatorId(employerId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PartyLink> findPendingLinksForUsers(Collection<UUID> userIds) {
+        if (userIds.isEmpty()) {
+            return List.of();
+        }
+        return paymentDao.findPendingLinksForUsers(userIds, PENDING_STATUSES);
     }
 }

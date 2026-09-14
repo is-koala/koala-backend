@@ -122,6 +122,9 @@ public class Job extends BaseEntity{
     @Column(name = "cancelled_at")
     private Instant cancelledAt;
 
+    @Column(name = "cancel_reason", length = 500)
+    private String cancelReason;
+
     @OneToMany(mappedBy = "job", fetch = FetchType.LAZY)
     @OrderBy("sortOrder ASC")
     private List<JobImage> images;

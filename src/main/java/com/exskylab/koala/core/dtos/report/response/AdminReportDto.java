@@ -8,8 +8,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 public record AdminReportDto(UUID id, SafeUserDto reporter, SafeUserDto reportedUser, UUID reportedUserId,
-                             UUID jobId, UUID messageId, UUID imageId,
+                             UUID jobId, UUID jobAssignmentId, UUID messageId, UUID imageId,
                              ReportReason reason, String description, ReportStatus status,
-                             SafeUserDto reviewedBy, String reviewNote, Instant reviewedAt,
+                             SafeUserDto reviewedBy, UUID reviewedByStaffId, String reviewNote, Instant reviewedAt,
                              Instant createdAt, long reportedUserReportCount) {
 }

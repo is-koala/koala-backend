@@ -16,6 +16,7 @@ import com.exskylab.koala.dataAccess.ReportedUserTally;
 import com.exskylab.koala.entities.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.JobService;
 import com.exskylab.koala.business.abstracts.ImageService;
 import com.exskylab.koala.business.abstracts.MessagingService;
@@ -30,6 +31,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -54,12 +57,13 @@ public class ReportManager implements ReportService {
     private final ImageService imageService;
     private final ReportMapper reportMapper;
     private final StaffAccountService staffAccountService;
+    private final JobAssignmentService jobAssignmentService;
 
     public ReportManager(ReportDao reportDao, UserService userService, JobService jobService,
                          MessagingService messagingService, SecurityService securityService,
                          ImageService imageService, ReportMapper reportMapper,
-                         StaffAccountService staffAccountService,
-                                PageableSanitizer pageableSanitizer) {
+                         StaffAccountService staffAccountService, JobAssignmentService jobAssignmentService,
+                         PageableSanitizer pageableSanitizer) {
         this.reportDao = reportDao;
         this.userService = userService;
         this.jobService = jobService;
@@ -68,7 +72,8 @@ public class ReportManager implements ReportService {
         this.imageService = imageService;
         this.reportMapper = reportMapper;
         this.staffAccountService = staffAccountService;
-            this.pageableSanitizer = pageableSanitizer;
+        this.jobAssignmentService = jobAssignmentService;
+        this.pageableSanitizer = pageableSanitizer;
     }
 
     @Override
@@ -155,7 +160,7 @@ public class ReportManager implements ReportService {
         long history = saved.getReportedUser() == null ? 0L
                 : reportDao.countByReportedUserId(saved.getReportedUser().getId());
 
-        return reportMapper.toAdminReportDto(saved, history);
+        return reportMapper.toAdminReportDto(saved, history, assignmentIds(List.of(saved)).get(saved.getId()));
     }
 
     @Override
@@ -170,19 +175,21 @@ public class ReportManager implements ReportService {
     @Transactional(readOnly = true)
     public Page<AdminReportDto> searchForModeration(ReportStatus status, ReportReason reason,
                                                     ReportTargetType targetType, UUID reportedUserId,
-                                                    String query, Pageable requested) {
+                                                    UUID reporterId, String query, Pageable requested) {
         pageableSanitizer.rejectUnknownSort(requested, SORTABLE);
 
         Page<Report> page = reportDao.search(status, reason,
-                targetType == null ? null : targetType.name(), reportedUserId,
+                targetType == null ? null : targetType.name(), reportedUserId, reporterId,
                 StaffSearchQuery.normalize(query),
                 pageableSanitizer.sanitize(requested, SORTABLE, DEFAULT_SORT));
 
         Map<UUID, Long> history = historyCounts(page.getContent());
+        Map<UUID, UUID> assignments = assignmentIds(page.getContent());
 
         return page.map(report -> reportMapper.toAdminReportDto(report,
                 report.getReportedUser() == null ? 0L
-                        : history.getOrDefault(report.getReportedUser().getId(), 0L)));
+                        : history.getOrDefault(report.getReportedUser().getId(), 0L),
+                assignments.get(report.getId())));
     }
 
     @Override
@@ -205,8 +212,42 @@ public class ReportManager implements ReportService {
 
         log.debug("Retrieving report {} for moderation", reportId);
 
-        return new AdminReportDetailDto(reportMapper.toAdminReportDto(report, history),
+        return new AdminReportDetailDto(
+                reportMapper.toAdminReportDto(report, history, assignmentIds(List.of(report)).get(report.getId())),
                 reportMapper.toReportContentDto(report));
+    }
+
+    private Map<UUID, UUID> assignmentIds(List<Report> reports) {
+        List<Report> aboutJobs = reports.stream().filter(report -> report.getJob() != null).toList();
+        if (aboutJobs.isEmpty()) {
+            return Map.of();
+        }
+        Set<UUID> jobIds = aboutJobs.stream().map(report -> report.getJob().getId()).collect(Collectors.toSet());
+        Set<UUID> partyIds = new HashSet<>();
+        for (Report report : aboutJobs) {
+            partyIds.add(report.getReporter().getId());
+            if (report.getReportedUser() != null) {
+                partyIds.add(report.getReportedUser().getId());
+            }
+        }
+        Map<Map.Entry<UUID, UUID>, UUID> byJobAndWorker = new HashMap<>();
+        for (JobAssignment assignment : jobAssignmentService.findLatestByJobsAndWorkers(jobIds, partyIds)) {
+            byJobAndWorker.put(Map.entry(assignment.getJob().getId(), assignment.getWorker().getId()),
+                    assignment.getId());
+        }
+
+        Map<UUID, UUID> resolved = new HashMap<>();
+        for (Report report : aboutJobs) {
+            UUID jobId = report.getJob().getId();
+            UUID assignmentId = byJobAndWorker.get(Map.entry(jobId, report.getReporter().getId()));
+            if (assignmentId == null && report.getReportedUser() != null) {
+                assignmentId = byJobAndWorker.get(Map.entry(jobId, report.getReportedUser().getId()));
+            }
+            if (assignmentId != null) {
+                resolved.put(report.getId(), assignmentId);
+            }
+        }
+        return resolved;
     }
 
     private Map<UUID, Long> historyCounts(List<Report> reports) {
@@ -253,5 +294,17 @@ public class ReportManager implements ReportService {
                             ? null
                             : report.getDescription().trim());
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countReceivedBy(UUID userId) {
+        return reportDao.countByReportedUserId(userId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countMadeBy(UUID userId) {
+        return reportDao.countByReporterId(userId);
     }
 }

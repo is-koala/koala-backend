@@ -106,7 +106,7 @@ public class PayoutManager implements PayoutService {
 
     @Override
     @Transactional
-    public Payout releaseToWorker(UUID jobAssignmentId) {
+    public Payout releaseToWorker(UUID jobAssignmentId, PayoutReleaseOrigin origin) {
         JobAssignment assignment = jobAssignmentDao.findByIdForUpdate(jobAssignmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(PayoutMessages.ASSIGNMENT_NOT_FOUND));
 
@@ -142,13 +142,15 @@ public class PayoutManager implements PayoutService {
         payout.setAmount(assignment.getWorkerPayout());
         payout.setCurrency(CURRENCY);
         payout.setStatus(PayoutStatus.PENDING);
+        payout.setReleaseOrigin(origin);
 
         settlementService.enqueue(payment, assignment, SettlementOperation.APPROVE)
                 .orElseThrow(() -> new ExternalServiceException(PayoutMessages.SETTLEMENT_NOT_QUEUED));
         stateMachine.transition(assignment, PaymentStatus.RELEASED_TO_WORKER);
 
         Payout saved = payoutDao.save(payout);
-        log.info("Payout {} created for assignment {} amount {}", saved.getId(), jobAssignmentId, saved.getAmount());
+        log.info("Payout {} created for assignment {} amount {} origin {}", saved.getId(), jobAssignmentId,
+                saved.getAmount(), origin);
         activityNotificationService.payoutReleased(assignment);
         return saved;
     }
@@ -200,7 +202,7 @@ public class PayoutManager implements PayoutService {
 
     @Override
     @Transactional
-    public Payout confirmSettlement(UUID payoutId, ConfirmPayoutSettlementDto evidence) {
+    public Payout confirmSettlement(UUID payoutId, ConfirmPayoutSettlementDto evidence, UUID reconciledByStaffId) {
         rejectMalformedEvidence(evidence);
 
         Payout payout = payoutDao.findByIdForUpdate(payoutId)
@@ -240,6 +242,7 @@ public class PayoutManager implements PayoutService {
         payout.setStatus(PayoutStatus.COMPLETED);
         payout.setSettlementReference(reported);
         payout.setCompletedAt(evidence.getSettledAt());
+        payout.setReconciledByStaffId(reconciledByStaffId);
         payout.setFailureReason(null);
 
         Payout settled;
@@ -289,14 +292,15 @@ public class PayoutManager implements PayoutService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageDto<StaffPayoutDto> listForStaff(List<PayoutStatus> statuses, String query, Pageable requested) {
+    public PageDto<StaffPayoutDto> listForStaff(List<PayoutStatus> statuses, String query, UUID workerId,
+                                                Pageable requested) {
         int page = Math.max(requested.getPageNumber(), 0);
         int size = requested.getPageSize() < 1 ? DEFAULT_PAGE_SIZE
                 : Math.min(requested.getPageSize(), MAX_PAGE_SIZE);
         List<PayoutStatus> filter = statuses == null || statuses.isEmpty()
                 ? PayoutStatus.AWAITING_SETTLEMENT
                 : List.copyOf(statuses);
-        Page<Payout> payouts = payoutDao.searchForStaff(filter, StaffSearchQuery.normalize(query),
+        Page<Payout> payouts = payoutDao.searchForStaff(filter, StaffSearchQuery.normalize(query), workerId,
                 PageRequest.of(page, size, STAFF_LIST_SORT));
 
         Set<UUID> workerIds = payouts.getContent().stream()
@@ -392,4 +396,9 @@ public class PayoutManager implements PayoutService {
         return paymentService.getSettledPaymentFor(jobAssignmentId);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public long countForWorker(UUID workerId) {
+        return payoutDao.countByWorkerId(workerId);
+    }
 }

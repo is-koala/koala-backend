@@ -32,6 +32,7 @@ import com.exskylab.koala.core.monitoring.PaymentMetrics;
 import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.*;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
+import com.exskylab.koala.dataAccess.PartyLink;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.MyAssignmentDto;
 import com.exskylab.koala.entities.*;
@@ -78,6 +79,9 @@ public class JobAssignmentManager implements JobAssignmentService {
                     AssignmentStatus.IN_PROGRESS);
     private static final Comparator<JobAssignment> OLDEST_FIRST =
             Comparator.comparing(JobAssignment::getCreatedAt, Comparator.nullsFirst(Comparator.naturalOrder()));
+
+    static final List<AssignmentStatus> ACTIVE_WORK_STATUSES =
+            List.of(AssignmentStatus.CONFIRMED, AssignmentStatus.IN_PROGRESS);
 
     private static final java.util.Set<AssignmentStatus> SLOT_OCCUPYING_STATUSES =
             java.util.EnumSet.of(AssignmentStatus.PENDING_CONFIRMATION, AssignmentStatus.CONFIRMED,
@@ -583,7 +587,7 @@ public class JobAssignmentManager implements JobAssignmentService {
                 .minusDays(graceDays);
 
         return jobAssignmentDao.findAutoCompletableIds(
-                List.of(AssignmentStatus.CONFIRMED, AssignmentStatus.IN_PROGRESS),
+                ACTIVE_WORK_STATUSES,
                 PaymentStatus.HELD_IN_ESCROW,
                 endedBefore,
                 PageRequest.of(0, autoCompletionProperties.getBatchSize()));
@@ -619,7 +623,7 @@ public class JobAssignmentManager implements JobAssignmentService {
         }
 
         markCompleted(assignment);
-        payoutService.releaseToWorker(assignmentId);
+        payoutService.releaseToWorker(assignmentId, PayoutReleaseOrigin.AUTO_COMPLETION);
 
         log.info("Assignment {} auto completed after the grace period and escrow released.", assignmentId);
         return true;
@@ -652,9 +656,10 @@ public class JobAssignmentManager implements JobAssignmentService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<AdminAssignmentDto> listForStaff(String query, Pageable requested) {
+    public Page<AdminAssignmentDto> listForStaff(String query, UUID workerId, UUID employerId, UUID jobId,
+                                                 Pageable requested) {
         pageableSanitizer.rejectUnknownSort(requested, ADMIN_LIST_SORTABLE);
-        return jobAssignmentDao.findAllForStaff(StaffSearchQuery.normalize(query),
+        return jobAssignmentDao.findAllForStaff(StaffSearchQuery.normalize(query), workerId, employerId, jobId,
                         pageableSanitizer.sanitize(requested, ADMIN_LIST_SORTABLE, ADMIN_LIST_SORT))
                 .map(jobAssignmentMapper::toAdminAssignmentDto);
     }
@@ -699,14 +704,31 @@ public class JobAssignmentManager implements JobAssignmentService {
 
     @Override
     @Transactional(readOnly = true)
-    public boolean hasMoneyInEscrowFor(UUID userId) {
-        return jobAssignmentDao.existsMoneyForUser(userId, PaymentStatus.HELD_IN_ESCROW);
+    public long countAsWorker(UUID workerId) {
+        return jobAssignmentDao.countByWorkerId(workerId);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public boolean hasActiveWorkFor(UUID userId) {
-        return jobAssignmentDao.existsActiveForUser(userId,
-                List.of(AssignmentStatus.CONFIRMED, AssignmentStatus.IN_PROGRESS));
+    public long countAsEmployer(UUID employerId) {
+        return jobAssignmentDao.countByJobCreatorId(employerId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PartyLink> findEscrowLinksForUsers(Collection<UUID> userIds) {
+        if (userIds.isEmpty()) {
+            return List.of();
+        }
+        return jobAssignmentDao.findMoneyLinksForUsers(userIds, PaymentStatus.HELD_IN_ESCROW);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PartyLink> findActiveWorkLinksForUsers(Collection<UUID> userIds) {
+        if (userIds.isEmpty()) {
+            return List.of();
+        }
+        return jobAssignmentDao.findActiveLinksForUsers(userIds, ACTIVE_WORK_STATUSES);
     }
 }
