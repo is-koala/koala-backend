@@ -49,7 +49,7 @@ class StaffIdentityIT extends AbstractStaffIntegrationTest {
                         "DISPUTE_HANDLER", "MODERATOR", "SUPPORT_AGENT", "TRUST_LEAD")))
                 .andExpect(jsonPath("$.data.permissions", containsInAnyOrder(
                         "content.moderate", "dispute.resolve", "user.deletion.manage",
-                        "user.read", "user.read_pii", "identity.review")));
+                        "user.read", "job.read", "user.read_pii", "identity.review")));
     }
 
     @Test

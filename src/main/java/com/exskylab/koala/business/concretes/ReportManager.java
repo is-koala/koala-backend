@@ -29,6 +29,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -182,6 +183,15 @@ public class ReportManager implements ReportService {
         return page.map(report -> reportMapper.toAdminReportDto(report,
                 report.getReportedUser() == null ? 0L
                         : history.getOrDefault(report.getReportedUser().getId(), 0L)));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Report> findAllBetweenAssignmentParties(UUID jobId, Collection<UUID> partyIds) {
+        if (partyIds.isEmpty()) {
+            return List.of();
+        }
+        return reportDao.findAllBetweenAssignmentParties(jobId, partyIds);
     }
 
     @Override

@@ -62,7 +62,8 @@ class EmployerIdentityGateTest {
                 mock(JobAlertService.class), mock(GalleryService.class), mock(CompanyFollowService.class),
                 mock(JobApplicationDao.class), mock(JobAssignmentDao.class), mock(NotificationService.class),
                 mock(MessageResolver.class),
-                new PricingManager(FallbackSettings.commissionCalculator()), mock(JobAvailability.class));
+                new PricingManager(FallbackSettings.commissionCalculator()), mock(JobAvailability.class),
+                mock(com.exskylab.koala.core.mappers.AdminDetailMapper.class));
 
         when(jobDao.save(any())).thenAnswer(i -> i.getArgument(0));
     }

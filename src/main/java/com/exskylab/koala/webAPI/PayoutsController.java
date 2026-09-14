@@ -14,11 +14,13 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.StaffPayoutService;
+import com.exskylab.koala.core.constants.AdminMessages;
 import com.exskylab.koala.core.constants.PayoutMessages;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.payout.request.ConfirmPayoutSettlementDto;
 import com.exskylab.koala.core.dtos.payout.request.RefundRequestDto;
 import com.exskylab.koala.core.dtos.payout.request.ReleaseRequestDto;
+import com.exskylab.koala.core.dtos.payout.response.AdminPayoutDetailDto;
 import com.exskylab.koala.core.dtos.payout.response.PayoutDto;
 import com.exskylab.koala.core.dtos.payout.response.StaffPayoutDto;
 import com.exskylab.koala.core.mappers.PayoutMapper;
@@ -115,6 +117,27 @@ public class PayoutsController {
         return ResponseEntity.ok(new SuccessDataResult<>(
                 staffPayoutService.listForStaff(actor, status, query, pageable),
                 PayoutMessages.LISTED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "Hakediş detayı",
+            description = "Tek hakediş: bağlı atama ve ilan, işçi ve işveren (id, ad, e-posta), maskeli IBAN "
+                    + "(ilk 4 + son 4; tam IBAN dönmez), sağlayıcı ve ekstre referansları, tutar (ondalık metin), "
+                    + "durum ve zaman damgaları. settlementTasks hakedişin ödemesine bağlı sağlayıcı mutabakat "
+                    + "görevlerini (işlem, durum, deneme sayısı, son hata, sonraki deneme) taşır; paymentAttempts "
+                    + "atamanın ödeme denemelerinin özetidir (id + durum). İşçi hesabını silmişse worker null döner. "
+                    + "Uç payout.reconcile ile korunur.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Hakediş detayı getirildi"),
+            @ApiResponse(responseCode = "404", description = "Hakediş bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(StaffPermission.PAYOUT_RECONCILE)
+    @GetMapping("/admin/payouts/{payoutId}")
+    public ResponseEntity<SuccessDataResult<AdminPayoutDetailDto>> detail(@PathVariable UUID payoutId,
+                                                                          @AuthenticationPrincipal StaffPrincipal actor) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                staffPayoutService.getForStaff(actor, payoutId),
+                AdminMessages.PAYOUT_DETAIL, HttpStatus.OK));
     }
 
     @Operation(summary = "Banka mutabakatıyla hakedişi tamamlanmış işaretle",

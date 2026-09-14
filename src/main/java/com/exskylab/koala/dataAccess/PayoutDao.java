@@ -22,6 +22,10 @@ public interface PayoutDao extends JpaRepository<Payout, UUID> {
 
     Optional<Payout> findByPaymentId(UUID paymentId);
 
+    @EntityGraph(attributePaths = {"bankAccount", "payment"})
+    @Query("select p from Payout p where p.id = :id")
+    Optional<Payout> findForStaffById(@Param("id") UUID id);
+
     @EntityGraph(attributePaths = {"jobAssignment", "worker", "bankAccount"})
     List<Payout> findAllByWorkerIdOrderByCreatedAtDesc(UUID workerId);
 

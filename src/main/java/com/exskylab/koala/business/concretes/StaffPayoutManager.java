@@ -5,6 +5,7 @@ import com.exskylab.koala.business.abstracts.StaffPayoutService;
 import com.exskylab.koala.core.constants.StaffMessages;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.payout.request.ConfirmPayoutSettlementDto;
+import com.exskylab.koala.core.dtos.payout.response.AdminPayoutDetailDto;
 import com.exskylab.koala.core.dtos.payout.response.StaffPayoutDto;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.security.StaffPrincipal;
@@ -58,6 +59,16 @@ public class StaffPayoutManager implements StaffPayoutService {
             throw new ForbiddenException(StaffMessages.PERMISSION_DENIED);
         }
         return payoutService.listForStaff(statuses, query, pageable);
+    }
+
+    @Override
+    public AdminPayoutDetailDto getForStaff(StaffPrincipal actor, UUID payoutId) {
+        if (lacks(actor, StaffPermission.PAYOUT_RECONCILE)) {
+            log.warn("Payout detail read refused without staff permission: permission={} payout={}",
+                    StaffPermission.PAYOUT_RECONCILE.getCode(), payoutId);
+            throw new ForbiddenException(StaffMessages.PERMISSION_DENIED);
+        }
+        return payoutService.getStaffDetail(payoutId);
     }
 
     @Override

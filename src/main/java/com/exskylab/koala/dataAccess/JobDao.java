@@ -82,6 +82,24 @@ public interface JobDao extends JpaRepository<Job, UUID> {
     @EntityGraph(attributePaths = {"category", "company", "address", "address.city", "address.district"})
     Page<Job> findAllByCompanyId(UUID companyId, Pageable pageable);
 
+    @Query("""
+            select j from Job j
+            left join j.creator creator
+            left join j.company company
+            where j.status in :statuses
+              and (cast(:query as string) is null
+                   or cast(j.id as string) like lower(concat('%', cast(:query as string), '%'))
+                   or unaccent(lower(j.title)) like unaccent(lower(concat('%', cast(:query as string), '%')))
+                   or unaccent(lower(company.name)) like unaccent(lower(concat('%', cast(:query as string), '%')))
+                   or unaccent(lower(creator.email)) like unaccent(lower(concat('%', cast(:query as string), '%')))
+                   or unaccent(lower(concat(creator.firstName, ' ', creator.lastName)))
+                      like unaccent(lower(concat('%', cast(:query as string), '%'))))
+            """)
+    @EntityGraph(attributePaths = {"category", "creator", "company", "company.address", "address",
+            "address.city", "address.district"})
+    Page<Job> searchForStaff(@Param("statuses") List<JobStatus> statuses, @Param("query") String query,
+                             Pageable pageable);
+
     @Query(value = "select exists(select 1 from jobs where job_category_id = :categoryId)",
             nativeQuery = true)
     boolean existsAnyByCategoryId(@Param("categoryId") UUID categoryId);

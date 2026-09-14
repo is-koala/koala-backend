@@ -100,4 +100,15 @@ public interface ReportDao extends JpaRepository<Report, UUID> {
             group by r.reportedUser.id
             """)
     List<ReportedUserTally> tallyByReportedUser(@Param("userIds") Collection<UUID> userIds);
+
+    @Query("""
+            select r from Report r
+            left join r.job job
+            left join r.reporter reporter
+            where job.id = :jobId
+              and reporter.id in :partyIds
+            order by r.createdAt desc
+            """)
+    List<Report> findAllBetweenAssignmentParties(@Param("jobId") UUID jobId,
+                                                 @Param("partyIds") Collection<UUID> partyIds);
 }

@@ -2,6 +2,7 @@ package com.exskylab.koala.business.abstracts;
 
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.payout.request.ConfirmPayoutSettlementDto;
+import com.exskylab.koala.core.dtos.payout.response.AdminPayoutDetailDto;
 import com.exskylab.koala.core.dtos.payout.response.StaffPayoutDto;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.Payout;
@@ -12,7 +13,9 @@ import org.springframework.data.domain.Pageable;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface PayoutService {
@@ -32,6 +35,12 @@ public interface PayoutService {
     AmountCount awaitingVolume(String currency);
 
     PageDto<StaffPayoutDto> listForStaff(List<PayoutStatus> statuses, String query, Pageable pageable);
+
+    AdminPayoutDetailDto getStaffDetail(UUID payoutId);
+
+    Optional<Payout> findForAssignment(UUID jobAssignmentId);
+
+    List<Refund> getRefundsForPayments(Collection<UUID> paymentIds);
 
     record AmountCount(BigDecimal amount, long count) {
     }

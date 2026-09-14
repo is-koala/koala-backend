@@ -58,7 +58,7 @@ class StaffAuthorizationIT extends AbstractIntegrationTest {
         StaffAuthorization resolved = staffAuthorizationService.resolve(List.of("SUPPORT_AGENT"));
 
         assertEquals(Set.of("SUPPORT_AGENT"), resolved.roles());
-        assertEquals(Set.of(StaffPermission.USER_READ), resolved.permissions());
+        assertEquals(Set.of(StaffPermission.USER_READ, StaffPermission.JOB_READ), resolved.permissions());
     }
 
     @Test
@@ -67,7 +67,7 @@ class StaffAuthorizationIT extends AbstractIntegrationTest {
 
         assertTrue(resolved.roles().containsAll(
                 Set.of("TRUST_LEAD", "MODERATOR", "DISPUTE_HANDLER", "SUPPORT_AGENT")));
-        assertEquals(Set.of(StaffPermission.USER_READ, StaffPermission.USER_READ_PII,
+        assertEquals(Set.of(StaffPermission.USER_READ, StaffPermission.JOB_READ, StaffPermission.USER_READ_PII,
                         StaffPermission.USER_DELETION_MANAGE, StaffPermission.CONTENT_MODERATE,
                         StaffPermission.DISPUTE_RESOLVE, StaffPermission.IDENTITY_REVIEW),
                 resolved.permissions());
@@ -96,7 +96,7 @@ class StaffAuthorizationIT extends AbstractIntegrationTest {
     void aRoleTheTokenCarriesButKoalaDoesNotKnowIsSkipped() {
         StaffAuthorization resolved = staffAuthorizationService.resolve(List.of("SUPPORT_AGENT", "NOT_A_ROLE"));
 
-        assertEquals(Set.of(StaffPermission.USER_READ), resolved.permissions());
+        assertEquals(Set.of(StaffPermission.USER_READ, StaffPermission.JOB_READ), resolved.permissions());
         assertFalse(resolved.roles().contains("NOT_A_ROLE"));
     }
 

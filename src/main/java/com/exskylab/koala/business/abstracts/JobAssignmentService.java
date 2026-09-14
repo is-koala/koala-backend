@@ -43,8 +43,6 @@ public interface JobAssignmentService {
 
     JobAssignment getDetailedByIdForUpdate(UUID assignmentId);
 
-    AdminAssignmentDto getAdminDetail(UUID assignmentId);
-
     Page<AdminAssignmentDto> listForStaff(String query, Pageable pageable);
 
     long countCompletedForWorker(UUID workerId);

@@ -10,7 +10,9 @@ import com.exskylab.koala.core.constants.DisputeMessages;
 import com.exskylab.koala.core.constants.PayoutMessages;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.payout.request.ConfirmPayoutSettlementDto;
+import com.exskylab.koala.core.dtos.payout.response.AdminPayoutDetailDto;
 import com.exskylab.koala.core.dtos.payout.response.StaffPayoutDto;
+import com.exskylab.koala.core.mappers.AdminDetailMapper;
 import com.exskylab.koala.core.mappers.PayoutMapper;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.monitoring.PaymentMetrics;
@@ -41,10 +43,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -72,6 +76,7 @@ public class PayoutManager implements PayoutService {
     private final Validator validator;
     private final UserService userService;
     private final PayoutMapper payoutMapper;
+    private final AdminDetailMapper adminDetailMapper;
     private final ApplicationEventPublisher eventPublisher;
 
     public PayoutManager(PayoutDao payoutDao, RefundDao refundDao, PaymentService paymentService,
@@ -81,7 +86,7 @@ public class PayoutManager implements PayoutService {
                          ActivityNotificationService activityNotificationService,
                          PaymentMetrics paymentMetrics, Validator validator,
                          UserService userService, PayoutMapper payoutMapper,
-                         ApplicationEventPublisher eventPublisher) {
+                         AdminDetailMapper adminDetailMapper, ApplicationEventPublisher eventPublisher) {
         this.payoutDao = payoutDao;
         this.refundDao = refundDao;
         this.paymentService = paymentService;
@@ -95,6 +100,7 @@ public class PayoutManager implements PayoutService {
         this.validator = validator;
         this.userService = userService;
         this.payoutMapper = payoutMapper;
+        this.adminDetailMapper = adminDetailMapper;
         this.eventPublisher = eventPublisher;
     }
 
@@ -301,6 +307,40 @@ public class PayoutManager implements PayoutService {
 
         return PageDto.of(payouts, payout -> payoutMapper.toStaffPayoutDto(
                 payout, recipients.get(payout.getWorker().getId())));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AdminPayoutDetailDto getStaffDetail(UUID payoutId) {
+        Payout payout = payoutDao.findForStaffById(payoutId)
+                .orElseThrow(() -> new ResourceNotFoundException(PayoutMessages.NOT_FOUND));
+
+        JobAssignment assignment = jobAssignmentDao
+                .findWithDetailsForPaymentById(payout.getJobAssignment().getId())
+                .orElse(null);
+        User worker = userService.getAllByIdIn(Set.of(payout.getWorker().getId())).stream()
+                .findFirst()
+                .orElse(null);
+        List<SettlementTask> tasks = payout.getPayment() == null ? List.of()
+                : settlementService.getTasksForPayment(payout.getPayment().getId());
+        List<Payment> attempts = paymentService.getAttemptsForStaff(payout.getJobAssignment().getId());
+
+        return adminDetailMapper.toAdminPayoutDetailDto(payout, assignment, worker, tasks, attempts);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Payout> findForAssignment(UUID jobAssignmentId) {
+        return payoutDao.findByJobAssignmentId(jobAssignmentId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Refund> getRefundsForPayments(Collection<UUID> paymentIds) {
+        if (paymentIds.isEmpty()) {
+            return List.of();
+        }
+        return refundDao.findAllByPaymentIdInOrderByCreatedAtDesc(paymentIds);
     }
 
     private static AmountCount amountCount(List<Object[]> rows) {

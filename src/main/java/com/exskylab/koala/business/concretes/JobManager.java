@@ -7,6 +7,8 @@ import com.exskylab.koala.business.abstracts.*;
 import com.exskylab.koala.core.constants.JobMessages;
 import com.exskylab.koala.core.dtos.job.request.CreateCompanyJobDto;
 import com.exskylab.koala.core.dtos.job.request.CreateIndividualJobDto;
+import com.exskylab.koala.core.dtos.job.response.AdminJobDetailDto;
+import com.exskylab.koala.core.dtos.job.response.AdminJobDto;
 import com.exskylab.koala.core.dtos.job.response.CompanyJobDto;
 import com.exskylab.koala.core.dtos.job.response.IndividualJobDto;
 import com.exskylab.koala.core.dtos.common.PageDto;
@@ -18,6 +20,8 @@ import com.exskylab.koala.core.dtos.gallery.response.GalleryImageDto;
 import org.springframework.web.multipart.MultipartFile;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
+import com.exskylab.koala.core.helpers.StaffSearchQuery;
+import com.exskylab.koala.core.mappers.AdminDetailMapper;
 import com.exskylab.koala.core.helpers.JobAddressVisibility;
 import com.exskylab.koala.core.helpers.JobAvailability;
 import org.springframework.data.domain.Page;
@@ -37,6 +41,7 @@ import com.exskylab.koala.business.abstracts.JobAlertService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -69,6 +74,7 @@ public class JobManager implements JobService {
     private final MessageResolver messageResolver;
     private final PricingService pricingService;
     private final JobAvailability jobAvailability;
+    private final AdminDetailMapper adminDetailMapper;
     private final JobAddressVisibility addressVisibility = new JobAddressVisibility();
 
     public JobManager(JobDao jobDao, SecurityService securityService, JobCategoryService jobCategoryService, AddressService addressService, CompanyService companyService, JobMapper jobMapper,
@@ -77,7 +83,7 @@ public class JobManager implements JobService {
                       CompanyFollowService companyFollowService, JobApplicationDao jobApplicationDao,
                       JobAssignmentDao jobAssignmentDao, NotificationService notificationService,
                       MessageResolver messageResolver, PricingService pricingService,
-                      JobAvailability jobAvailability) {
+                      JobAvailability jobAvailability, AdminDetailMapper adminDetailMapper) {
         this.jobDao = jobDao;
         this.securityService = securityService;
         this.jobCategoryService = jobCategoryService;
@@ -95,6 +101,7 @@ public class JobManager implements JobService {
         this.messageResolver = messageResolver;
         this.pricingService = pricingService;
         this.jobAvailability = jobAvailability;
+        this.adminDetailMapper = adminDetailMapper;
     }
 
     @Override
@@ -460,6 +467,39 @@ public class JobManager implements JobService {
         job.setStatus(JobStatus.CLOSED);
         jobDao.save(job);
         log.info("Job {} closed by user {}", jobId, securityService.getAuthenticatedUserId());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageDto<AdminJobDto> searchForStaff(List<JobStatus> statuses, String query, Pageable requested) {
+        pageableSanitizer.rejectUnknownSort(requested, SORTABLE_FIELDS);
+        Pageable pageable = pageableSanitizer.sanitize(requested, SORTABLE_FIELDS, DEFAULT_SORT);
+        List<JobStatus> filter = statuses == null || statuses.isEmpty()
+                ? List.of(JobStatus.values())
+                : List.copyOf(statuses);
+
+        Page<Job> jobs = jobDao.searchForStaff(filter, StaffSearchQuery.normalize(query), pageable);
+        List<UUID> ids = jobs.getContent().stream().map(Job::getId).toList();
+        Map<UUID, Long> applications = ids.isEmpty() ? Map.of() : jobApplicationDao.countByJobIds(ids).stream()
+                .collect(Collectors.toMap(JobApplicationDao.JobApplicationCount::getJobId,
+                        JobApplicationDao.JobApplicationCount::getTotal));
+        Map<UUID, Long> assignments = ids.isEmpty() ? Map.of()
+                : jobAssignmentDao.countHiredByJobIds(ids, EnumSet.allOf(AssignmentStatus.class)).stream()
+                .collect(Collectors.toMap(JobAssignmentDao.HiredCount::getJobId,
+                        JobAssignmentDao.HiredCount::getTotal));
+
+        return PageDto.of(jobs, job -> adminDetailMapper.toAdminJobDto(job,
+                applications.getOrDefault(job.getId(), 0L),
+                assignments.getOrDefault(job.getId(), 0L)));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AdminJobDetailDto getAdminDetail(UUID jobId) {
+        Job job = getDetailedById(jobId);
+        return adminDetailMapper.toAdminJobDetailDto(job,
+                jobApplicationDao.countByJobId(jobId),
+                jobAssignmentDao.countByJobId(jobId));
     }
 
     private PageDto<JobSummaryDto> listJobs(Pageable requested, UUID viewerId,

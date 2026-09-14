@@ -358,6 +358,19 @@ public class PaymentManager implements PaymentService {
         return paymentDao.findAllByJobAssignmentIdOrderByCreatedAtDesc(jobAssignmentId);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<Payment> getAttemptsForStaff(UUID jobAssignmentId) {
+        return paymentDao.findAllByJobAssignmentIdOrderByCreatedAtDesc(jobAssignmentId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Payment getForStaff(UUID paymentId) {
+        return paymentDao.findForStaffById(paymentId)
+                .orElseThrow(() -> new ResourceNotFoundException(PaymentMessages.NOT_FOUND));
+    }
+
     private String identityMismatch(Payment payment, IyzicoPaymentResultResponseDto result) {
         JobAssignment assignment = payment.getJobAssignment();
         if (!Objects.equals(payment.getConversationId(), result.getConversationId())) return "conversationId";

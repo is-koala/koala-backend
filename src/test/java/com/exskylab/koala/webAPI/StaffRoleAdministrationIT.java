@@ -83,7 +83,8 @@ class StaffRoleAdministrationIT extends AbstractStaffIntegrationTest {
         mockMvc.perform(get("/admin/roles").header("Authorization", "Bearer " + tokenFor("OWNER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data[?(@.code == 'SUPPORT_AGENT')].permissions[0]").value("user.read"))
+                .andExpect(jsonPath("$.data[?(@.code == 'SUPPORT_AGENT')].permissions[*]",
+                        containsInAnyOrder("user.read", "job.read")))
                 .andExpect(jsonPath("$.data[?(@.code == 'TRUST_LEAD')].includes[*].code",
                         hasItem("MODERATOR")))
                 .andExpect(jsonPath("$.data[?(@.code == 'OWNER')].id").exists());
@@ -103,7 +104,7 @@ class StaffRoleAdministrationIT extends AbstractStaffIntegrationTest {
                         "DISPUTE_HANDLER", "MODERATOR", "SUPPORT_AGENT")))
                 .andExpect(jsonPath("$.data.effectivePermissions", containsInAnyOrder(
                         "content.moderate", "dispute.resolve", "user.deletion.manage",
-                        "user.read", "user.read_pii", "identity.review")));
+                        "user.read", "job.read", "user.read_pii", "identity.review")));
     }
 
     @Test
