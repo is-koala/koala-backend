@@ -96,12 +96,13 @@ class AssignmentOperationsAuthorizationTest {
                 java.time.Clock.systemUTC());
         com.exskylab.koala.core.mappers.JobAssignmentMapper jobAssignmentMapper =
                 mock(com.exskylab.koala.core.mappers.JobAssignmentMapper.class);
-        when(jobAssignmentMapper.toMyAssignmentDto(any(), any(), any(), any())).thenAnswer(call -> {
+        when(jobAssignmentMapper.toMyAssignmentDto(any(), any(), any(), any(), any())).thenAnswer(call -> {
             JobAssignment source = call.getArgument(0);
             return new com.exskylab.koala.core.dtos.jobAssignment.response.MyAssignmentDto(source.getId(),
                     new com.exskylab.koala.core.dtos.job.response.JobSummaryDto(), null, source.getStatus(),
                     source.getPaymentStatus(), null, source.getActualCompletionDateTime(), 0, null, null, null,
-                    false, null, null, null, source.getConfirmedAt(), null, null, null, null, null, null);
+                    false, null, null, null, source.getConfirmedAt(), null, null, null, null, null, null, null,
+                    false);
         });
         jobAssignmentManager = new JobAssignmentManager(jobAssignmentDao, securityService,
                 jobAssignmentMapper,
@@ -117,7 +118,9 @@ class AssignmentOperationsAuthorizationTest {
                 new com.exskylab.koala.core.properties.UnpaidExpiryProperties(), passthroughSettings(),
                 mock(com.exskylab.koala.business.abstracts.GalleryService.class), mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class), mock(org.springframework.context.ApplicationEventPublisher.class),
                 new com.exskylab.koala.core.monitoring.PaymentMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()),
-                cancellationDao, mock(com.exskylab.koala.business.abstracts.JobService.class));
+                cancellationDao, mock(com.exskylab.koala.business.abstracts.JobService.class),
+                mock(com.exskylab.koala.dataAccess.ReviewDao.class),
+                new com.exskylab.koala.core.mappers.PricingDtoMapper());
 
         when(cancellationDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(disputeDaoStub.save(any())).thenAnswer(i -> i.getArgument(0));

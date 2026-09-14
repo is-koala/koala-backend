@@ -153,6 +153,38 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void assignmentReviewStateAndViewerSidedPricingAreDocumentedInTurkish() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.components.schemas.MyAssignmentDto.properties.myReview.$ref")
+                        .value(containsString("MyReviewDto")))
+                .andExpect(jsonPath("$.components.schemas.MyAssignmentDto.properties.counterpartyReviewed.type")
+                        .value("boolean"))
+                .andExpect(jsonPath("$.components.schemas.MyAssignmentDto.properties.counterpartyReviewed.description")
+                        .value(containsString("Karşı taraf")))
+                .andExpect(jsonPath("$.components.schemas.MyAssignmentDto.properties.totalCharged.type")
+                        .value(hasItems("number", "null")))
+                .andExpect(jsonPath("$.components.schemas.MyAssignmentDto.properties.totalCharged.description")
+                        .value(containsString("işçiyse null")))
+                .andExpect(jsonPath("$.components.schemas.MyAssignmentDto.properties.pricing.description")
+                        .value(containsString("workerPayout")))
+                .andExpect(jsonPath("$.components.schemas.MyReviewDto.properties.rating.description")
+                        .value(containsString("1-5")))
+                .andExpect(jsonPath("$.components.schemas.PricingBreakdownDto.properties.serviceFeeRate.type")
+                        .value(hasItems("string", "null")))
+                .andExpect(jsonPath("$.components.schemas.PricingBreakdownDto.properties.serviceFeeAmount.type")
+                        .value(hasItems("string", "null")))
+                .andExpect(jsonPath("$.components.schemas.PricingBreakdownDto.properties.employerTotal.type")
+                        .value(hasItems("string", "null")))
+                .andExpect(jsonPath("$.components.schemas.ReviewDto.properties.jobAssignmentId.type")
+                        .value(hasItems("string", "null")))
+                .andExpect(jsonPath("$.components.schemas.ReviewDto.properties.jobAssignmentId.format")
+                        .value("uuid"))
+                .andExpect(jsonPath("$.components.schemas.ReviewDto.properties.jobAssignmentId.description")
+                        .value(containsString("POST")));
+    }
+
+    @Test
     void sitemapProjectionDocumentsItsPublicPrivacySafeContract() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())

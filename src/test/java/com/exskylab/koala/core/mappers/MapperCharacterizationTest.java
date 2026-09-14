@@ -20,7 +20,9 @@ import com.exskylab.koala.entities.JobApplication;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.JobCategory;
 import com.exskylab.koala.entities.JobEmployerType;
+import com.exskylab.koala.entities.Review;
 import com.exskylab.koala.entities.User;
+import com.exskylab.koala.core.dtos.payment.response.PricingBreakdownDto;
 import org.junit.jupiter.api.BeforeEach;
 import com.exskylab.koala.core.helpers.StorageUrlResolver;
 import org.junit.jupiter.api.Test;
@@ -126,7 +128,7 @@ class MapperCharacterizationTest {
         JobAssignment assignment = assignment(individualJob());
 
         var dto = assertDoesNotThrow(
-                () -> jobAssignmentMapper.toMyAssignmentDto(assignment, null, null, null));
+                () -> jobAssignmentMapper.toMyAssignmentDto(assignment, null, null, null, employerFacts(assignment)));
 
         assertNotNull(dto);
         assertNull(dto.company());
@@ -138,6 +140,43 @@ class MapperCharacterizationTest {
         assertNull(dto.cancellation());
         assertNull(dto.payout());
         assertNull(dto.paymentSecuredAt());
+        assertNull(dto.myReview());
+        assertFalse(dto.counterpartyReviewed());
+    }
+
+    @Test
+    void theViewerFactsCarryTheReviewStateAndTheViewerSidedPricing() {
+        JobAssignment assignment = assignment(individualJob());
+        assignment.setTotalCharged(new BigDecimal("110.00"));
+        Review review = new Review();
+        review.setId(UUID.randomUUID());
+        review.setJobAssignment(assignment);
+        review.setAuthor(assignment.getWorker());
+        review.setSubject(assignment.getJob().getCreator());
+        review.setRating(4);
+        review.setComment("Dakik");
+        review.setCreatedAt(Instant.parse("2026-09-14T10:00:00Z"));
+
+        var employerDto = jobAssignmentMapper.toMyAssignmentDto(assignment, null, null, null,
+                new JobAssignmentMapper.ViewerFacts(assignment.getTotalCharged(), pricing(), null, true));
+        var workerDto = jobAssignmentMapper.toMyAssignmentDto(assignment, null, null, null,
+                new JobAssignmentMapper.ViewerFacts(null, pricing().workerView(), review, false));
+
+        assertEquals(new BigDecimal("110.00"), employerDto.totalCharged());
+        assertEquals("10.00", employerDto.pricing().serviceFeeAmount());
+        assertNull(employerDto.myReview());
+        assertTrue(employerDto.counterpartyReviewed());
+
+        assertNull(workerDto.totalCharged());
+        assertEquals("100.00", workerDto.pricing().workerPayout());
+        assertNull(workerDto.pricing().serviceFeeRate());
+        assertNull(workerDto.pricing().serviceFeeAmount());
+        assertNull(workerDto.pricing().employerTotal());
+        assertEquals(review.getId(), workerDto.myReview().id());
+        assertEquals(4, workerDto.myReview().rating());
+        assertEquals("Dakik", workerDto.myReview().comment());
+        assertEquals(review.getCreatedAt(), workerDto.myReview().createdAt());
+        assertFalse(workerDto.counterpartyReviewed());
     }
 
     @Test
@@ -146,7 +185,7 @@ class MapperCharacterizationTest {
 
         assignment.getJob().getCompany().setLogo(image());
 
-        var dto = jobAssignmentMapper.toMyAssignmentDto(assignment, null, null, null);
+        var dto = jobAssignmentMapper.toMyAssignmentDto(assignment, null, null, null, employerFacts(assignment));
 
         assertNotNull(dto.company());
         assertEquals("Akme AS", dto.company().name());
@@ -255,7 +294,7 @@ class MapperCharacterizationTest {
     @Test
     void nestedApplicationAndAssignmentSummariesAlsoDefaultToApproximateCoordinates() {
         var application = jobApplicationMapper.toMyApplicationDto(application());
-        var assignment = jobAssignmentMapper.toMyAssignmentDto(assignment(individualJob()), null, null, null);
+        var assignment = jobAssignmentMapper.toMyAssignmentDto(assignment(individualJob()), null, null, null, null);
 
         assertEquals(40.99, application.job().getLatitude());
         assertEquals(AddressPrecision.APPROXIMATE, application.job().getAddressPrecision());
@@ -405,6 +444,14 @@ class MapperCharacterizationTest {
         job.setEmployerType(JobEmployerType.COMPANY);
         job.setCompany(company());
         return job;
+    }
+
+    private JobAssignmentMapper.ViewerFacts employerFacts(JobAssignment assignment) {
+        return new JobAssignmentMapper.ViewerFacts(assignment.getTotalCharged(), pricing(), null, false);
+    }
+
+    private PricingBreakdownDto pricing() {
+        return new PricingBreakdownDto("v1", "TRY", "100.00", "0.1000", "10.00", "110.00");
     }
 
     private JobAssignment assignment(Job job) {

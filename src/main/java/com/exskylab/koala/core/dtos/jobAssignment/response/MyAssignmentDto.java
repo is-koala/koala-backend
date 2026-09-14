@@ -19,7 +19,11 @@ import java.util.UUID;
 public record MyAssignmentDto(UUID id, JobSummaryDto job, SafeUserDto worker,
                               AssignmentStatus status, PaymentStatus paymentStatus,
                               Instant assignmentDateTime, Instant actualCompletionDateTime,
-                              int workHours, BigDecimal workerPayout, BigDecimal totalCharged,
+                              int workHours, BigDecimal workerPayout,
+                              @Schema(types = {"number", "null"},
+                                      description = "İşverenden çekilen toplam tutar. Yalnız işveren tarafı görür; görüntüleyen işçiyse null.")
+                              BigDecimal totalCharged,
+                              @Schema(description = "Fiyat dökümü. Görüntüleyen işçiyse yalnız workerPayout dolu gelir; serviceFeeRate, serviceFeeAmount ve employerTotal null'dur.")
                               PricingBreakdownDto pricing,
                               boolean messagingAvailable,
                               MessagingAvailabilityReason messagingAvailableReason,
@@ -43,5 +47,9 @@ public record MyAssignmentDto(UUID id, JobSummaryDto job, SafeUserDto worker,
                               @Schema(description = "İptal edilmişse iptal özeti; değilse null.")
                               AssignmentCancellationDto cancellation,
                               @Schema(description = "Hakediş kaydı; emanet çıkışa verilmediyse null.")
-                              AssignmentPayoutDto payout) {
+                              AssignmentPayoutDto payout,
+                              @Schema(description = "Görüntüleyen kullanıcının bu atamaya yazdığı değerlendirme; yazmadıysa null.")
+                              MyReviewDto myReview,
+                              @Schema(description = "Karşı taraf bu atamayı değerlendirdi mi. Yalnız varlık bilgisidir; içerik ve yazar kimliği taşınmaz.")
+                              boolean counterpartyReviewed) {
 }

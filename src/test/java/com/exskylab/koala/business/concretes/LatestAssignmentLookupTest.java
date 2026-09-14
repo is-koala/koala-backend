@@ -72,7 +72,9 @@ class LatestAssignmentLookupTest {
                 new com.exskylab.koala.core.monitoring.PaymentMetrics(
                         new io.micrometer.core.instrument.simple.SimpleMeterRegistry()),
                 mock(com.exskylab.koala.dataAccess.CancellationDao.class),
-                mock(com.exskylab.koala.business.abstracts.JobService.class));
+                mock(com.exskylab.koala.business.abstracts.JobService.class),
+                mock(com.exskylab.koala.dataAccess.ReviewDao.class),
+                new com.exskylab.koala.core.mappers.PricingDtoMapper());
     }
 
     private static Job job() {

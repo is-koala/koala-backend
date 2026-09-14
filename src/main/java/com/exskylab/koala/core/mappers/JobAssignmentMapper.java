@@ -4,7 +4,9 @@ import com.exskylab.koala.core.dtos.jobApplication.response.AssignmentApplicatio
 import com.exskylab.koala.core.dtos.jobAssignment.response.AdminAssignmentDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.PaymentSessionDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.MyAssignmentDto;
+import com.exskylab.koala.core.dtos.jobAssignment.response.MyReviewDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.ShortJobAssignmentDto;
+import com.exskylab.koala.core.dtos.payment.response.PricingBreakdownDto;
 import com.exskylab.koala.core.dtos.payout.response.AssignmentPayoutDto;
 import com.exskylab.koala.core.helpers.MessagingAvailability;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.PaymentSessionResponseDto;
@@ -12,10 +14,12 @@ import com.exskylab.koala.entities.Cancellation;
 import com.exskylab.koala.entities.JobApplication;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.Payout;
+import com.exskylab.koala.entities.Review;
 import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 @Mapper(componentModel = "spring",
@@ -38,7 +42,10 @@ public interface JobAssignmentMapper {
     @Mapping(target = "status", source = "jobAssignment.status")
     @Mapping(target = "createdAt", source = "jobAssignment.createdAt")
     @Mapping(target = "worker", source = "jobAssignment.worker")
-    @Mapping(target = "pricing", source = "jobAssignment")
+    @Mapping(target = "totalCharged", source = "viewer.totalCharged")
+    @Mapping(target = "pricing", source = "viewer.pricing")
+    @Mapping(target = "myReview", source = "viewer.myReview")
+    @Mapping(target = "counterpartyReviewed", source = "viewer.counterpartyReviewed")
     @Mapping(target = "messagingAvailable", source = "jobAssignment", qualifiedByName = "messagingAvailable")
     @Mapping(target = "messagingAvailableReason", source = "jobAssignment",
             qualifiedByName = "messagingAvailableReason")
@@ -49,9 +56,15 @@ public interface JobAssignmentMapper {
     @Mapping(target = "cancellation", source = "cancellation")
     @Mapping(target = "payout", source = "payout")
     MyAssignmentDto toMyAssignmentDto(JobAssignment jobAssignment, Cancellation cancellation, Payout payout,
-                                      Instant paymentSecuredAt);
+                                      Instant paymentSecuredAt, ViewerFacts viewer);
+
+    MyReviewDto toMyReviewDto(Review review);
 
     AssignmentApplicationDto toAssignmentApplicationDto(JobApplication application);
+
+    record ViewerFacts(BigDecimal totalCharged, PricingBreakdownDto pricing, Review myReview,
+                       boolean counterpartyReviewed) {
+    }
 
     AssignmentPayoutDto toAssignmentPayoutDto(Payout payout);
 

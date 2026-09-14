@@ -17,6 +17,7 @@ import com.exskylab.koala.core.dtos.jobAssignment.response.PaymentSessionDto;
 import com.exskylab.koala.core.constants.JobMessages;
 import com.exskylab.koala.business.abstracts.JobService;
 import com.exskylab.koala.dataAccess.CancellationDao;
+import com.exskylab.koala.dataAccess.ReviewDao;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.business.abstracts.PaymentService;
@@ -28,6 +29,8 @@ import com.exskylab.koala.core.properties.AppProperties;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.mappers.JobAssignmentMapper;
+import com.exskylab.koala.core.mappers.PricingDtoMapper;
+import com.exskylab.koala.core.dtos.payment.response.PricingBreakdownDto;
 import com.exskylab.koala.core.monitoring.PaymentMetrics;
 import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.*;
@@ -60,6 +63,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -120,6 +124,8 @@ public class JobAssignmentManager implements JobAssignmentService {
     private final PaymentMetrics paymentMetrics;
     private final CancellationDao cancellationDao;
     private final JobService jobService;
+    private final ReviewDao reviewDao;
+    private final PricingDtoMapper pricingDtoMapper;
     private final JobAddressVisibility addressVisibility = new JobAddressVisibility();
 
 
@@ -134,7 +140,8 @@ public class JobAssignmentManager implements JobAssignmentService {
                                SettingsService settingsService, GalleryService galleryService,
                                ActivityNotificationService activityNotificationService,
                                ApplicationEventPublisher eventPublisher, PaymentMetrics paymentMetrics,
-                               CancellationDao cancellationDao, JobService jobService) {
+                               CancellationDao cancellationDao, JobService jobService, ReviewDao reviewDao,
+                               PricingDtoMapper pricingDtoMapper) {
         this.jobAssignmentDao = jobAssignmentDao;
         this.securityService = securityService;
         this.jobAssignmentMapper = jobAssignmentMapper;
@@ -159,6 +166,8 @@ public class JobAssignmentManager implements JobAssignmentService {
         this.paymentMetrics = paymentMetrics;
         this.cancellationDao = cancellationDao;
         this.jobService = jobService;
+        this.reviewDao = reviewDao;
+        this.pricingDtoMapper = pricingDtoMapper;
     }
 
 
@@ -518,14 +527,40 @@ public class JobAssignmentManager implements JobAssignmentService {
                                               boolean activeWorker) {
         UUID id = assignment.getId();
         MyAssignmentDto dto = jobAssignmentMapper.toMyAssignmentDto(assignment,
-                linked.cancellations().get(id), linked.payouts().get(id), linked.paymentSecuredAt().get(id));
+                linked.cancellations().get(id), linked.payouts().get(id), linked.paymentSecuredAt().get(id),
+                viewerFactsOf(assignment, linked.reviews().getOrDefault(id, List.of()), viewerId));
         addressVisibility.protect(assignment.getJob(), dto.job(), viewerId, activeWorker);
         return dto;
     }
 
+    private JobAssignmentMapper.ViewerFacts viewerFactsOf(JobAssignment assignment, List<Review> reviews,
+                                                          UUID viewerId) {
+        UUID workerId = assignment.getWorker() == null ? null : assignment.getWorker().getId();
+        boolean workerView = workerId != null && workerId.equals(viewerId);
+
+        Review myReview = null;
+        boolean counterpartyReviewed = false;
+        for (Review review : reviews) {
+            UUID authorId = review.getAuthor().getId();
+            if (authorId.equals(viewerId)) {
+                myReview = review;
+            } else if (authorId.equals(workerId) != workerView) {
+                counterpartyReviewed = true;
+            }
+        }
+
+        PricingBreakdownDto pricing = pricingDtoMapper.toPricing(assignment);
+        if (workerView) {
+            return new JobAssignmentMapper.ViewerFacts(null, pricing == null ? null : pricing.workerView(),
+                    myReview, counterpartyReviewed);
+        }
+        return new JobAssignmentMapper.ViewerFacts(assignment.getTotalCharged(), pricing, myReview,
+                counterpartyReviewed);
+    }
+
     private LinkedRecords linkedRecordsOf(List<JobAssignment> assignments) {
         if (assignments.isEmpty()) {
-            return new LinkedRecords(Map.of(), Map.of(), Map.of());
+            return new LinkedRecords(Map.of(), Map.of(), Map.of(), Map.of());
         }
         List<UUID> ids = assignments.stream().map(JobAssignment::getId).toList();
 
@@ -539,11 +574,16 @@ public class JobAssignmentManager implements JobAssignmentService {
             payouts.put(payout.getJobAssignment().getId(), payout);
         }
 
-        return new LinkedRecords(cancellations, payouts, paymentService.securedAtForAssignments(ids));
+        Map<UUID, List<Review>> reviews = new HashMap<>();
+        for (Review review : reviewDao.findAllByJobAssignmentIdIn(ids)) {
+            reviews.computeIfAbsent(review.getJobAssignment().getId(), key -> new ArrayList<>()).add(review);
+        }
+
+        return new LinkedRecords(cancellations, payouts, paymentService.securedAtForAssignments(ids), reviews);
     }
 
     private record LinkedRecords(Map<UUID, Cancellation> cancellations, Map<UUID, Payout> payouts,
-                                 Map<UUID, Instant> paymentSecuredAt) {
+                                 Map<UUID, Instant> paymentSecuredAt, Map<UUID, List<Review>> reviews) {
     }
 
     @Override
