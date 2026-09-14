@@ -38,6 +38,7 @@ public class PaymentMetrics {
         register("callback", "fraud_rejected");
         register("callback", "in_review");
         register("callback", "amount_mismatch");
+        register("callback", "manual_review_required");
         register("payout_settlement", "settled");
         register("payout_settlement", "already_settled");
         register("payout_settlement", "evidence_mismatch");
@@ -113,6 +114,10 @@ public class PaymentMetrics {
 
     public void callbackAmountMismatch() {
         record("callback", "amount_mismatch");
+    }
+
+    public void callbackManualReviewRequired() {
+        record("callback", "manual_review_required");
     }
 
     private void record(String operation, String outcome) {

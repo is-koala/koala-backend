@@ -427,8 +427,14 @@ public class PaymentManager implements PaymentService {
         payment.setCompletedAt(null);
         int attempts = payment.getVerificationAttempts() + 1;
         payment.setVerificationAttempts(attempts);
-        payment.setNextVerificationAt(attempts >= verificationProperties.getMaxAttempts()
-                ? null : Instant.now().plus(verificationBackoffFor(attempts)));
+        boolean ceilingReached = attempts >= verificationProperties.getMaxAttempts();
+        payment.setNextVerificationAt(ceilingReached ? null : Instant.now().plus(verificationBackoffFor(attempts)));
+        if (ceilingReached) {
+            paymentMetrics.callbackManualReviewRequired();
+            log.warn("Payment {} reached the automatic reconciliation ceiling after {} attempts, "
+                            + "stays {} with reason {} and requires manual review",
+                    payment.getId(), attempts, status, reason);
+        }
         return paymentDao.save(payment);
     }
 

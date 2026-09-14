@@ -37,6 +37,7 @@ import java.util.UUID;
 @Slf4j
 public class IyzicoPaymentService {
 
+    private static final Integer FORCE_THREE_D_SECURE = 1;
 
     private final RestTemplate restTemplate;
     private final IyzicoProperties iyzicoProperties;
@@ -119,8 +120,10 @@ public class IyzicoPaymentService {
     }
 
     public PaymentSessionResponseDto initiateCheckoutFormPayment(PaymentSessionRequestDto request) {
-        log.info("iyzico: initiating checkout form for conversationId {}", request.getConversationId());
+        log.info("iyzico: initiating checkout form for conversationId {} forceThreeDS={}",
+                request.getConversationId(), iyzicoProperties.isForceThreeDSecure());
 
+        request.setForceThreeDS(iyzicoProperties.isForceThreeDSecure() ? FORCE_THREE_D_SECURE : null);
         JsonNode root = call(HttpMethod.POST, IyzicoEndpoints.CHECKOUT_FORM_INITIALIZE, request,
                 "payment session initiation");
         verifyResponseSignature(root, List.of("conversationId", "token"), Set.of());
