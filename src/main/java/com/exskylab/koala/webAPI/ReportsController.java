@@ -88,10 +88,13 @@ public class ReportsController {
             description = "Süzgeçlerin hepsi isteğe bağlıdır; status verilmezse tüm durumlar döner. "
                     + "targetType şikayetin hedefine göre daraltır, reportedUserId aynı kullanıcı hakkındaki "
                     + "şikayetleri gruplar. Satırlar şikayet edeni, kararı vereni ve şikayet edilenin "
-                    + "kuyruğun tamamı üzerinden hesaplanmış toplam şikayet sayısını taşır.")
+                    + "kuyruğun tamamı üzerinden hesaplanmış toplam şikayet sayısını taşır. "
+                    + "query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) şikayet edenin ve edilenin ad-soyadı ile "
+                    + "e-postasında ve şikayete konu ilanın başlığında büyük-küçük harf ve Türkçe karakter duyarsız arar; "
+                    + "diğer süzgeçlerle kesişir; 100 karakteri aşarsa 400.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Şikayetler listelendi"),
-            @ApiResponse(responseCode = "400", description = "Bilinmeyen sıralama alanı",
+            @ApiResponse(responseCode = "400", description = "Bilinmeyen sıralama alanı ya da query 100 karakteri aşıyor",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @RequiresPermission(StaffPermission.CONTENT_MODERATE)
@@ -101,9 +104,10 @@ public class ReportsController {
             @RequestParam(required = false) ReportReason reason,
             @RequestParam(required = false) ReportTargetType targetType,
             @RequestParam(required = false) UUID reportedUserId,
+            @RequestParam(required = false) String query,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
-        var page = reportService.searchForModeration(status, reason, targetType, reportedUserId, pageable);
+        var page = reportService.searchForModeration(status, reason, targetType, reportedUserId, query, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
                 PageDto.of(page, page.getContent()),
                 ReportMessages.LISTED, HttpStatus.OK));

@@ -98,15 +98,21 @@ public class AdminController {
     }
 
     @Operation(summary = "Atama kuyruğu",
-            description = "Son atamaları sayfalar. Yanıt AdminAssignmentDto'dur; UUID bakışı ile aynı SafeUser ve fiyat dökümü. Emanet kuralları değişmez.")
+            description = "Son atamaları sayfalar. Yanıt AdminAssignmentDto'dur; UUID bakışı ile aynı SafeUser ve fiyat dökümü. "
+                    + "Emanet kuralları değişmez. query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) atama id'si, "
+                    + "ilan başlığı, işveren ve çalışanın ad-soyadı ile e-postasında büyük-küçük harf ve Türkçe karakter "
+                    + "duyarsız arar; 100 karakteri aşarsa 400.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Atamalar listelendi")
+            @ApiResponse(responseCode = "200", description = "Atamalar listelendi"),
+            @ApiResponse(responseCode = "400", description = "query 100 karakteri aşıyor ya da bilinmeyen sıralama alanı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @RequiresPermission(StaffPermission.PAYMENT_READ)
     @GetMapping("/job-assignments")
     public ResponseEntity<SuccessDataResult<PageDto<AdminAssignmentDto>>> assignments(
+            @RequestParam(required = false) String query,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
-        var page = jobAssignmentService.listForStaff(pageable);
+        var page = jobAssignmentService.listForStaff(query, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
                 PageDto.of(page, page.getContent()),
                 AdminMessages.ASSIGNMENTS_LISTED, HttpStatus.OK));
@@ -143,22 +149,25 @@ public class AdminController {
 
     @Operation(summary = "Bekleyen IBAN doğrulamaları",
             description = "status verilmezse ya da PENDING ise süresi dolmamış bekleyen transferler sayfalanır. "
-                    + "Yanıt maskeli IBAN ve referans taşır; tam IBAN yoktur. Onay mevcut confirm ucundan yapılır; ret ucu yoktur.")
+                    + "Yanıt maskeli IBAN ve referans taşır; tam IBAN yoktur. Onay mevcut confirm ucundan yapılır; ret ucu yoktur. "
+                    + "query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) hesap sahibinin ad-soyadı, e-postası ve "
+                    + "doğrulama referansında büyük-küçük harf ve Türkçe karakter duyarsız arar; 100 karakteri aşarsa 400.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Bekleyen doğrulamalar listelendi"),
-            @ApiResponse(responseCode = "400", description = "Yalnız PENDING kuyruğu vardır",
+            @ApiResponse(responseCode = "400", description = "Yalnız PENDING kuyruğu vardır ya da query 100 karakteri aşıyor",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @RequiresPermission(StaffPermission.BANK_ACCOUNT_VERIFY)
     @GetMapping("/bank-account-verifications")
     public ResponseEntity<SuccessDataResult<PageDto<IbanPendingDto>>> pendingIbanVerifications(
             @RequestParam(defaultValue = "PENDING") BankAccountVerificationStatus status,
+            @RequestParam(required = false) String query,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
         if (status != BankAccountVerificationStatus.PENDING) {
             throw new ValidationException(BankAccountMessages.PENDING_QUEUE_ONLY);
         }
-        var page = bankAccountService.listPendingForStaff(pageable);
+        var page = bankAccountService.listPendingForStaff(query, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
                 PageDto.of(page, page.getContent().stream().map(bankAccountMapper::toIbanPendingDto).toList()),
                 BankAccountMessages.PENDING_LISTED, HttpStatus.OK));
@@ -375,17 +384,22 @@ public class AdminController {
     }
 
     @Operation(summary = "TCKK kimlik incelemelerini listele",
-            description = "status verilmezse onay bekleyenler döner.")
+            description = "status verilmezse onay bekleyenler döner. query (2-100 karakter, kırpılır; kısa ya da boş değer "
+                    + "süzmez) kullanıcının profil ad-soyadı, e-postası ve belgede beyan edilen ad-soyadta büyük-küçük harf "
+                    + "ve Türkçe karakter duyarsız arar; status süzgeciyle kesişir; 100 karakteri aşarsa 400.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "İncelemeler listelendi")
+            @ApiResponse(responseCode = "200", description = "İncelemeler listelendi"),
+            @ApiResponse(responseCode = "400", description = "query 100 karakteri aşıyor ya da bilinmeyen sıralama alanı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @RequiresPermission(StaffPermission.IDENTITY_REVIEW)
     @GetMapping("/identity-verifications")
     public ResponseEntity<SuccessDataResult<PageDto<IdentityReviewDto>>> identityReviews(
             @RequestParam(defaultValue = "PENDING") IdentityReviewStatus status,
+            @RequestParam(required = false) String query,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
-        var page = identityDocumentReviewService.search(status, pageable);
+        var page = identityDocumentReviewService.search(status, query, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
                 PageDto.of(page, page.getContent().stream().map(IdentityReviewDto::from).toList()),
                 AdminMessages.IDENTITY_REVIEWS_LISTED, HttpStatus.OK));

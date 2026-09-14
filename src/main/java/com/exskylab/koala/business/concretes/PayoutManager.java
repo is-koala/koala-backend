@@ -17,6 +17,7 @@ import com.exskylab.koala.core.monitoring.PaymentMetrics;
 import com.exskylab.koala.core.helpers.ConstraintViolations;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
 import com.exskylab.koala.core.events.AssignmentClosedEvent;
+import com.exskylab.koala.core.helpers.StaffSearchQuery;
 import com.exskylab.koala.dataAccess.DisputeDao;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
 import com.exskylab.koala.dataAccess.PayoutDao;
@@ -282,14 +283,15 @@ public class PayoutManager implements PayoutService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageDto<StaffPayoutDto> listForStaff(List<PayoutStatus> statuses, Pageable requested) {
+    public PageDto<StaffPayoutDto> listForStaff(List<PayoutStatus> statuses, String query, Pageable requested) {
         int page = Math.max(requested.getPageNumber(), 0);
         int size = requested.getPageSize() < 1 ? DEFAULT_PAGE_SIZE
                 : Math.min(requested.getPageSize(), MAX_PAGE_SIZE);
         List<PayoutStatus> filter = statuses == null || statuses.isEmpty()
                 ? PayoutStatus.AWAITING_SETTLEMENT
                 : List.copyOf(statuses);
-        Page<Payout> payouts = payoutDao.findAllByStatusIn(filter, PageRequest.of(page, size, STAFF_LIST_SORT));
+        Page<Payout> payouts = payoutDao.searchForStaff(filter, StaffSearchQuery.normalize(query),
+                PageRequest.of(page, size, STAFF_LIST_SORT));
 
         Set<UUID> workerIds = payouts.getContent().stream()
                 .map(payout -> payout.getWorker().getId())

@@ -95,19 +95,25 @@ public class PayoutsController {
                     + "Her satır ekstre eşleştirmesi için kayıtlı sağlayıcı referansını, alıcı özetini ve "
                     + "maskeli IBAN'ı (ilk 4 + son 4) taşır; tam IBAN dönmez. Tutar ondalık metindir. "
                     + "İşçi hesabını silmişse satır kuyrukta kalır, recipient ve maskedIban null döner. "
-                    + "Onay mevcut reconcile ucundan yapılır; bu GET yalnız okur.")
+                    + "Onay mevcut reconcile ucundan yapılır; bu GET yalnız okur. "
+                    + "query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) hakediş id'si, atama id'si ve alıcının "
+                    + "ad-soyadı ile e-postasında büyük-küçük harf ve Türkçe karakter duyarsız arar; status süzgeciyle "
+                    + "kesişir; 100 karakteri aşarsa 400.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Hakedişler listelendi")
+            @ApiResponse(responseCode = "200", description = "Hakedişler listelendi"),
+            @ApiResponse(responseCode = "400", description = "query 100 karakteri aşıyor",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @RequiresPermission(value = StaffPermission.PAYOUT_RECONCILE, action = "payout.reconcile")
     @GetMapping("/admin/payouts")
     public ResponseEntity<SuccessDataResult<PageDto<StaffPayoutDto>>> list(
             @RequestParam(required = false) List<PayoutStatus> status,
+            @RequestParam(required = false) String query,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable,
             @AuthenticationPrincipal StaffPrincipal actor) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
-                staffPayoutService.listForStaff(actor, status, pageable),
+                staffPayoutService.listForStaff(actor, status, query, pageable),
                 PayoutMessages.LISTED, HttpStatus.OK));
     }
 

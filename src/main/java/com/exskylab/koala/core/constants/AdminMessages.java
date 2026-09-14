@@ -26,4 +26,5 @@ public class AdminMessages {
     public static final String IDENTITY_REVIEW_REJECTED = "{admin.identity.review.rejected}";
     public static final String REJECTION_REASON_NOT_BLANK = "{admin.company.rejection.reason.not.blank}";
     public static final String DECISION_NOTE_TOO_LONG = "{admin.company.decision.note.too.long}";
+    public static final String SEARCH_QUERY_TOO_LONG = "{admin.search.query.too.long}";
 }

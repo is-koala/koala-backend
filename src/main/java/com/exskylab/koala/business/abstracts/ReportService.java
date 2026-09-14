@@ -23,7 +23,7 @@ public interface ReportService {
 
     Page<AdminReportDto> searchForModeration(ReportStatus status, ReportReason reason,
                                              ReportTargetType targetType, UUID reportedUserId,
-                                             Pageable pageable);
+                                             String query, Pageable pageable);
 
     AdminReportDetailDto getForModeration(UUID reportId);
 }

@@ -25,10 +25,15 @@ public interface AccountDeletionRequestDao extends JpaRepository<AccountDeletion
 
     Optional<AccountDeletionRequest> findFirstByUserIdOrderByRequestedAtDesc(UUID userId);
 
-    Page<AccountDeletionRequest> findAllByStatus(AccountDeletionStatus status, Pageable pageable);
-
-    @Override
-    Page<AccountDeletionRequest> findAll(Pageable pageable);
+    @Query("""
+            select r from AccountDeletionRequest r
+            left join r.user u
+            where (:status is null or r.status = :status)
+              and (cast(:query as string) is null
+                   or unaccent(lower(u.email)) like unaccent(lower(concat('%', cast(:query as string), '%'))))
+            """)
+    Page<AccountDeletionRequest> search(@Param("status") AccountDeletionStatus status,
+                                        @Param("query") String query, Pageable pageable);
 
     @Query("""
             select r.id from AccountDeletionRequest r

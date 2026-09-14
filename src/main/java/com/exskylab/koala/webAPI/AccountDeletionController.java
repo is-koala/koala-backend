@@ -47,17 +47,21 @@ public class AccountDeletionController {
         this.messageResolver = messageResolver;
     }
 
-    @Operation(summary = "Hesap silme taleplerini listele")
+    @Operation(summary = "Hesap silme taleplerini listele",
+            description = "status verilmezse tüm durumlar döner. query (2-100 karakter, kırpılır; kısa ya da boş değer "
+                    + "süzmez) talep sahibinin e-postasında büyük-küçük harf ve Türkçe karakter duyarsız arar; status "
+                    + "süzgeciyle kesişir; 100 karakteri aşarsa 400.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Hesap silme talepleri listelendi"),
-            @ApiResponse(responseCode = "400", description = "Geçersiz sayfalama veya durum değeri")
+            @ApiResponse(responseCode = "400", description = "Geçersiz sayfalama veya durum değeri ya da query 100 karakteri aşıyor")
     })
     @GetMapping
     @RequiresPermission(StaffPermission.USER_READ_PII)
     public ResponseEntity<SuccessDataResult<PageDto<AccountDeletionDto>>> list(
             @RequestParam(required = false) AccountDeletionStatus status,
+            @RequestParam(required = false) String query,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
-        var page = legalService.getDeletionRequests(status, pageable);
+        var page = legalService.getDeletionRequests(status, query, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
                 PageDto.of(page, legalMapper.toAccountDeletionDtoList(page.getContent(), messageResolver)),
                 LegalMessages.DELETIONS_LISTED, HttpStatus.OK));

@@ -1689,6 +1689,93 @@ insanı okur). `ActivityNotificationRulesTest` alıcı seçimini sabitliyor (yal
 satırının `createdAt`/`createdBy` taşıması, bilinmeyen sıralama alanının 400 dönmesi, iki kararın da akışa
 ayrı cümlelerle düşmesi ve gerekçenin yabancıya görünmemesi.
 
+## 2s5. Personel liste araması — yedi uçta `query` (#254)
+
+Personel panelinde yalnız `GET /admin/users` ve `GET /admin/companies` `query` alıyordu; atama, kimlik, IBAN,
+hakediş, şikayet, uyuşmazlık ve hesap silme kuyrukları yalnız durum/sayfa süzgeci tanıyordu ve kayıt bulmak sayfa
+sayfa gezmek demekti (13.09.2026 cihaz testi: "admin sayfalarında arama yok"). Yedi uç da artık aynı sözleşmeyle
+`query` alıyor.
+
+**Sözleşme tek yerde: `core/helpers/StaffSearchQuery.normalize`.** Değer kırpılır; kırpılmış hâli 2 karakterden
+kısaysa (boş dahil) **süzgeç uygulanmaz** — `null` DAO'ya gider ve `cast(:query as string) is null` dalı her satırı
+geçirir (§2l'deki mevcut kalıp); 100 karakteri aşarsa `ValidationException` → **400 `ADMIN_SEARCH_QUERY_TOO_LONG`**.
+Uzunluk kırpmadan **sonra** ölçülür: iki yanı boşluklu 101 karakter geçer, 101 harf geçmez. Kural manager'da
+uygulanıyor, DTO'da değil, çünkü ortada DTO yok — `@RequestParam String`; `PageableSanitizer.rejectUnknownSort`
+ile aynı yer ve aynı istisna tipi. `users`/`companies`/`staff` aramalarının uzunluk kuralı **değiştirilmedi**
+(oralarda hâlâ yalnız kırpma var); yedi uca eklenen kural yeni davranış, eskilerini bu turda daraltmak istemci
+sözleşmesi kararı.
+
+**Aranan alanlar uç başına (issue tablosunun asgarisi, iki yerde bilinçli genişletme):**
+
+| Uç | `query`'nin arandığı alanlar |
+|---|---|
+| `GET /admin/job-assignments` | atama id, ilan başlığı, işveren (ilan sahibi) ve çalışanın ad-soyadı ile e-postası |
+| `GET /admin/identity-verifications` | kullanıcının profil ad-soyadı ve e-postası, **belgede beyan edilen ad-soyad** (kuyruk satırı `IdentityReviewDto.firstName/lastName` olarak onu çiziyor; personel gördüğünü aramalı) |
+| `GET /admin/bank-account-verifications` | hesap sahibinin ad-soyadı ve e-postası, doğrulama referansı |
+| `GET /admin/payouts` | hakediş id, atama id, alıcının ad-soyadı ve e-postası |
+| `GET /admin/reports` | şikayet edenin ve edilenin ad-soyadı ile e-postası, şikayete konu ilanın başlığı |
+| `GET /admin/disputes` | uyuşmazlık id, atama id, tarafların ad-soyadı ve e-postası — çalışan, ilan sahibi **ve açan** (`openedBy` şirket ilanında ilan sahibinden farklı bir yetkili olabilir, §2p) |
+| `GET /admin/account-deletions` | talep sahibinin e-postası |
+
+Id alanları `cast(x.id as string) like lower(concat('%', :query, '%'))` ile aranıyor — tam UUID de önek de
+bulunur, büyük harfli yapıştırma `lower` ile tolere edilir. Süzgeçler mevcut durum süzgeçleriyle `and` ile
+kesişiyor (`AdminListSearchIT` her uçta ölçüyor); `GET /admin/job-assignments`'ın bugün durum süzgeci yok, orada
+kesişecek tek şey sayfalama.
+
+**Türkçe duyarsızlık `lower()` ile sağlanamıyordu — ölçüldü, `unaccent` eklendi.** Testlerin ve prod'un imajı
+`postgres:17` (`en_US.utf8`, libc): `lower('İLKER') = 'ilker'` (simple case mapping, `İ → i`) ama
+`lower('IŞIK') = 'işik'` — noktasız `ı` ile yazılan `ışık` **bulunamıyor**, çünkü libc `I`'yı Türkçe kuralla
+değil İngilizce kuralla küçültüyor; `ş/s`, `ç/c`, `ğ/g`, `ö/o`, `ü/u` da hiç katlanmıyordu. Issue'nun istediği
+"büyük-küçük ve Türkçe karakter duyarsız" bu yüzden `unaccent(lower(x)) like unaccent(lower(concat('%', :q, '%')))`
+ile kuruluyor: `unaccent('İ') = 'I'`, `unaccent('ı') = 'i'`, `Işık`↔`ışık`↔`ISIK`, `Çağlayan`↔`caglayan` hepsi
+eşleşiyor (`postgres:17` kabında ölçüldü; IT'de `sukru ozturk` → `Şükrü Öztürk`, `ışıl çağlayan` → `Işıl Çağlayan`).
+Sıra `unaccent(lower(x))`: iki sıra da bu vakalarda aynı sonucu veriyor, seçilen sıra okunanı.
+
+**Uzantı Liquibase ile geliyor (`2026/09/13-02-unaccent-extension.xml`, `CREATE EXTENSION IF NOT EXISTS unaccent`).**
+`unaccent` PostgreSQL 13'ten beri **trusted** uzantı — veritabanının sahibi süper kullanıcı olmadan da kurabiliyor;
+`postgres:17` imajı contrib'i taşıyor, Testcontainers ve Dokploy aynı imajı kullanıyor. Uzantı yoksa `CREATE
+EXTENSION` açılışta patlar ve uygulama kalkmaz — çalışma anında her aramanın 500 vermesine tercih edildi.
+`pg_trgm` **eklenmedi**: issue onu yalnız ölçüm gerektirirse istiyor, kuyruklar bugün binlerce satırın altında ve
+`unaccent` STABLE olduğu için ifade indeksi zaten doğrudan kurulamazdı.
+
+**HQL `unaccent`'i `UnaccentFunctionContributor` ile tanıyor** (`META-INF/services/org.hibernate.boot.model.FunctionContributor`,
+`core/configs`). Kayıtsız bir fonksiyon HQL'de `function('unaccent', x)` ile çağrılabilirdi ama dönüş tipi `Object`
+kalır ve `lower()`/`like` argüman doğrulamasından geçmezdi; contributor tek argümanlı, `STRING` dönen bir
+fonksiyon olarak kaydediyor. **Uzantı ile contributor birlikte yaşıyor:** biri kalkarsa arama sorguları açılışta
+değil ilk istekte kırılır — ikisini birden düşürmek gerekir.
+
+**`users`, `companies` ve `staff` aramaları bu turda `lower()` ile kaldı — bilerek ve bir test yüzünden.**
+Üçünü aynı katlamaya çekmek denendi: `CompanyApprovalIT.theQueueIsSearchableByNameAndByTaxNumber` `yalanci`
+sorgusunun `Yalancı Kahve Ltd.`'yi **bulmamasını** açıkça sabitliyor, yani şirket aramasında katlamanın yokluğu
+yazılı bir beklenti. Issue'nun kapsamı yedi uç; kapsam dışı bir ucun davranışını değiştirip onun testini de
+düzeltmek bu PR'ın kararı olamazdı. Sonuç panel içinde iki arama davranışı: yedi kuyruk `Işık`'ı `ışık` ile
+bulur, kullanıcı/şirket/personel araması bulmaz. Üçünü hizalamak (ve o testin beklentisini çevirmek) ayrı bir
+karar; mekanizma hazır — DAO'daki `lower(x)`'i `unaccent(lower(x))` yapmak yeterli.
+
+**Soft-delete edilmiş ilişkiler satırı düşürmüyor, yalnız eşleşmiyor.** Her arama JPQL'inde ilişkiler açık
+`left join` ile bağlanıyor (`left join p.worker worker`); Hibernate 7 `@SQLRestriction("is_deleted = false")`'ı bu
+join'in **ON** cümlesine yazıyor, yani hesabını silmiş işçinin hakedişi `query` yokken kuyrukta kalıyor (§2y3'ün
+#231 kuralı) ve `query` varken yalnız ad/e-posta dalı eşleşmiyor — id ile hâlâ bulunuyor. Örtük yol (`p.worker.email`)
+`nullable = false` FK'da **INNER** join üretir ve satırı düşürürdü; bu yüzden hiçbir arama dalı örtük yol
+kullanmıyor. Yükleme grafikleri değişmedi: `PayoutDao.searchForStaff` yalnız `bankAccount` çekiyor, alıcı hâlâ
+`UserService.getAllByIdIn` ile ikinci toplu sorguda geliyor; `PayoutQueueIT`'in "sayfa başına 3 statement" ölçümü
+ve `PayoutSettlementReconciliationIT`'in "komşuları gitmiş satır kuyrukta kalır" kuralı olduğu gibi geçiyor.
+
+**`IdentityVerificationDao`'nun üç türetilmiş listesi tek `search(status, query, pageable)` oldu.** Durum
+süzgeci `cast(:status as string) = 'PENDING' and ...` dallarıyla JPQL'de; `EagerFetchCoverageIT`'in üç muafiyeti
+tek satıra indi. `AccountDeletionRequestDao.findAll/findAllByStatus` de tek `search`'e indi ve DTO kullanıcıyı
+çizmediği için grafiksiz — `CollectionQueryWithoutGraphTest` allowlist'inde gerekçesiyle. `ReportDao.search`'ün
+`@EntityGraph`'ı sorgunun **altına** alındı; tarayıcı 400 karakterlik pencerede artık grafiği görüyor ve
+`ReportDao.search` allowlist'ten düştü — kural değişmedi, görünürlüğü düzeldi.
+
+**İzin yüzeyi değişmedi.** Yedi uç aynı `@RequiresPermission` ile duruyor; `query` yalnız satırları daraltıyor,
+kimin görebildiğini genişletmiyor (`AdminListSearchIT.searchDoesNotWidenWhoMayReadAQueue`: güven dalı finans
+kuyruklarını, finans dalı güven kuyruklarını `query` ile de göremiyor). `query` §2av'nin 5. kuralı gereği **filtre**
+sayılıyor: `query` taşıyan her liste isteği denetim satırı yazıyor, süzgeçsiz sayfa çevirme yazmıyor — arama
+metninin kendisi kişisel veri olabilir, gerekçe `/admin/users` için yazılanla aynı.
+
+**Panel tarafı is-koala/koala-admin#94.**
+
 ---
 
 ## 2t. Iyzico mutabakat tetiği

@@ -290,12 +290,12 @@ class PayoutQueueIT extends AbstractStaffIntegrationTest {
         try {
             statistics.clear();
             List<StaffPayoutDto> oneRow = transactionTemplate.execute(status ->
-                    payoutService.listForStaff(null, PageRequest.of(0, 1)).content());
+                    payoutService.listForStaff(null, null, PageRequest.of(0, 1)).content());
             long statementsForOneRow = statistics.getPrepareStatementCount();
 
             statistics.clear();
             List<StaffPayoutDto> fiveRows = transactionTemplate.execute(status ->
-                    payoutService.listForStaff(null, PageRequest.of(0, 5)).content());
+                    payoutService.listForStaff(null, null, PageRequest.of(0, 5)).content());
             long statementsForFiveRows = statistics.getPrepareStatementCount();
 
             assertEquals(1, oneRow.size());

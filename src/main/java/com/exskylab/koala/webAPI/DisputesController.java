@@ -53,17 +53,23 @@ public class DisputesController {
     @Operation(summary = "Uyuşmazlık kuyruğu",
             description = "status verilmezse yalnız OPEN ve UNDER_REVIEW döner. "
                     + "status=RESOLVED kapalı kayıtları (DISMISSED çözümü dahil) sayfalar. "
-                    + "Tutarlar DisputeDto'da yoktur; GET /admin/job-assignments/{id} (payment.read) otoriter kaynaktır.")
+                    + "Tutarlar DisputeDto'da yoktur; GET /admin/job-assignments/{id} (payment.read) otoriter kaynaktır. "
+                    + "query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) uyuşmazlık id'si, atama id'si ve "
+                    + "tarafların (çalışan, ilan sahibi, açan) ad-soyadı ile e-postasında büyük-küçük harf ve Türkçe karakter "
+                    + "duyarsız arar; status süzgeciyle kesişir; 100 karakteri aşarsa 400.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Uyuşmazlıklar listelendi")
+            @ApiResponse(responseCode = "200", description = "Uyuşmazlıklar listelendi"),
+            @ApiResponse(responseCode = "400", description = "query 100 karakteri aşıyor ya da bilinmeyen sıralama alanı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @RequiresPermission(StaffPermission.DISPUTE_RESOLVE)
     @GetMapping
     public ResponseEntity<SuccessDataResult<PageDto<DisputeDto>>> list(
             @RequestParam(required = false) DisputeStatus status,
+            @RequestParam(required = false) String query,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
-        var page = disputeService.searchForStaff(status, pageable);
+        var page = disputeService.searchForStaff(status, query, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
                 PageDto.of(page, disputeMapper.toDisputeDtoList(page.getContent())),
                 DisputeMessages.LISTED, HttpStatus.OK));

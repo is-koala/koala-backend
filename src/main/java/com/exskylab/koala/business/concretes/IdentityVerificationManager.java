@@ -19,6 +19,7 @@ import com.exskylab.koala.core.producers.user.UserProducerService;
 import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.core.utilities.storage.FolderType;
 import com.exskylab.koala.core.utilities.storage.StorageService;
+import com.exskylab.koala.core.helpers.StaffSearchQuery;
 import com.exskylab.koala.dataAccess.IdentityVerificationDao;
 import com.exskylab.koala.entities.IdentityReviewStatus;
 import com.exskylab.koala.entities.IdentityVerification;
@@ -144,14 +145,10 @@ public class IdentityVerificationManager implements IdentityDocumentReviewServic
 
     @Override
     @Transactional(readOnly = true)
-    public Page<IdentityVerification> search(IdentityReviewStatus status, Pageable pageable) {
+    public Page<IdentityVerification> search(IdentityReviewStatus status, String query, Pageable pageable) {
         pageableSanitizer.rejectUnknownSort(pageable, SORTABLE);
         IdentityReviewStatus filter = status == null ? IdentityReviewStatus.PENDING : status;
-        return switch (filter) {
-            case PENDING -> identityVerificationDao.findByVerifiedFalseAndRejectedAtIsNull(pageable);
-            case APPROVED -> identityVerificationDao.findByVerifiedTrue(pageable);
-            case REJECTED -> identityVerificationDao.findByRejectedAtIsNotNull(pageable);
-        };
+        return identityVerificationDao.search(filter.name(), StaffSearchQuery.normalize(query), pageable);
     }
 
     @Override

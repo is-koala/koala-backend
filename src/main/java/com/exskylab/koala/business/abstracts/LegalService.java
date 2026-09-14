@@ -30,7 +30,7 @@ public interface LegalService {
 
     AccountDeletionRequest getCurrentDeletionRequest(UUID userId);
 
-    Page<AccountDeletionRequest> getDeletionRequests(AccountDeletionStatus status, Pageable pageable);
+    Page<AccountDeletionRequest> getDeletionRequests(AccountDeletionStatus status, String query, Pageable pageable);
 
     AccountDeletionRequest getDeletionRequest(UUID requestId);
 

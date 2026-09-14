@@ -50,7 +50,21 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
     @EntityGraph(attributePaths = {"job", "job.category", "job.address", "job.company", "worker", "worker.profilePicture"})
     Page<JobAssignment> findAllByJobCreatorId(UUID creatorId, Pageable pageable);
 
-    @Query("select assignment from JobAssignment assignment")
+    @Query("""
+            select assignment from JobAssignment assignment
+            left join assignment.worker worker
+            left join assignment.job job
+            left join job.creator creator
+            where cast(:query as string) is null
+               or cast(assignment.id as string) like lower(concat('%', cast(:query as string), '%'))
+               or unaccent(lower(job.title)) like unaccent(lower(concat('%', cast(:query as string), '%')))
+               or unaccent(lower(worker.email)) like unaccent(lower(concat('%', cast(:query as string), '%')))
+               or unaccent(lower(concat(worker.firstName, ' ', worker.lastName)))
+                  like unaccent(lower(concat('%', cast(:query as string), '%')))
+               or unaccent(lower(creator.email)) like unaccent(lower(concat('%', cast(:query as string), '%')))
+               or unaccent(lower(concat(creator.firstName, ' ', creator.lastName)))
+                  like unaccent(lower(concat('%', cast(:query as string), '%')))
+            """)
     @EntityGraph(attributePaths = {
             "worker",
             "worker.profilePicture",
@@ -59,7 +73,7 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
             "job.creator.profilePicture",
             "job.company"
     })
-    Page<JobAssignment> findAllForStaff(Pageable pageable);
+    Page<JobAssignment> findAllForStaff(@Param("query") String query, Pageable pageable);
 
     long countByWorkerIdAndStatus(UUID workerId, AssignmentStatus status);
 

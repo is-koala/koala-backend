@@ -23,7 +23,7 @@ public interface IdentityDocumentReviewService {
 
     IdentityVerification reject(StaffPrincipal actor, UUID reviewId, String reason);
 
-    Page<IdentityVerification> search(IdentityReviewStatus status, Pageable pageable);
+    Page<IdentityVerification> search(IdentityReviewStatus status, String query, Pageable pageable);
 
     IdentityVerification getById(UUID reviewId);
 

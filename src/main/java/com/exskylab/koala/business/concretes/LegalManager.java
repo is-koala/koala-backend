@@ -18,6 +18,7 @@ import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.DisputeService;
 import com.exskylab.koala.business.abstracts.PaymentService;
 import com.exskylab.koala.core.privacy.AccountAnonymizer;
+import com.exskylab.koala.core.helpers.StaffSearchQuery;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -173,11 +174,10 @@ public class LegalManager implements LegalService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<AccountDeletionRequest> getDeletionRequests(AccountDeletionStatus status, Pageable pageable) {
+    public Page<AccountDeletionRequest> getDeletionRequests(AccountDeletionStatus status, String query,
+                                                            Pageable pageable) {
         pageableSanitizer.rejectUnknownSort(pageable, DELETION_SORT_FIELDS);
-        return status == null
-                ? accountDeletionRequestDao.findAll(pageable)
-                : accountDeletionRequestDao.findAllByStatus(status, pageable);
+        return accountDeletionRequestDao.search(status, StaffSearchQuery.normalize(query), pageable);
     }
 
     @Override
