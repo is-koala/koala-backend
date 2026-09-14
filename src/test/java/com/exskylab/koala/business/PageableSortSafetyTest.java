@@ -43,7 +43,9 @@ class PageableSortSafetyTest {
             new Exemption("PayoutManager", "listForStaff",
                     "istemci sort'u yok sayiliyor; kuyruk sabit createdAt DESC kullanir"),
             new Exemption("StaffPayoutManager", "listForStaff",
-                    "saf devretme; izin kapisindan sonra PayoutManager.listForStaff istemci sort'unu yok sayar"));
+                    "saf devretme; izin kapisindan sonra PayoutManager.listForStaff istemci sort'unu yok sayar"),
+            new Exemption("AdminDetailManager", "searchCompanies",
+                    "saf devretme; sayfalama CompanyManager.searchCompanies icinde dogrulaniyor (#283)"));
 
     @Test
     void everyPagedQuerySanitisesTheRequestedSort() throws IOException {
