@@ -2,6 +2,8 @@ package com.exskylab.koala.dataAccess;
 
 import com.exskylab.koala.support.AbstractIntegrationTest;
 import com.exskylab.koala.support.OverlappingWrites;
+import com.exskylab.koala.support.PaymentFixtures;
+import com.exskylab.koala.support.RunbookSql;
 import com.exskylab.koala.support.TestLatches;
 import com.exskylab.koala.business.abstracts.PaymentService;
 import com.exskylab.koala.core.exceptions.ConflictException;
@@ -9,6 +11,7 @@ import com.exskylab.koala.core.helpers.CommissionCalculator;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.Payment;
 import com.exskylab.koala.entities.PaymentAttemptStatus;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -16,12 +19,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
@@ -30,7 +28,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -51,6 +48,13 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
 
     @Autowired
     private PlatformTransactionManager transactionManager;
+
+    private PaymentFixtures fixtures;
+
+    @BeforeEach
+    void fixtures() {
+        fixtures = new PaymentFixtures(jdbcTemplate);
+    }
 
     @Test
     void databaseAllowsOnlyOneActiveAttemptPerAssignment() {
@@ -86,7 +90,7 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
     void everyStatusJavaCallsActiveIsAlsoBlockedByTheDatabaseAtInsertTime() {
         UUID jobId = UUID.randomUUID();
         UUID assignmentId = UUID.randomUUID();
-        seedAssignment(jobId, assignmentId);
+        fixtures.seedAssignment(jobId, assignmentId);
 
         try {
             for (PaymentAttemptStatus active : PaymentAttemptStatus.ACTIVE) {
@@ -107,7 +111,7 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
                 jdbcTemplate.update("delete from payments where id = ?", sitting);
             }
         } finally {
-            cleanUp(jobId, assignmentId);
+            fixtures.cleanUp(jobId, assignmentId);
         }
     }
 
@@ -115,34 +119,17 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
     void twoConcurrentReservationsProduceOneAttemptAndOneConflict() throws Exception {
         UUID jobId = UUID.randomUUID();
         UUID assignmentId = UUID.randomUUID();
-        jdbcTemplate.update("""
-                insert into jobs (id, created_at, is_deleted, title, status, employer_type,
-                                  experience_required, insurance_required, min_age, max_age,
-                                  start_date_time, end_date_time)
-                values (?, now(), false, 'Payment lock', 'OPEN', 'INDIVIDUAL',
-                        false, false, 18, 65, now() + interval '1 day', now() + interval '2 days')
-                """, jobId);
-        jdbcTemplate.update("""
-                insert into job_assignments
-                    (id, created_at, is_deleted, job_id, worker_id, status, payment_status,
-                     pricing_version, currency,
-                     worker_payout, commission_rate, commission_amount, total_charged, work_hours)
-                values (?, now(), false, ?, '00000000-0000-0000-0000-000000000001',
-                        'CONFIRMED', 'PENDING_COLLECTION', '2026-09-v1', 'TRY',
-                        1000.00, 0.0750, 75.00, 1075.00, 0)
-                """, assignmentId, jobId);
+        fixtures.seedAssignment(jobId, assignmentId);
         widenTheInsertWindow();
 
         try (var executor = Executors.newFixedThreadPool(2)) {
             CountDownLatch start = new CountDownLatch(1);
-            CommissionCalculator.Breakdown breakdown = new CommissionCalculator.Breakdown(
-                    new BigDecimal("1000.00"), new BigDecimal("75.00"),
-                    new BigDecimal("1075.00"), new BigDecimal("0.0750"));
+            CommissionCalculator.Breakdown breakdown = PaymentFixtures.breakdown();
             java.util.concurrent.Callable<String> request = () -> {
                 start.await();
                 JobAssignment assignment = new JobAssignment();
                 assignment.setId(assignmentId);
-                assignment.setPricingVersion("2026-09-v1");
+                assignment.setPricingVersion(PaymentFixtures.PRICING_VERSION);
                 assignment.setCurrency("TRY");
                 try {
                     paymentService.startAttempt(assignment, breakdown);
@@ -166,9 +153,7 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
                     """, Integer.class, assignmentId));
         } finally {
             narrowTheInsertWindow();
-            jdbcTemplate.update("delete from payments where job_assignment_id = ?", assignmentId);
-            jdbcTemplate.update("delete from job_assignments where id = ?", assignmentId);
-            jdbcTemplate.update("delete from jobs where id = ?", jobId);
+            fixtures.cleanUp(jobId, assignmentId);
         }
     }
 
@@ -176,29 +161,12 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
     void reservationWaitsForTheFinancialLockAndRechecksTheCommittedAssignmentState() throws Exception {
         UUID jobId = UUID.randomUUID();
         UUID assignmentId = UUID.randomUUID();
-        jdbcTemplate.update("""
-                insert into jobs (id, created_at, is_deleted, title, status, employer_type,
-                                  experience_required, insurance_required, min_age, max_age,
-                                  start_date_time, end_date_time)
-                values (?, now(), false, 'Payment lock', 'OPEN', 'INDIVIDUAL',
-                        false, false, 18, 65, now() + interval '1 day', now() + interval '2 days')
-                """, jobId);
-        jdbcTemplate.update("""
-                insert into job_assignments
-                    (id, created_at, is_deleted, job_id, worker_id, status, payment_status,
-                     pricing_version, currency, worker_payout, commission_rate,
-                     commission_amount, total_charged, work_hours)
-                values (?, now(), false, ?, '00000000-0000-0000-0000-000000000001',
-                        'CONFIRMED', 'PENDING_COLLECTION', '2026-09-v1', 'TRY',
-                        1000.00, 0.0750, 75.00, 1075.00, 0)
-                """, assignmentId, jobId);
+        fixtures.seedAssignment(jobId, assignmentId);
 
         CountDownLatch firstHasLock = new CountDownLatch(1);
         CountDownLatch releaseFirst = new CountDownLatch(1);
         TransactionTemplate transactions = new TransactionTemplate(transactionManager);
-        CommissionCalculator.Breakdown breakdown = new CommissionCalculator.Breakdown(
-                new BigDecimal("1000.00"), new BigDecimal("75.00"),
-                new BigDecimal("1075.00"), new BigDecimal("0.0750"));
+        CommissionCalculator.Breakdown breakdown = PaymentFixtures.breakdown();
 
         try (var executor = Executors.newFixedThreadPool(2)) {
             var financialDecision = executor.submit(() -> transactions.executeWithoutResult(status -> {
@@ -231,9 +199,7 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
                     "select count(*) from payments where job_assignment_id = ?", Integer.class, assignmentId));
         } finally {
             releaseFirst.countDown();
-            jdbcTemplate.update("delete from payments where job_assignment_id = ?", assignmentId);
-            jdbcTemplate.update("delete from job_assignments where id = ?", assignmentId);
-            jdbcTemplate.update("delete from jobs where id = ?", jobId);
+            fixtures.cleanUp(jobId, assignmentId);
         }
     }
 
@@ -242,14 +208,14 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
         UUID jobId = UUID.randomUUID();
         UUID assignmentId = UUID.randomUUID();
         UUID paymentId = UUID.randomUUID();
-        seedAssignment(jobId, assignmentId);
+        fixtures.seedAssignment(jobId, assignmentId);
         seedStuckInitiation(paymentId, assignmentId);
 
         try {
-            CommissionCalculator.Breakdown breakdown = breakdown();
+            CommissionCalculator.Breakdown breakdown = PaymentFixtures.breakdown();
             JobAssignment assignment = new JobAssignment();
             assignment.setId(assignmentId);
-            assignment.setPricingVersion("2026-09-v1");
+            assignment.setPricingVersion(PaymentFixtures.PRICING_VERSION);
             assignment.setCurrency("TRY");
 
             ConflictException blocked = assertThrows(ConflictException.class,
@@ -275,7 +241,7 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
             assertTrue(idsReturnedByTheRunbookQuery().contains(paymentId),
                     "Otomatik yol kalmadigi icin satiri gorunur kilan tek sey runbook kuyrugu; orada olmali.");
         } finally {
-            cleanUp(jobId, assignmentId);
+            fixtures.cleanUp(jobId, assignmentId);
         }
     }
 
@@ -284,7 +250,7 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
         UUID jobId = UUID.randomUUID();
         UUID assignmentId = UUID.randomUUID();
         UUID paymentId = UUID.randomUUID();
-        seedAssignment(jobId, assignmentId);
+        fixtures.seedAssignment(jobId, assignmentId);
         seedStuckInitiation(paymentId, assignmentId);
 
         try {
@@ -297,7 +263,7 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
                     "docs/runbooks/payments.md icindeki kuyruk sorgusu supurulen satiri dondurmeli; "
                             + "dondurmezse supurme sadece kovayi degistirmis, gorunurluk kurmamis olur.");
         } finally {
-            cleanUp(jobId, assignmentId);
+            fixtures.cleanUp(jobId, assignmentId);
         }
     }
 
@@ -309,8 +275,8 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
         UUID uncertain = UUID.randomUUID();
         UUID otherJobId = UUID.randomUUID();
         UUID otherAssignmentId = UUID.randomUUID();
-        seedAssignment(jobId, assignmentId);
-        seedAssignment(otherJobId, otherAssignmentId);
+        fixtures.seedAssignment(jobId, assignmentId);
+        fixtures.seedAssignment(otherJobId, otherAssignmentId);
         seedStuckInitiation(swept, assignmentId);
         seedStuckInitiation(uncertain, otherAssignmentId);
 
@@ -332,8 +298,8 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
                     "Kuyruk sorgusu yalniz supurulen satiri secmeli; sonucu bilinmeyen deneme baska bir "
                             + "triyaj dalidir ve ayni kovaya dusmemeli: " + queue);
         } finally {
-            cleanUp(jobId, assignmentId);
-            cleanUp(otherJobId, otherAssignmentId);
+            fixtures.cleanUp(jobId, assignmentId);
+            fixtures.cleanUp(otherJobId, otherAssignmentId);
         }
     }
 
@@ -341,7 +307,7 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
     void aFailedAttemptDoesNotBlockTheEmployerFromTryingAgain() {
         UUID jobId = UUID.randomUUID();
         UUID assignmentId = UUID.randomUUID();
-        seedAssignment(jobId, assignmentId);
+        fixtures.seedAssignment(jobId, assignmentId);
         jdbcTemplate.update("""
                 insert into payments (id, created_at, is_deleted, job_assignment_id, conversation_id,
                                       status, currency, verification_attempts)
@@ -351,10 +317,10 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
         try {
             JobAssignment assignment = new JobAssignment();
             assignment.setId(assignmentId);
-            assignment.setPricingVersion("2026-09-v1");
+            assignment.setPricingVersion(PaymentFixtures.PRICING_VERSION);
             assignment.setCurrency("TRY");
 
-            var retry = paymentService.startAttempt(assignment, breakdown());
+            var retry = paymentService.startAttempt(assignment, PaymentFixtures.breakdown());
 
             assertEquals(PaymentAttemptStatus.INITIATED, retry.getStatus());
             assertEquals(1, jdbcTemplate.queryForObject("""
@@ -364,7 +330,7 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
             assertEquals(2, jdbcTemplate.queryForObject(
                     "select count(*) from payments where job_assignment_id = ?", Integer.class, assignmentId));
         } finally {
-            cleanUp(jobId, assignmentId);
+            fixtures.cleanUp(jobId, assignmentId);
         }
     }
 
@@ -372,7 +338,7 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
     void theIndexRejectsASecondActiveRowWhenTwoInsertsSkipTheAssignmentLock() throws Exception {
         UUID jobId = UUID.randomUUID();
         UUID assignmentId = UUID.randomUUID();
-        seedAssignment(jobId, assignmentId);
+        fixtures.seedAssignment(jobId, assignmentId);
         widenTheInsertWindow();
 
         try {
@@ -408,7 +374,7 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
                     """, Integer.class, assignmentId));
         } finally {
             narrowTheInsertWindow();
-            cleanUp(jobId, assignmentId);
+            fixtures.cleanUp(jobId, assignmentId);
         }
     }
 
@@ -476,56 +442,9 @@ class ActivePaymentAttemptConstraintIT extends AbstractIntegrationTest {
     }
 
     private static String abandonedQueueQueryFromTheRunbook() {
-        String runbook;
-        try {
-            runbook = Files.readString(Path.of("docs/runbooks/payments.md"), StandardCharsets.UTF_8);
-        } catch (java.io.IOException unreadable) {
-            throw new IllegalStateException("docs/runbooks/payments.md okunamadi", unreadable);
-        }
-        Matcher blocks = Pattern.compile("```sql\\n(.*?)```", Pattern.DOTALL).matcher(runbook);
-        List<String> matching = new ArrayList<>();
-        while (blocks.find()) {
-            String block = blocks.group(1);
-            if (block.contains("{payment.initiation.abandoned}")) {
-                matching.add(block);
-            }
-        }
-        assertEquals(1, matching.size(),
-                "Runbook, supurulen satirlarin kuyrugunu tam olarak bir SQL blogunda tarif etmeli, "
-                        + "bulunan: " + matching.size());
-        return matching.getFirst().replace("select id, job_assignment_id, conversation_id, created_at",
-                "select id");
-    }
-
-    private static CommissionCalculator.Breakdown breakdown() {
-        return new CommissionCalculator.Breakdown(
-                new BigDecimal("1000.00"), new BigDecimal("75.00"),
-                new BigDecimal("1075.00"), new BigDecimal("0.0750"));
-    }
-
-    private void seedAssignment(UUID jobId, UUID assignmentId) {
-        jdbcTemplate.update("""
-                insert into jobs (id, created_at, is_deleted, title, status, employer_type,
-                                  experience_required, insurance_required, min_age, max_age,
-                                  start_date_time, end_date_time)
-                values (?, now(), false, 'Payment lock', 'OPEN', 'INDIVIDUAL',
-                        false, false, 18, 65, now() + interval '1 day', now() + interval '2 days')
-                """, jobId);
-        jdbcTemplate.update("""
-                insert into job_assignments
-                    (id, created_at, is_deleted, job_id, worker_id, status, payment_status,
-                     pricing_version, currency,
-                     worker_payout, commission_rate, commission_amount, total_charged, work_hours)
-                values (?, now(), false, ?, '00000000-0000-0000-0000-000000000001',
-                        'CONFIRMED', 'PENDING_COLLECTION', '2026-09-v1', 'TRY',
-                        1000.00, 0.0750, 75.00, 1075.00, 0)
-                """, assignmentId, jobId);
-    }
-
-    private void cleanUp(UUID jobId, UUID assignmentId) {
-        jdbcTemplate.update("delete from payments where job_assignment_id = ?", assignmentId);
-        jdbcTemplate.update("delete from job_assignments where id = ?", assignmentId);
-        jdbcTemplate.update("delete from jobs where id = ?", jobId);
+        return RunbookSql.theOnlyBlock(RunbookSql.PAYMENTS,
+                        block -> block.contains("{payment.initiation.abandoned}"), "supurulen satirlarin kuyrugunu")
+                .replace("select id, job_assignment_id, conversation_id, created_at", "select id");
     }
 
     private static void await(CountDownLatch latch) {

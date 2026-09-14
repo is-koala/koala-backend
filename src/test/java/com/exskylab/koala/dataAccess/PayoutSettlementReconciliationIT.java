@@ -9,6 +9,8 @@ import com.exskylab.koala.entities.Payout;
 import com.exskylab.koala.entities.PayoutStatus;
 import com.exskylab.koala.support.AbstractIntegrationTest;
 import com.exskylab.koala.support.OverlappingWrites;
+import com.exskylab.koala.support.PaymentFixtures;
+import com.exskylab.koala.support.RunbookSql;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,9 +21,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -31,7 +30,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -42,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
 
-    private static final UUID WORKER = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private static final UUID WORKER = PaymentFixtures.SEEDED_WORKER;
     private static final String PROVIDER_REFERENCE = "iyz-transaction-4711";
 
     @Autowired
@@ -63,12 +61,9 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
 
     @AfterEach
     void cleanUp() {
-        for (UUID assignmentId : assignments) {
-            jdbcTemplate.update("delete from payouts where job_assignment_id = ?", assignmentId);
-            jdbcTemplate.update("delete from job_assignments where id = ?", assignmentId);
-        }
-        for (UUID jobId : jobs) {
-            jdbcTemplate.update("delete from jobs where id = ?", jobId);
+        PaymentFixtures fixtures = new PaymentFixtures(jdbcTemplate);
+        for (int seeded = 0; seeded < assignments.size(); seeded++) {
+            fixtures.cleanUp(jobs.get(seeded), assignments.get(seeded));
         }
         for (UUID workerId : workers) {
             jdbcTemplate.update("delete from users where id = ?", workerId);
@@ -402,24 +397,9 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
     }
 
     private static String runbookSettlementQueueBlock() {
-        String runbook;
-        try {
-            runbook = Files.readString(Path.of("docs/runbooks/payments.md"), StandardCharsets.UTF_8);
-        } catch (java.io.IOException unreadable) {
-            throw new IllegalStateException("docs/runbooks/payments.md okunamadi", unreadable);
-        }
-        Matcher blocks = Pattern.compile("```sql\\n(.*?)```", Pattern.DOTALL).matcher(runbook);
-        List<String> matching = new ArrayList<>();
-        while (blocks.find()) {
-            String block = blocks.group(1);
-            if (block.contains("from payouts") && block.contains("settlement_reference is null")) {
-                matching.add(block);
-            }
-        }
-        assertEquals(1, matching.size(),
-                "Runbook, mutabakat bekleyen hakedislerin kuyrugunu tam olarak bir SQL blogunda tarif etmeli, "
-                        + "bulunan: " + matching.size());
-        return matching.getFirst();
+        return RunbookSql.theOnlyBlock(RunbookSql.PAYMENTS,
+                block -> block.contains("from payouts") && block.contains("settlement_reference is null"),
+                "mutabakat bekleyen hakedislerin kuyrugunu");
     }
 
     private static Set<UUID> onlySeeded(List<UUID> ids, Set<UUID> seeded) {
@@ -460,22 +440,8 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
     }
 
     private void seedAssignment(UUID jobId, UUID assignmentId, UUID workerId) {
-        jdbcTemplate.update("""
-                insert into jobs (id, created_at, is_deleted, title, status, employer_type,
-                                  experience_required, insurance_required, min_age, max_age,
-                                  start_date_time, end_date_time)
-                values (?, now(), false, 'Payout settlement', 'OPEN', 'INDIVIDUAL',
-                        false, false, 18, 65, now() + interval '1 day', now() + interval '2 days')
-                """, jobId);
-        jdbcTemplate.update("""
-                insert into job_assignments
-                    (id, created_at, is_deleted, job_id, worker_id, status, payment_status,
-                     pricing_version, currency,
-                     worker_payout, commission_rate, commission_amount, total_charged, work_hours)
-                values (?, now(), false, ?, ?, 'COMPLETED', 'RELEASED_TO_WORKER', '2026-09-v1', 'TRY',
-                        1000.00, 0.0750, 75.00, 1075.00, 0)
-                """, assignmentId, jobId, workerId);
-
+        new PaymentFixtures(jdbcTemplate)
+                .seedAssignment(jobId, assignmentId, workerId, "COMPLETED", "RELEASED_TO_WORKER");
         jobs.add(jobId);
         assignments.add(assignmentId);
     }
