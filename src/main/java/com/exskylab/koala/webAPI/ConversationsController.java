@@ -58,12 +58,23 @@ public class ConversationsController {
     }
 
     @Operation(summary = "İlan üzerinden konuşma aç",
-            description = "Konuşma açmak için arada bir başvuru olmalıdır; rastgele bir kullanıcı yabancı bir ilan üzerinden mesaj başlatamaz. Aynı ilanda aynı işçiyle ikinci konuşma açılmaz, mevcut olan döner.")
+            description = "Konuşma açmak için işçinin bu ilandaki atamasının ödemesi emanette olmalıdır "
+                    + "(HELD_IN_ESCROW ya da RELEASED_TO_WORKER); ödeme yoksa 403 MESSAGING_PAYMENT_REQUIRED. "
+                    + "Atama iptal/ret edilmiş, iade edilmiş ya da iş bitiminden sonraki pencere kapanmışsa 409 "
+                    + "MESSAGING_WINDOW_CLOSED. Aynı ilanda aynı işçiyle ikinci konuşma açılmaz, mevcut olan döner. "
+                    + "workerId verilmezse çağıran işçi sayılır; işveren tarafı (ilan sahibi ya da şirket yetkilisi) "
+                    + "workerId vermek zorundadır.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Konuşma açıldı ya da mevcut konuşma döndürüldü"),
-            @ApiResponse(responseCode = "403", description = "Bu ilana başvuru yok",
+            @ApiResponse(responseCode = "403",
+                    description = "Ödeme henüz emanette değil (MESSAGING_PAYMENT_REQUIRED) ya da taraflardan biri "
+                            + "diğerini engellemiş (MESSAGING_BLOCKED)",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
-            @ApiResponse(responseCode = "404", description = "İlan bulunamadı",
+            @ApiResponse(responseCode = "404",
+                    description = "İlan bulunamadı ya da çağıran ilanın işveren tarafı da işçisi de değil",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409",
+                    description = "Mesajlaşma kapalı: atama iptal/ret/iade edildi ya da iş bitimi penceresi doldu",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping("/jobs/{jobId}/conversation")
@@ -93,12 +104,19 @@ public class ConversationsController {
     }
 
     @Operation(summary = "Mesaj gönder",
-            description = "Engelleme iki yönlü kontrol edilir: taraflardan biri diğerini engellediyse mesaj gönderilemez. Mesaj gerçek zamanlı olarak konuşma topic ve iki tarafın kişisel kuyruğuna yayınlanır.")
+            description = "Engelleme iki yönlü kontrol edilir: taraflardan biri diğerini engellediyse mesaj gönderilemez. "
+                    + "İkili sohbette işçinin, grupta işveren tarafında olmayan gönderenin ataması ödenmemişse "
+                    + "403 MESSAGING_PAYMENT_REQUIRED; atama kapandıysa ya da iş bitimi penceresi dolduysa "
+                    + "409 MESSAGING_WINDOW_CLOSED. Mesaj gerçek zamanlı olarak "
+                    + "konuşma topic ve katılımcıların kişisel kuyruğuna yayınlanır.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Mesaj gönderildi"),
-            @ApiResponse(responseCode = "403", description = "Taraflardan biri diğerini engellemiş",
+            @ApiResponse(responseCode = "403",
+                    description = "Taraflardan biri diğerini engellemiş ya da ödeme henüz emanette değil",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "404", description = "Konuşma bulunamadı ya da taraf değilsiniz",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "Mesajlaşma kapalı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping("/conversations/{conversationId}/messages")

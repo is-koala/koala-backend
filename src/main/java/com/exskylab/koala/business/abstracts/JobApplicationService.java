@@ -37,5 +37,4 @@ public interface JobApplicationService {
     PageDto<ReceivedApplicationDto> getReceivedApplications(ApplicationStatus status, UUID jobId, UUID companyId,
                                                             Pageable pageable);
 
-    boolean hasApplied(UUID jobId, UUID userId);
 }

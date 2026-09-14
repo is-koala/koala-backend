@@ -21,6 +21,8 @@ import com.exskylab.koala.entities.*;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.business.abstracts.ActivityNotificationService;
+import com.exskylab.koala.core.events.AssignmentClosedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,6 +51,7 @@ public class CancellationManager implements CancellationService {
     private final DisputeService disputeService;
     private final ActivityNotificationService activityNotificationService;
     private final PaymentService paymentService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public CancellationManager(CancellationDao cancellationDao, JobAssignmentService jobAssignmentService,
                                UserService userService, SecurityService securityService,
@@ -56,7 +59,8 @@ public class CancellationManager implements CancellationService {
                                PayoutService payoutService,
                                DisputeService disputeService,
                                ActivityNotificationService activityNotificationService,
-                               PaymentService paymentService) {
+                               PaymentService paymentService,
+                               ApplicationEventPublisher eventPublisher) {
         this.cancellationDao = cancellationDao;
         this.jobAssignmentService = jobAssignmentService;
         this.userService = userService;
@@ -67,6 +71,7 @@ public class CancellationManager implements CancellationService {
         this.disputeService = disputeService;
         this.activityNotificationService = activityNotificationService;
         this.paymentService = paymentService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -120,6 +125,8 @@ public class CancellationManager implements CancellationService {
                 jobAssignmentId, actorId, party, notice.toMinutes(),
                 outcome.feeAmount(), outcome.refundAmount());
 
+        eventPublisher.publishEvent(new AssignmentClosedEvent(
+                assignment.getJob().getId(), assignment.getWorker().getId(), assignment.getId()));
         activityNotificationService.assignmentCancelled(saved);
         return saved;
     }
@@ -191,6 +198,8 @@ public class CancellationManager implements CancellationService {
         log.info("Assignment {} expired: the employer did not pay before the job start, {} min of notice left.",
                 jobAssignmentId, notice.toMinutes());
 
+        eventPublisher.publishEvent(new AssignmentClosedEvent(
+                assignment.getJob().getId(), assignment.getWorker().getId(), assignment.getId()));
         activityNotificationService.assignmentExpired(saved);
         return true;
     }

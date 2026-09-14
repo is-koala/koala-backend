@@ -51,13 +51,19 @@ import com.exskylab.koala.business.abstracts.GalleryService;
 import com.exskylab.koala.business.abstracts.SettingsService;
 import com.exskylab.koala.core.constants.SettingKeys;
 import com.exskylab.koala.business.abstracts.ActivityNotificationService;
-import com.exskylab.koala.core.events.AssignmentConfirmedEvent;
+import com.exskylab.koala.core.events.AssignmentClosedEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.function.BinaryOperator;
 
 @Service
 @Slf4j
@@ -66,6 +72,8 @@ public class JobAssignmentManager implements JobAssignmentService {
     private static final java.util.Set<AssignmentStatus> LIVE_ASSIGNMENT_STATUSES =
             java.util.EnumSet.of(AssignmentStatus.PENDING_CONFIRMATION, AssignmentStatus.CONFIRMED,
                     AssignmentStatus.IN_PROGRESS);
+    private static final Comparator<JobAssignment> OLDEST_FIRST =
+            Comparator.comparing(JobAssignment::getCreatedAt, Comparator.nullsFirst(Comparator.naturalOrder()));
 
     private static final java.util.Set<AssignmentStatus> SLOT_OCCUPYING_STATUSES =
             java.util.EnumSet.of(AssignmentStatus.PENDING_CONFIRMATION, AssignmentStatus.CONFIRMED,
@@ -183,9 +191,9 @@ public class JobAssignmentManager implements JobAssignmentService {
 
         log.info("Job assignment with id {} has been saved", assignmentId);
 
-        if (assignment.getStatus() == AssignmentStatus.CONFIRMED) {
-            eventPublisher.publishEvent(new AssignmentConfirmedEvent(
-                    assignment.getJob().getId(), assignment.getWorker().getId()));
+        if (assignment.getStatus() == AssignmentStatus.REJECTED) {
+            eventPublisher.publishEvent(new AssignmentClosedEvent(
+                    assignment.getJob().getId(), assignment.getWorker().getId(), assignment.getId()));
         }
 
         activityNotificationService.assignmentAnswered(assignment);
@@ -590,6 +598,26 @@ public class JobAssignmentManager implements JobAssignmentService {
         return jobAssignmentDao.findAllForStaff(
                         pageableSanitizer.sanitize(requested, ADMIN_LIST_SORTABLE, ADMIN_LIST_SORT))
                 .map(jobAssignmentMapper::toAdminAssignmentDto);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<JobAssignment> findLatestByJobAndWorker(UUID jobId, UUID workerId) {
+        return jobAssignmentDao.findAllByJobIdAndWorkerId(jobId, workerId).stream().max(OLDEST_FIRST);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<JobAssignment> findLatestByJobsAndWorkers(Collection<UUID> jobIds, Collection<UUID> workerIds) {
+        if (jobIds.isEmpty() || workerIds.isEmpty()) {
+            return List.of();
+        }
+        Map<Map.Entry<UUID, UUID>, JobAssignment> latest = new HashMap<>();
+        for (JobAssignment assignment : jobAssignmentDao.findAllByJobIdInAndWorkerIdIn(jobIds, workerIds)) {
+            latest.merge(Map.entry(assignment.getJob().getId(), assignment.getWorker().getId()), assignment,
+                    BinaryOperator.maxBy(OLDEST_FIRST));
+        }
+        return List.copyOf(latest.values());
     }
 
     @Override

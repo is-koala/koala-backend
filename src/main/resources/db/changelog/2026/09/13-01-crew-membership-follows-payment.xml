@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-13-01-crew-membership-drops-unpaid-workers" author="koala">
+        <comment>Crew membership now follows escrow; workers who never paid into escrow leave existing crews.</comment>
+        <sql><![CDATA[
+            UPDATE conversation_participants p
+            SET is_deleted = true, deleted_at = now()
+            FROM conversations c
+            JOIN jobs j ON j.id = c.job_id
+            WHERE p.conversation_id = c.id
+              AND p.is_deleted = false
+              AND c.kind = 'GROUP'
+              AND p.user_id <> c.employer_id
+              AND NOT EXISTS (
+                  SELECT 1 FROM company_contacts cc
+                  WHERE cc.company_id = j.company_id
+                    AND cc.user_id = p.user_id
+                    AND cc.is_deleted = false)
+              AND NOT EXISTS (
+                  SELECT 1 FROM job_assignments a
+                  WHERE a.job_id = c.job_id
+                    AND a.worker_id = p.user_id
+                    AND a.is_deleted = false
+                    AND a.status NOT IN ('CANCELLED', 'REJECTED')
+                    AND a.payment_status IN ('HELD_IN_ESCROW', 'RELEASED_TO_WORKER'))
+        ]]></sql>
+        <rollback/>
+    </changeSet>
+
+    <changeSet id="2026-09-13-02-crew-membership-adds-company-contacts" author="koala">
+        <comment>Company officers join the crews of their company's jobs that have not yet ended.</comment>
+        <sql><![CDATA[
+            INSERT INTO conversation_participants (id, conversation_id, user_id, joined_at, is_deleted, created_at)
+            SELECT gen_random_uuid(), c.id, cc.user_id, now(), false, now()
+            FROM conversations c
+            JOIN jobs j ON j.id = c.job_id
+            JOIN company_contacts cc ON cc.company_id = j.company_id AND cc.is_deleted = false
+            WHERE c.kind = 'GROUP'
+              AND c.is_deleted = false
+              AND (j.end_date_time IS NULL OR j.end_date_time > now())
+              AND NOT EXISTS (
+                  SELECT 1 FROM conversation_participants p
+                  WHERE p.conversation_id = c.id
+                    AND p.user_id = cc.user_id
+                    AND p.is_deleted = false)
+        ]]></sql>
+        <rollback/>
+    </changeSet>
+
+</databaseChangeLog>

@@ -1,6 +1,8 @@
 package com.exskylab.koala.core.mappers;
 
 import com.exskylab.koala.core.helpers.MediaUrlResolver;
+import com.exskylab.koala.core.helpers.MessagingAvailability;
+import com.exskylab.koala.core.properties.MessagingProperties;
 import com.exskylab.koala.core.properties.AppProperties;
 import com.exskylab.koala.core.properties.StorageProperties;
 import com.exskylab.koala.entities.ApplicationStatus;
@@ -71,7 +73,7 @@ class MapperCharacterizationTest {
         jobMapper = new JobMapperImpl(userMapper, jobCategoryMapper, addressMapper, companyMapper,
                 galleryMapper, pricingDtoMapper);
         jobAssignmentMapper = new JobAssignmentMapperImpl(jobMapper, userMapper, companyMapper,
-                pricingDtoMapper);
+                pricingDtoMapper, new MessagingAvailability(new MessagingProperties()));
         jobApplicationMapper = new JobApplicationMapperImpl(userMapper, jobMapper, jobAssignmentMapper, urls);
     }
 

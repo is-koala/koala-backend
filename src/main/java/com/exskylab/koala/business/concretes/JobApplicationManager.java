@@ -375,9 +375,4 @@ public class JobApplicationManager implements JobApplicationService {
         return PageDto.of(page, jobApplicationMapper::toReceivedApplicationDto);
     }
 
-    @Override
-    @Transactional(readOnly = true)
-    public boolean hasApplied(UUID jobId, UUID userId) {
-        return jobApplicationDao.existsByJobIdAndUserId(jobId, userId);
-    }
 }

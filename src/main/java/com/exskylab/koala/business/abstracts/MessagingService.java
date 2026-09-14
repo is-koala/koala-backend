@@ -1,7 +1,6 @@
 package com.exskylab.koala.business.abstracts;
 
 import com.exskylab.koala.entities.Conversation;
-import com.exskylab.koala.entities.Job;
 import com.exskylab.koala.entities.User;
 import com.exskylab.koala.entities.Message;
 import com.exskylab.koala.entities.UserBlock;
@@ -17,7 +16,11 @@ public interface MessagingService {
 
     Conversation joinJobCrew(UUID jobId, UUID workerId);
 
-    boolean isMessagingClosed(Job job);
+    void leaveJobCrew(UUID jobId, UUID workerId);
+
+    void joinCompanyCrews(UUID companyId, UUID userId);
+
+    void leaveCompanyCrews(UUID companyId, UUID userId);
 
     Conversation openConversation(UUID jobId, UUID workerId);
 

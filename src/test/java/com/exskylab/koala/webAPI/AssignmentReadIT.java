@@ -117,6 +117,29 @@ class AssignmentReadIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void theAssignmentTellsTheClientWhetherMessagingIsOpenAndWhyNot() throws Exception {
+        getAssignmentAs(workerId)
+                .andExpect(jsonPath("$.data.messagingAvailable").value(true))
+                .andExpect(jsonPath("$.data.messagingAvailableReason").value("AVAILABLE"));
+
+        jdbc.update("update job_assignments set payment_status = 'PENDING_COLLECTION' where id = ?", assignmentId);
+        getAssignmentAs(employerId)
+                .andExpect(jsonPath("$.data.messagingAvailable").value(false))
+                .andExpect(jsonPath("$.data.messagingAvailableReason").value("PAYMENT_REQUIRED"));
+
+        jdbc.update("update job_assignments set payment_status = 'REFUNDED', status = 'CANCELLED' where id = ?",
+                assignmentId);
+        getAssignmentAs(workerId)
+                .andExpect(jsonPath("$.data.messagingAvailable").value(false))
+                .andExpect(jsonPath("$.data.messagingAvailableReason").value("CLOSED"));
+
+        mockMvc.perform(get("/users/me/assignments").with(user(principal(workerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].messagingAvailable").value(false))
+                .andExpect(jsonPath("$.data.content[0].messagingAvailableReason").value("CLOSED"));
+    }
+
+    @Test
     void aCompanyAdminReadsTheCompanyAssignment() throws Exception {
         getAssignmentAs(companyAdminId)
                 .andExpect(status().isOk())

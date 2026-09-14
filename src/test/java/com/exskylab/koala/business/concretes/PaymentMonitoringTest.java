@@ -19,8 +19,10 @@ import com.exskylab.koala.entities.Job;
 import com.exskylab.koala.entities.Payment;
 import com.exskylab.koala.entities.PaymentAttemptStatus;
 import com.exskylab.koala.entities.PaymentStatus;
+import com.exskylab.koala.entities.User;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
+import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.hibernate.exception.ConstraintViolationException;
@@ -69,7 +71,7 @@ class PaymentMonitoringTest {
         paymentManager = new PaymentManager(paymentDao, iyzicoPaymentService, new PaymentStateMachine(),
                 mock(SecurityService.class), jobAssignmentDao,
                 new AssignmentParticipants(mock(CompanyContactService.class)), new PaymentMetrics(registry),
-                verificationProperties);
+                verificationProperties, mock(ApplicationEventPublisher.class));
         when(paymentDao.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(paymentDao.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
@@ -372,6 +374,9 @@ class PaymentMonitoringTest {
         Job job = new Job();
         job.setId(UUID.randomUUID());
         assignment.setJob(job);
+        User worker = new User();
+        worker.setId(UUID.randomUUID());
+        assignment.setWorker(worker);
 
         Payment payment = new Payment();
         payment.setId(UUID.randomUUID());

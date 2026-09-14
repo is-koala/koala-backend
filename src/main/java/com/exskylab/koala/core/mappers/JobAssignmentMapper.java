@@ -5,6 +5,7 @@ import com.exskylab.koala.core.dtos.jobAssignment.response.PaymentSessionDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.MyAssignmentDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.ShortJobAssignmentDto;
+import com.exskylab.koala.core.helpers.MessagingAvailability;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.PaymentSessionResponseDto;
 import com.exskylab.koala.entities.JobAssignment;
 import org.mapstruct.InjectionStrategy;
@@ -12,13 +13,20 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 @Mapper(componentModel = "spring",
-        uses = {JobMapper.class, UserMapper.class, CompanyMapper.class, PricingDtoMapper.class},
+        uses = {JobMapper.class, UserMapper.class, CompanyMapper.class, PricingDtoMapper.class,
+                MessagingAvailability.class},
         injectionStrategy = InjectionStrategy.CONSTRUCTOR)
 public interface JobAssignmentMapper {
 
+    @Mapping(target = "messagingAvailable", source = "jobAssignment", qualifiedByName = "messagingAvailable")
+    @Mapping(target = "messagingAvailableReason", source = "jobAssignment",
+            qualifiedByName = "messagingAvailableReason")
     ShortJobAssignmentDto toShortJobAssignmentDto(JobAssignment jobAssignment);
 
     @Mapping(target = "company", source = "job.company")
+    @Mapping(target = "messagingAvailable", source = "jobAssignment", qualifiedByName = "messagingAvailable")
+    @Mapping(target = "messagingAvailableReason", source = "jobAssignment",
+            qualifiedByName = "messagingAvailableReason")
     JobAssignmentDto toJobAssignmentsAssignmentIdStatusPatchResponseDto(
             JobAssignment jobAssignment);
 
@@ -28,6 +36,9 @@ public interface JobAssignmentMapper {
             PaymentSessionResponseDto paymentSessionResponseDto);
 
     @Mapping(target = "pricing", source = "jobAssignment")
+    @Mapping(target = "messagingAvailable", source = "jobAssignment", qualifiedByName = "messagingAvailable")
+    @Mapping(target = "messagingAvailableReason", source = "jobAssignment",
+            qualifiedByName = "messagingAvailableReason")
     MyAssignmentDto toMyAssignmentDto(JobAssignment jobAssignment);
 
     java.util.List<MyAssignmentDto> toMyAssignmentDtoList(java.util.List<JobAssignment> assignments);

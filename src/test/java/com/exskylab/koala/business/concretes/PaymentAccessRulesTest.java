@@ -15,6 +15,7 @@ import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.Payment;
 import com.exskylab.koala.entities.User;
 import org.junit.jupiter.api.BeforeEach;
+import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.Test;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
@@ -54,7 +55,8 @@ class PaymentAccessRulesTest {
 
         paymentManager = new PaymentManager(paymentDao, mock(IyzicoPaymentService.class),
                 mock(PaymentStateMachine.class), securityService, jobAssignmentDao, participants,
-                new PaymentMetrics(new SimpleMeterRegistry()), new PaymentVerificationProperties());
+                new PaymentMetrics(new SimpleMeterRegistry()), new PaymentVerificationProperties(),
+                mock(ApplicationEventPublisher.class));
 
         Job job = new Job();
         job.setId(UUID.randomUUID());

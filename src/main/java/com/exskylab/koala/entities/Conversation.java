@@ -68,6 +68,10 @@ public class Conversation extends BaseEntity {
         participants.add(participant);
     }
 
+    public boolean removeParticipant(UUID userId) {
+        return participants.removeIf(participant -> participant.getUser().getId().equals(userId));
+    }
+
     public boolean isGroup() {
         return kind == ConversationKind.GROUP;
     }
