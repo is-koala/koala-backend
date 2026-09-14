@@ -142,14 +142,49 @@ class StaffPayoutMappingTest {
     }
 
     @Test
-    void theWorkerFacingPayoutNeverGainsTheStaffEvidence() {
-        PayoutDto mine = mapper.toPayoutDto(processingPayout(account(FULL_IBAN)));
+    void theWorkerFacingPayoutCarriesItsDestinationAndProviderReferenceButNeverTheStatementLine() {
+        Payout payout = processingPayout(account(FULL_IBAN));
+        payout.setSettlementReference("stl-2026-09-14-0001");
+        PayoutDto mine = mapper.toPayoutDto(payout);
         JsonNode row = json.valueToTree(mine);
 
-        assertEquals(Set.of("id", "jobAssignmentId", "jobTitle", "companyName", "amount", "currency", "status",
-                "failureReason", "completedAt", "createdAt"), fieldNames(row));
-        assertFalse(json.writeValueAsString(mine).contains("4711"),
-                "sağlayıcı referansı işçiye açılan DTO'ya sızdı");
+        assertEquals(Set.of("id", "jobAssignmentId", "jobTitle", "companyName", "maskedIban", "bankAccountId",
+                "providerReference", "amount", "currency", "status", "failureReason", "releasedAt", "settledAt",
+                "completedAt", "createdAt"), fieldNames(row));
+        assertEquals("TR18***2315", mine.getMaskedIban());
+        assertEquals(payout.getBankAccount().getId(), mine.getBankAccountId());
+        assertEquals("iyz-transaction-4711", mine.getProviderReference());
+        String serialized = json.writeValueAsString(mine);
+        assertFalse(serialized.contains(FULL_IBAN), "tam IBAN işçiye açılan DTO'ya sızdı: " + serialized);
+        assertFalse(serialized.contains("620011900000"), "IBAN gövdesi işçiye açılan DTO'ya sızdı: " + serialized);
+        assertFalse(serialized.contains("stl-2026"), "ekstre referansı işçiye açılan DTO'ya sızdı: " + serialized);
+        assertFalse(serialized.contains("Ayşe"), "alıcı kimliği işçiye açılan DTO'ya sızdı: " + serialized);
+    }
+
+    @Test
+    void theWorkerFacingPayoutWithoutADestinationAccountRendersNullsNotPlaceholders() {
+        Payout payout = processingPayout(null);
+        payout.setProviderReference(null);
+        PayoutDto mine = mapper.toPayoutDto(payout);
+
+        assertNull(mine.getMaskedIban());
+        assertNull(mine.getBankAccountId());
+        assertNull(mine.getProviderReference());
+        assertNull(mine.getSettledAt());
+    }
+
+    @Test
+    void releasedAtMirrorsCreatedAtAndSettledAtMirrorsCompletedAt() {
+        Payout payout = processingPayout(account(FULL_IBAN));
+        payout.setCreatedAt(Instant.parse("2026-09-09T07:00:00Z"));
+        payout.setStatus(PayoutStatus.COMPLETED);
+        payout.setCompletedAt(Instant.parse("2026-09-12T10:30:00Z"));
+        PayoutDto mine = mapper.toPayoutDto(payout);
+
+        assertEquals(Instant.parse("2026-09-09T07:00:00Z"), mine.getReleasedAt());
+        assertEquals(mine.getCreatedAt(), mine.getReleasedAt());
+        assertEquals(Instant.parse("2026-09-12T10:30:00Z"), mine.getSettledAt());
+        assertEquals(mine.getCompletedAt(), mine.getSettledAt());
     }
 
     @Test

@@ -58,7 +58,15 @@ public class PayoutsController {
         this.securityService = securityService;
     }
 
-    @Operation(summary = "Bana yapılan ödemeler")
+    @Operation(summary = "Bana yapılan ödemeler",
+            description = "Oturum sahibinin hakedişleri, en yeni önce. Her satır hakedişin gittiği hesabın maskeli "
+                    + "IBAN'ını (ilk 4 + *** + son 4; tam IBAN dönmez) ve bankAccountId'sini, sağlayıcının onay "
+                    + "referansını (providerReference; PENDING'de null), çıkışa alınma anını (releasedAt) ve banka "
+                    + "ekstresiyle doğrulanan gerçekleşme anını (settledAt; yalnız COMPLETED'da dolu) taşır. "
+                    + "Durum sözlüğü: PENDING = çıkışa alındı, sağlayıcı onayı bekleniyor; PROCESSING = sağlayıcı "
+                    + "onayladı, banka transferi yolda; COMPLETED = banka ekstresiyle doğrulandı; FAILED = çıkış "
+                    + "başarısız (failureReason açıklar). Hesap kaydı yok ya da hesap sonradan silinmişse maskedIban ve "
+                    + "bankAccountId null döner; uydurulmaz.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Ödemeler listelendi")
     })
