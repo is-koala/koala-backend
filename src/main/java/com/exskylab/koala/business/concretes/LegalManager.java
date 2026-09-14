@@ -12,6 +12,7 @@ import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.dataAccess.AccountDeletionRequestDao;
 import com.exskylab.koala.dataAccess.AgreementVersionDao;
 import com.exskylab.koala.dataAccess.ConsentRecordDao;
+import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.entities.*;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
@@ -189,14 +190,17 @@ public class LegalManager implements LegalService {
 
     @Override
     @Transactional
-    public AccountDeletionRequest rejectDeletionRequest(UUID requestId, String reason) {
+    public AccountDeletionRequest rejectDeletionRequest(StaffPrincipal actor, UUID requestId, String reason) {
         AccountDeletionRequest request = lockedRequest(requestId);
         if (request.getStatus() != AccountDeletionStatus.REQUESTED) {
             throw new ConflictException(LegalMessages.DELETION_ALREADY_PROCESSED);
         }
         request.setStatus(AccountDeletionStatus.REJECTED);
-        request.setBlockedReason(reason);
+        request.setRejectionReason(reason);
+        request.setRejectedByStaffId(actor == null ? null : actor.staffId());
         request.setProcessedAt(Instant.now());
+        log.info("Account deletion request {} rejected by {}", requestId,
+                actor == null ? "bridge admin" : "staff " + actor.staffId());
         return accountDeletionRequestDao.save(request);
     }
 

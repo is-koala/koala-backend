@@ -42,6 +42,7 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
 
     private static final UUID WORKER = PaymentFixtures.SEEDED_WORKER;
     private static final String PROVIDER_REFERENCE = "iyz-transaction-4711";
+    private static final UUID RECONCILER = null;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -150,7 +151,7 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
         UUID payoutId = seedPayout("PROCESSING", releasedAt, PROVIDER_REFERENCE);
         Instant settledAt = Instant.now().minus(1, ChronoUnit.HOURS).truncatedTo(ChronoUnit.MILLIS);
 
-        Payout settled = payoutService.confirmSettlement(payoutId, evidence("TRF-1", settledAt));
+        Payout settled = payoutService.confirmSettlement(payoutId, evidence("TRF-1", settledAt), RECONCILER);
 
         assertEquals(PayoutStatus.COMPLETED, settled.getStatus());
         assertEquals("COMPLETED", statusOf(payoutId));
@@ -165,10 +166,10 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
         UUID payoutId = seedPayout("PROCESSING", Instant.now().minus(2, ChronoUnit.DAYS), PROVIDER_REFERENCE);
         Instant settledAt = Instant.now().minus(3, ChronoUnit.HOURS).truncatedTo(ChronoUnit.MILLIS);
 
-        payoutService.confirmSettlement(payoutId, evidence("TRF-2", settledAt));
+        payoutService.confirmSettlement(payoutId, evidence("TRF-2", settledAt), RECONCILER);
 
         ConfirmPayoutSettlementDto replay = evidence("TRF-2", Instant.now());
-        payoutService.confirmSettlement(payoutId, replay);
+        payoutService.confirmSettlement(payoutId, replay, RECONCILER);
 
         assertEquals(settledAt, jdbcTemplate.queryForObject(
                 "select completed_at from payouts where id = ?", Instant.class, payoutId),
@@ -184,7 +185,7 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
         ConfirmPayoutSettlementDto wrongAmount = evidence("TRF-3", Instant.now());
         wrongAmount.setAmount(new BigDecimal("999.99"));
 
-        assertThrows(ValidationException.class, () -> payoutService.confirmSettlement(payoutId, wrongAmount));
+        assertThrows(ValidationException.class, () -> payoutService.confirmSettlement(payoutId, wrongAmount, RECONCILER));
 
         assertEquals("PROCESSING", statusOf(payoutId));
         assertNull(jdbcTemplate.queryForObject(
@@ -198,7 +199,7 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
         UUID payoutId = seedPayout("PROCESSING", Instant.now().minus(2, ChronoUnit.DAYS), null);
 
         ConflictException refused = assertThrows(ConflictException.class,
-                () -> payoutService.confirmSettlement(payoutId, evidence("TRF-4", Instant.now())));
+                () -> payoutService.confirmSettlement(payoutId, evidence("TRF-4", Instant.now()), RECONCILER));
 
         assertEquals("PAYOUT_NO_PROVIDER_REFERENCE", refused.getErrorCode());
         assertEquals("PROCESSING", statusOf(payoutId));
@@ -231,12 +232,11 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
         UUID retired = seedPayout("PROCESSING", releasedAt, PROVIDER_REFERENCE);
         UUID second = seedPayout("PROCESSING", releasedAt, PROVIDER_REFERENCE);
 
-        payoutService.confirmSettlement(retired, evidence("TRF-SOFT", Instant.now().minus(1, ChronoUnit.HOURS)));
+        payoutService.confirmSettlement(retired, evidence("TRF-SOFT", Instant.now().minus(1, ChronoUnit.HOURS)), RECONCILER);
         jdbcTemplate.update("update payouts set is_deleted = true, deleted_at = now() where id = ?", retired);
 
         ConflictException taken = assertThrows(ConflictException.class,
-                () -> payoutService.confirmSettlement(second,
-                        evidence("TRF-SOFT", Instant.now().minus(1, ChronoUnit.HOURS))));
+                () -> payoutService.confirmSettlement(second, evidence("TRF-SOFT", Instant.now().minus(1, ChronoUnit.HOURS)), RECONCILER));
 
         assertEquals("PAYOUT_SETTLEMENT_REFERENCE_TAKEN", taken.getErrorCode(),
                 "Ayni banka gonderim satiri iki hakedisi kapatamaz; soft delete parayi geri getirmez, "
@@ -251,8 +251,7 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
         UUID settled = seedPayout("PROCESSING", Instant.now().minus(10, ChronoUnit.DAYS), PROVIDER_REFERENCE);
         UUID failed = seedPayout("FAILED", Instant.now().minus(10, ChronoUnit.DAYS), PROVIDER_REFERENCE);
 
-        payoutService.confirmSettlement(settled,
-                evidence("TRF-5", Instant.now().minus(9, ChronoUnit.DAYS)));
+        payoutService.confirmSettlement(settled, evidence("TRF-5", Instant.now().minus(9, ChronoUnit.DAYS)), RECONCILER);
 
         List<UUID> queue = idsReturnedByTheRunbookQuery();
 
@@ -269,8 +268,7 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
         UUID alsoOverdue = seedPayout("PROCESSING", Instant.now().minus(4, ChronoUnit.DAYS), PROVIDER_REFERENCE);
         seedPayout("PROCESSING", Instant.now(), PROVIDER_REFERENCE);
         UUID reconciled = seedPayout("PROCESSING", Instant.now().minus(9, ChronoUnit.DAYS), PROVIDER_REFERENCE);
-        payoutService.confirmSettlement(reconciled,
-                evidence("TRF-GAUGE", Instant.now().minus(8, ChronoUnit.DAYS)));
+        payoutService.confirmSettlement(reconciled, evidence("TRF-GAUGE", Instant.now().minus(8, ChronoUnit.DAYS)), RECONCILER);
         UUID carryingAStatementLine = seedPayout("PROCESSING", Instant.now().minus(9, ChronoUnit.DAYS),
                 PROVIDER_REFERENCE);
         jdbcTemplate.update("update payouts set settlement_reference = 'TRF-GAUGE-STUCK' where id = ?",
@@ -345,7 +343,7 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
             transactions.execute(status -> {
                 payoutDao.findByIdForUpdate(payoutId).orElseThrow();
                 overlap.meet();
-                return payoutService.confirmSettlement(payoutId, evidence("TRF-RACE", raceSettledAt));
+                return payoutService.confirmSettlement(payoutId, evidence("TRF-RACE", raceSettledAt), RECONCILER);
             });
             return "SUCCESS";
         } catch (ConflictException conflict) {

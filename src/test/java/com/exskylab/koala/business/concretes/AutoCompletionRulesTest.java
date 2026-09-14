@@ -94,7 +94,7 @@ class AutoCompletionRulesTest {
 
         assertEquals(AssignmentStatus.COMPLETED, a.getStatus());
         assertNotNull(a.getActualCompletionDateTime());
-        verify(payoutService).releaseToWorker(a.getId());
+        verify(payoutService).releaseToWorker(a.getId(), PayoutReleaseOrigin.AUTO_COMPLETION);
         verify(badgeService).evaluate(worker.getId());
     }
 
@@ -115,7 +115,7 @@ class AutoCompletionRulesTest {
         JobAssignment a = assignment(AssignmentStatus.CONFIRMED, PaymentStatus.PENDING_COLLECTION);
 
         assertFalse(manager.autoCompleteAssignment(a.getId()));
-        verify(payoutService, never()).releaseToWorker(any());
+        verify(payoutService, never()).releaseToWorker(any(), any());
     }
 
     @Test
@@ -123,7 +123,7 @@ class AutoCompletionRulesTest {
         JobAssignment a = assignment(AssignmentStatus.COMPLETED, PaymentStatus.RELEASED_TO_WORKER);
 
         assertFalse(manager.autoCompleteAssignment(a.getId()));
-        verify(payoutService, never()).releaseToWorker(any());
+        verify(payoutService, never()).releaseToWorker(any(), any());
     }
 
     @Test

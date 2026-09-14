@@ -55,7 +55,7 @@ public interface JobService {
 
     void closeJob(UUID jobId);
 
-    void cancelJob(UUID jobId);
+    void cancelJob(UUID jobId, String reason);
 
     boolean existsById(UUID jobId);
 

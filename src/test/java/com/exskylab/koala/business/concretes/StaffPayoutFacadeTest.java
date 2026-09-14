@@ -6,6 +6,7 @@ import com.exskylab.koala.core.dtos.payout.response.StaffPayoutDto;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.entities.Payout;
+import com.exskylab.koala.entities.PayoutReleaseOrigin;
 import com.exskylab.koala.entities.PayoutStatus;
 import com.exskylab.koala.entities.StaffPermission;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,7 +51,7 @@ class StaffPayoutFacadeTest {
     void staffWithoutTheReleasePermissionNeverReachesThePayoutService() {
         StaffPrincipal analyst = staff(StaffPermission.FINANCE_READ);
 
-        assertThrows(ForbiddenException.class, () -> facade.releaseToWorker(analyst, assignmentId, "sebep"));
+        assertThrows(ForbiddenException.class, () -> facade.releaseToWorker(analyst, assignmentId, "sebep", PayoutReleaseOrigin.STAFF));
         verifyNoInteractions(payoutService);
     }
 
@@ -67,22 +68,22 @@ class StaffPayoutFacadeTest {
     void staffWithoutAStaffRecordCannotMoveMoney() {
         StaffPrincipal stranger = StaffPrincipal.unregistered("sub", Set.of("FINANCE_OFFICER"));
 
-        assertThrows(ForbiddenException.class, () -> facade.releaseToWorker(stranger, assignmentId, "sebep"));
+        assertThrows(ForbiddenException.class, () -> facade.releaseToWorker(stranger, assignmentId, "sebep", PayoutReleaseOrigin.STAFF));
         verifyNoInteractions(payoutService);
     }
 
     @Test
     void staffHoldingThePermissionReachesTheUnguardedInnerMethod() {
-        when(payoutService.releaseToWorker(any())).thenReturn(new Payout());
+        when(payoutService.releaseToWorker(any(), any())).thenReturn(new Payout());
 
-        facade.releaseToWorker(staff(StaffPermission.PAYOUT_RELEASE), assignmentId, "sebep");
+        facade.releaseToWorker(staff(StaffPermission.PAYOUT_RELEASE), assignmentId, "sebep", PayoutReleaseOrigin.STAFF);
 
-        verify(payoutService, times(1)).releaseToWorker(assignmentId);
+        verify(payoutService, times(1)).releaseToWorker(assignmentId, PayoutReleaseOrigin.STAFF);
     }
 
     @Test
     void noActorReleasesNoMoneyNowThatTheMarketplaceBridgeIsCut() {
-        assertThrows(ForbiddenException.class, () -> facade.releaseToWorker(null, assignmentId, "sebep"));
+        assertThrows(ForbiddenException.class, () -> facade.releaseToWorker(null, assignmentId, "sebep", PayoutReleaseOrigin.STAFF));
         verifyNoInteractions(payoutService);
     }
 
@@ -102,11 +103,11 @@ class StaffPayoutFacadeTest {
 
     @Test
     void staffHoldingThePermissionIsUnaffectedByTheCutover() {
-        when(payoutService.releaseToWorker(any())).thenReturn(new Payout());
+        when(payoutService.releaseToWorker(any(), any())).thenReturn(new Payout());
 
-        facade.releaseToWorker(staff(StaffPermission.PAYOUT_RELEASE), assignmentId, "sebep");
+        facade.releaseToWorker(staff(StaffPermission.PAYOUT_RELEASE), assignmentId, "sebep", PayoutReleaseOrigin.STAFF);
 
-        verify(payoutService, times(1)).releaseToWorker(assignmentId);
+        verify(payoutService, times(1)).releaseToWorker(assignmentId, PayoutReleaseOrigin.STAFF);
     }
 
     @Test

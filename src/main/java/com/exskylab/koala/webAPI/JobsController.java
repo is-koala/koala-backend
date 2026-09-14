@@ -22,6 +22,7 @@ import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationDto;
 import com.exskylab.koala.core.mappers.JobApplicationMapper;
 import com.exskylab.koala.core.constants.JobMessages;
 import com.exskylab.koala.core.dtos.common.PageDto;
+import com.exskylab.koala.core.dtos.job.request.CancelJobDto;
 import com.exskylab.koala.core.dtos.job.request.JobSearchCriteriaDto;
 import com.exskylab.koala.core.dtos.job.response.JobDetailDto;
 import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
@@ -123,17 +124,20 @@ public class JobsController {
     }
 
     @Operation(summary = "İlanı iptal et",
-            description = "İlanı CANCELLED durumuna çeker ve başvuranlara bildirim gönderir. Kapatmadan farkı: kapatma yalnızca yeni başvuruyu durdurur, iptal ilanı geçersiz kılar. Devam eden bir iş ataması varsa iptal edilemez; o durumda atamanın kendi iptal akışı kullanılır. Kayıt silinmez, başvuru geçmişi korunur.")
+            description = "İlanı CANCELLED durumuna çeker ve başvuranlara bildirim gönderir. Kapatmadan farkı: kapatma yalnızca yeni başvuruyu durdurur, iptal ilanı geçersiz kılar. Devam eden bir iş ataması varsa iptal edilemez; o durumda atamanın kendi iptal akışı kullanılır. Kayıt silinmez, başvuru geçmişi korunur. Gövde isteğe bağlıdır; reason (en fazla 500 karakter) verilirse iptal gerekçesi kayda geçer ve personel ilan detayında görünür.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "İlan iptal edildi"),
+            @ApiResponse(responseCode = "400", description = "İptal gerekçesi 500 karakteri aşıyor",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "404", description = "İlan bulunamadı ya da yetki yok",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "409", description = "İlan zaten iptal edilmiş ya da devam eden atama var",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping("/{jobId}/cancel")
-    public ResponseEntity<SuccessResult> cancelJob(@PathVariable UUID jobId) {
-        jobService.cancelJob(jobId);
+    public ResponseEntity<SuccessResult> cancelJob(@PathVariable UUID jobId,
+                                                   @RequestBody(required = false) @Valid CancelJobDto request) {
+        jobService.cancelJob(jobId, request == null ? null : request.getReason());
         return ResponseEntity.ok(new SuccessResult(JobMessages.JOB_CANCELLED, HttpStatus.OK));
     }
 

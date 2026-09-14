@@ -2,6 +2,7 @@ package com.exskylab.koala.business.abstracts;
 
 import com.exskylab.koala.core.dtos.legal.request.ConsentDecisionDto;
 import com.exskylab.koala.core.helpers.ClientContext;
+import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.entities.AccountDeletionRequest;
 import com.exskylab.koala.entities.AgreementVersion;
 import com.exskylab.koala.entities.ConsentRecord;
@@ -34,7 +35,7 @@ public interface LegalService {
 
     AccountDeletionRequest getDeletionRequest(UUID requestId);
 
-    AccountDeletionRequest rejectDeletionRequest(UUID requestId, String reason);
+    AccountDeletionRequest rejectDeletionRequest(StaffPrincipal actor, UUID requestId, String reason);
 
     List<UUID> findDueDeletionRequestIds(Instant dueBefore, Instant attemptBefore, Pageable pageable);
 

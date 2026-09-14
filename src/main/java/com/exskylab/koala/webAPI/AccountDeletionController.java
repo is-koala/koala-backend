@@ -8,6 +8,8 @@ import com.exskylab.koala.core.dtos.legal.response.AccountDeletionDto;
 import com.exskylab.koala.core.helpers.MessageResolver;
 import com.exskylab.koala.core.mappers.LegalMapper;
 import com.exskylab.koala.core.security.RequiresPermission;
+import com.exskylab.koala.core.security.StaffPrincipal;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.entities.AccountDeletionStatus;
 import com.exskylab.koala.entities.StaffPermission;
@@ -91,8 +93,9 @@ public class AccountDeletionController {
     @PostMapping("/{requestId}/reject")
     @RequiresPermission(value = StaffPermission.USER_DELETION_MANAGE, action = "user.deletion.reject")
     public ResponseEntity<SuccessDataResult<AccountDeletionDto>> reject(
-            @PathVariable UUID requestId, @RequestBody @Valid RejectDeletionDto body) {
-        var deletion = legalService.rejectDeletionRequest(requestId, body.reason());
+            @PathVariable UUID requestId, @RequestBody @Valid RejectDeletionDto body,
+            @AuthenticationPrincipal StaffPrincipal actor) {
+        var deletion = legalService.rejectDeletionRequest(actor, requestId, body.reason());
         return ResponseEntity.ok(new SuccessDataResult<>(
                 legalMapper.toAccountDeletionDto(deletion, messageResolver),
                 LegalMessages.DELETION_REJECTED, HttpStatus.OK));

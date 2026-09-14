@@ -43,6 +43,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -429,7 +430,7 @@ public class JobManager implements JobService {
 
     @Override
     @Transactional
-    public void cancelJob(UUID jobId) {
+    public void cancelJob(UUID jobId, String reason) {
         Job job = requireJobEditor(jobId);
 
         if (job.getStatus() == JobStatus.CANCELLED) {
@@ -442,6 +443,7 @@ public class JobManager implements JobService {
 
         job.setStatus(JobStatus.CANCELLED);
         job.setCancelledAt(Instant.now());
+        job.setCancelReason(reason == null || reason.isBlank() ? null : reason.trim());
         jobDao.save(job);
 
         log.info("Job {} cancelled by user {}", jobId, securityService.getAuthenticatedUserId());

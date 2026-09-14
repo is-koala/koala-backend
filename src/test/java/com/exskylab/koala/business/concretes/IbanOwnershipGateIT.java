@@ -7,6 +7,7 @@ import com.exskylab.koala.business.abstracts.SettlementService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.entities.Payout;
+import com.exskylab.koala.entities.PayoutReleaseOrigin;
 import com.exskylab.koala.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -114,7 +115,7 @@ class IbanOwnershipGateIT extends AbstractIntegrationTest {
 
     @Test
     void escrowIsReleasedToAnUnverifiedPrimaryIban() {
-        Payout payout = payoutService.releaseToWorker(assignmentId);
+        Payout payout = payoutService.releaseToWorker(assignmentId, PayoutReleaseOrigin.STAFF);
 
         assertNotNull(payout.getId());
         assertEquals("RELEASED_TO_WORKER", paymentStatusOfTheAssignment());
@@ -126,7 +127,7 @@ class IbanOwnershipGateIT extends AbstractIntegrationTest {
                 update bank_accounts set verification_status = 'VERIFIED', verified_at = now() where id = ?
                 """, accountId);
 
-        Payout payout = payoutService.releaseToWorker(assignmentId);
+        Payout payout = payoutService.releaseToWorker(assignmentId, PayoutReleaseOrigin.STAFF);
 
         assertNotNull(payout.getId());
         assertEquals("RELEASED_TO_WORKER", paymentStatusOfTheAssignment());
@@ -153,7 +154,7 @@ class IbanOwnershipGateIT extends AbstractIntegrationTest {
         assertNull(jdbcTemplate.queryForObject(
                 "select verification_reference from bank_accounts where id = ?", String.class, accountId));
 
-        Payout payout = payoutService.releaseToWorker(assignmentId);
+        Payout payout = payoutService.releaseToWorker(assignmentId, PayoutReleaseOrigin.STAFF);
 
         assertNotNull(payout.getId());
         assertEquals("RELEASED_TO_WORKER", paymentStatusOfTheAssignment());
@@ -163,7 +164,7 @@ class IbanOwnershipGateIT extends AbstractIntegrationTest {
     void escrowIsNotReleasedWhenTheWorkerHasNoPrimaryIban() {
         jdbcTemplate.update("delete from bank_accounts where user_id = ?", workerId);
 
-        assertThrows(ConflictException.class, () -> payoutService.releaseToWorker(assignmentId));
+        assertThrows(ConflictException.class, () -> payoutService.releaseToWorker(assignmentId, PayoutReleaseOrigin.STAFF));
 
         assertEquals(0, (int) jdbcTemplate.queryForObject(
                 "select count(*) from payouts where job_assignment_id = ?", Integer.class, assignmentId));

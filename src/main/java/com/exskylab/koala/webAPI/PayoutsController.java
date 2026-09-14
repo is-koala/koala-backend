@@ -26,6 +26,7 @@ import com.exskylab.koala.core.dtos.payout.response.StaffPayoutDto;
 import com.exskylab.koala.core.mappers.PayoutMapper;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.core.utilities.results.SuccessResult;
+import com.exskylab.koala.entities.PayoutReleaseOrigin;
 import com.exskylab.koala.entities.PayoutStatus;
 import jakarta.validation.Valid;
 import org.springdoc.core.annotations.ParameterObject;
@@ -86,7 +87,7 @@ public class PayoutsController {
                                                                 @AuthenticationPrincipal StaffPrincipal actor) {
         String reason = request == null ? null : request.getReason();
         PayoutDto payout = payoutMapper.toPayoutDto(
-                staffPayoutService.releaseToWorker(actor, assignmentId, reason));
+                staffPayoutService.releaseToWorker(actor, assignmentId, reason, PayoutReleaseOrigin.STAFF));
 
         return ResponseEntity.status(HttpStatus.OK).body(new SuccessDataResult<>(
                 payout, PayoutMessages.RELEASED, HttpStatus.OK));

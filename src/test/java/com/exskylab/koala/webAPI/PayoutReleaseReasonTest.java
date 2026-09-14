@@ -7,6 +7,7 @@ import com.exskylab.koala.core.dtos.payout.request.ReleaseRequestDto;
 import com.exskylab.koala.core.mappers.PayoutMapper;
 import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.entities.Payout;
+import com.exskylab.koala.entities.PayoutReleaseOrigin;
 import com.exskylab.koala.entities.StaffPermission;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,7 +39,7 @@ class PayoutReleaseReasonTest {
         staffPayoutService = mock(StaffPayoutService.class);
         PayoutMapper payoutMapper = mock(PayoutMapper.class);
 
-        when(staffPayoutService.releaseToWorker(any(), any(), any())).thenReturn(new Payout());
+        when(staffPayoutService.releaseToWorker(any(), any(), any(), any())).thenReturn(new Payout());
 
         controller = new PayoutsController(mock(PayoutService.class), staffPayoutService, payoutMapper,
                 mock(SecurityService.class));
@@ -55,13 +56,13 @@ class PayoutReleaseReasonTest {
     void theOperatorsReasonForAStandaloneReleaseReachesTheMoneyFacade() {
         controller.release(assignmentId, new ReleaseRequestDto("emanet elle çözüldü"), officer);
 
-        verify(staffPayoutService).releaseToWorker(officer, assignmentId, "emanet elle çözüldü");
+        verify(staffPayoutService).releaseToWorker(officer, assignmentId, "emanet elle çözüldü", PayoutReleaseOrigin.STAFF);
     }
 
     @Test
     void aReleaseWithoutABodyStillReleases() {
         controller.release(assignmentId, null, officer);
 
-        verify(staffPayoutService).releaseToWorker(officer, assignmentId, null);
+        verify(staffPayoutService).releaseToWorker(officer, assignmentId, null, PayoutReleaseOrigin.STAFF);
     }
 }

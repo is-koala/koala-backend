@@ -160,7 +160,8 @@ public class DisputeManager implements DisputeService {
         Dispute saved = disputeDao.save(dispute);
 
         switch (resolution) {
-            case RELEASE_TO_WORKER -> staffPayoutService.releaseToWorker(actor, assignmentId, note);
+            case RELEASE_TO_WORKER -> staffPayoutService.releaseToWorker(actor, assignmentId, note,
+                    PayoutReleaseOrigin.DISPUTE);
             case REFUND_EMPLOYER -> staffPayoutService.refundEmployer(actor, assignmentId, null, note);
             case DISMISSED -> log.info("Dispute {} dismissed, escrow untouched.", disputeId);
         }

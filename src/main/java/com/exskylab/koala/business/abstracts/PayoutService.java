@@ -6,6 +6,7 @@ import com.exskylab.koala.core.dtos.payout.response.AdminPayoutDetailDto;
 import com.exskylab.koala.core.dtos.payout.response.StaffPayoutDto;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.Payout;
+import com.exskylab.koala.entities.PayoutReleaseOrigin;
 import com.exskylab.koala.entities.PayoutStatus;
 import com.exskylab.koala.entities.Refund;
 import org.springframework.data.domain.Pageable;
@@ -20,11 +21,11 @@ import java.util.UUID;
 
 public interface PayoutService {
 
-    Payout releaseToWorker(UUID jobAssignmentId);
+    Payout releaseToWorker(UUID jobAssignmentId, PayoutReleaseOrigin origin);
 
     Refund refundEmployer(UUID jobAssignmentId, BigDecimal amount, String reason);
 
-    Payout confirmSettlement(UUID payoutId, ConfirmPayoutSettlementDto evidence);
+    Payout confirmSettlement(UUID payoutId, ConfirmPayoutSettlementDto evidence, UUID reconciledByStaffId);
 
     List<Payout> getPayoutsForWorker(UUID workerId);
 

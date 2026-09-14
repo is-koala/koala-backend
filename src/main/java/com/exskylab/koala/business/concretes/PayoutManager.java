@@ -106,7 +106,7 @@ public class PayoutManager implements PayoutService {
 
     @Override
     @Transactional
-    public Payout releaseToWorker(UUID jobAssignmentId) {
+    public Payout releaseToWorker(UUID jobAssignmentId, PayoutReleaseOrigin origin) {
         JobAssignment assignment = jobAssignmentDao.findByIdForUpdate(jobAssignmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(PayoutMessages.ASSIGNMENT_NOT_FOUND));
 
@@ -142,13 +142,15 @@ public class PayoutManager implements PayoutService {
         payout.setAmount(assignment.getWorkerPayout());
         payout.setCurrency(CURRENCY);
         payout.setStatus(PayoutStatus.PENDING);
+        payout.setReleaseOrigin(origin);
 
         settlementService.enqueue(payment, assignment, SettlementOperation.APPROVE)
                 .orElseThrow(() -> new ExternalServiceException(PayoutMessages.SETTLEMENT_NOT_QUEUED));
         stateMachine.transition(assignment, PaymentStatus.RELEASED_TO_WORKER);
 
         Payout saved = payoutDao.save(payout);
-        log.info("Payout {} created for assignment {} amount {}", saved.getId(), jobAssignmentId, saved.getAmount());
+        log.info("Payout {} created for assignment {} amount {} origin {}", saved.getId(), jobAssignmentId,
+                saved.getAmount(), origin);
         activityNotificationService.payoutReleased(assignment);
         return saved;
     }
@@ -200,7 +202,7 @@ public class PayoutManager implements PayoutService {
 
     @Override
     @Transactional
-    public Payout confirmSettlement(UUID payoutId, ConfirmPayoutSettlementDto evidence) {
+    public Payout confirmSettlement(UUID payoutId, ConfirmPayoutSettlementDto evidence, UUID reconciledByStaffId) {
         rejectMalformedEvidence(evidence);
 
         Payout payout = payoutDao.findByIdForUpdate(payoutId)
@@ -240,6 +242,7 @@ public class PayoutManager implements PayoutService {
         payout.setStatus(PayoutStatus.COMPLETED);
         payout.setSettlementReference(reported);
         payout.setCompletedAt(evidence.getSettledAt());
+        payout.setReconciledByStaffId(reconciledByStaffId);
         payout.setFailureReason(null);
 
         Payout settled;

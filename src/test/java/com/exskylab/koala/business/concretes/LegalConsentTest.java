@@ -246,10 +246,12 @@ class LegalConsentTest {
         AccountDeletionRequest request = deletionRequest();
         when(deletionDao.findByIdForUpdate(request.getId())).thenReturn(Optional.of(request));
 
-        legalManager.rejectDeletionRequest(request.getId(), "Yasal saklama incelemesi sürüyor.");
+        legalManager.rejectDeletionRequest(null, request.getId(), "Yasal saklama incelemesi sürüyor.");
 
         assertEquals(AccountDeletionStatus.REJECTED, request.getStatus());
-        assertEquals("Yasal saklama incelemesi sürüyor.", request.getBlockedReason());
+        assertEquals("Yasal saklama incelemesi sürüyor.", request.getRejectionReason());
+        assertNull(request.getBlockedReason());
+        assertNull(request.getRejectedByStaffId());
         assertNotNull(request.getProcessedAt());
     }
 

@@ -51,4 +51,10 @@ public class AccountDeletionRequest extends BaseEntity {
 
     @Column(name = "next_attempt_at")
     private Instant nextAttemptAt;
+
+    @Column(name = "rejection_reason", length = 512)
+    private String rejectionReason;
+
+    @Column(name = "rejected_by_staff_id")
+    private UUID rejectedByStaffId;
 }

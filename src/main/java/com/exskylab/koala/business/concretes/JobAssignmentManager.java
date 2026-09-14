@@ -619,7 +619,7 @@ public class JobAssignmentManager implements JobAssignmentService {
         }
 
         markCompleted(assignment);
-        payoutService.releaseToWorker(assignmentId);
+        payoutService.releaseToWorker(assignmentId, PayoutReleaseOrigin.AUTO_COMPLETION);
 
         log.info("Assignment {} auto completed after the grace period and escrow released.", assignmentId);
         return true;
