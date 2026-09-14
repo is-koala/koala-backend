@@ -4481,7 +4481,7 @@ self-hosted runner üzerinde Dokploy webhook'udur. Sıra
 2. **image** — `scripts/publish-ghcr-image.sh --latest` → `ghcr.io/is-koala/koala:<pom>` ve `:latest`, tek `linux/amd64` manifest (`provenance`/`sbom` kapalı).
 3. **deploy** — annotated `v*` etiket push'u GitHub'dan webhook atar. İmaj GHCR'de yokken etiket basılmaz.
 
-Sürümleme: `v1.2.3` tag'i Dokploy'un çektiği `:latest` ile aynı digest'i varsayar. `main` push imaj basmaz. Maven `pom.xml` sürümü git tag'iyle aynı semver'dir (`0.9.23` ↔ `v0.9.23`); `build-info` ve `info.app.version` / ECS `SERVICE_VERSION` (boşsa) buradan okunur. Dokploy'da `SERVICE_VERSION` hâlâ `0.0.1` ise o satır imaj varsayılanını ezer — boşaltın veya tag'le eşleyin.
+Sürümleme: `v1.2.3` tag'i Dokploy'un çektiği `:latest` ile aynı digest'i varsayar. `main` push imaj basmaz. Maven `pom.xml` sürümü git tag'iyle aynı semver'dir (`0.9.24` ↔ `v0.9.24`); `build-info` ve `info.app.version` / ECS `SERVICE_VERSION` (boşsa) buradan okunur. Dokploy'da `SERVICE_VERSION` hâlâ `0.0.1` ise o satır imaj varsayılanını ezer — boşaltın veya tag'le eşleyin.
 
 Uygulama root olmayan `koala` kullanıcısıyla, JRE tabanlı imajda çalışıyor. Sağlık kontrolü `/actuator/health/readiness` üzerinden; `/actuator/health/**` herkese açık, kalan actuator uçları ADMIN rolü istiyor.
 
