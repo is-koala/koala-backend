@@ -7,7 +7,7 @@ import com.exskylab.koala.core.dtos.address.request.AddressPositionRequestDto;
 import com.exskylab.koala.core.dtos.address.request.AddressWriteDto;
 import com.exskylab.koala.core.dtos.address.request.ConfirmedPositionSource;
 import com.exskylab.koala.core.dtos.address.request.ReverseGeocodeRequestDto;
-import com.exskylab.koala.core.dtos.address.response.AddressCandidatePrecision;
+import com.exskylab.koala.entities.AddressCandidatePrecision;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.properties.AddressSearchProperties;
 import com.exskylab.koala.core.utilities.location.AddressSearchProvider;

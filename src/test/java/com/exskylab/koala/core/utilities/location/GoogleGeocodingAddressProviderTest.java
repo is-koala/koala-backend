@@ -3,7 +3,7 @@ package com.exskylab.koala.core.utilities.location;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
-import com.exskylab.koala.core.dtos.address.response.AddressCandidatePrecision;
+import com.exskylab.koala.entities.AddressCandidatePrecision;
 import com.exskylab.koala.core.exceptions.ExternalServiceException;
 import com.exskylab.koala.core.properties.AddressSearchProperties;
 import org.junit.jupiter.api.AfterEach;

@@ -15,6 +15,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -118,7 +119,7 @@ public class GooglePlacesAddressProvider implements AddressSearchProvider {
         headers.set("X-Goog-FieldMask", fieldMask);
         try {
             ResponseEntity<String> response = restTemplate.exchange(
-                    properties.getPlacesBaseUrl() + path,
+                    URI.create(properties.getPlacesBaseUrl() + path),
                     method,
                     new HttpEntity<>(body, headers),
                     String.class);

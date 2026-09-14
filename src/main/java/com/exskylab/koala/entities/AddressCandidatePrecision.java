@@ -1,4 +1,4 @@
-package com.exskylab.koala.core.dtos.address.response;
+package com.exskylab.koala.entities;
 
 public enum AddressCandidatePrecision {
     BUILDING,

@@ -1,6 +1,6 @@
 package com.exskylab.koala.core.utilities.location;
 
-import com.exskylab.koala.core.dtos.address.response.AddressCandidatePrecision;
+import com.exskylab.koala.entities.AddressCandidatePrecision;
 
 import java.math.BigDecimal;
 import java.util.stream.Stream;

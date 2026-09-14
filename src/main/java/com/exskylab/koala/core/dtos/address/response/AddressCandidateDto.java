@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.dtos.address.response;
 
+import com.exskylab.koala.entities.AddressCandidatePrecision;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.UUID;

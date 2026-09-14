@@ -73,10 +73,12 @@ class AddressReverseGeocodeIT extends AbstractIntegrationTest {
 
     @AfterEach
     void tearDown() {
-        restTemplate.setRequestFactory(originalRequestFactory);
-        properties.setEnabled(originalEnabled);
-        properties.setApiKey(originalApiKey);
-        properties.setGeocodingBaseUrl(originalGeocodingBaseUrl);
+        if (originalRequestFactory != null) {
+            restTemplate.setRequestFactory(originalRequestFactory);
+            properties.setEnabled(originalEnabled);
+            properties.setApiKey(originalApiKey);
+            properties.setGeocodingBaseUrl(originalGeocodingBaseUrl);
+        }
         jdbc.update("delete from users where id = ?", userId);
     }
 
