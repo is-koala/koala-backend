@@ -1,5 +1,7 @@
 package com.exskylab.koala.business.abstracts;
 
+import com.exskylab.koala.core.dtos.bankAccount.response.AdminBankAccountDto;
+import com.exskylab.koala.entities.PaymentAttemptStatus;
 import com.exskylab.koala.core.dtos.company.response.CompanyReviewDto;
 import com.exskylab.koala.core.dtos.identity.response.IdentityReviewDto;
 import com.exskylab.koala.core.dtos.legal.response.AccountDeletionDto;
@@ -25,6 +27,10 @@ public interface AdminDetailService {
     AdminPaymentDto getPayment(UUID paymentId);
 
     AdminUserDetailDto getUserDetail(StaffPrincipal actor, UUID userId);
+
+    List<AdminBankAccountDto> getBankAccountsOfUser(UUID userId);
+
+    Page<AdminPaymentDto> searchPayments(List<PaymentAttemptStatus> statuses, Pageable pageable);
 
     Page<CompanyReviewDto> searchCompanies(CompanyApprovalStatus status, String query, Pageable pageable);
 

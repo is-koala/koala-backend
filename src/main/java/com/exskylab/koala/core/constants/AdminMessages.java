@@ -10,6 +10,7 @@ public class AdminMessages {
     public static final String APPROVED_COMPANY_CANNOT_BE_REJECTED = "{admin.company.approved.not.rejectable}";
     public static final String USERS_LISTED = "{admin.users.listed}";
     public static final String USER_FETCHED = "{admin.user.fetched}";
+    public static final String USER_BANK_ACCOUNTS_LISTED = "{admin.user.bank.accounts.listed}";
     public static final String USER_ROLES_LISTED = "{admin.user.roles.listed}";
     public static final String USER_ROLE_GRANTED = "{admin.user.role.granted}";
     public static final String USER_ROLE_REVOKED = "{admin.user.role.revoked}";

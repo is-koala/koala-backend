@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.SessionService;
 import com.exskylab.koala.core.constants.SessionMessages;
 import com.exskylab.koala.core.dtos.session.response.CreatedSessionDto;
+import com.exskylab.koala.core.dtos.user.response.AdminSessionSummaryDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.properties.SessionProperties;
 import com.exskylab.koala.core.security.JwtService;
@@ -164,5 +165,15 @@ public class SessionManager implements SessionService {
 
         log.info("{} other sessions revoked for user {}", others.size(), userId);
         return others.size();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AdminSessionSummaryDto summarizeForStaff(UUID userId) {
+        long active = sessionDao.countByDevice_User_IdAndIsActive(userId, true);
+        Session latest = sessionDao.findFirstByDevice_User_IdOrderByCreatedAtDesc(userId).orElse(null);
+        return new AdminSessionSummaryDto(active,
+                latest == null ? null : latest.getCreatedAt(),
+                latest == null || latest.getDevice() == null ? null : latest.getDevice().getType());
     }
 }

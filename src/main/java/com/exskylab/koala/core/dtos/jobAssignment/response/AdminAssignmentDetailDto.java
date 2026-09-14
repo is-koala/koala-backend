@@ -12,7 +12,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-public record AdminAssignmentDetailDto(UUID id, UUID jobId, String jobTitle, String companyName,
+public record AdminAssignmentDetailDto(UUID id, UUID jobId, String jobTitle, UUID companyId, String companyName,
                                        JobEmployerType employerType,
                                        SafeUserDto worker, SafeUserDto employer,
                                        AssignmentStatus status, PaymentStatus paymentStatus,

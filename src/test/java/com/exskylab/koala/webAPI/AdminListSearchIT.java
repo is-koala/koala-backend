@@ -16,6 +16,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Set;
 import java.util.UUID;
 
@@ -482,6 +484,206 @@ class AdminListSearchIT extends AbstractStaffIntegrationTest {
         search("/admin/account-deletions", financeToken, workerEmail).andExpect(status().isForbidden());
     }
 
+    @Test
+    void theStatusAndCreatedAtFiltersNarrowTheAssignmentQueueAndIntersectWithTheRest() throws Exception {
+        jdbc.update("update job_assignments set status = 'IN_PROGRESS', payment_status = 'HELD_IN_ESCROW', "
+                + "created_at = now() - interval '10 days' where id = ?", otherAssignmentId);
+        String threeDaysAgo = Instant.now().minus(3, ChronoUnit.DAYS).toString();
+        String twentyDaysAgo = Instant.now().minus(20, ChronoUnit.DAYS).toString();
+
+        expectOnlyFiltered("/admin/job-assignments", financeToken, matchingAssignmentId, otherAssignmentId,
+                "status", "COMPLETED");
+        expectOnlyFiltered("/admin/job-assignments", financeToken, otherAssignmentId, matchingAssignmentId,
+                "status", "IN_PROGRESS");
+        filtered("/admin/job-assignments", financeToken, "status", "COMPLETED", "status", "IN_PROGRESS")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[*].id", hasItem(matchingAssignmentId.toString())))
+                .andExpect(jsonPath("$.data.content[*].id", hasItem(otherAssignmentId.toString())));
+        expectOnlyFiltered("/admin/job-assignments", financeToken, matchingAssignmentId, otherAssignmentId,
+                "from", threeDaysAgo);
+        expectOnlyFiltered("/admin/job-assignments", financeToken, otherAssignmentId, matchingAssignmentId,
+                "to", threeDaysAgo);
+        expectOnlyFiltered("/admin/job-assignments", financeToken, otherAssignmentId, matchingAssignmentId,
+                "from", twentyDaysAgo, "to", threeDaysAgo);
+        filtered("/admin/job-assignments", financeToken, "from", threeDaysAgo, "status", "IN_PROGRESS")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(0));
+        filtered("/admin/job-assignments", financeToken, "from", threeDaysAgo, "workerId", bystanderId.toString())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(0));
+        Integer rows = jdbc.queryForObject(
+                "select count(*) from admin_audit_entries where resource_type = 'job-assignments' and allowed = true",
+                Integer.class);
+        assertEquals(8, rows, "durum ve tarih süzgeçli her liste okuması denetim satırı yazmalı");
+
+        filtered("/admin/job-assignments", financeToken, "from", "2026-09-01T00:00:00")
+                .andExpect(status().isBadRequest());
+        filtered("/admin/job-assignments", financeToken, "status", "NOT_A_STATUS")
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void theCreatedAtRangeNarrowsPayoutsReportsAndDisputes() throws Exception {
+        jdbc.update("update payouts set created_at = now() - interval '10 days' where id = ?", otherPayoutId);
+        jdbc.update("update reports set created_at = now() - interval '10 days' where id = ?", otherReportId);
+        jdbc.update("update disputes set created_at = now() - interval '10 days' where id = ?", otherDisputeId);
+        String threeDaysAgo = Instant.now().minus(3, ChronoUnit.DAYS).toString();
+
+        expectOnlyFiltered("/admin/payouts", financeToken, matchingPayoutId, otherPayoutId,
+                "status", "PROCESSING", "status", "COMPLETED", "from", threeDaysAgo);
+        expectOnlyFiltered("/admin/payouts", financeToken, otherPayoutId, matchingPayoutId,
+                "status", "PROCESSING", "status", "COMPLETED", "to", threeDaysAgo);
+        filtered("/admin/payouts", financeToken, "status", "COMPLETED", "from", threeDaysAgo)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(0));
+
+        expectOnlyFiltered("/admin/reports", trustToken, matchingReportId, otherReportId, "from", threeDaysAgo);
+        expectOnlyFiltered("/admin/reports", trustToken, otherReportId, matchingReportId, "to", threeDaysAgo);
+        filtered("/admin/reports", trustToken, "to", threeDaysAgo, "reporterId", employerId.toString())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(0));
+
+        expectOnlyFiltered("/admin/disputes", trustToken, matchingDisputeId, otherDisputeId, "from", threeDaysAgo);
+        expectOnlyFiltered("/admin/disputes", trustToken, otherDisputeId, matchingDisputeId, "to", threeDaysAgo);
+        filtered("/admin/disputes", trustToken, "to", threeDaysAgo, "userId", workerId.toString())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(0));
+
+        for (String path : new String[]{"/admin/payouts", "/admin/reports", "/admin/disputes"}) {
+            filtered(path, path.equals("/admin/payouts") ? financeToken : trustToken, "to", "2026-09-01T00:00:00")
+                    .andExpect(status().isBadRequest());
+        }
+    }
+
+    @Test
+    void thePendingIbanQueueIsNarrowedToOneUser() throws Exception {
+        expectOnlyFilteredBy("accountId", "/admin/bank-account-verifications", financeToken, matchingAccountId,
+                otherAccountId, "userId", workerId.toString());
+        expectOnlyFilteredBy("accountId", "/admin/bank-account-verifications", financeToken, otherAccountId,
+                matchingAccountId, "userId", bystanderId.toString());
+        filtered("/admin/bank-account-verifications", financeToken, "userId", bystanderId.toString(),
+                "query", workerEmail)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(0));
+        filtered("/admin/bank-account-verifications", financeToken, "userId", UUID.randomUUID().toString())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(0));
+    }
+
+    @Test
+    void assignmentRowsCarryTheCompanyIdentityOnlyForCompanyJobs() throws Exception {
+        UUID companyId = UUID.randomUUID();
+        jdbc.update("insert into companies (id, created_at, is_deleted, name, tax_number, email, approval_status) "
+                        + "values (?, now(), false, ?, ?, ?, 'APPROVED')",
+                companyId, "Kimlik Lojistik " + companyId, String.valueOf(Math.abs(companyId.hashCode())),
+                "identity-company-" + companyId + "@example.com");
+        jdbc.update("update jobs set company_id = ? where id = ?", companyId, otherJobId);
+        try {
+            filtered("/admin/job-assignments", financeToken, "jobId", otherJobId.toString())
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content[0].companyId").value(companyId.toString()))
+                    .andExpect(jsonPath("$.data.content[0].companyName").value("Kimlik Lojistik " + companyId));
+            filtered("/admin/job-assignments", financeToken, "jobId", matchingJobId.toString())
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content[0].companyId").value(nullValue()))
+                    .andExpect(jsonPath("$.data.content[0].companyName").value(nullValue()));
+        } finally {
+            jdbc.update("update jobs set company_id = null where id = ?", otherJobId);
+            jdbc.update("delete from companies where id = ?", companyId);
+        }
+    }
+
+    @Test
+    void thePaymentListIsFilteredByStatusRefusedToTheTrustBranchAndBuiltWithoutAQueryPerRow() throws Exception {
+        UUID stuckPaymentId = UUID.randomUUID();
+        UUID failedPaymentId = UUID.randomUUID();
+        UUID succeededPaymentId = UUID.randomUUID();
+        UUID refundId = UUID.randomUUID();
+        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        boolean wasEnabled = statistics.isStatisticsEnabled();
+        try {
+            insertPayment(stuckPaymentId, matchingAssignmentId, "VERIFY_PENDING", "now() - interval '3 hours'", null);
+            insertPayment(failedPaymentId, otherAssignmentId, "FAILED", "now() - interval '2 hours'", null);
+            insertPayment(succeededPaymentId, matchingAssignmentId, "SUCCEEDED", "now() - interval '1 hour'", "now()");
+            jdbc.update("""
+                    insert into refunds (id, created_at, is_deleted, payment_id, amount, currency, status, reason)
+                    values (?, now(), false, ?, 100.00, 'TRY', 'COMPLETED', 'Kısmi iade')
+                    """, refundId, succeededPaymentId);
+            jdbc.update("update payouts set payment_id = ? where id = ?", succeededPaymentId, matchingPayoutId);
+
+            expectOnlyFiltered("/admin/payments", financeToken, stuckPaymentId, failedPaymentId,
+                    "status", "VERIFY_PENDING");
+            expectOnlyFiltered("/admin/payments", financeToken, failedPaymentId, stuckPaymentId, "status", "FAILED");
+            filtered("/admin/payments", financeToken, "status", "FAILED", "status", "VERIFY_PENDING")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content[*].id",
+                            containsInAnyOrder(stuckPaymentId.toString(), failedPaymentId.toString())));
+            filtered("/admin/payments", financeToken, "sort", "createdAt,asc")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content[*].id", hasItem(succeededPaymentId.toString())))
+                    .andExpect(jsonPath("$.data.content[?(@.id == '" + stuckPaymentId
+                            + "' && @.nextVerificationAt == null)].id").value(hasItem(stuckPaymentId.toString())))
+                    .andExpect(jsonPath("$.data.content[?(@.id == '" + stuckPaymentId + "')].jobAssignmentId")
+                            .value(hasItem(matchingAssignmentId.toString())))
+                    .andExpect(jsonPath("$.data.content[?(@.id == '" + stuckPaymentId + "')].worker.id")
+                            .value(hasItem(workerId.toString())))
+                    .andExpect(jsonPath("$.data.content[?(@.id == '" + stuckPaymentId + "')].employer.id")
+                            .value(hasItem(employerId.toString())))
+                    .andExpect(jsonPath("$.data.content[?(@.id == '" + succeededPaymentId + "')].payoutId")
+                            .value(hasItem(matchingPayoutId.toString())))
+                    .andExpect(jsonPath("$.data.content[?(@.id == '" + succeededPaymentId + "')].refunds[0].id")
+                            .value(hasItem(refundId.toString())))
+                    .andExpect(jsonPath("$.data.content[?(@.id == '" + succeededPaymentId + "')].refunds[0].origin")
+                            .value(hasItem("STAFF")))
+                    .andExpect(jsonPath("$.data.content[?(@.id == '" + failedPaymentId
+                            + "' && @.payoutId == null)].id").value(hasItem(failedPaymentId.toString())))
+                    .andExpect(jsonPath("$.data.content[*].providerToken").doesNotExist())
+                    .andExpect(jsonPath("$.data.content[*].worker.email").doesNotExist());
+            filtered("/admin/payments", financeToken, "sort", "providerToken,asc")
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errorCode").value("PAGE_SORT_FIELD_NOT_ALLOWED"));
+            filtered("/admin/payments", trustToken).andExpect(status().isForbidden());
+            filtered("/admin/payments", staffTokenFor(STAFF_EMAIL.formatted(UUID.randomUUID()), "Analist",
+                    "FINANCE_ANALYST"), "status", "FAILED")
+                    .andExpect(status().isOk());
+
+            statistics.setStatisticsEnabled(true);
+            statistics.clear();
+            filtered("/admin/payments", financeToken, "size", "1", "sort", "createdAt,desc")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content", hasSize(1)))
+                    .andExpect(jsonPath("$.data.content[0].id").value(succeededPaymentId.toString()));
+            long statementsForOneRow = statistics.getPrepareStatementCount();
+
+            statistics.clear();
+            filtered("/admin/payments", financeToken, "size", "3", "sort", "createdAt,desc")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content", hasSize(3)))
+                    .andExpect(jsonPath("$.data.content[*].id", containsInAnyOrder(succeededPaymentId.toString(),
+                            failedPaymentId.toString(), stuckPaymentId.toString())));
+            long statementsForThreeRows = statistics.getPrepareStatementCount();
+
+            assertEquals(statementsForOneRow, statementsForThreeRows,
+                    "ödeme listesi satır sayısıyla büyüyen sorgu atıyor (N+1)");
+        } finally {
+            statistics.setStatisticsEnabled(wasEnabled);
+            jdbc.update("update payouts set payment_id = null where id = ?", matchingPayoutId);
+            jdbc.update("delete from refunds where id = ?", refundId);
+            jdbc.update("delete from payments where id in (?, ?, ?)", stuckPaymentId, failedPaymentId,
+                    succeededPaymentId);
+        }
+    }
+
+    private void insertPayment(UUID id, UUID assignmentId, String status, String createdAt, String completedAt) {
+        jdbc.update("""
+                insert into payments (id, created_at, is_deleted, job_assignment_id, conversation_id, status,
+                                      currency, pricing_version, worker_payout, commission_rate, commission_amount,
+                                      total_charged, verification_attempts, completed_at)
+                values (?, %s, false, ?, ?, ?, 'TRY', '2026-09-v1', 1000.00, 0.0750, 75.00, 1075.00, 1, %s)
+                """.formatted(createdAt, completedAt == null ? "null" : completedAt),
+                id, assignmentId, "conv-" + id, status);
+    }
+
     private void expectOnly(String path, String token, UUID expected, UUID hidden, String query) throws Exception {
         expectOnly(path, token, expected, hidden, query, "id");
     }
@@ -496,10 +698,15 @@ class AdminListSearchIT extends AbstractStaffIntegrationTest {
 
     private void expectOnlyFiltered(String path, String token, UUID expected, UUID hidden, String... params)
             throws Exception {
+        expectOnlyFilteredBy("id", path, token, expected, hidden, params);
+    }
+
+    private void expectOnlyFilteredBy(String idField, String path, String token, UUID expected, UUID hidden,
+                                      String... params) throws Exception {
         filtered(path, token, params)
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.content[*].id", hasItem(expected.toString())))
-                .andExpect(jsonPath("$.data.content[*].id", not(hasItem(hidden.toString()))));
+                .andExpect(jsonPath("$.data.content[*]." + idField, hasItem(expected.toString())))
+                .andExpect(jsonPath("$.data.content[*]." + idField, not(hasItem(hidden.toString()))));
     }
 
     private ResultActions filtered(String path, String token, String... params) throws Exception {

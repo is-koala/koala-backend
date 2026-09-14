@@ -13,6 +13,7 @@ import com.exskylab.koala.entities.StaffPermission;
 import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
+import com.exskylab.koala.core.helpers.CreatedAtRange;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,7 +26,7 @@ public interface StaffPayoutService {
     Payout confirmSettlement(StaffPrincipal actor, UUID payoutId, ConfirmPayoutSettlementDto evidence);
 
     PageDto<StaffPayoutDto> listForStaff(StaffPrincipal actor, List<PayoutStatus> statuses, String query,
-                                         UUID workerId, Pageable pageable);
+                                         UUID workerId, CreatedAtRange createdAt, Pageable pageable);
 
     AdminPayoutDetailDto getForStaff(StaffPrincipal actor, UUID payoutId);
 

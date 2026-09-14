@@ -56,6 +56,7 @@ import com.exskylab.koala.business.abstracts.SettingsService;
 import com.exskylab.koala.core.constants.SettingKeys;
 import com.exskylab.koala.business.abstracts.ActivityNotificationService;
 import com.exskylab.koala.core.events.AssignmentClosedEvent;
+import com.exskylab.koala.core.helpers.CreatedAtRange;
 import com.exskylab.koala.core.helpers.StaffSearchQuery;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -692,10 +693,15 @@ public class JobAssignmentManager implements JobAssignmentService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<AdminAssignmentDto> listForStaff(String query, UUID workerId, UUID employerId, UUID jobId,
+    public Page<AdminAssignmentDto> listForStaff(List<AssignmentStatus> statuses, String query, UUID workerId,
+                                                 UUID employerId, UUID jobId, CreatedAtRange createdAt,
                                                  Pageable requested) {
         pageableSanitizer.rejectUnknownSort(requested, ADMIN_LIST_SORTABLE);
-        return jobAssignmentDao.findAllForStaff(StaffSearchQuery.normalize(query), workerId, employerId, jobId,
+        List<AssignmentStatus> filter = statuses == null || statuses.isEmpty()
+                ? List.of(AssignmentStatus.values())
+                : List.copyOf(statuses);
+        return jobAssignmentDao.findAllForStaff(filter, StaffSearchQuery.normalize(query), workerId, employerId,
+                        jobId, createdAt.from(), createdAt.to(),
                         pageableSanitizer.sanitize(requested, ADMIN_LIST_SORTABLE, ADMIN_LIST_SORT))
                 .map(jobAssignmentMapper::toAdminAssignmentDto);
     }

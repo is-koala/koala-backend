@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.core.helpers.CreatedAtRange;
 import com.exskylab.koala.business.abstracts.ReportService;
 import com.exskylab.koala.core.dtos.report.response.AdminReportDetailDto;
 import com.exskylab.koala.core.dtos.report.response.AdminReportDto;
@@ -149,7 +150,7 @@ class ReportModerationIT extends AbstractStaffIntegrationTest {
     }
 
     private AdminReportDto rowFor(UUID reportId) {
-        return reportService.searchForModeration(null, null, null, null, null, null, PageRequest.of(0, 100))
+        return reportService.searchForModeration(null, null, null, null, null, null, CreatedAtRange.ANY, PageRequest.of(0, 100))
                 .getContent().stream()
                 .filter(row -> row.id().equals(reportId))
                 .findFirst()
@@ -158,7 +159,7 @@ class ReportModerationIT extends AbstractStaffIntegrationTest {
 
     private Page<AdminReportDto> queue(ReportStatus status, ReportReason reason,
                                        ReportTargetType targetType, UUID reportedUser) {
-        return reportService.searchForModeration(status, reason, targetType, reportedUser, null, null,
+        return reportService.searchForModeration(status, reason, targetType, reportedUser, null, null, CreatedAtRange.ANY,
                 PageRequest.of(0, 100));
     }
 
@@ -260,7 +261,7 @@ class ReportModerationIT extends AbstractStaffIntegrationTest {
     @Test
     void theHistoryCountComesFromTheWholeQueueNotFromTheVisiblePage() {
         Page<AdminReportDto> onePerPage = reportService.searchForModeration(
-                null, null, null, reportedUserId, null, null, PageRequest.of(0, 1));
+                null, null, null, reportedUserId, null, null, CreatedAtRange.ANY, PageRequest.of(0, 1));
 
         assertEquals(1, onePerPage.getContent().size(), "Sayfa boyutu bir olmali.");
         assertEquals(2L, onePerPage.getContent().get(0).reportedUserReportCount(),
@@ -352,7 +353,7 @@ class ReportModerationIT extends AbstractStaffIntegrationTest {
                 """, assignmentId, jobId, reportedUserId);
         try {
             Map<UUID, AdminReportDto> rows = reportService
-                    .searchForModeration(null, null, null, null, null, null, PageRequest.of(0, 100))
+                    .searchForModeration(null, null, null, null, null, null, CreatedAtRange.ANY, PageRequest.of(0, 100))
                     .getContent().stream()
                     .collect(Collectors.toMap(AdminReportDto::id, Function.identity()));
 

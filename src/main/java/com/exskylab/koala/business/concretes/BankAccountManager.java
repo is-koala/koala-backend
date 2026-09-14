@@ -289,10 +289,16 @@ public class BankAccountManager implements BankAccountService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<BankAccount> listPendingForStaff(String query, Pageable requested) {
+    public Page<BankAccount> listPendingForStaff(String query, UUID userId, Pageable requested) {
         pageableSanitizer.rejectUnknownSort(requested, PENDING_SORTABLE);
-        return bankAccountDao.findAwaitingStaffConfirmation(Instant.now(), StaffSearchQuery.normalize(query),
+        return bankAccountDao.findAwaitingStaffConfirmation(Instant.now(), StaffSearchQuery.normalize(query), userId,
                 pageableSanitizer.sanitize(requested, PENDING_SORTABLE, PENDING_SORT));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<BankAccount> getAccountsForStaff(UUID userId) {
+        return bankAccountDao.findAllByUserIdAndActiveTrueOrderByPrimaryAccountDescCreatedAtAsc(userId);
     }
 
     private BankAccount requireOwned(UUID accountId, UUID userId) {

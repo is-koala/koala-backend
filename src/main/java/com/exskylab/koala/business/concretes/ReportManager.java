@@ -24,6 +24,7 @@ import com.exskylab.koala.business.abstracts.UserService;
 import org.springframework.data.domain.Sort;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.security.StaffPrincipal;
+import com.exskylab.koala.core.helpers.CreatedAtRange;
 import com.exskylab.koala.core.helpers.StaffSearchQuery;
 import java.util.Set;
 import org.springframework.stereotype.Service;
@@ -175,12 +176,13 @@ public class ReportManager implements ReportService {
     @Transactional(readOnly = true)
     public Page<AdminReportDto> searchForModeration(ReportStatus status, ReportReason reason,
                                                     ReportTargetType targetType, UUID reportedUserId,
-                                                    UUID reporterId, String query, Pageable requested) {
+                                                    UUID reporterId, String query, CreatedAtRange createdAt,
+                                                    Pageable requested) {
         pageableSanitizer.rejectUnknownSort(requested, SORTABLE);
 
         Page<Report> page = reportDao.search(status, reason,
                 targetType == null ? null : targetType.name(), reportedUserId, reporterId,
-                StaffSearchQuery.normalize(query),
+                StaffSearchQuery.normalize(query), createdAt.from(), createdAt.to(),
                 pageableSanitizer.sanitize(requested, SORTABLE, DEFAULT_SORT));
 
         Map<UUID, Long> history = historyCounts(page.getContent());

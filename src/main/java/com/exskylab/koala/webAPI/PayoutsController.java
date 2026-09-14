@@ -23,6 +23,7 @@ import com.exskylab.koala.core.dtos.payout.request.ReleaseRequestDto;
 import com.exskylab.koala.core.dtos.payout.response.AdminPayoutDetailDto;
 import com.exskylab.koala.core.dtos.payout.response.PayoutDto;
 import com.exskylab.koala.core.dtos.payout.response.StaffPayoutDto;
+import com.exskylab.koala.core.helpers.CreatedAtRange;
 import com.exskylab.koala.core.mappers.PayoutMapper;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.core.utilities.results.SuccessResult;
@@ -32,11 +33,13 @@ import jakarta.validation.Valid;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -109,10 +112,12 @@ public class PayoutsController {
                     + "Onay mevcut reconcile ucundan yapılır; bu GET yalnız okur. "
                     + "query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) hakediş id'si, atama id'si ve alıcının "
                     + "ad-soyadı ile e-postasında büyük-küçük harf ve Türkçe karakter duyarsız arar; status süzgeciyle "
-                    + "kesişir; 100 karakteri aşarsa 400. workerId verilirse yalnız o işçinin hakedişleri döner.")
+                    + "kesişir; 100 karakteri aşarsa 400. workerId verilirse yalnız o işçinin hakedişleri döner. "
+                    + "from ve to hakedişin oluşturulma anını (createdAt) süzer, ikisi de dahildir ve dilimli ISO-8601 "
+                    + "an ister; yalnız biri verilebilir; status, query ve workerId ile kesişir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Hakedişler listelendi"),
-            @ApiResponse(responseCode = "400", description = "query 100 karakteri aşıyor",
+            @ApiResponse(responseCode = "400", description = "query 100 karakteri aşıyor ya da tarih dilimsiz",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @RequiresPermission(value = StaffPermission.PAYOUT_RECONCILE, action = "payout.reconcile")
@@ -121,11 +126,13 @@ public class PayoutsController {
             @RequestParam(required = false) List<PayoutStatus> status,
             @RequestParam(required = false) String query,
             @RequestParam(required = false) UUID workerId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable,
             @AuthenticationPrincipal StaffPrincipal actor) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
-                staffPayoutService.listForStaff(actor, status, query, workerId, pageable),
+                staffPayoutService.listForStaff(actor, status, query, workerId, CreatedAtRange.of(from, to), pageable),
                 PayoutMessages.LISTED, HttpStatus.OK));
     }
 

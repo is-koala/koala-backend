@@ -2100,10 +2100,85 @@ görünen ad boşsa personel e-postası (§2av'nin `actorDisplayName` kuralıyla
 **Süzgeçler `StaffSearchQuery` sözleşmesine eklenir, onu değiştirmez.** Her id süzgeci `(:x is null or … = :x)` ile
 sorguya girer, `status` ve `query` ile **kesişir** (`AdminListSearchIT.theIdFiltersNarrowEachQueueAndIntersectWithTheSearch`).
 `AuditScope.hasFilter` sayfalama dışı her parametreyi süzgeç saydığı için id süzgeçli liste okuması denetim satırı
-yazar (`anIdFilterIsAnAuditedSearch`); §2av kural 5 kendiliğinden kapsıyor. `/admin/payments` diye bir liste ucu
-yok ve açılmadı; kullanıcı detayındaki `payments` sayacı `/admin/job-assignments?employerId=` üzerinden atamaya iner.
+yazar (`anIdFilterIsAnAuditedSearch`); §2av kural 5 kendiliğinden kapsıyor. Bu turda `/admin/payments` diye bir
+liste ucu açılmadı; kullanıcı detayındaki `payments` sayacı `/admin/job-assignments?employerId=` üzerinden atamaya
+iniyordu — liste ucu #301 ile geldi, aşağıda.
 
 **Panel tarafı is-koala/koala-admin#100.**
+
+### Şirket kimliği, kullanıcı bağlamı, tarih süzgeçleri ve `/admin/payments` (#301)
+
+Panel denetimi (14.09.2026, koala-admin#105/#108/#110/#111): şirket adı hiçbir personel DTO'sunda bağlanamıyordu,
+kullanıcı sayfası kimlik incelemesini açtıramıyor ve IBAN/oturum bağlamı taşımıyordu, listelerde tarih aralığı
+yoktu, takılı ödemeler görünmüyordu. Yeni yazma ucu **yok**.
+
+| Uç | İzin | Eklenen |
+|---|---|---|
+| `GET /admin/job-assignments`, `/{id}`, `/admin/payments/{id}`, `/{id}/payments`, `/admin/payouts/{id}` | değişmedi | `companyId` (`companyName`'in yanına; bireysel ilanda ikisi de `null`). `StaffPayoutDto` liste satırına **eklenmedi**: satır ilanı hiç çizmiyor ve grafiğe `jobAssignment` almak §2y3'ün INNER join regresyonunu geri getirirdi |
+| `GET /admin/users/{id}` | `user.read` | `identityReviewId` (son incelemenin id'si; `identityReviewStatus` ile aynı satırdan, `IdentityDocumentReviewService.findLatestFor`), `sessionSummary{activeSessionCount,lastLoginAt,lastDevicePlatform}` |
+| `GET /admin/users/{id}/bank-accounts` | **`user.read_pii`** | `List<AdminBankAccountDto>`: `id`, `maskedIban` (`LogMasks.iban`), etkin `verificationStatus` (`BankAccountVerificationPolicy.effectiveStatus`), `primary`, `accountHolderNameVerified`, `verifiedAt`, `createdAt` |
+| `GET /admin/bank-account-verifications` | `bank.account.verify` | `userId` süzgeci |
+| `GET /admin/job-assignments` | `payment.read` | `status` (çoklu; verilmezse her durum), `from`/`to` |
+| `GET /admin/payouts`, `/admin/reports`, `/admin/disputes` | değişmedi | `from`/`to` |
+| `GET /admin/payments` | `payment.read` | **yeni**: `status` (çoklu `PaymentAttemptStatus`; verilmezse her durum), `PageDto<AdminPaymentDto>` |
+| `GET /admin/finance/summary` | `finance.read` | `stuckPaymentCount`, `overduePayoutCount` |
+
+**Oturum özeti `Session` tablosundan, cihaz kimliği olmadan.** `SessionManager.summarizeForStaff`: etkin oturum sayısı
+`countByDevice_User_IdAndIsActive`, son giriş ve platform en yeni oturumun `createdAt`'i ve `device.type`'ı
+(`findFirstByDevice_User_IdOrderByCreatedAtDesc`, grafik `device`). `clientDeviceId`, oturum/cihaz id'si, IP ve refresh
+hash'i DTO'ya girmiyor (`AdminDetailReadIT.theUserDetailNamesItsLatestIdentityReviewAndSummarisesSessionsWithoutDeviceIdentity`
+gövdede dördünü de arıyor). Tekil detay olduğu için iki sorgu çarpan üretmiyor.
+
+**Banka hesabı listesi `user.read_pii` altında ve ham IBAN asla.** Uç `user.read` ile **korunmuyor**: kullanıcı
+detayındaki e-posta/telefon gibi "aynı gövde, boş alan" seçilmedi çünkü IBAN'ın maskeli hâli bile hesap sahipliği
+bilgisidir ve liste ayrı bir sayfa (koala-admin#108). `PERSONAL_DATA` olduğu için her okuma denetim satırı yazar
+(`AdminDetailReadIT.theBankAccountsOfAUserAreMaskedAndOpenOnlyToThePiiPermission` satırın `user.read_pii` olduğunu ve
+`SUPPORT_AGENT`/`FINANCE_OFFICER`'ın var olan ile olmayan kullanıcıya **aynı 403 zarfını** aldığını ölçüyor; izinli aktör
+olmayan kullanıcıya `USER_NOT_FOUND_BY_ID` alır). Liste `findAllByUserIdAndActiveTrueOrderByPrimaryAccountDescCreatedAtAsc`
+— kullanıcının kendi listesiyle aynı sorgu; silinen hesap `@SQLRestriction` ile zaten görünmez, `is_active=false`
+yalnız anonimleştirmede yazılıyor. Bekleyen doğrulamanın referansı ve tutarı bu DTO'da **yok**; o bilgi
+`bank.account.verify` yüzeyinin (`/admin/bank-account-verifications?userId=`) — iki izin iki yüzey, birleştirilmedi.
+
+**Tarih süzgeci `core/helpers/CreatedAtRange`.** `from`/`to` `Instant` + `@DateTimeFormat(iso = DATE_TIME)` (dilimsiz değer
+400, §2l'nin `startFrom` kararı); boş sınır `EPOCH`/`9999-12-31`'e düşer (`CreatedAtRange.of`), JPQL'de
+`x.createdAt >= :from and x.createdAt <= :to` — `:x is null` dalı yok, çünkü pgjdbc `Instant`'ı tipsiz gönderir (§2l).
+**İki sınır da dahil**, `AuditLogController`'ın `<= :to` kuralıyla aynı: panelin `DateRangeFilter`'ı `to`'yu günün
+`23:59:59.999`'u olarak gönderiyor (`istanbulDayBoundary`); finans özetinin yarı açık aralığı **değişmedi**, o bir dönem
+toplamı. Ters aralık doğrulanmıyor, boş sayfa döner (denetim kaydıyla aynı). Süzülen alan dört uçta da `createdAt` ve
+OpenAPI'de açık; `status`/`query`/id süzgeçleriyle `and` ile kesişir (`AdminListSearchIT.theStatusAndCreatedAtFilters…`,
+`theCreatedAtRangeNarrowsPayoutsReportsAndDisputes`). Atama `status`'ü boşken `AssignmentStatus.values()` bağlanır —
+`in :statuses` boş listeyi sevmez, `null` dalı da tipsiz parametre tuzağına düşerdi. Sort allowlist'leri değişmedi;
+`PageableSortSafetyTest` `AdminDetailManager.searchPayments`'ı saf devretme olarak muaf tutuyor (doğrulama
+`PaymentManager.searchForStaff`'ta: `createdAt`, `updatedAt`, `status`, `nextVerificationAt`).
+
+**`/admin/payments` liste ve tekil detay aynı DTO, aynı bileşim.** `AdminDetailManager.paymentDtos` artık **atamalar
+arası** çalışıyor: iadeler (`findAllByPaymentIdInOrderByCreatedAtDesc`), iptaller (`findAllByRefundIds`), uyuşmazlıklar
+(`DisputeService.findAllForAssignments` → `findAllByJobAssignmentIdInOrderByCreatedAtDesc`, yeni) ve hakedişler
+(`findForAssignments`) sayfa başına birer sorgu; `payoutId`/`origin` kuralları §2s7'dekiyle aynı, yalnız atama başına
+haritalanıyor. İade → atama eşlemesi `refund.getPayment().getJobAssignment()` ile **değil**, sayfadaki ödemelerden kurulan
+`assignmentByPayment` haritasıyla yapılıyor — proxy'yi açmak satır başına sorgu olurdu.
+`AdminListSearchIT.thePaymentListIsFilteredByStatusRefusedToTheTrustBranchAndBuiltWithoutAQueryPerRow` `size=1` ile
+`size=3`'ün statement sayısını eşitliyor. Grafik `jobAssignment(.worker.profilePicture, .job.category, .job.creator
+.profilePicture, .job.company.address)` — `category` ve `Company.address` eager olduğu için (§2s6);
+`company.logo` `EagerFetchCoverageIT` muafiyetinde. `Payment.jobAssignment` ve `JobAssignment.worker` `nullable = false`
++ `@SQLRestriction` olduğu için grafik INNER join üretir (§2y3): işçisi anonimleştirilmiş bir atamanın **FAILED**
+denemesi bu listeden düşer. Bilerek kabul edildi — `VERIFY_PENDING`/`INITIATED`/`IN_REVIEW` deneme hesap silmeyi
+`PENDING_PAYMENT` engeliyle durdurur (§2s7 `blockers`), yani takılı ödeme kaybolmaz; `findForStaffById` ve
+`JobAssignmentDao.findAllForStaff` zaten aynı grafiği taşıyor. `status` verilmezse her durum (ilan listesiyle aynı);
+panelin "takılı" karosu `status=VERIFY_PENDING&sort=createdAt,asc` ile en eskiyi başa alır. Güven dalı 403
+(`payment.read` finans dalında), `FINANCE_ANALYST` okur.
+
+**Finans özetindeki iki sayaç dönemden bağımsız.** `stuckPaymentCount` = `VERIFY_PENDING` ve `next_verification_at is
+null` (`PaymentDao.countByStatusAndNextVerificationAtIsNull`): doğrulama zamanlayıcısı yalnız `nextVerificationAt <= now`
+satırlarını seçer (`findDueVerificationIds`), sütunu boş kalan deneme hiçbir zamanlayıcıya düşmez — "takılı"nın tanımı
+budur, `INITIATED` tarafındaki `findStuckInitiationIds` ayrı bir mekanizma ve sayılmıyor. `overduePayoutCount`
+`payoutService.findPayoutsAwaitingSettlementLongerThan(settlementProperties.getOverdueAfter()).size()` — §2y3'ün
+göstergesi, runbook kuyruğu ve personel kuyruğuyla **aynı sorgu ve aynı eşik**; `FinanceManager` bunun için
+`PayoutSettlementProperties`'i alıyor, ikinci bir gün sabiti yazılmadı
+(`AdminFinanceSummaryIT.theSummaryCountsStuckVerificationsAndOverdueSettlementsRegardlessOfThePeriod` sayaç ile kuyruğun
+aynı satırı gördüğünü ölçüyor). `stalled-after` kademesi özete alınmadı; panel karosu tek eşik istiyor.
+
+**Panel tarafı is-koala/koala-admin#105, #108, #110, #111.**
 
 ---
 

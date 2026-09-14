@@ -11,6 +11,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import java.util.Collection;
+import com.exskylab.koala.core.helpers.CreatedAtRange;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,7 +26,7 @@ public interface ReportService {
 
     Page<AdminReportDto> searchForModeration(ReportStatus status, ReportReason reason,
                                              ReportTargetType targetType, UUID reportedUserId, UUID reporterId,
-                                             String query, Pageable pageable);
+                                             String query, CreatedAtRange createdAt, Pageable pageable);
 
     AdminReportDetailDto getForModeration(UUID reportId);
 

@@ -767,8 +767,12 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
                 .andExpect(jsonPath("$.data.counts.disputes").value(1))
                 .andExpect(jsonPath("$.data.counts.reportsReceived").value(3))
                 .andExpect(jsonPath("$.data.counts.reportsMade").value(0))
+                .andExpect(jsonPath("$.data.identityReviewId").value(nullValue()))
                 .andExpect(jsonPath("$.data.identityReviewStatus").value(nullValue()))
                 .andExpect(jsonPath("$.data.pendingDeletionRequestId").value(nullValue()))
+                .andExpect(jsonPath("$.data.sessionSummary.activeSessionCount").value(0))
+                .andExpect(jsonPath("$.data.sessionSummary.lastLoginAt").value(nullValue()))
+                .andExpect(jsonPath("$.data.sessionSummary.lastDevicePlatform").value(nullValue()))
                 .andExpect(content().string(not(containsString(employerEmail))));
 
         read("/admin/users/" + workerId, tokenFor("TRUST_LEAD"))
@@ -811,5 +815,132 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
     @Test
     void theUserDetailIsRefusedWithoutUserReadWhetherOrNotTheUserExists() throws Exception {
         assertRefusedIdentically(id -> "/admin/users/" + id, workerId, tokenFor("CATALOG_EDITOR"));
+    }
+
+    @Test
+    void theUserDetailNamesItsLatestIdentityReviewAndSummarisesSessionsWithoutDeviceIdentity() throws Exception {
+        UUID olderReviewId = UUID.randomUUID();
+        UUID latestReviewId = UUID.randomUUID();
+        UUID androidDeviceId = UUID.randomUUID();
+        UUID iosDeviceId = UUID.randomUUID();
+        UUID revokedSessionId = UUID.randomUUID();
+        UUID androidSessionId = UUID.randomUUID();
+        UUID iosSessionId = UUID.randomUUID();
+        String clientDeviceId = "client-device-" + iosDeviceId;
+        String refreshHash = "refresh-hash-" + iosSessionId;
+        try {
+            insertIdentityReview(olderReviewId, workerId, "now() - interval '2 days'", true);
+            insertIdentityReview(latestReviewId, workerId, "now() - interval '1 day'", false);
+            jdbcTemplate.update("""
+                    insert into devices (id, created_at, is_deleted, user_id, type, name, client_device_id)
+                    values (?, now() - interval '3 days', false, ?, 'ANDROID', 'Pixel', ?)
+                    """, androidDeviceId, workerId, "client-device-" + androidDeviceId);
+            jdbcTemplate.update("""
+                    insert into devices (id, created_at, is_deleted, user_id, type, name, client_device_id)
+                    values (?, now() - interval '1 hour', false, ?, 'IOS', 'iPhone', ?)
+                    """, iosDeviceId, workerId, clientDeviceId);
+            insertSession(revokedSessionId, androidDeviceId, "now() - interval '3 days'", false, refreshHash);
+            insertSession(androidSessionId, androidDeviceId, "now() - interval '2 days'", true, refreshHash);
+            insertSession(iosSessionId, iosDeviceId, "now() - interval '1 hour'", true, refreshHash);
+
+            read("/admin/users/" + workerId, tokenFor("SUPPORT_AGENT"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.identityReviewId").value(latestReviewId.toString()))
+                    .andExpect(jsonPath("$.data.identityReviewStatus").value("PENDING"))
+                    .andExpect(jsonPath("$.data.sessionSummary.activeSessionCount").value(2))
+                    .andExpect(jsonPath("$.data.sessionSummary.lastLoginAt").isNotEmpty())
+                    .andExpect(jsonPath("$.data.sessionSummary.lastDevicePlatform").value("IOS"))
+                    .andExpect(content().string(not(containsString(clientDeviceId))))
+                    .andExpect(content().string(not(containsString(iosDeviceId.toString()))))
+                    .andExpect(content().string(not(containsString(iosSessionId.toString()))))
+                    .andExpect(content().string(not(containsString(refreshHash))));
+        } finally {
+            jdbcTemplate.update("delete from sessions where id in (?, ?, ?)", revokedSessionId, androidSessionId,
+                    iosSessionId);
+            jdbcTemplate.update("delete from devices where id in (?, ?)", androidDeviceId, iosDeviceId);
+            jdbcTemplate.update("delete from user_verifications where id in (?, ?)", olderReviewId, latestReviewId);
+        }
+    }
+
+    @Test
+    void theBankAccountsOfAUserAreMaskedAndOpenOnlyToThePiiPermission() throws Exception {
+        read("/admin/users/" + workerId + "/bank-accounts", tokenFor("TRUST_LEAD"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(1)))
+                .andExpect(jsonPath("$.data[0].id").value(bankAccountId.toString()))
+                .andExpect(jsonPath("$.data[0].maskedIban").value("TR18***2315"))
+                .andExpect(jsonPath("$.data[0].verificationStatus").value("VERIFIED"))
+                .andExpect(jsonPath("$.data[0].primary").value(true))
+                .andExpect(jsonPath("$.data[0].accountHolderNameVerified").value(true))
+                .andExpect(jsonPath("$.data[0].createdAt").isNotEmpty())
+                .andExpect(content().string(not(containsString(FULL_IBAN))))
+                .andExpect(content().string(not(containsString(IBAN_BODY))));
+        read("/admin/users/" + strangerId + "/bank-accounts", tokenFor("TRUST_LEAD"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(0)));
+        read("/admin/users/" + UUID.randomUUID() + "/bank-accounts", tokenFor("TRUST_LEAD"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("USER_NOT_FOUND_BY_ID"));
+
+        assertRefusedIdentically(id -> "/admin/users/" + id + "/bank-accounts", workerId, tokenFor("SUPPORT_AGENT"));
+        assertRefusedIdentically(id -> "/admin/users/" + id + "/bank-accounts", workerId, tokenFor("FINANCE_OFFICER"));
+
+        List<String> permissions = jdbcTemplate.queryForList(
+                "select permission from admin_audit_entries where resource_id = ? and allowed = true",
+                String.class, workerId.toString());
+        assertEquals(List.of("user.read_pii"), permissions,
+                "banka hesabı okuması user.read_pii izniyle denetlenmeli");
+    }
+
+    @Test
+    void theCompanyIdentityTravelsWithTheAssignmentItsPaymentsAndItsPayout() throws Exception {
+        read("/admin/job-assignments/" + assignmentId, tokenFor("FINANCE_ANALYST"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.companyId").value(nullValue()))
+                .andExpect(jsonPath("$.data.companyName").value(nullValue()));
+
+        jdbcTemplate.update("update jobs set company_id = ? where id = ?", companyId, jobId);
+        try {
+            String companyName = "Detay Lojistik " + companyId;
+            read("/admin/job-assignments/" + assignmentId, tokenFor("FINANCE_ANALYST"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.companyId").value(companyId.toString()))
+                    .andExpect(jsonPath("$.data.companyName").value(companyName));
+            read("/admin/job-assignments?jobId=" + jobId, tokenFor("FINANCE_ANALYST"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content[0].companyId").value(companyId.toString()))
+                    .andExpect(jsonPath("$.data.content[0].companyName").value(companyName));
+            read("/admin/payments/" + paymentId, tokenFor("FINANCE_ANALYST"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.companyId").value(companyId.toString()))
+                    .andExpect(jsonPath("$.data.companyName").value(companyName));
+            read("/admin/job-assignments/" + assignmentId + "/payments", tokenFor("FINANCE_ANALYST"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data[*].companyId", hasItem(companyId.toString())));
+            read("/admin/payouts/" + payoutId, tokenFor("FINANCE_OFFICER"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.companyId").value(companyId.toString()))
+                    .andExpect(jsonPath("$.data.companyName").value(companyName));
+        } finally {
+            jdbcTemplate.update("update jobs set company_id = null where id = ?", jobId);
+        }
+    }
+
+    private void insertIdentityReview(UUID id, UUID user, String createdAt, boolean verified) {
+        long digits = Math.floorMod(id.getMostSignificantBits(), 8_999_999_999L) + 1_000_000_000L;
+        jdbcTemplate.update("""
+                insert into user_verifications (id, verification_type, created_at, is_deleted, is_verified,
+                                                user_id, tc_identity_number, first_name, last_name, birth_date,
+                                                tc_document_number)
+                values (?, 'IDENTITY', %s, false, ?, ?, ?, 'Işıl', 'Çağlayan', date '1998-04-12', 'A01A00000')
+                """.formatted(createdAt), id, verified, user, "1" + digits);
+    }
+
+    private void insertSession(UUID id, UUID deviceId, String createdAt, boolean active, String refreshHash) {
+        jdbcTemplate.update("""
+                insert into sessions (id, created_at, is_deleted, device_id, refresh_token_hash, refresh_expires_at,
+                                      ip_address, last_accessed_at, is_active)
+                values (?, %s, false, ?, ?, now() + interval '30 days', '10.0.0.7', now(), ?)
+                """.formatted(createdAt), id, deviceId, refreshHash, active);
     }
 }

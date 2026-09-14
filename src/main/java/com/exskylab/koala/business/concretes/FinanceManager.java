@@ -6,6 +6,7 @@ import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.core.constants.FinanceMessages;
 import com.exskylab.koala.core.dtos.finance.response.FinanceSummaryDto;
 import com.exskylab.koala.core.exceptions.ValidationException;
+import com.exskylab.koala.core.properties.PayoutSettlementProperties;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,11 +24,14 @@ public class FinanceManager implements FinanceService {
 
     private final PaymentService paymentService;
     private final PayoutService payoutService;
+    private final PayoutSettlementProperties settlementProperties;
     private final Clock clock;
 
-    public FinanceManager(PaymentService paymentService, PayoutService payoutService, Clock clock) {
+    public FinanceManager(PaymentService paymentService, PayoutService payoutService,
+                          PayoutSettlementProperties settlementProperties, Clock clock) {
         this.paymentService = paymentService;
         this.payoutService = payoutService;
+        this.settlementProperties = settlementProperties;
         this.clock = clock;
     }
 
@@ -46,11 +50,15 @@ public class FinanceManager implements FinanceService {
         PaymentService.SucceededVolume payments = paymentService.succeededVolume(from, to, normalized);
         PayoutService.AmountCount completed = payoutService.completedVolume(from, to, normalized);
         PayoutService.AmountCount awaiting = payoutService.awaitingVolume(normalized);
+        long stuckPayments = paymentService.countStuckVerifications();
+        long overduePayouts = payoutService.findPayoutsAwaitingSettlementLongerThan(
+                settlementProperties.getOverdueAfter()).size();
         return new FinanceSummaryDto(from, to, normalized,
                 money(payments.employerVolume()), money(payments.koalaFee()), money(payments.workerPayout()),
                 payments.count(),
                 money(completed.amount()), completed.count(),
-                money(awaiting.amount()), awaiting.count());
+                money(awaiting.amount()), awaiting.count(),
+                stuckPayments, overduePayouts);
     }
 
     private static String normalizeCurrency(String currency) {

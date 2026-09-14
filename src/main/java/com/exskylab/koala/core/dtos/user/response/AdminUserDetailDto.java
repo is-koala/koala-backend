@@ -12,6 +12,7 @@ public record AdminUserDetailDto(UUID id, String firstName, String lastName, Str
                                  Boolean emailVerified, Boolean phoneVerified, Boolean identityVerified,
                                  Boolean isEmployer, Instant createdAt,
                                  List<AdminUserCompanyDto> companies, List<BadgeDto> badges,
-                                 AdminUserCountsDto counts, IdentityReviewStatus identityReviewStatus,
-                                 UUID pendingDeletionRequestId) {
+                                 AdminUserCountsDto counts, UUID identityReviewId,
+                                 IdentityReviewStatus identityReviewStatus,
+                                 UUID pendingDeletionRequestId, AdminSessionSummaryDto sessionSummary) {
 }

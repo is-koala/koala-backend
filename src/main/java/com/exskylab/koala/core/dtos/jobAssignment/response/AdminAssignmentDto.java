@@ -8,7 +8,7 @@ import com.exskylab.koala.entities.PaymentStatus;
 import java.time.Instant;
 import java.util.UUID;
 
-public record AdminAssignmentDto(UUID id, UUID jobId, String jobTitle, String companyName,
+public record AdminAssignmentDto(UUID id, UUID jobId, String jobTitle, UUID companyId, String companyName,
                                  SafeUserDto worker, SafeUserDto employer,
                                  AssignmentStatus status, PaymentStatus paymentStatus,
                                  Instant assignmentDateTime, Instant actualCompletionDateTime,

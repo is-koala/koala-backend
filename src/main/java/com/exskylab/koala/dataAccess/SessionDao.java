@@ -18,4 +18,9 @@ public interface SessionDao extends JpaRepository<Session, UUID> {
     List<Session> findAllByDeviceIdAndIsActive(UUID deviceId, boolean active);
 
     List<Session> findAllByDevice_User_IdAndIsActive(UUID userId, boolean active);
+
+    long countByDevice_User_IdAndIsActive(UUID userId, boolean active);
+
+    @EntityGraph(attributePaths = {"device"})
+    Optional<Session> findFirstByDevice_User_IdOrderByCreatedAtDesc(UUID userId);
 }

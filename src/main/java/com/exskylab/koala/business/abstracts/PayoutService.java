@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
+import com.exskylab.koala.core.helpers.CreatedAtRange;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -37,7 +38,8 @@ public interface PayoutService {
 
     AmountCount awaitingVolume(String currency);
 
-    PageDto<StaffPayoutDto> listForStaff(List<PayoutStatus> statuses, String query, UUID workerId, Pageable pageable);
+    PageDto<StaffPayoutDto> listForStaff(List<PayoutStatus> statuses, String query, UUID workerId,
+                                         CreatedAtRange createdAt, Pageable pageable);
 
     AdminPayoutDetailDto getStaffDetail(UUID payoutId);
 

@@ -44,6 +44,8 @@ public interface PayoutDao extends JpaRepository<Payout, UUID> {
             left join p.worker worker
             left join p.jobAssignment assignment
             where p.status in :statuses
+              and p.createdAt >= :from
+              and p.createdAt <= :to
               and (:workerId is null or worker.id = :workerId)
               and (cast(:query as string) is null
                    or cast(p.id as string) like lower(concat('%', cast(:query as string), '%'))
@@ -54,7 +56,8 @@ public interface PayoutDao extends JpaRepository<Payout, UUID> {
             """)
     @EntityGraph(attributePaths = {"bankAccount"})
     Page<Payout> searchForStaff(@Param("statuses") List<PayoutStatus> statuses, @Param("query") String query,
-                                @Param("workerId") UUID workerId, Pageable pageable);
+                                @Param("workerId") UUID workerId, @Param("from") Instant from,
+                                @Param("to") Instant to, Pageable pageable);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Payout p where p.id = :id")

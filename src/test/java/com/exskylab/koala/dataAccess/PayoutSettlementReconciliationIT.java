@@ -1,5 +1,6 @@
 package com.exskylab.koala.dataAccess;
 
+import com.exskylab.koala.core.helpers.CreatedAtRange;
 import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.core.dtos.payout.request.ConfirmPayoutSettlementDto;
 import com.exskylab.koala.core.dtos.payout.response.StaffPayoutDto;
@@ -319,7 +320,7 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
         Set<UUID> seeded = Set.of(overdue, orphaned, withoutAssignment);
 
         Set<UUID> listed = onlySeeded(payoutService
-                .listForStaff(List.of(PayoutStatus.PROCESSING), null, null, PageRequest.of(0, 50))
+                .listForStaff(List.of(PayoutStatus.PROCESSING), null, null, CreatedAtRange.ANY, PageRequest.of(0, 50))
                 .content().stream()
                 .map(StaffPayoutDto::id)
                 .toList(), seeded);

@@ -6,5 +6,6 @@ public record FinanceSummaryDto(Instant from, Instant to, String currency,
                                 String employerVolume, String koalaFee, String workerPayout,
                                 long succeededPaymentCount,
                                 String completedPayoutAmount, long completedPayoutCount,
-                                String awaitingPayoutAmount, long awaitingPayoutCount) {
+                                String awaitingPayoutAmount, long awaitingPayoutCount,
+                                long stuckPaymentCount, long overduePayoutCount) {
 }
