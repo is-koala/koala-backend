@@ -29,7 +29,8 @@ public interface JobDao extends JpaRepository<Job, UUID> {
             case when j.employerType = com.exskylab.koala.entities.JobEmployerType.COMPANY and j.addressPublic = true
                  then j.address.longitude else round(j.address.longitude, 2) end""";
 
-    String DISTANCE_KM = "case when :located = true then 6371.0 * acos(least(1.0, greatest(-1.0, "
+    String DISTANCE_KM = "case when :located = true and j.address.latitude is not null and j.address.longitude is not null "
+            + "then 6371.0 * acos(least(1.0, greatest(-1.0, "
             + "sin(radians(:latitude)) * sin(radians(" + PUBLIC_LATITUDE + ")) "
             + "+ cos(radians(:latitude)) * cos(radians(" + PUBLIC_LATITUDE + ")) "
             + "* cos(radians(" + PUBLIC_LONGITUDE + ") - radians(:longitude))))) else null end";

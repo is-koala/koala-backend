@@ -58,6 +58,7 @@ class JobSearchDateDistanceIT extends AbstractIntegrationTest {
     private final UUID far = UUID.randomUUID();
     private final UUID individualAtExactSpot = UUID.randomUUID();
     private final UUID publicCompanyAtExactSpot = UUID.randomUUID();
+    private final UUID withoutCoordinates = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
@@ -91,6 +92,7 @@ class JobSearchDateDistanceIT extends AbstractIntegrationTest {
         insertJob(mid, null, false, "41.010000", "29.030000", distanceStart, 12);
         insertJob(individualAtExactSpot, null, false, "40.994999", "29.030000", distanceStart, 13);
         insertJob(publicCompanyAtExactSpot, companyId, true, "40.994999", "29.030000", distanceStart, 14);
+        insertJob(withoutCoordinates, null, false, null, null, distanceStart, 9);
     }
 
     @AfterEach
@@ -141,7 +143,7 @@ class JobSearchDateDistanceIT extends AbstractIntegrationTest {
                         .param("startFrom", "2027-03-11T21:00:00Z")
                         .param("size", "100"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalElements").value(6))
+                .andExpect(jsonPath("$.data.totalElements").value(7))
                 .andExpect(jsonPath("$.data.content[*].id", hasItem(justAfter.toString())))
                 .andExpect(jsonPath("$.data.content[*].id", not(hasItem(atUpperBound.toString()))));
 
@@ -180,7 +182,7 @@ class JobSearchDateDistanceIT extends AbstractIntegrationTest {
                         .param("sort", "distance,asc")
                         .param("size", "100"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.content", hasSize(5)))
+                .andExpect(jsonPath("$.data.content", hasSize(6)))
                 .andExpect(jsonPath("$.data.content[0].id").value(individualAtExactSpot.toString()))
                 .andExpect(jsonPath("$.data.content[0].distanceKm").value(0.0))
                 .andExpect(jsonPath("$.data.content[1].id").value(publicCompanyAtExactSpot.toString()))
@@ -190,7 +192,38 @@ class JobSearchDateDistanceIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.content[3].id").value(mid.toString()))
                 .andExpect(jsonPath("$.data.content[3].distanceKm").value(2.2))
                 .andExpect(jsonPath("$.data.content[4].id").value(far.toString()))
-                .andExpect(jsonPath("$.data.content[4].distanceKm").value(8.9));
+                .andExpect(jsonPath("$.data.content[4].distanceKm").value(8.9))
+                .andExpect(jsonPath("$.data.content[5].id").value(withoutCoordinates.toString()))
+                .andExpect(jsonPath("$.data.content[5].distanceKm").value(nullValue()));
+    }
+
+    @Test
+    void aJobWithoutCoordinatesComesLastInBothDirectionsOfTheDistanceSort() throws Exception {
+        mockMvc.perform(get("/jobs")
+                        .param("query", query)
+                        .param("startFrom", "2027-05-01T00:00:00Z")
+                        .param("lat", CENTER_LAT.toPlainString())
+                        .param("lng", CENTER_LNG.toPlainString())
+                        .param("sort", "distance,desc")
+                        .param("size", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content", hasSize(6)))
+                .andExpect(jsonPath("$.data.content[0].id").value(far.toString()))
+                .andExpect(jsonPath("$.data.content[4].id").value(individualAtExactSpot.toString()))
+                .andExpect(jsonPath("$.data.content[5].id").value(withoutCoordinates.toString()))
+                .andExpect(jsonPath("$.data.content[5].distanceKm").value(nullValue()));
+
+        mockMvc.perform(get("/jobs")
+                        .param("query", query)
+                        .param("startFrom", "2027-05-01T00:00:00Z")
+                        .param("lat", CENTER_LAT.toPlainString())
+                        .param("lng", CENTER_LNG.toPlainString())
+                        .param("sort", "distance,asc")
+                        .param("size", "2")
+                        .param("page", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(6))
+                .andExpect(jsonPath("$.data.content[1].id").value(withoutCoordinates.toString()));
     }
 
     @Test
@@ -203,11 +236,13 @@ class JobSearchDateDistanceIT extends AbstractIntegrationTest {
                         .param("sort", "createdAt,desc")
                         .param("size", "100"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.content", hasSize(5)))
-                .andExpect(jsonPath("$.data.content[0].id").value(far.toString()))
-                .andExpect(jsonPath("$.data.content[0].distanceKm").value(8.9))
-                .andExpect(jsonPath("$.data.content[4].id").value(publicCompanyAtExactSpot.toString()))
-                .andExpect(jsonPath("$.data.content[4].distanceKm").value(0.6));
+                .andExpect(jsonPath("$.data.content", hasSize(6)))
+                .andExpect(jsonPath("$.data.content[0].id").value(withoutCoordinates.toString()))
+                .andExpect(jsonPath("$.data.content[0].distanceKm").value(nullValue()))
+                .andExpect(jsonPath("$.data.content[1].id").value(far.toString()))
+                .andExpect(jsonPath("$.data.content[1].distanceKm").value(8.9))
+                .andExpect(jsonPath("$.data.content[5].id").value(publicCompanyAtExactSpot.toString()))
+                .andExpect(jsonPath("$.data.content[5].distanceKm").value(0.6));
     }
 
     @Test
@@ -217,7 +252,7 @@ class JobSearchDateDistanceIT extends AbstractIntegrationTest {
                         .param("startFrom", "2027-05-01T00:00:00Z")
                         .param("size", "100"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.content", hasSize(5)))
+                .andExpect(jsonPath("$.data.content", hasSize(6)))
                 .andExpect(jsonPath("$.data.content[*].distanceKm", everyItem(nullValue())));
     }
 
@@ -255,7 +290,8 @@ class JobSearchDateDistanceIT extends AbstractIntegrationTest {
         jdbc.update("insert into addresses (id, created_at, is_deleted, country_id, city_id, district_id, "
                         + "latitude, longitude, canonical_version, needs_review) "
                         + "values (?, now(), false, ?, ?, ?, ?, ?, 1, false)",
-                addressId, countryId, cityId, districtId, new BigDecimal(latitude), new BigDecimal(longitude));
+                addressId, countryId, cityId, districtId,
+                latitude == null ? null : new BigDecimal(latitude), longitude == null ? null : new BigDecimal(longitude));
         jdbc.update("insert into jobs (id, created_at, is_deleted, creator_id, company_id, job_category_id, "
                         + "employer_type, title, description, position, address_id, address_public, type, "
                         + "salary_type, salary, min_age, max_age, experience_required, insurance_required, "

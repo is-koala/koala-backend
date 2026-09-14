@@ -362,7 +362,7 @@ public class JobManager implements JobService {
                     criteria.getMaxLatitude(),
                     criteria.getMinLongitude(),
                     criteria.getMaxLongitude(),
-                    withDistanceTieBreaker(pageable));
+                    withDistanceOrdering(pageable));
 
             hits.forEach(hit -> distances.put(hit.getId(), hit.getDistance()));
             List<UUID> ids = hits.getContent().stream().map(JobDao.JobSearchHit::getId).toList();
@@ -575,12 +575,18 @@ public class JobManager implements JobService {
         return page;
     }
 
-    private static Pageable withDistanceTieBreaker(Pageable pageable) {
-        Sort sort = pageable.getSort();
-        if (sort.getOrderFor(DISTANCE_SORT) == null || sort.getOrderFor("createdAt") != null) {
+    private static Pageable withDistanceOrdering(Pageable pageable) {
+        Sort requested = pageable.getSort();
+        if (requested.getOrderFor(DISTANCE_SORT) == null) {
             return pageable;
         }
-        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort.and(DEFAULT_SORT));
+        Sort sort = Sort.by(requested.stream()
+                .map(order -> DISTANCE_SORT.equals(order.getProperty()) ? order.nullsLast() : order)
+                .toList());
+        if (sort.getOrderFor("createdAt") == null) {
+            sort = sort.and(DEFAULT_SORT);
+        }
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
     }
 
     private static Double roundKm(Double distance) {
