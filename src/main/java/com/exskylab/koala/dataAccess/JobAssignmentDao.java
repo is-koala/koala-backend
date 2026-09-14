@@ -48,6 +48,24 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
     boolean existsActiveForUser(@Param("userId") UUID userId,
                                 @Param("statuses") java.util.List<AssignmentStatus> statuses);
 
+    @Query("""
+            select a.id as id, a.worker.id as workerId, a.job.creator.id as employerId
+            from JobAssignment a
+            where a.paymentStatus = :paymentStatus
+              and (a.worker.id in :userIds or a.job.creator.id in :userIds)
+            """)
+    List<PartyLink> findMoneyLinksForUsers(@Param("userIds") java.util.Collection<UUID> userIds,
+                                           @Param("paymentStatus") PaymentStatus paymentStatus);
+
+    @Query("""
+            select a.id as id, a.worker.id as workerId, a.job.creator.id as employerId
+            from JobAssignment a
+            where a.status in :statuses
+              and (a.worker.id in :userIds or a.job.creator.id in :userIds)
+            """)
+    List<PartyLink> findActiveLinksForUsers(@Param("userIds") java.util.Collection<UUID> userIds,
+                                            @Param("statuses") java.util.List<AssignmentStatus> statuses);
+
     @EntityGraph(attributePaths = {"job", "job.category", "job.address", "job.address.city", "job.address.district",
             "job.creator", "job.creator.profilePicture", "job.company", "job.company.logo",
             "worker", "worker.profilePicture", "application"})

@@ -7,6 +7,7 @@ import lombok.Setter;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Map;
 import java.util.UUID;
 
 @Getter
@@ -25,6 +26,7 @@ public class IdentityReviewDto {
     private Instant rejectedAt;
     private Instant verifiedAt;
     private UUID reviewedByStaffId;
+    private String reviewedByStaffName;
     private UUID selfieDocumentId;
     private UUID frontDocumentId;
     private UUID backDocumentId;
@@ -36,6 +38,14 @@ public class IdentityReviewDto {
             return IdentityReviewStatus.APPROVED;
         }
         return review.getRejectedAt() != null ? IdentityReviewStatus.REJECTED : IdentityReviewStatus.PENDING;
+    }
+
+    public static IdentityReviewDto from(IdentityVerification review, Map<UUID, String> staffNames) {
+        IdentityReviewDto dto = from(review);
+        if (review.getReviewedByStaffId() != null) {
+            dto.setReviewedByStaffName(staffNames.get(review.getReviewedByStaffId()));
+        }
+        return dto;
     }
 
     public static IdentityReviewDto from(IdentityVerification review) {

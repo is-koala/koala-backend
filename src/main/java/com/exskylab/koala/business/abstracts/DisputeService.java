@@ -10,6 +10,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.exskylab.koala.dataAccess.PartyLink;
+
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -42,4 +45,6 @@ public interface DisputeService {
     DisputeEvidence getEvidenceForStaffDownload(UUID disputeId, UUID evidenceId);
 
     long countInvolving(UUID userId);
+
+    List<PartyLink> findActiveLinksForUsers(Collection<UUID> userIds);
 }

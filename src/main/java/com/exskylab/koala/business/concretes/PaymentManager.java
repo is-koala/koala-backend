@@ -18,6 +18,7 @@ import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoPaymentResultRequestDto;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoPaymentResultResponseDto;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
+import com.exskylab.koala.dataAccess.PartyLink;
 import com.exskylab.koala.dataAccess.PaymentDao;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.Payment;
@@ -556,5 +557,14 @@ public class PaymentManager implements PaymentService {
     @Transactional(readOnly = true)
     public long countForEmployer(UUID employerId) {
         return paymentDao.countByJobAssignmentJobCreatorId(employerId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PartyLink> findPendingLinksForUsers(Collection<UUID> userIds) {
+        if (userIds.isEmpty()) {
+            return List.of();
+        }
+        return paymentDao.findPendingLinksForUsers(userIds, PENDING_STATUSES);
     }
 }

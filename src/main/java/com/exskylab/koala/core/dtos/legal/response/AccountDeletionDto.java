@@ -3,6 +3,7 @@ package com.exskylab.koala.core.dtos.legal.response;
 import com.exskylab.koala.entities.AccountDeletionStatus;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 public record AccountDeletionDto(
@@ -11,5 +12,8 @@ public record AccountDeletionDto(
         AccountDeletionStatus status,
         Instant requestedAt,
         Instant processedAt,
-        String blockedReason) {
+        String blockedReason,
+        String rejectionReason,
+        UUID rejectedByStaffId,
+        List<DeletionBlockerDto> blockers) {
 }

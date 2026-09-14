@@ -5,6 +5,7 @@ import com.exskylab.koala.core.dtos.company.response.JobCompanyDto;
 import com.exskylab.koala.core.dtos.gallery.response.GalleryImageDto;
 import com.exskylab.koala.core.dtos.jobCategory.response.JobCategoryDto;
 import com.exskylab.koala.core.dtos.payment.response.PricingBreakdownDto;
+import com.exskylab.koala.core.dtos.user.response.SafeUserDto;
 import com.exskylab.koala.core.dtos.user.response.StaffPartyDto;
 import com.exskylab.koala.entities.JobEmployerType;
 import com.exskylab.koala.entities.JobStatus;
@@ -23,8 +24,9 @@ public record AdminJobDetailDto(UUID id, String title, String description, Strin
                                 BigDecimal salary, PricingBreakdownDto pricing, Integer minAge, Integer maxAge,
                                 Boolean insuranceRequired, Boolean experienceRequired, Integer headcount,
                                 LocalDateTime startDateTime, LocalDateTime endDateTime,
-                                StaffPartyDto employer, JobCompanyDto company,
+                                StaffPartyDto employer, SafeUserDto creator, JobCompanyDto company,
                                 AddressDto address, Boolean addressPublic, List<GalleryImageDto> images,
                                 Long applicationCount, Long assignmentCount,
+                                Instant cancelledAt, String cancelReason,
                                 Instant createdAt, Instant updatedAt) {
 }

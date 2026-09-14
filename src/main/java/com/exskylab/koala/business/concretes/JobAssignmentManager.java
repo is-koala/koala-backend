@@ -32,6 +32,7 @@ import com.exskylab.koala.core.monitoring.PaymentMetrics;
 import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.*;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
+import com.exskylab.koala.dataAccess.PartyLink;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.MyAssignmentDto;
 import com.exskylab.koala.entities.*;
@@ -721,5 +722,24 @@ public class JobAssignmentManager implements JobAssignmentService {
     @Transactional(readOnly = true)
     public long countAsEmployer(UUID employerId) {
         return jobAssignmentDao.countByJobCreatorId(employerId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PartyLink> findEscrowLinksForUsers(Collection<UUID> userIds) {
+        if (userIds.isEmpty()) {
+            return List.of();
+        }
+        return jobAssignmentDao.findMoneyLinksForUsers(userIds, PaymentStatus.HELD_IN_ESCROW);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PartyLink> findActiveWorkLinksForUsers(Collection<UUID> userIds) {
+        if (userIds.isEmpty()) {
+            return List.of();
+        }
+        return jobAssignmentDao.findActiveLinksForUsers(userIds,
+                List.of(AssignmentStatus.CONFIRMED, AssignmentStatus.IN_PROGRESS));
     }
 }

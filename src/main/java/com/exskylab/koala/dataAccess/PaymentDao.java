@@ -110,6 +110,15 @@ public interface PaymentDao extends JpaRepository<Payment, UUID> {
                                  @Param("statuses") List<PaymentAttemptStatus> statuses);
 
     @Query("""
+            select p.id as id, a.worker.id as workerId, a.job.creator.id as employerId
+            from Payment p join p.jobAssignment a
+            where p.status in :statuses
+              and (a.worker.id in :userIds or a.job.creator.id in :userIds)
+            """)
+    List<PartyLink> findPendingLinksForUsers(@Param("userIds") Collection<UUID> userIds,
+                                             @Param("statuses") List<PaymentAttemptStatus> statuses);
+
+    @Query("""
             select coalesce(sum(p.totalCharged), 0),
                    coalesce(sum(p.commissionAmount), 0),
                    coalesce(sum(p.workerPayout), 0),

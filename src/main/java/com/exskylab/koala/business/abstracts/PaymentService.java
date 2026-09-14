@@ -7,6 +7,8 @@ import com.exskylab.koala.entities.PaymentAttemptStatus;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import com.exskylab.koala.dataAccess.PartyLink;
+
 import java.util.Collection;
 import java.util.Map;
 import java.util.List;
@@ -61,4 +63,6 @@ public interface PaymentService {
     }
 
     long countForEmployer(UUID employerId);
+
+    List<PartyLink> findPendingLinksForUsers(Collection<UUID> userIds);
 }

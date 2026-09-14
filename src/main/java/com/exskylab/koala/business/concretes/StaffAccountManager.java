@@ -492,4 +492,17 @@ public class StaffAccountManager implements StaffAccountService {
         return member.getLockedUntil() != null && member.getLockedUntil().isAfter(now);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, String> displayNamesOf(Collection<UUID> staffIds) {
+        if (staffIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, String> names = new LinkedHashMap<>();
+        for (StaffMember member : staffMemberDao.findAllById(staffIds)) {
+            names.put(member.getId(), member.getDisplayName() == null || member.getDisplayName().isBlank()
+                    ? member.getEmail() : member.getDisplayName());
+        }
+        return names;
+    }
 }

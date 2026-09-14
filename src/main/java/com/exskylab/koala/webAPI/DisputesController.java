@@ -73,7 +73,7 @@ public class DisputesController {
 
         var page = disputeService.searchForStaff(status, query, userId, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
-                PageDto.of(page, disputeMapper.toDisputeDtoList(page.getContent())),
+                PageDto.of(page, disputeMapper.toStaffDisputeDtoList(page.getContent())),
                 DisputeMessages.LISTED, HttpStatus.OK));
     }
 
@@ -89,7 +89,7 @@ public class DisputesController {
     @GetMapping("/{disputeId}")
     public ResponseEntity<SuccessDataResult<DisputeDto>> dispute(@PathVariable UUID disputeId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
-                disputeMapper.toDisputeDto(disputeService.getForStaff(disputeId)),
+                disputeMapper.toStaffDisputeDto(disputeService.getForStaff(disputeId)),
                 DisputeMessages.FETCHED, HttpStatus.OK));
     }
 
@@ -111,7 +111,7 @@ public class DisputesController {
             @AuthenticationPrincipal StaffPrincipal actor) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
-                disputeMapper.toDisputeDto(disputeService.resolveDispute(
+                disputeMapper.toStaffDisputeDto(disputeService.resolveDispute(
                         actor, disputeId, request.getResolution(), request.getNote())),
                 DisputeMessages.RESOLVED, HttpStatus.OK));
     }

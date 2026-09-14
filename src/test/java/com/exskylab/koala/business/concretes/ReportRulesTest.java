@@ -48,7 +48,7 @@ class ReportRulesTest {
 
         manager = new ReportManager(reportDao, userService, jobService, messagingService, securityService,
                 mock(ImageService.class), mock(com.exskylab.koala.core.mappers.ReportMapper.class),
-                staffAccountService,
+                staffAccountService, mock(com.exskylab.koala.business.abstracts.JobAssignmentService.class),
                 new com.exskylab.koala.core.helpers.PageableSanitizer());
 
         when(reportDao.save(any())).thenAnswer(i -> i.getArgument(0));
@@ -171,7 +171,7 @@ class ReportRulesTest {
         ReportManager withGhost = new ReportManager(reportDao, userService, mock(JobService.class),
                 mock(MessagingService.class), securityService, mock(ImageService.class),
                 mock(com.exskylab.koala.core.mappers.ReportMapper.class),
-                staffAccountService,
+                staffAccountService, mock(com.exskylab.koala.business.abstracts.JobAssignmentService.class),
                 new com.exskylab.koala.core.helpers.PageableSanitizer());
 
         assertThrows(ResourceNotFoundException.class,

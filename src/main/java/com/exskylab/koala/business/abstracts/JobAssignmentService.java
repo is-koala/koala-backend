@@ -10,6 +10,8 @@ import com.exskylab.koala.core.dtos.jobAssignment.response.PaymentSessionDto;
 import com.exskylab.koala.entities.JobAssignment;
 import jakarta.validation.Valid;
 
+import com.exskylab.koala.dataAccess.PartyLink;
+
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -64,4 +66,8 @@ public interface JobAssignmentService {
     long countAsWorker(UUID workerId);
 
     long countAsEmployer(UUID employerId);
+
+    List<PartyLink> findEscrowLinksForUsers(Collection<UUID> userIds);
+
+    List<PartyLink> findActiveWorkLinksForUsers(Collection<UUID> userIds);
 }

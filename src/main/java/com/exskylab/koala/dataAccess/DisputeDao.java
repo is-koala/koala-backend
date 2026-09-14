@@ -12,6 +12,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -43,6 +44,15 @@ public interface DisputeDao extends JpaRepository<Dispute, UUID> {
             where d.jobAssignment.worker.id = :userId or d.jobAssignment.job.creator.id = :userId
             """)
     long countInvolving(@Param("userId") UUID userId);
+
+    @Query("""
+            select d.id as id, a.worker.id as workerId, a.job.creator.id as employerId
+            from Dispute d join d.jobAssignment a
+            where d.status in :statuses
+              and (a.worker.id in :userIds or a.job.creator.id in :userIds)
+            """)
+    List<PartyLink> findActiveLinksForUsers(@Param("userIds") Collection<UUID> userIds,
+                                            @Param("statuses") List<DisputeStatus> statuses);
 
     @Query("""
             select d from Dispute d

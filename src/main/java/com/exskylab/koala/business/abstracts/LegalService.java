@@ -3,12 +3,15 @@ package com.exskylab.koala.business.abstracts;
 import com.exskylab.koala.core.dtos.legal.request.ConsentDecisionDto;
 import com.exskylab.koala.core.helpers.ClientContext;
 import com.exskylab.koala.core.security.StaffPrincipal;
+import com.exskylab.koala.core.dtos.legal.response.DeletionBlockerDto;
 import com.exskylab.koala.entities.AccountDeletionRequest;
 import com.exskylab.koala.entities.AgreementVersion;
 import com.exskylab.koala.entities.ConsentRecord;
 import com.exskylab.koala.entities.User;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.time.Instant;
@@ -43,4 +46,6 @@ public interface LegalService {
     boolean processDeletionRequest(UUID requestId);
 
     Optional<UUID> findOpenDeletionRequestId(UUID userId);
+
+    Map<UUID, List<DeletionBlockerDto>> findDeletionBlockers(Collection<AccountDeletionRequest> requests);
 }

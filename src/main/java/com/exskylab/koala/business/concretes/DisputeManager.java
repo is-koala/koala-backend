@@ -23,6 +23,7 @@ import com.exskylab.koala.core.utilities.storage.FolderType;
 import com.exskylab.koala.core.utilities.storage.StorageService;
 import com.exskylab.koala.dataAccess.DisputeDao;
 import com.exskylab.koala.dataAccess.DisputeEvidenceDao;
+import com.exskylab.koala.dataAccess.PartyLink;
 import org.springframework.http.MediaType;
 import org.springframework.http.MediaTypeFactory;
 import org.springframework.web.multipart.MultipartFile;
@@ -42,6 +43,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -332,5 +334,14 @@ public class DisputeManager implements DisputeService {
     @Transactional(readOnly = true)
     public long countInvolving(UUID userId) {
         return disputeDao.countInvolving(userId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PartyLink> findActiveLinksForUsers(Collection<UUID> userIds) {
+        if (userIds.isEmpty()) {
+            return List.of();
+        }
+        return disputeDao.findActiveLinksForUsers(userIds, ACTIVE);
     }
 }

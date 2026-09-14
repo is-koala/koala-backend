@@ -17,10 +17,12 @@ import com.exskylab.koala.business.abstracts.CompanyService;
 import com.exskylab.koala.business.abstracts.GalleryService;
 import com.exskylab.koala.business.abstracts.IdentityDocumentReviewService;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
+import com.exskylab.koala.business.abstracts.StaffAccountService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.dtos.identity.request.RejectIdentityReviewDto;
 import com.exskylab.koala.core.dtos.identity.response.IdentityReviewDto;
 import com.exskylab.koala.entities.IdentityReviewStatus;
+import com.exskylab.koala.entities.IdentityVerification;
 import com.exskylab.koala.core.constants.AdminMessages;
 import com.exskylab.koala.core.constants.BankAccountMessages;
 import com.exskylab.koala.core.dtos.bankAccount.request.ConfirmIbanTransferDto;
@@ -65,7 +67,11 @@ import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Tag(name = "Yönetim", description = "Yalnızca ADMIN rolüne açık işlemler.")
 @RestController
@@ -84,6 +90,7 @@ public class AdminController {
     private final SignedFileResponses signedFileResponses;
     private final AdminDetailService adminDetailService;
     private final JobService jobService;
+    private final StaffAccountService staffAccountService;
 
     public AdminController(CompanyService companyService, UserService userService, UserMapper userMapper,
                            GalleryService galleryService, RoleGrantMapper roleGrantMapper,
@@ -91,7 +98,7 @@ public class AdminController {
                            BankAccountService bankAccountService, BankAccountMapper bankAccountMapper,
                            IdentityDocumentReviewService identityDocumentReviewService,
                            SignedFileResponses signedFileResponses, AdminDetailService adminDetailService,
-                           JobService jobService) {
+                           JobService jobService, StaffAccountService staffAccountService) {
         this.companyService = companyService;
         this.userService = userService;
         this.userMapper = userMapper;
@@ -104,6 +111,7 @@ public class AdminController {
         this.signedFileResponses = signedFileResponses;
         this.adminDetailService = adminDetailService;
         this.jobService = jobService;
+        this.staffAccountService = staffAccountService;
     }
 
     @Operation(summary = "Atama kuyruğu",
@@ -263,8 +271,11 @@ public class AdminController {
             throw new ValidationException(BankAccountMessages.PENDING_QUEUE_ONLY);
         }
         var page = bankAccountService.listPendingForStaff(query, pageable);
+        int attemptsAllowed = bankAccountService.verificationAttemptsAllowed();
         return ResponseEntity.ok(new SuccessDataResult<>(
-                PageDto.of(page, page.getContent().stream().map(bankAccountMapper::toIbanPendingDto).toList()),
+                PageDto.of(page, page.getContent().stream()
+                        .map(account -> bankAccountMapper.toIbanPendingDto(account, attemptsAllowed))
+                        .toList()),
                 BankAccountMessages.PENDING_LISTED, HttpStatus.OK));
     }
 
@@ -506,7 +517,7 @@ public class AdminController {
 
         var page = identityDocumentReviewService.search(status, query, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
-                PageDto.of(page, page.getContent().stream().map(IdentityReviewDto::from).toList()),
+                PageDto.of(page, identityViews(page.getContent())),
                 AdminMessages.IDENTITY_REVIEWS_LISTED, HttpStatus.OK));
     }
 
@@ -521,7 +532,7 @@ public class AdminController {
     @GetMapping("/identity-verifications/{reviewId}")
     public ResponseEntity<SuccessDataResult<IdentityReviewDto>> identityReview(@PathVariable UUID reviewId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
-                IdentityReviewDto.from(identityDocumentReviewService.getById(reviewId)),
+                identityView(identityDocumentReviewService.getById(reviewId)),
                 AdminMessages.IDENTITY_REVIEW_FETCHED, HttpStatus.OK));
     }
 
@@ -546,7 +557,7 @@ public class AdminController {
             @AuthenticationPrincipal StaffPrincipal actor) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
-                IdentityReviewDto.from(identityDocumentReviewService.approve(actor, reviewId)),
+                identityView(identityDocumentReviewService.approve(actor, reviewId)),
                 AdminMessages.IDENTITY_REVIEW_APPROVED, HttpStatus.OK));
     }
 
@@ -569,7 +580,7 @@ public class AdminController {
             @AuthenticationPrincipal StaffPrincipal actor) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
-                IdentityReviewDto.from(identityDocumentReviewService.reject(actor, reviewId, request.getReason())),
+                identityView(identityDocumentReviewService.reject(actor, reviewId, request.getReason())),
                 AdminMessages.IDENTITY_REVIEW_REJECTED, HttpStatus.OK));
     }
 
@@ -587,5 +598,18 @@ public class AdminController {
     public ResponseEntity<?> downloadIdentityDocument(@PathVariable UUID reviewId, @PathVariable UUID documentId) {
         VerificationDocument document = identityDocumentReviewService.getDocumentForStaffDownload(reviewId, documentId);
         return signedFileResponses.attachment(document.getFileUrl(), document.getFileName());
+    }
+
+    private IdentityReviewDto identityView(IdentityVerification review) {
+        return identityViews(List.of(review)).getFirst();
+    }
+
+    private List<IdentityReviewDto> identityViews(List<IdentityVerification> reviews) {
+        Set<UUID> reviewerIds = reviews.stream()
+                .map(IdentityVerification::getReviewedByStaffId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, String> names = staffAccountService.displayNamesOf(reviewerIds);
+        return reviews.stream().map(review -> IdentityReviewDto.from(review, names)).toList();
     }
 }

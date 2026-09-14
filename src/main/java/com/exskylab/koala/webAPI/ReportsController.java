@@ -136,7 +136,8 @@ public class ReportsController {
     @Operation(summary = "Şikayeti sonuçlandır", description = "Sonuçlanmış bir şikayet tekrar "
             + "sonuçlandırılamaz, karar gerekçesi zorunludur ve yanıt kuyruk satırının tamamını döndürür. "
             + "reviewedBy yalnızca köprü (marketplace ROLE_ADMIN) kararlarında dolar; personel kimliğiyle "
-            + "verilen kararda boş kalır, kararı kimin verdiğini denetim kaydı söyler.")
+            + "verilen kararda reviewedByStaffId dolar. jobAssignmentId, şikayete konu ilanda şikayet eden ya da "
+            + "şikayet edilenin işçi olduğu son atamadır; böyle bir atama yoksa null.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Şikayet sonuçlandırıldı"),
             @ApiResponse(responseCode = "400", description = "Karar gerekçesi boş",

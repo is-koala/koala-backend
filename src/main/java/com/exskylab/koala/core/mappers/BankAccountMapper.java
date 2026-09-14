@@ -37,12 +37,17 @@ public interface BankAccountMapper {
     @Mapping(target = "attemptsLeft", source = "attemptsLeft")
     IbanVerificationDto toIbanVerificationDto(BankAccount account, String targetIban, int attemptsLeft);
 
-    @Mapping(target = "accountId", source = "id")
+    @Mapping(target = "accountId", source = "account.id")
     @Mapping(target = "maskedIban", expression = "java(LogMasks.iban(account.getIban()))")
-    @Mapping(target = "user", source = "user")
-    @Mapping(target = "reference", source = "verificationReference")
-    @Mapping(target = "amount", source = "verificationAmount")
-    @Mapping(target = "startedAt", source = "verificationStartedAt")
-    @Mapping(target = "expiresAt", source = "verificationExpiresAt")
-    IbanPendingDto toIbanPendingDto(BankAccount account);
+    @Mapping(target = "user", source = "account.user")
+    @Mapping(target = "reference", source = "account.verificationReference")
+    @Mapping(target = "amount", source = "account.verificationAmount")
+    @Mapping(target = "startedAt", source = "account.verificationStartedAt")
+    @Mapping(target = "expiresAt", source = "account.verificationExpiresAt")
+    @Mapping(target = "status",
+            expression = "java(BankAccountVerificationPolicy.effectiveStatus(account, Instant.now()))")
+    @Mapping(target = "attemptsLeft",
+            expression = "java(BankAccountVerificationPolicy.attemptsLeft(account, attemptsAllowed))")
+    @Mapping(target = "createdAt", source = "account.createdAt")
+    IbanPendingDto toIbanPendingDto(BankAccount account, int attemptsAllowed);
 }
