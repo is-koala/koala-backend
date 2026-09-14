@@ -17,6 +17,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JobSearchIT extends AbstractIntegrationTest {
 
+    private static final LocalDateTime NO_LOWER_BOUND = LocalDateTime.of(1, 1, 1, 0, 0);
+    private static final LocalDateTime NO_UPPER_BOUND = LocalDateTime.of(9999, 12, 31, 23, 59, 59);
+
     @Autowired
     private JobDao jobDao;
 
@@ -53,7 +56,7 @@ class JobSearchIT extends AbstractIntegrationTest {
             insertOpenJob(endingAtBoundary, boundary, ownerId, addressId, categoryId);
             insertOpenJob(endingAfterBoundary, boundary.plusSeconds(1), ownerId, addressId, categoryId);
 
-            var results = searchAt(boundary).getContent();
+            var results = searchAt(boundary).map(JobDao.JobSearchHit::getId).getContent();
 
             assertFalse(results.contains(endingAtBoundary));
             assertTrue(results.contains(endingAfterBoundary));
@@ -73,6 +76,7 @@ class JobSearchIT extends AbstractIntegrationTest {
         var page = assertDoesNotThrow(() -> jobDao.searchIds(
                 com.exskylab.koala.entities.JobStatus.OPEN,
                 java.time.LocalDateTime.now(),
+                false, NO_LOWER_BOUND, NO_UPPER_BOUND, false, 0d, 0d,
                 null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null, null, null,
                 PageRequest.of(0, 5, Sort.by(Sort.Direction.DESC, "createdAt"))));
@@ -86,6 +90,8 @@ class JobSearchIT extends AbstractIntegrationTest {
         assertDoesNotThrow(() -> jobDao.searchIds(
                 com.exskylab.koala.entities.JobStatus.OPEN,
                 java.time.LocalDateTime.now(),
+                true, LocalDateTime.of(2026, 9, 1, 0, 0), LocalDateTime.of(2026, 9, 30, 23, 59),
+                true, 41.015137, 28.979530,
                 "garson",
                 null,
                 java.util.UUID.randomUUID(),
@@ -107,6 +113,7 @@ class JobSearchIT extends AbstractIntegrationTest {
         assertDoesNotThrow(() -> jobDao.searchIds(
                 com.exskylab.koala.entities.JobStatus.OPEN,
                 java.time.LocalDateTime.now(),
+                false, NO_LOWER_BOUND, NO_UPPER_BOUND, false, 0d, 0d,
                 null, null, null, null, null, null, null, null, null, null, null,
                 null, 40.98, 41.10, 28.95, 29.15,
                 PageRequest.of(0, 20)));
@@ -124,10 +131,11 @@ class JobSearchIT extends AbstractIntegrationTest {
                 id, ownerId, categoryId, addressId, endDateTime);
     }
 
-    private org.springframework.data.domain.Page<UUID> searchAt(LocalDateTime activeAfter) {
+    private org.springframework.data.domain.Page<JobDao.JobSearchHit> searchAt(LocalDateTime activeAfter) {
         return jobDao.searchIds(
                 com.exskylab.koala.entities.JobStatus.OPEN,
                 activeAfter,
+                false, NO_LOWER_BOUND, NO_UPPER_BOUND, false, 0d, 0d,
                 null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null, null, null,
                 PageRequest.of(0, 20));

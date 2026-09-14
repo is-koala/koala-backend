@@ -37,6 +37,7 @@ public interface JobMapper {
     @Mapping(target = "applicationCount", ignore = true)
     @Mapping(target = "hiredCount", ignore = true)
     @Mapping(target = "addressPrecision", constant = "APPROXIMATE")
+    @Mapping(target = "distanceKm", ignore = true)
     @Mapping(target = "pricing", source = "job")
     JobSummaryDto toJobSummaryDto(Job job);
 

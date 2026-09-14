@@ -19,6 +19,7 @@ import java.util.stream.Collectors;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -72,6 +73,22 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.paths['/jobs'].get.parameters[?(@.name == 'companyId')]").isNotEmpty())
                 .andExpect(jsonPath("$.paths['/job-assignments/{assignmentId}'].get.responses.200").exists())
                 .andExpect(jsonPath("$.paths['/job-assignments/{assignmentId}'].get.responses.404").exists());
+    }
+
+    @Test
+    void jobSearchDocumentsTheStartRangeAndDistanceParametersButNotTheValidationGetters() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath("$.paths['/jobs'].get.parameters[?(@.name == 'startFrom')].description")
+                        .value(hasItem(containsString("Europe/Istanbul"))))
+                .andExpect(jsonPath("$.paths['/jobs'].get.parameters[?(@.name == 'startTo')]").isNotEmpty())
+                .andExpect(jsonPath("$.paths['/jobs'].get.parameters[?(@.name == 'lat')].description")
+                        .value(hasItem(containsString("distanceKm"))))
+                .andExpect(jsonPath("$.paths['/jobs'].get.parameters[?(@.name == 'lng')]").isNotEmpty())
+                .andExpect(jsonPath("$.paths['/jobs'].get.parameters[?(@.name == 'startRangeOrdered')]").isEmpty())
+                .andExpect(jsonPath("$.paths['/jobs'].get.parameters[?(@.name == 'locationComplete')]").isEmpty())
+                .andExpect(jsonPath("$.paths['/jobs'].get.description").value(containsString("sort=distance,asc")))
+                .andExpect(jsonPath("$.components.schemas.JobSummaryDto.properties.distanceKm.description")
+                        .value(containsString("km")));
     }
 
     @Test

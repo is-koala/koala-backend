@@ -26,6 +26,7 @@ import com.exskylab.koala.core.helpers.JobAddressVisibility;
 import com.exskylab.koala.core.helpers.JobAvailability;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
@@ -41,7 +42,11 @@ import com.exskylab.koala.business.abstracts.JobAlertService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -295,7 +300,16 @@ public class JobManager implements JobService {
     private static final Set<String> SORTABLE_FIELDS =
             Set.of("createdAt", "salary", "startDateTime", "title");
 
+    private static final String DISTANCE_SORT = "distance";
+
+    private static final Set<String> LOCATED_SEARCH_SORTABLE_FIELDS =
+            Set.of("createdAt", "salary", "startDateTime", "title", DISTANCE_SORT);
+
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
+
+    private static final LocalDateTime EARLIEST_START = LocalDateTime.of(1, 1, 1, 0, 0);
+
+    private static final LocalDateTime LATEST_START = LocalDateTime.of(9999, 12, 31, 23, 59, 59);
 
     @Override
     @Transactional(readOnly = true)
@@ -318,10 +332,20 @@ public class JobManager implements JobService {
     @Override
     @Transactional(readOnly = true)
     public PageDto<JobSummaryDto> search(JobSearchCriteriaDto criteria, Pageable requested, UUID viewerId) {
-        return listJobs(requested, viewerId, pageable -> {
-            Page<UUID> ids = jobDao.searchIds(
+        boolean located = criteria.hasLocation();
+        Set<String> sortableFields = located ? LOCATED_SEARCH_SORTABLE_FIELDS : SORTABLE_FIELDS;
+        Map<UUID, Double> distances = new HashMap<>();
+
+        PageDto<JobSummaryDto> page = listJobs(requested, sortableFields, viewerId, pageable -> {
+            Page<JobDao.JobSearchHit> hits = jobDao.searchIds(
                     JobStatus.OPEN,
                     jobAvailability.currentTime(),
+                    criteria.getStartFrom() != null || criteria.getStartTo() != null,
+                    Objects.requireNonNullElse(jobAvailability.wallClock(criteria.getStartFrom()), EARLIEST_START),
+                    Objects.requireNonNullElse(jobAvailability.wallClock(criteria.getStartTo()), LATEST_START),
+                    located,
+                    located ? criteria.getLat().doubleValue() : 0d,
+                    located ? criteria.getLng().doubleValue() : 0d,
                     blankToNull(criteria.getQuery()),
                     criteria.getCompanyId(),
                     criteria.getCategoryId(),
@@ -338,17 +362,25 @@ public class JobManager implements JobService {
                     criteria.getMaxLatitude(),
                     criteria.getMinLongitude(),
                     criteria.getMaxLongitude(),
-                    pageable);
+                    withDistanceTieBreaker(pageable));
 
-            return new PageImpl<>(inIdOrder(ids.getContent()), pageable, ids.getTotalElements());
+            hits.forEach(hit -> distances.put(hit.getId(), hit.getDistance()));
+            List<UUID> ids = hits.getContent().stream().map(JobDao.JobSearchHit::getId).toList();
+            return new PageImpl<>(inIdOrder(ids), pageable, hits.getTotalElements());
         });
+
+        if (located) {
+            page.content().forEach(job -> job.setDistanceKm(roundKm(distances.get(job.getId()))));
+        }
+        return page;
     }
 
     @Override
     @Transactional(readOnly = true)
     public PageDto<JobSummaryDto> getJobsOfCurrentUser(Pageable requested) {
         UUID viewerId = securityService.getAuthenticatedUserId();
-        return listJobs(requested, viewerId, pageable -> jobDao.findAllByCreatorId(viewerId, pageable));
+        return listJobs(requested, SORTABLE_FIELDS, viewerId,
+                pageable -> jobDao.findAllByCreatorId(viewerId, pageable));
     }
 
     @Override
@@ -362,7 +394,8 @@ public class JobManager implements JobService {
             throw new ForbiddenException(JobMessages.USER_IS_NOT_A_CONTACT_OF_COMPANY);
         }
 
-        return listJobs(requested, viewerId, pageable -> jobDao.findAllByCompanyId(companyId, pageable));
+        return listJobs(requested, SORTABLE_FIELDS, viewerId,
+                pageable -> jobDao.findAllByCompanyId(companyId, pageable));
     }
 
     @Override
@@ -502,10 +535,10 @@ public class JobManager implements JobService {
                 jobAssignmentDao.countByJobId(jobId));
     }
 
-    private PageDto<JobSummaryDto> listJobs(Pageable requested, UUID viewerId,
+    private PageDto<JobSummaryDto> listJobs(Pageable requested, Set<String> sortableFields, UUID viewerId,
                                             Function<Pageable, Page<Job>> query) {
-        pageableSanitizer.rejectUnknownSort(requested, SORTABLE_FIELDS);
-        Pageable pageable = pageableSanitizer.sanitize(requested, SORTABLE_FIELDS, DEFAULT_SORT);
+        pageableSanitizer.rejectUnknownSort(requested, sortableFields);
+        Pageable pageable = pageableSanitizer.sanitize(requested, sortableFields, DEFAULT_SORT);
 
         Page<Job> jobs = query.apply(pageable);
         Set<UUID> assignedJobIds =
@@ -540,6 +573,18 @@ public class JobManager implements JobService {
             job.setHiredCount(hired.getOrDefault(job.getId(), 0L));
         });
         return page;
+    }
+
+    private static Pageable withDistanceTieBreaker(Pageable pageable) {
+        Sort sort = pageable.getSort();
+        if (sort.getOrderFor(DISTANCE_SORT) == null || sort.getOrderFor("createdAt") != null) {
+            return pageable;
+        }
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort.and(DEFAULT_SORT));
+    }
+
+    private static Double roundKm(Double distance) {
+        return distance == null ? null : BigDecimal.valueOf(distance).setScale(1, RoundingMode.HALF_UP).doubleValue();
     }
 
     private List<Job> inIdOrder(List<UUID> ids) {
