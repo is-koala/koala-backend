@@ -17,7 +17,6 @@ import tools.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -59,15 +58,15 @@ public class GooglePlacesAddressProvider implements AddressSearchProvider {
         List<ProviderAddressSuggestion> suggestions = new ArrayList<>();
         for (JsonNode item : root.path("suggestions")) {
             JsonNode prediction = item.path("placePrediction");
-            String placeId = text(prediction, "placeId");
+            String placeId = GoogleAddressComponents.text(prediction, "placeId");
             if (placeId == null) {
                 continue;
             }
             JsonNode format = prediction.path("structuredFormat");
             suggestions.add(new ProviderAddressSuggestion(
                     placeId,
-                    text(format.path("mainText"), "text"),
-                    text(format.path("secondaryText"), "text")));
+                    GoogleAddressComponents.text(format.path("mainText"), "text"),
+                    GoogleAddressComponents.text(format.path("secondaryText"), "text")));
         }
         return suggestions;
     }
@@ -83,33 +82,9 @@ public class GooglePlacesAddressProvider implements AddressSearchProvider {
                 .encode()
                 .toUriString();
         JsonNode root = call(HttpMethod.GET, path, null, DETAILS_FIELD_MASK);
-        Map<String, String> longComponents = new HashMap<>();
-        Map<String, String> shortComponents = new HashMap<>();
-        for (JsonNode component : root.path("addressComponents")) {
-            String longText = text(component, "longText");
-            String shortText = text(component, "shortText");
-            for (JsonNode type : component.path("types")) {
-                String key = type.asText();
-                if (longText != null) {
-                    longComponents.putIfAbsent(key, longText);
-                }
-                if (shortText != null) {
-                    shortComponents.putIfAbsent(key, shortText);
-                }
-            }
-        }
         JsonNode location = root.path("location");
-        return new ProviderAddressCandidate(
-                first(shortComponents, "country"),
-                first(longComponents, "administrative_area_level_1", "locality"),
-                first(longComponents, "administrative_area_level_2", "sublocality_level_1"),
-                first(longComponents, "neighborhood", "sublocality_level_2", "sublocality_level_3"),
-                first(longComponents, "route"),
-                first(longComponents, "premise"),
-                first(longComponents, "street_number"),
-                first(longComponents, "postal_code"),
-                decimal(location, "latitude"),
-                decimal(location, "longitude"));
+        return GoogleAddressComponents.of(root.path("addressComponents"), "longText", "shortText")
+                .toCandidate(decimal(location, "latitude"), decimal(location, "longitude"));
     }
 
     private JsonNode call(HttpMethod method, String path, Object body, String fieldMask) {
@@ -138,21 +113,6 @@ public class GooglePlacesAddressProvider implements AddressSearchProvider {
         if (!properties.isEnabled() || properties.getApiKey() == null || properties.getApiKey().isBlank()) {
             throw new ExternalServiceException(AddressMessages.SEARCH_PROVIDER_UNAVAILABLE);
         }
-    }
-
-    private static String first(Map<String, String> values, String... keys) {
-        for (String key : keys) {
-            String value = values.get(key);
-            if (value != null && !value.isBlank()) {
-                return value;
-            }
-        }
-        return null;
-    }
-
-    private static String text(JsonNode node, String field) {
-        JsonNode value = node.path(field);
-        return value.isMissingNode() || value.isNull() || value.asText().isBlank() ? null : value.asText();
     }
 
     private static BigDecimal decimal(JsonNode node, String field) {

@@ -1,6 +1,7 @@
 package com.exskylab.koala.core.utilities.location;
 
 import com.exskylab.koala.core.exceptions.ExternalServiceException;
+import com.exskylab.koala.entities.AddressCandidatePrecision;
 import com.exskylab.koala.core.properties.AddressSearchProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -106,6 +107,36 @@ class GooglePlacesAddressProviderTest {
         assertEquals("34710", candidate.postalCode());
         assertEquals(new BigDecimal("40.982512"), candidate.latitude());
         assertEquals(new BigDecimal("29.025411"), candidate.longitude());
+        server.verify();
+    }
+
+    @Test
+    void resolveMapsATurkishNeighborhoodDeliveredAsAdministrativeAreaLevel4() {
+        server.expect(requestTo(containsString(BASE_URL + "/v1/places/provider-place-2")))
+                .andExpect(method(GET))
+                .andRespond(withSuccess("""
+                        {
+                          "id":"provider-place-2",
+                          "addressComponents":[
+                            {"longText":"15","shortText":"15","types":["street_number"]},
+                            {"longText":"Okul Caddesi","shortText":"Okul Cd.","types":["route"]},
+                            {"longText":"Rumeli Hisarı Mahallesi","shortText":"Rumeli Hisarı Mahallesi","types":["administrative_area_level_4","political"]},
+                            {"longText":"Sarıyer","shortText":"Sarıyer","types":["political","sublocality","sublocality_level_1"]},
+                            {"longText":"Sarıyer","shortText":"Sarıyer","types":["administrative_area_level_2","political"]},
+                            {"longText":"İstanbul","shortText":"İstanbul","types":["administrative_area_level_1","political"]},
+                            {"longText":"Türkiye","shortText":"TR","types":["country","political"]},
+                            {"longText":"34450","shortText":"34450","types":["postal_code"]}
+                          ],
+                          "location":{"latitude":41.085123,"longitude":29.055321}
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        ProviderAddressCandidate candidate = provider.resolve("provider-place-2", "session-1");
+
+        assertEquals("Sarıyer", candidate.district());
+        assertEquals("Rumeli Hisarı Mahallesi", candidate.neighborhood());
+        assertEquals("15", candidate.buildingNumber());
+        assertEquals(AddressCandidatePrecision.BUILDING, candidate.precision());
         server.verify();
     }
 
