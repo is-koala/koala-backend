@@ -198,9 +198,15 @@ public class CompaniesController {
     }
 
     @Operation(summary = "Şirketi güncelle",
-            description = "Yalnızca şirketin ADMIN yetkilisi düzenleyebilir; üye olmayan 404 alır.")
+            description = "Yalnızca şirketin ADMIN yetkilisi düzenleyebilir; üye olmayan ve ADMIN olmayan yetkili 404 alır. "
+                    + "Gövdedeki alanlar isteğe bağlıdır; yalnız gönderilenler değişir. `address` verilirse şirketin fatura "
+                    + "adresi yeni bir adres kaydıyla değiştirilir (eski kayıt soft-delete edilir) ve yanıttaki "
+                    + "`address` yeni adresi taşır; sonraki ödeme oturumları Iyzico fatura adresi olarak bunu kullanır. "
+                    + "Geçmiş ödemeler etkilenmez. İlan yanıtındaki şirket özeti adres taşımaz.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Şirket güncellendi"),
+            @ApiResponse(responseCode = "400", description = "Geçersiz gövde; adres alan hataları `details[]` içinde döner",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "404", description = "Şirket bulunamadı ya da yetki yok",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })

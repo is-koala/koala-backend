@@ -1,6 +1,9 @@
 package com.exskylab.koala.core.dtos.company.request;
 
 import com.exskylab.koala.core.constants.CompanyMessages;
+import com.exskylab.koala.core.dtos.address.request.AddressWriteDto;
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
@@ -28,4 +31,9 @@ public class UpdateCompanyRequestDto {
 
     @Size(max = 4000)
     private String description;
+
+    @Valid
+    @Schema(description = "Verilirse şirket adresi yeni bir adres kaydıyla değiştirilir; eski kayıt soft-delete edilir. "
+            + "Verilmezse adres olduğu gibi kalır.")
+    private AddressWriteDto address;
 }

@@ -3,6 +3,7 @@ package com.exskylab.koala.business.concretes;
 import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.*;
+import com.exskylab.koala.core.dtos.address.request.AddressWriteDto;
 import com.exskylab.koala.core.dtos.company.request.UpdateCompanyRequestDto;
 import com.exskylab.koala.core.dtos.company.response.CompanyDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
@@ -30,6 +31,7 @@ class CompanyAdministrationRulesTest {
     private SecurityService securityService;
     private ActivityNotificationService activityNotificationService;
     private CompanyMapper companyMapper;
+    private AddressService addressService;
     private CompanyManager manager;
 
     private Company company;
@@ -44,10 +46,11 @@ class CompanyAdministrationRulesTest {
         securityService = mock(SecurityService.class);
         activityNotificationService = mock(ActivityNotificationService.class);
         companyMapper = mock(CompanyMapper.class);
+        addressService = mock(AddressService.class);
 
         manager = new CompanyManager(companyDao, mock(UserService.class), mock(NotificationService.class),
                 mock(ImageService.class), mock(CompanyContactInvitationService.class), securityService,
-                mock(AddressService.class), mock(EntityManager.class), companyMapper,
+                addressService, mock(EntityManager.class), companyMapper,
                 companyContactService, mock(GalleryService.class),
                 mock(com.exskylab.koala.business.abstracts.CompanyFollowService.class),
                 new com.exskylab.koala.core.helpers.PageableSanitizer(), activityNotificationService);
@@ -88,6 +91,48 @@ class CompanyAdministrationRulesTest {
 
         assertEquals("Koala Teknoloji AŞ", company.getName());
         assertNull(company.getWebsite());
+    }
+
+    @Test
+    void anAddressInThePatchReplacesTheCompanyAddressThroughTheAddressService() {
+        when(securityService.getAuthenticatedUserId()).thenReturn(adminId);
+        Address previous = new Address();
+        previous.setId(UUID.randomUUID());
+        company.setAddress(previous);
+        Address replacement = new Address();
+        replacement.setId(UUID.randomUUID());
+        AddressWriteDto write = new AddressWriteDto();
+        when(addressService.createAddress(write)).thenReturn(replacement);
+        UpdateCompanyRequestDto request = new UpdateCompanyRequestDto();
+        request.setAddress(write);
+
+        manager.updateCompany(company.getId(), request);
+
+        assertSame(replacement, company.getAddress());
+        assertEquals("Koala AŞ", company.getName());
+    }
+
+    @Test
+    void aPatchWithoutAnAddressNeverTouchesTheAddressService() {
+        when(securityService.getAuthenticatedUserId()).thenReturn(adminId);
+        Address previous = new Address();
+        previous.setId(UUID.randomUUID());
+        company.setAddress(previous);
+
+        manager.updateCompany(company.getId(), update("Koala Teknoloji AŞ"));
+
+        assertSame(previous, company.getAddress());
+        verify(addressService, never()).createAddress(any());
+    }
+
+    @Test
+    void aNonAdminCannotReplaceTheAddressEither() {
+        when(securityService.getAuthenticatedUserId()).thenReturn(memberId);
+        UpdateCompanyRequestDto request = new UpdateCompanyRequestDto();
+        request.setAddress(new AddressWriteDto());
+
+        assertThrows(ResourceNotFoundException.class, () -> manager.updateCompany(company.getId(), request));
+        verify(addressService, never()).createAddress(any());
     }
 
     @Test

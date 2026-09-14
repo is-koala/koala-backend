@@ -282,6 +282,13 @@ public class CompanyManager implements CompanyService {
         if (request.getDescription() != null) {
             company.setDescription(request.getDescription());
         }
+        if (request.getAddress() != null) {
+            UUID previousAddressId = company.getAddress() == null ? null : company.getAddress().getId();
+            Address address = addressService.createAddress(request.getAddress());
+            company.setAddress(address);
+            log.info("Company address replaced companyId={} previousAddressId={} addressId={}",
+                    companyId, previousAddressId, address.getId());
+        }
 
         Company saved = companyDao.save(company);
         log.info("Company {} updated by user {}", companyId, securityService.getAuthenticatedUserId());
