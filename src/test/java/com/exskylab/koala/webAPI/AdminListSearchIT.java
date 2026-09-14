@@ -674,6 +674,62 @@ class AdminListSearchIT extends AbstractStaffIntegrationTest {
         }
     }
 
+    @Test
+    void aDeletedWorkersSettledPaymentStaysOnTheListWithItsAssignmentAndANullWorker() throws Exception {
+        UUID departedId = UUID.randomUUID();
+        UUID departedJobId = UUID.randomUUID();
+        UUID departedAssignmentId = UUID.randomUUID();
+        UUID settledPaymentId = UUID.randomUUID();
+        insertUser(departedId, "departed-" + departedId + "@example.com", "Giden", "İşçi", false);
+        insertJob(departedJobId, employerId, "Vardiya " + departedJobId);
+        insertAssignment(departedAssignmentId, departedJobId, departedId);
+        try {
+            insertPayment(settledPaymentId, departedAssignmentId, "SUCCEEDED", "now() - interval '1 hour'", "now()");
+            jdbc.update("update users set is_deleted = true, deleted_at = now() where id = ?", departedId);
+
+            filtered("/admin/payments", financeToken, "status", "SUCCEEDED")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content[*].id", hasItem(settledPaymentId.toString())))
+                    .andExpect(jsonPath("$.data.content[?(@.id == '" + settledPaymentId + "')].jobAssignmentId")
+                            .value(hasItem(departedAssignmentId.toString())))
+                    .andExpect(jsonPath("$.data.content[?(@.id == '" + settledPaymentId + "')].jobId")
+                            .value(hasItem(departedJobId.toString())))
+                    .andExpect(jsonPath("$.data.content[?(@.id == '" + settledPaymentId + "')].jobTitle")
+                            .value(hasItem("Vardiya " + departedJobId)))
+                    .andExpect(jsonPath("$.data.content[?(@.id == '" + settledPaymentId + "')].employer.id")
+                            .value(hasItem(employerId.toString())))
+                    .andExpect(jsonPath("$.data.content[?(@.id == '" + settledPaymentId
+                            + "' && @.worker == null)].id").value(hasItem(settledPaymentId.toString())));
+        } finally {
+            jdbc.update("delete from payments where id = ?", settledPaymentId);
+            jdbc.update("delete from job_assignments where id = ?", departedAssignmentId);
+            jdbc.update("delete from jobs where id = ?", departedJobId);
+            jdbc.update("delete from users where id = ?", departedId);
+        }
+    }
+
+    @Test
+    void theCreatedAtBoundsAreInclusiveToTheMillisecond() throws Exception {
+        Instant createdAt = Instant.parse("2026-09-10T12:00:00.250Z");
+        jdbc.update("update job_assignments set created_at = ? where id = ?",
+                java.sql.Timestamp.from(createdAt), matchingAssignmentId);
+        jdbc.update("update job_assignments set created_at = now() where id = ?", otherAssignmentId);
+
+        expectOnlyFiltered("/admin/job-assignments", financeToken, matchingAssignmentId, otherAssignmentId,
+                "to", createdAt.toString());
+        filtered("/admin/job-assignments", financeToken, "to", createdAt.minusMillis(1).toString())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(0));
+        filtered("/admin/job-assignments", financeToken, "from", createdAt.toString(), "to", createdAt.toString())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content[0].id").value(matchingAssignmentId.toString()));
+        filtered("/admin/job-assignments", financeToken, "from", createdAt.plusMillis(1).toString(),
+                "to", createdAt.plusMillis(1).toString())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(0));
+    }
+
     private void insertPayment(UUID id, UUID assignmentId, String status, String createdAt, String completedAt) {
         jdbc.update("""
                 insert into payments (id, created_at, is_deleted, job_assignment_id, conversation_id, status,

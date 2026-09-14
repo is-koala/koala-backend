@@ -21,6 +21,8 @@ import java.util.UUID;
 @Repository
 public interface DisputeDao extends JpaRepository<Dispute, UUID> {
 
+    List<Dispute> findAllByJobAssignmentIdInOrderByCreatedAtDesc(Collection<UUID> jobAssignmentIds);
+
     @Query("select d.jobAssignment.id from Dispute d where d.id = :id")
     Optional<UUID> findJobAssignmentIdById(@Param("id") UUID id);
 
@@ -84,6 +86,4 @@ public interface DisputeDao extends JpaRepository<Dispute, UUID> {
 
     @EntityGraph(attributePaths = {"openedBy", "openedBy.profilePicture", "jobAssignment"})
     List<Dispute> findAllByJobAssignmentIdOrderByCreatedAtDesc(UUID jobAssignmentId);
-
-    List<Dispute> findAllByJobAssignmentIdInOrderByCreatedAtDesc(Collection<UUID> jobAssignmentIds);
 }

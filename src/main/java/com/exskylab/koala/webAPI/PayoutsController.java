@@ -16,6 +16,7 @@ import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.StaffPayoutService;
 import com.exskylab.koala.core.constants.AdminMessages;
 import com.exskylab.koala.core.constants.PayoutMessages;
+import com.exskylab.koala.core.dtos.admin.request.CreatedAtRangeDto;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.payout.request.ConfirmPayoutSettlementDto;
 import com.exskylab.koala.core.dtos.payout.request.RefundRequestDto;
@@ -23,7 +24,6 @@ import com.exskylab.koala.core.dtos.payout.request.ReleaseRequestDto;
 import com.exskylab.koala.core.dtos.payout.response.AdminPayoutDetailDto;
 import com.exskylab.koala.core.dtos.payout.response.PayoutDto;
 import com.exskylab.koala.core.dtos.payout.response.StaffPayoutDto;
-import com.exskylab.koala.core.helpers.CreatedAtRange;
 import com.exskylab.koala.core.mappers.PayoutMapper;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.core.utilities.results.SuccessResult;
@@ -33,13 +33,11 @@ import jakarta.validation.Valid;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -126,13 +124,12 @@ public class PayoutsController {
             @RequestParam(required = false) List<PayoutStatus> status,
             @RequestParam(required = false) String query,
             @RequestParam(required = false) UUID workerId,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
+            @ParameterObject CreatedAtRangeDto createdAt,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable,
             @AuthenticationPrincipal StaffPrincipal actor) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
-                staffPayoutService.listForStaff(actor, status, query, workerId, CreatedAtRange.of(from, to), pageable),
+                staffPayoutService.listForStaff(actor, status, query, workerId, createdAt.toRange(), pageable),
                 PayoutMessages.LISTED, HttpStatus.OK));
     }
 

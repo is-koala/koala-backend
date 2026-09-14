@@ -1,6 +1,5 @@
 package com.exskylab.koala.webAPI;
 
-import com.exskylab.koala.core.helpers.CreatedAtRange;
 import com.exskylab.koala.core.security.RequiresPermission;
 import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.entities.StaffPermission;
@@ -14,6 +13,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import com.exskylab.koala.business.abstracts.ReportService;
 import com.exskylab.koala.core.constants.ReportMessages;
+import com.exskylab.koala.core.dtos.admin.request.CreatedAtRangeDto;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.report.request.CreateReportDto;
 import com.exskylab.koala.core.dtos.report.request.ReviewReportDto;
@@ -29,13 +29,11 @@ import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.web.PageableDefault;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.Instant;
 import java.util.UUID;
 
 @Tag(name = "Şikayetler", description = "Şikayet oluşturma ve yönetimi.")
@@ -112,12 +110,11 @@ public class ReportsController {
             @RequestParam(required = false) UUID reportedUserId,
             @RequestParam(required = false) UUID reporterId,
             @RequestParam(required = false) String query,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
+            @ParameterObject CreatedAtRangeDto createdAt,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
         var page = reportService.searchForModeration(status, reason, targetType, reportedUserId, reporterId, query,
-                CreatedAtRange.of(from, to), pageable);
+                createdAt.toRange(), pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
                 PageDto.of(page, page.getContent()),
                 ReportMessages.LISTED, HttpStatus.OK));

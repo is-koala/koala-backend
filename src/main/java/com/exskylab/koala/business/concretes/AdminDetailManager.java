@@ -37,6 +37,7 @@ import com.exskylab.koala.core.mappers.LegalMapper;
 import com.exskylab.koala.core.helpers.MessageResolver;
 import com.exskylab.koala.core.security.StaffAuditContext;
 import com.exskylab.koala.core.security.StaffPrincipal;
+import com.exskylab.koala.dataAccess.StaffAssignmentSummary;
 import com.exskylab.koala.entities.AccountDeletionRequest;
 import com.exskylab.koala.entities.Cancellation;
 import com.exskylab.koala.entities.IdentityVerification;
@@ -46,6 +47,7 @@ import com.exskylab.koala.entities.CompanyContact;
 import com.exskylab.koala.entities.Dispute;
 import com.exskylab.koala.entities.DisputeResolution;
 import com.exskylab.koala.entities.DisputeStatus;
+import com.exskylab.koala.entities.Job;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.Payment;
 import com.exskylab.koala.entities.PaymentAttemptStatus;
@@ -61,6 +63,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -69,6 +72,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 @Slf4j
@@ -233,7 +237,19 @@ public class AdminDetailManager implements AdminDetailService {
     @Transactional(readOnly = true)
     public Page<AdminPaymentDto> searchPayments(List<PaymentAttemptStatus> statuses, Pageable pageable) {
         Page<Payment> page = paymentService.searchForStaff(statuses, pageable);
-        return new PageImpl<>(paymentDtos(page.getContent(), Payment::getJobAssignment),
+        Set<UUID> assignmentIds = page.getContent().stream()
+                .map(payment -> payment.getJobAssignment().getId())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Map<UUID, StaffAssignmentSummary> assignments = jobAssignmentService.findStaffSummaries(assignmentIds).stream()
+                .collect(Collectors.toMap(StaffAssignmentSummary::getId, Function.identity()));
+        Set<UUID> personIds = assignments.values().stream()
+                .flatMap(summary -> Stream.of(summary.getWorkerId(), summary.getEmployerId()))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, User> people = userService.getAllByIdIn(personIds).stream()
+                .collect(Collectors.toMap(User::getId, Function.identity()));
+
+        return new PageImpl<>(paymentDtos(page.getContent(), assignments, people),
                 page.getPageable(), page.getTotalElements());
     }
 
@@ -256,20 +272,24 @@ public class AdminDetailManager implements AdminDetailService {
     @Transactional(readOnly = true)
     public List<AdminPaymentDto> getPaymentsForAssignment(UUID assignmentId) {
         JobAssignment assignment = jobAssignmentService.getDetailedById(assignmentId);
-        return paymentDtos(paymentService.getAttemptsForStaff(assignmentId), payment -> assignment);
+        return paymentDtos(paymentService.getAttemptsForStaff(assignmentId),
+                Map.of(assignment.getId(), LoadedAssignmentSummary.of(assignment)), peopleOf(assignment));
     }
 
     @Override
     @Transactional(readOnly = true)
     public AdminPaymentDto getPayment(UUID paymentId) {
         Payment payment = paymentService.getForStaff(paymentId);
-        return paymentDtos(List.of(payment), Payment::getJobAssignment).getFirst();
+        JobAssignment assignment = payment.getJobAssignment();
+        return paymentDtos(List.of(payment),
+                Map.of(assignment.getId(), LoadedAssignmentSummary.of(assignment)), peopleOf(assignment)).getFirst();
     }
 
-    private List<AdminPaymentDto> paymentDtos(List<Payment> attempts, Function<Payment, JobAssignment> assignmentOf) {
+    private List<AdminPaymentDto> paymentDtos(List<Payment> attempts, Map<UUID, StaffAssignmentSummary> assignments,
+                                              Map<UUID, User> people) {
         Set<UUID> paymentIds = attempts.stream().map(Payment::getId).collect(Collectors.toSet());
         Map<UUID, UUID> assignmentByPayment = attempts.stream()
-                .collect(Collectors.toMap(Payment::getId, payment -> assignmentOf.apply(payment).getId()));
+                .collect(Collectors.toMap(Payment::getId, payment -> payment.getJobAssignment().getId()));
         Set<UUID> assignmentIds = new LinkedHashSet<>(assignmentByPayment.values());
 
         List<Refund> refunds = payoutService.getRefundsForPayments(paymentIds);
@@ -294,14 +314,79 @@ public class AdminDetailManager implements AdminDetailService {
 
         return attempts.stream()
                 .map(payment -> {
-                    Payout payout = payoutByAssignment.get(assignmentByPayment.get(payment.getId()));
+                    UUID assignmentId = assignmentByPayment.get(payment.getId());
+                    StaffAssignmentSummary assignment = assignments.get(assignmentId);
+                    Payout payout = payoutByAssignment.get(assignmentId);
                     UUID paidOutPaymentId = payout == null || payout.getPayment() == null
                             ? null : payout.getPayment().getId();
-                    return adminDetailMapper.toAdminPaymentDto(payment, assignmentOf.apply(payment),
+                    return adminDetailMapper.toAdminPaymentDto(payment, assignment,
+                            assignment == null ? null : people.get(assignment.getWorkerId()),
+                            assignment == null ? null : people.get(assignment.getEmployerId()),
                             payment.getId().equals(paidOutPaymentId) ? payout.getId() : null,
                             refundsByPayment.getOrDefault(payment.getId(), List.of()));
                 })
                 .toList();
+    }
+
+    private static Map<UUID, User> peopleOf(JobAssignment assignment) {
+        Map<UUID, User> people = new HashMap<>();
+        if (assignment.getWorker() != null) {
+            people.put(assignment.getWorker().getId(), assignment.getWorker());
+        }
+        if (assignment.getJob() != null && assignment.getJob().getCreator() != null) {
+            people.put(assignment.getJob().getCreator().getId(), assignment.getJob().getCreator());
+        }
+        return people;
+    }
+
+    private record LoadedAssignmentSummary(UUID id, UUID workerId, UUID jobId, String jobTitle, UUID employerId,
+                                           UUID companyId, String companyName) implements StaffAssignmentSummary {
+
+        static LoadedAssignmentSummary of(JobAssignment assignment) {
+            Job job = assignment.getJob();
+            return new LoadedAssignmentSummary(assignment.getId(),
+                    assignment.getWorker() == null ? null : assignment.getWorker().getId(),
+                    job == null ? null : job.getId(),
+                    job == null ? null : job.getTitle(),
+                    job == null || job.getCreator() == null ? null : job.getCreator().getId(),
+                    job == null || job.getCompany() == null ? null : job.getCompany().getId(),
+                    job == null || job.getCompany() == null ? null : job.getCompany().getName());
+        }
+
+        @Override
+        public UUID getId() {
+            return id;
+        }
+
+        @Override
+        public UUID getWorkerId() {
+            return workerId;
+        }
+
+        @Override
+        public UUID getJobId() {
+            return jobId;
+        }
+
+        @Override
+        public String getJobTitle() {
+            return jobTitle;
+        }
+
+        @Override
+        public UUID getEmployerId() {
+            return employerId;
+        }
+
+        @Override
+        public UUID getCompanyId() {
+            return companyId;
+        }
+
+        @Override
+        public String getCompanyName() {
+            return companyName;
+        }
     }
 
     private AdminRefundDto refundDto(Refund refund, Map<UUID, UUID> cancellationByRefund, UUID refundingDispute) {

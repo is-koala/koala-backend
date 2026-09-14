@@ -94,6 +94,25 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void theStaffListsDocumentTheSharedCreatedAtRangeAsPlainParametersInTurkish() throws Exception {
+        for (String path : new String[]{"/admin/job-assignments", "/admin/payouts", "/admin/reports", "/admin/disputes"}) {
+            mockMvc.perform(get("/v3/api-docs"))
+                    .andExpect(jsonPath("$.paths['" + path + "'].get.parameters[?(@.name == 'from')].description")
+                            .value(hasItem(containsString("oluşturulma anı"))))
+                    .andExpect(jsonPath("$.paths['" + path + "'].get.parameters[?(@.name == 'to')].description")
+                            .value(hasItem(containsString("dahil"))))
+                    .andExpect(jsonPath("$.paths['" + path + "'].get.parameters[?(@.name == 'createdAt')]").isEmpty())
+                    .andExpect(jsonPath("$.paths['" + path + "'].get.parameters[?(@.name == 'range')]").isEmpty());
+        }
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath("$.paths['/admin/payments'].get.parameters[?(@.name == 'status')]").isNotEmpty())
+                .andExpect(jsonPath("$.paths['/admin/users/{userId}/bank-accounts'].get.description")
+                        .value(containsString("user.read_pii")))
+                .andExpect(jsonPath("$.components.schemas.FinanceSummaryDto.properties.stuckPaymentCount").exists())
+                .andExpect(jsonPath("$.components.schemas.AdminUserDetailDto.properties.sessionSummary").exists());
+    }
+
+    @Test
     void jobSummariesDocumentTheirAuthoritativeRevisionTime() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())

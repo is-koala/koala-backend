@@ -21,6 +21,9 @@ import java.util.UUID;
 @Repository
 public interface PaymentDao extends JpaRepository<Payment, UUID> {
 
+    @Query("select p from Payment p where p.status in :statuses")
+    Page<Payment> searchForStaff(@Param("statuses") List<PaymentAttemptStatus> statuses, Pageable pageable);
+
     @Query("""
             select p.jobAssignment.id as jobAssignmentId, min(p.completedAt) as securedAt
             from Payment p
@@ -97,13 +100,6 @@ public interface PaymentDao extends JpaRepository<Payment, UUID> {
             "jobAssignment.job.creator", "jobAssignment.job.company"})
     @Query("select p from Payment p where p.id = :id")
     Optional<Payment> findForStaffById(@Param("id") UUID id);
-
-    @Query("select p from Payment p where p.status in :statuses")
-    @EntityGraph(attributePaths = {"jobAssignment", "jobAssignment.worker", "jobAssignment.worker.profilePicture",
-            "jobAssignment.job", "jobAssignment.job.category", "jobAssignment.job.creator",
-            "jobAssignment.job.creator.profilePicture", "jobAssignment.job.company",
-            "jobAssignment.job.company.address"})
-    Page<Payment> searchForStaff(@Param("statuses") List<PaymentAttemptStatus> statuses, Pageable pageable);
 
     long countByStatusAndNextVerificationAtIsNull(PaymentAttemptStatus status);
 

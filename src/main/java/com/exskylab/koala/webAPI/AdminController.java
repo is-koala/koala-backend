@@ -18,6 +18,7 @@ import com.exskylab.koala.business.abstracts.GalleryService;
 import com.exskylab.koala.business.abstracts.IdentityDocumentReviewService;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.UserService;
+import com.exskylab.koala.core.dtos.admin.request.CreatedAtRangeDto;
 import com.exskylab.koala.core.dtos.identity.request.RejectIdentityReviewDto;
 import com.exskylab.koala.core.dtos.identity.response.IdentityReviewDto;
 import com.exskylab.koala.entities.IdentityReviewStatus;
@@ -54,7 +55,6 @@ import com.exskylab.koala.core.mappers.UserMapper;
 import com.exskylab.koala.entities.Image;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.core.constants.GalleryMessages;
-import com.exskylab.koala.core.helpers.CreatedAtRange;
 import com.exskylab.koala.core.helpers.SignedFileResponses;
 import com.exskylab.koala.core.utilities.results.Result;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
@@ -63,13 +63,11 @@ import com.exskylab.koala.entities.VerificationDocument;
 import org.springframework.data.domain.Pageable;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.web.PageableDefault;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -134,11 +132,10 @@ public class AdminController {
             @RequestParam(required = false) UUID workerId,
             @RequestParam(required = false) UUID employerId,
             @RequestParam(required = false) UUID jobId,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
+            @ParameterObject CreatedAtRangeDto createdAt,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
         var page = jobAssignmentService.listForStaff(status, query, workerId, employerId, jobId,
-                CreatedAtRange.of(from, to), pageable);
+                createdAt.toRange(), pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
                 PageDto.of(page, page.getContent()),
                 AdminMessages.ASSIGNMENTS_LISTED, HttpStatus.OK));

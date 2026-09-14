@@ -19,6 +19,7 @@ import com.exskylab.koala.core.dtos.user.response.StaffPartyDto;
 import com.exskylab.koala.core.helpers.LogMasks;
 import com.exskylab.koala.core.helpers.MediaUrlResolver;
 import com.exskylab.koala.core.helpers.PlainDecimalStringConverter;
+import com.exskylab.koala.dataAccess.StaffAssignmentSummary;
 import com.exskylab.koala.entities.Cancellation;
 import com.exskylab.koala.entities.CompanyContact;
 import com.exskylab.koala.entities.IdentityVerification;
@@ -109,12 +110,12 @@ public interface AdminDetailMapper {
 
     @Mapping(target = "id", source = "payment.id")
     @Mapping(target = "jobAssignmentId", source = "assignment.id")
-    @Mapping(target = "jobId", source = "assignment.job.id")
-    @Mapping(target = "jobTitle", source = "assignment.job.title")
-    @Mapping(target = "companyId", source = "assignment.job.company.id")
-    @Mapping(target = "companyName", source = "assignment.job.company.name")
-    @Mapping(target = "worker", source = "assignment.worker")
-    @Mapping(target = "employer", source = "assignment.job.creator")
+    @Mapping(target = "jobId", source = "assignment.jobId")
+    @Mapping(target = "jobTitle", source = "assignment.jobTitle")
+    @Mapping(target = "companyId", source = "assignment.companyId")
+    @Mapping(target = "companyName", source = "assignment.companyName")
+    @Mapping(target = "worker", source = "worker")
+    @Mapping(target = "employer", source = "employer")
     @Mapping(target = "status", source = "payment.status")
     @Mapping(target = "currency", source = "payment.currency")
     @Mapping(target = "pricingVersion", source = "payment.pricingVersion")
@@ -134,8 +135,8 @@ public interface AdminDetailMapper {
     @Mapping(target = "updatedAt", source = "payment.updatedAt")
     @Mapping(target = "payoutId", source = "payoutId")
     @Mapping(target = "refunds", source = "refunds")
-    AdminPaymentDto toAdminPaymentDto(Payment payment, JobAssignment assignment, UUID payoutId,
-                                      List<AdminRefundDto> refunds);
+    AdminPaymentDto toAdminPaymentDto(Payment payment, StaffAssignmentSummary assignment, User worker, User employer,
+                                      UUID payoutId, List<AdminRefundDto> refunds);
 
     @Mapping(target = "id", source = "payout.id")
     @Mapping(target = "jobAssignmentId", source = "payout.jobAssignment.id")

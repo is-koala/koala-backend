@@ -853,7 +853,8 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
                     .andExpect(content().string(not(containsString(clientDeviceId))))
                     .andExpect(content().string(not(containsString(iosDeviceId.toString()))))
                     .andExpect(content().string(not(containsString(iosSessionId.toString()))))
-                    .andExpect(content().string(not(containsString(refreshHash))));
+                    .andExpect(content().string(not(containsString(refreshHash))))
+                    .andExpect(content().string(not(containsString("10.0.0.7"))));
         } finally {
             jdbcTemplate.update("delete from sessions where id in (?, ?, ?)", revokedSessionId, androidSessionId,
                     iosSessionId);

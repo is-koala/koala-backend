@@ -2125,9 +2125,9 @@ yoktu, takılı ödemeler görünmüyordu. Yeni yazma ucu **yok**.
 
 **Oturum özeti `Session` tablosundan, cihaz kimliği olmadan.** `SessionManager.summarizeForStaff`: etkin oturum sayısı
 `countByDevice_User_IdAndIsActive`, son giriş ve platform en yeni oturumun `createdAt`'i ve `device.type`'ı
-(`findFirstByDevice_User_IdOrderByCreatedAtDesc`, grafik `device`). `clientDeviceId`, oturum/cihaz id'si, IP ve refresh
-hash'i DTO'ya girmiyor (`AdminDetailReadIT.theUserDetailNamesItsLatestIdentityReviewAndSummarisesSessionsWithoutDeviceIdentity`
-gövdede dördünü de arıyor). Tekil detay olduğu için iki sorgu çarpan üretmiyor.
+(`findFirstByDevice_User_IdOrderByCreatedAtDesc`, grafik `device`). `clientDeviceId`, oturum/cihaz id'si, IP adresi ve
+refresh hash'i DTO'ya girmiyor (`AdminDetailReadIT.theUserDetailNamesItsLatestIdentityReviewAndSummarisesSessionsWithoutDeviceIdentity`
+gövdede beşini de arıyor). Tekil detay olduğu için iki sorgu çarpan üretmiyor.
 
 **Banka hesabı listesi `user.read_pii` altında ve ham IBAN asla.** Uç `user.read` ile **korunmuyor**: kullanıcı
 detayındaki e-posta/telefon gibi "aynı gövde, boş alan" seçilmedi çünkü IBAN'ın maskeli hâli bile hesap sahipliği
@@ -2139,34 +2139,48 @@ olmayan kullanıcıya `USER_NOT_FOUND_BY_ID` alır). Liste `findAllByUserIdAndAc
 yalnız anonimleştirmede yazılıyor. Bekleyen doğrulamanın referansı ve tutarı bu DTO'da **yok**; o bilgi
 `bank.account.verify` yüzeyinin (`/admin/bank-account-verifications?userId=`) — iki izin iki yüzey, birleştirilmedi.
 
-**Tarih süzgeci `core/helpers/CreatedAtRange`.** `from`/`to` `Instant` + `@DateTimeFormat(iso = DATE_TIME)` (dilimsiz değer
-400, §2l'nin `startFrom` kararı); boş sınır `EPOCH`/`9999-12-31`'e düşer (`CreatedAtRange.of`), JPQL'de
+**Tarih süzgeci tek şekil: `CreatedAtRangeDto` (`@ParameterObject`) → `core/helpers/CreatedAtRange`.** Dört liste ucu
+(`/admin/job-assignments`, `/admin/payouts`, `/admin/reports`, `/admin/disputes`) `from`/`to`'yu aynı parametre
+nesnesinden alır (`Instant` + `@DateTimeFormat(iso = DATE_TIME)`; dilimsiz değer 400, §2l'nin `startFrom` kararı;
+`OpenApiDocumentIT.theStaffListsDocumentTheSharedCreatedAtRange…` dördünde de düz `from`/`to` parametresi ve Türkçe
+açıklama arıyor). Boş sınır `EPOCH`/`9999-12-31`'e düşer (`CreatedAtRange.of`); `StaffAuditManager`'ın kendi
+sabitleri kaldırıldı, o da aynı yardımcıyı kullanır — sentinel tek yerde. JPQL'de
 `x.createdAt >= :from and x.createdAt <= :to` — `:x is null` dalı yok, çünkü pgjdbc `Instant`'ı tipsiz gönderir (§2l).
 **İki sınır da dahil**, `AuditLogController`'ın `<= :to` kuralıyla aynı: panelin `DateRangeFilter`'ı `to`'yu günün
-`23:59:59.999`'u olarak gönderiyor (`istanbulDayBoundary`); finans özetinin yarı açık aralığı **değişmedi**, o bir dönem
-toplamı. Ters aralık doğrulanmıyor, boş sayfa döner (denetim kaydıyla aynı). Süzülen alan dört uçta da `createdAt` ve
-OpenAPI'de açık; `status`/`query`/id süzgeçleriyle `and` ile kesişir (`AdminListSearchIT.theStatusAndCreatedAtFilters…`,
-`theCreatedAtRangeNarrowsPayoutsReportsAndDisputes`). Atama `status`'ü boşken `AssignmentStatus.values()` bağlanır —
-`in :statuses` boş listeyi sevmez, `null` dalı da tipsiz parametre tuzağına düşerdi. Sort allowlist'leri değişmedi;
-`PageableSortSafetyTest` `AdminDetailManager.searchPayments`'ı saf devretme olarak muaf tutuyor (doğrulama
-`PaymentManager.searchForStaff`'ta: `createdAt`, `updatedAt`, `status`, `nextVerificationAt`).
+`23:59:59.999`'u olarak gönderiyor (`istanbulDayBoundary`); `AdminListSearchIT.theCreatedAtBoundsAreInclusiveToTheMillisecond`
+`to = createdAt`'in satırı aldığını, `to = createdAt − 1 ms`'nin almadığını ölçüyor. Finans özetinin yarı açık
+aralığı **değişmedi**, o bir dönem toplamı. Ters aralık doğrulanmıyor, boş sayfa döner (denetim kaydıyla aynı).
+Süzülen alan dört uçta da `createdAt`; `status`/`query`/id süzgeçleriyle `and` ile kesişir
+(`theStatusAndCreatedAtFilters…`, `theCreatedAtRangeNarrowsPayoutsReportsAndDisputes`). Atama `status`'ü boşken
+`AssignmentStatus.values()` bağlanır — `in :statuses` boş listeyi sevmez, `null` dalı da tipsiz parametre tuzağına
+düşerdi. Sort allowlist'leri değişmedi; `PageableSortSafetyTest` `AdminDetailManager.searchPayments`'ı saf devretme
+olarak muaf tutuyor (doğrulama `PaymentManager.searchForStaff`'ta: `createdAt`, `updatedAt`, `status`,
+`nextVerificationAt`).
 
-**`/admin/payments` liste ve tekil detay aynı DTO, aynı bileşim.** `AdminDetailManager.paymentDtos` artık **atamalar
-arası** çalışıyor: iadeler (`findAllByPaymentIdInOrderByCreatedAtDesc`), iptaller (`findAllByRefundIds`), uyuşmazlıklar
-(`DisputeService.findAllForAssignments` → `findAllByJobAssignmentIdInOrderByCreatedAtDesc`, yeni) ve hakedişler
-(`findForAssignments`) sayfa başına birer sorgu; `payoutId`/`origin` kuralları §2s7'dekiyle aynı, yalnız atama başına
-haritalanıyor. İade → atama eşlemesi `refund.getPayment().getJobAssignment()` ile **değil**, sayfadaki ödemelerden kurulan
-`assignmentByPayment` haritasıyla yapılıyor — proxy'yi açmak satır başına sorgu olurdu.
-`AdminListSearchIT.thePaymentListIsFilteredByStatusRefusedToTheTrustBranchAndBuiltWithoutAQueryPerRow` `size=1` ile
-`size=3`'ün statement sayısını eşitliyor. Grafik `jobAssignment(.worker.profilePicture, .job.category, .job.creator
-.profilePicture, .job.company.address)` — `category` ve `Company.address` eager olduğu için (§2s6);
-`company.logo` `EagerFetchCoverageIT` muafiyetinde. `Payment.jobAssignment` ve `JobAssignment.worker` `nullable = false`
-+ `@SQLRestriction` olduğu için grafik INNER join üretir (§2y3): işçisi anonimleştirilmiş bir atamanın **FAILED**
-denemesi bu listeden düşer. Bilerek kabul edildi — `VERIFY_PENDING`/`INITIATED`/`IN_REVIEW` deneme hesap silmeyi
-`PENDING_PAYMENT` engeliyle durdurur (§2s7 `blockers`), yani takılı ödeme kaybolmaz; `findForStaffById` ve
-`JobAssignmentDao.findAllForStaff` zaten aynı grafiği taşıyor. `status` verilmezse her durum (ilan listesiyle aynı);
-panelin "takılı" karosu `status=VERIFY_PENDING&sort=createdAt,asc` ile en eskiyi başa alır. Güven dalı 403
-(`payment.read` finans dalında), `FINANCE_ANALYST` okur.
+**`/admin/payments` liste ve tekil detay aynı DTO, aynı bileşim — ve liste sorgusu bilerek grafiksiz.**
+`Payment.jobAssignment` ve `JobAssignment.worker` `nullable = false` + `@SQLRestriction` çifti taşır; grafiğe alınsalardı
+Hibernate INNER join üretir ve hesabını silmiş (anonimleştirilmiş) işçinin **her** ödemesi — yerleşmiş `SUCCEEDED`
+dahil, çünkü silme engeli yalnız bekleyen denemeye ve emanete bakar (§2s7 `blockers`) — listeden düşerdi;
+`finance/summary.succeededPaymentCount` ile liste ayrışırdı. §2y3'ün hakediş kuyruğundaki çözümü uygulandı:
+`PaymentDao.searchForStaff` yalnız `Payment` çeker (`jobAssignment` lazy proxy, `getId()` sorgusuz), atama özeti sayfa
+başına tek projeksiyonla gelir (`JobAssignmentDao.findStaffSummariesByIdIn` → `StaffAssignmentSummary`: atama id, işçi
+id, ilan id/başlık, işveren id, şirket id/ad; `a.worker.id` FK'dan okunur, `users`'a join yok), taraflar tek
+`UserService.getAllByIdIn` ile (`worker`/`employer` → `SafeUserDto`); silinmiş kullanıcı haritada yoktur ve alan
+**`null`** döner, satır ve ilan bilgisi kalır
+(`AdminListSearchIT.aDeletedWorkersSettledPaymentStaysOnTheListWithItsAssignmentAndANullWorker`). Tekil `GET
+/admin/payments/{id}` ve atama denemeleri aynı mapper'ı entity'den kurulan özetle (`LoadedAssignmentSummary.of`)
+besler; oralarda `findForStaffById`/`getDetailedById` grafiği hâlâ `worker` taşır ve silinmiş işçide 404 verir —
+tekil okuma, kural değişmedi. Bileşim atamalar arası: iadeler (`findAllByPaymentIdInOrderByCreatedAtDesc`), iptaller
+(`findAllByRefundIds`), uyuşmazlıklar (`DisputeService.findAllForAssignments` →
+`findAllByJobAssignmentIdInOrderByCreatedAtDesc`, `CollectionQueryWithoutGraphTest` allowlist'inde — dosyanın başında,
+tarayıcının 400 karakterlik penceresine komşu grafik girmesin diye; `PaymentDao.searchForStaff` da aynı sebeple
+dosyanın başında) ve hakedişler (`findForAssignments`) sayfa başına birer sorgu; `payoutId`/`origin` kuralları
+§2s7'dekiyle aynı, yalnız atama başına haritalanıyor. İade → atama eşlemesi `refund.getPayment().getJobAssignment()`
+ile **değil**, sayfadaki ödemelerden kurulan `assignmentByPayment` haritasıyla — proxy'yi açmak satır başına sorgu
+olurdu. `thePaymentListIsFilteredByStatusRefusedToTheTrustBranchAndBuiltWithoutAQueryPerRow` `size=1` ile `size=3`'ün
+statement sayısını eşitliyor. `status` verilmezse her durum (ilan listesiyle aynı); panelin "takılı" karosu
+`status=VERIFY_PENDING&sort=createdAt,asc` ile en eskiyi başa alır. Güven dalı 403 (`payment.read` finans dalında),
+`FINANCE_ANALYST` okur.
 
 **Finans özetindeki iki sayaç dönemden bağımsız.** `stuckPaymentCount` = `VERIFY_PENDING` ve `next_verification_at is
 null` (`PaymentDao.countByStatusAndNextVerificationAtIsNull`): doğrulama zamanlayıcısı yalnız `nextVerificationAt <= now`

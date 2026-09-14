@@ -1,6 +1,5 @@
 package com.exskylab.koala.webAPI;
 
-import com.exskylab.koala.core.helpers.CreatedAtRange;
 import com.exskylab.koala.core.security.RequiresPermission;
 import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.entities.DisputeStatus;
@@ -15,6 +14,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import com.exskylab.koala.business.abstracts.DisputeService;
 import com.exskylab.koala.core.constants.DisputeMessages;
+import com.exskylab.koala.core.dtos.admin.request.CreatedAtRangeDto;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.dispute.request.ResolveDisputeDto;
 import com.exskylab.koala.core.dtos.dispute.response.DisputeDto;
@@ -27,14 +27,12 @@ import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.web.PageableDefault;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.time.Instant;
 import java.util.UUID;
 
 @Tag(name = "Uyuşmazlık yönetimi", description = "Açık uyuşmazlıkların admin tarafından çözülmesi.")
@@ -74,11 +72,10 @@ public class DisputesController {
             @RequestParam(required = false) DisputeStatus status,
             @RequestParam(required = false) String query,
             @RequestParam(required = false) UUID userId,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
+            @ParameterObject CreatedAtRangeDto createdAt,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
-        var page = disputeService.searchForStaff(status, query, userId, CreatedAtRange.of(from, to), pageable);
+        var page = disputeService.searchForStaff(status, query, userId, createdAt.toRange(), pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
                 PageDto.of(page, disputeMapper.toStaffDisputeDtoList(page.getContent())),
                 DisputeMessages.LISTED, HttpStatus.OK));
