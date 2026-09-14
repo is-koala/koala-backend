@@ -31,6 +31,13 @@ public class IdentityReviewDto {
     private UUID togetherDocumentId;
     private Instant createdAt;
 
+    public static IdentityReviewStatus statusOf(IdentityVerification review) {
+        if (review.isVerified()) {
+            return IdentityReviewStatus.APPROVED;
+        }
+        return review.getRejectedAt() != null ? IdentityReviewStatus.REJECTED : IdentityReviewStatus.PENDING;
+    }
+
     public static IdentityReviewDto from(IdentityVerification review) {
         IdentityReviewDto dto = new IdentityReviewDto();
         dto.setId(review.getId());
@@ -42,13 +49,7 @@ public class IdentityReviewDto {
         dto.setTcIdentityNumber(review.getTcIdentityNumber());
         dto.setTcDocumentNumber(review.getTcDocumentNumber());
         dto.setBirthDate(review.getBirthDate());
-        if (review.isVerified()) {
-            dto.setStatus(IdentityReviewStatus.APPROVED);
-        } else if (review.getRejectedAt() != null) {
-            dto.setStatus(IdentityReviewStatus.REJECTED);
-        } else {
-            dto.setStatus(IdentityReviewStatus.PENDING);
-        }
+        dto.setStatus(statusOf(review));
         dto.setRejectionReason(review.getRejectionReason());
         dto.setRejectedAt(review.getRejectedAt());
         dto.setVerifiedAt(review.getVerifiedAt());

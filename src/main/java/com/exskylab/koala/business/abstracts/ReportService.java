@@ -30,4 +30,8 @@ public interface ReportService {
     AdminReportDetailDto getForModeration(UUID reportId);
 
     List<Report> findAllBetweenAssignmentParties(UUID jobId, Collection<UUID> partyIds);
+
+    long countReceivedBy(UUID userId);
+
+    long countMadeBy(UUID userId);
 }

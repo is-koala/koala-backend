@@ -709,4 +709,16 @@ public class JobAssignmentManager implements JobAssignmentService {
         return jobAssignmentDao.existsActiveForUser(userId,
                 List.of(AssignmentStatus.CONFIRMED, AssignmentStatus.IN_PROGRESS));
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countAsWorker(UUID workerId) {
+        return jobAssignmentDao.countByWorkerId(workerId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countAsEmployer(UUID employerId) {
+        return jobAssignmentDao.countByJobCreatorId(employerId);
+    }
 }

@@ -551,4 +551,10 @@ public class PaymentManager implements PaymentService {
     private static long count(Object value) {
         return value == null ? 0L : ((Number) value).longValue();
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countForEmployer(UUID employerId) {
+        return paymentDao.countByJobAssignmentJobCreatorId(employerId);
+    }
 }

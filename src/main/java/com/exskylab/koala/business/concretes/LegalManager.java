@@ -29,6 +29,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -270,5 +271,13 @@ public class LegalManager implements LegalService {
 
     private String truncate(String value) {
         return value == null ? null : value.substring(0, Math.min(value.length(), 512));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<UUID> findOpenDeletionRequestId(UUID userId) {
+        return accountDeletionRequestDao
+                .findFirstByUserIdAndStatusOrderByRequestedAtDesc(userId, AccountDeletionStatus.REQUESTED)
+                .map(AccountDeletionRequest::getId);
     }
 }

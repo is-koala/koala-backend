@@ -35,6 +35,8 @@ public interface PayoutDao extends JpaRepository<Payout, UUID> {
 
     boolean existsByJobAssignmentId(UUID jobAssignmentId);
 
+    long countByWorkerId(UUID workerId);
+
     Optional<Payout> findByJobAssignmentId(UUID jobAssignmentId);
 
     @Query("""

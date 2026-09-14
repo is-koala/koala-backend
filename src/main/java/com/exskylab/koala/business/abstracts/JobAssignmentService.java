@@ -59,4 +59,8 @@ public interface JobAssignmentService {
     Optional<JobAssignment> findLatestByJobAndWorker(UUID jobId, UUID workerId);
 
     List<JobAssignment> findLatestByJobsAndWorkers(Collection<UUID> jobIds, Collection<UUID> workerIds);
+
+    long countAsWorker(UUID workerId);
+
+    long countAsEmployer(UUID employerId);
 }

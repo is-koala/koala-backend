@@ -11,10 +11,16 @@ import com.exskylab.koala.core.dtos.payment.response.AdminPaymentDto;
 import com.exskylab.koala.core.dtos.payment.response.AdminRefundDto;
 import com.exskylab.koala.core.dtos.payment.response.AdminSettlementTaskDto;
 import com.exskylab.koala.core.dtos.payout.response.AdminPayoutDetailDto;
+import com.exskylab.koala.core.dtos.user.response.AdminUserCompanyDto;
+import com.exskylab.koala.core.dtos.user.response.AdminUserCountsDto;
+import com.exskylab.koala.core.dtos.user.response.AdminUserDetailDto;
 import com.exskylab.koala.core.dtos.user.response.StaffPartyDto;
 import com.exskylab.koala.core.helpers.LogMasks;
+import com.exskylab.koala.core.helpers.MediaUrlResolver;
 import com.exskylab.koala.core.helpers.PlainDecimalStringConverter;
 import com.exskylab.koala.entities.Cancellation;
+import com.exskylab.koala.entities.CompanyContact;
+import com.exskylab.koala.entities.IdentityReviewStatus;
 import com.exskylab.koala.entities.Dispute;
 import com.exskylab.koala.entities.Job;
 import com.exskylab.koala.entities.JobApplication;
@@ -26,21 +32,50 @@ import com.exskylab.koala.entities.Report;
 import com.exskylab.koala.entities.Review;
 import com.exskylab.koala.entities.SettlementTask;
 import com.exskylab.koala.entities.User;
+import com.exskylab.koala.entities.UserBadge;
 import com.exskylab.koala.entities.WorkSession;
 import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 import java.util.List;
+import java.util.UUID;
 
 @Mapper(componentModel = "spring",
         uses = {UserMapper.class, PricingDtoMapper.class, AddressMapper.class, CompanyMapper.class,
-                GalleryMapper.class, JobCategoryMapper.class, TimesheetMapper.class},
+                GalleryMapper.class, JobCategoryMapper.class, TimesheetMapper.class, BadgeMapper.class,
+                MediaUrlResolver.class},
         injectionStrategy = InjectionStrategy.CONSTRUCTOR,
         imports = {LogMasks.class, PlainDecimalStringConverter.class})
 public interface AdminDetailMapper {
 
     StaffPartyDto toStaffPartyDto(User user);
+
+    @Mapping(target = "id", source = "company.id")
+    @Mapping(target = "name", source = "company.name")
+    AdminUserCompanyDto toAdminUserCompanyDto(CompanyContact membership);
+
+    @Mapping(target = "id", source = "user.id")
+    @Mapping(target = "firstName", source = "user.firstName")
+    @Mapping(target = "lastName", source = "user.lastName")
+    @Mapping(target = "username", source = "user.username")
+    @Mapping(target = "profilePictureUrl", source = "user.profilePicture", qualifiedByName = "imageToPublicUrl")
+    @Mapping(target = "email", expression = "java(includePii ? user.getEmail() : null)")
+    @Mapping(target = "phoneNumber", expression = "java(includePii ? user.getPhoneNumber() : null)")
+    @Mapping(target = "emailVerified", source = "user.emailVerified")
+    @Mapping(target = "phoneVerified", source = "user.phoneVerified")
+    @Mapping(target = "identityVerified", source = "user.identityVerified")
+    @Mapping(target = "isEmployer", source = "user.employer")
+    @Mapping(target = "createdAt", source = "user.createdAt")
+    @Mapping(target = "companies", source = "memberships")
+    @Mapping(target = "badges", source = "badges")
+    @Mapping(target = "counts", source = "counts")
+    @Mapping(target = "identityReviewStatus", source = "identityReviewStatus")
+    @Mapping(target = "pendingDeletionRequestId", source = "pendingDeletionRequestId")
+    AdminUserDetailDto toAdminUserDetailDto(User user, boolean includePii, List<CompanyContact> memberships,
+                                            List<UserBadge> badges, AdminUserCountsDto counts,
+                                            IdentityReviewStatus identityReviewStatus,
+                                            UUID pendingDeletionRequestId);
 
     LinkedRecordDto toLinkedRecordDto(Payment payment);
 

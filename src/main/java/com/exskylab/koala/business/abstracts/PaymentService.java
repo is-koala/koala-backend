@@ -59,4 +59,6 @@ public interface PaymentService {
 
     record RecordedOutcome(PaymentAttemptStatus status, UUID jobAssignmentId) {
     }
+
+    long countForEmployer(UUID employerId);
 }

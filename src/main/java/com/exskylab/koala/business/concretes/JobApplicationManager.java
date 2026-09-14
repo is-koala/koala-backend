@@ -375,4 +375,9 @@ public class JobApplicationManager implements JobApplicationService {
         return PageDto.of(page, jobApplicationMapper::toReceivedApplicationDto);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public long countForApplicant(UUID applicantId) {
+        return jobApplicationDao.countByUserId(applicantId);
+    }
 }

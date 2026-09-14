@@ -37,4 +37,5 @@ public interface JobApplicationService {
     PageDto<ReceivedApplicationDto> getReceivedApplications(ApplicationStatus status, UUID jobId, UUID companyId,
                                                             Pageable pageable);
 
+    long countForApplicant(UUID applicantId);
 }

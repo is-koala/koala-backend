@@ -21,6 +21,7 @@ import com.exskylab.koala.core.utilities.storage.FolderType;
 import com.exskylab.koala.core.utilities.storage.StorageService;
 import com.exskylab.koala.core.helpers.StaffSearchQuery;
 import com.exskylab.koala.dataAccess.IdentityVerificationDao;
+import com.exskylab.koala.core.dtos.identity.response.IdentityReviewDto;
 import com.exskylab.koala.entities.IdentityReviewStatus;
 import com.exskylab.koala.entities.IdentityVerification;
 import com.exskylab.koala.entities.User;
@@ -34,6 +35,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -252,5 +254,12 @@ public class IdentityVerificationManager implements IdentityDocumentReviewServic
         }
         String trimmed = input.trim();
         return trimmed.substring(0, 1).toUpperCase(TURKISH) + trimmed.substring(1).toLowerCase(TURKISH);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<IdentityReviewStatus> findLatestStatusFor(UUID userId) {
+        return identityVerificationDao.findTopByUser_IdOrderByCreatedAtDesc(userId)
+                .map(IdentityReviewDto::statusOf);
     }
 }

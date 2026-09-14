@@ -90,6 +90,8 @@ public interface PaymentDao extends JpaRepository<Payment, UUID> {
 
     List<Payment> findAllByJobAssignmentIdOrderByCreatedAtDesc(UUID jobAssignmentId);
 
+    long countByJobAssignmentJobCreatorId(UUID creatorId);
+
     @EntityGraph(attributePaths = {"jobAssignment", "jobAssignment.worker", "jobAssignment.job",
             "jobAssignment.job.creator", "jobAssignment.job.company"})
     @Query("select p from Payment p where p.id = :id")

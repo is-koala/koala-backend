@@ -40,4 +40,6 @@ public interface DisputeService {
     List<StaffDisputeEvidenceDto> getEvidenceForStaff(UUID disputeId);
 
     DisputeEvidence getEvidenceForStaffDownload(UUID disputeId, UUID evidenceId);
+
+    long countInvolving(UUID userId);
 }

@@ -44,6 +44,7 @@ import com.exskylab.koala.business.abstracts.JobService;
 import com.exskylab.koala.entities.JobStatus;
 import com.exskylab.koala.core.dtos.user.request.GrantRoleDto;
 import com.exskylab.koala.core.dtos.user.response.RoleGrantDto;
+import com.exskylab.koala.core.dtos.user.response.AdminUserDetailDto;
 import com.exskylab.koala.core.dtos.user.response.SafeUserDto;
 import com.exskylab.koala.core.mappers.CompanyMapper;
 import com.exskylab.koala.core.mappers.RoleGrantMapper;
@@ -402,9 +403,16 @@ public class AdminController {
                 AdminMessages.USERS_LISTED, HttpStatus.OK));
     }
 
-    @Operation(summary = "Kullanıcı özeti",
-            description = "Kuyruk satırıyla aynı SafeUserDto. Rol listesi /users/{userId}/roles'ta kalır; "
-                    + "tekil GET daha spesifik /roles eşleşmesini bozmaz.")
+    @Operation(summary = "Kullanıcı detayı",
+            description = "SafeUserDto'nun üst kümesi: doğrulama bayrakları (e-posta, telefon, kimlik), işveren "
+                    + "bayrağı, kayıt tarihi, şirket üyelikleri (id, ad, rol), rozetler, geçmiş sayaçları "
+                    + "(başvuru, işçi/işveren olarak atama, ödeme, hakediş, uyuşmazlık, alınan/yapılan şikayet), "
+                    + "son kimlik incelemesinin durumu ve açık hesap silme talebinin id'si. email ve phoneNumber "
+                    + "yalnız user.read_pii taşıyan personele döner; taşımayana null gelir ve gövde aynı şekildedir. "
+                    + "PII döndüğünde denetim satırı user.read_pii izniyle (PERSONAL_DATA) yazılır. Sayaçlar "
+                    + "süzgeçli listelere bağlanır: /admin/job-assignments?workerId=|employerId=, "
+                    + "/admin/payouts?workerId=, /admin/disputes?userId=, /admin/reports?reportedUserId=|reporterId=. "
+                    + "Rol listesi /users/{userId}/roles'ta kalır.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Kullanıcı getirildi"),
             @ApiResponse(responseCode = "404", description = "Kullanıcı bulunamadı",
@@ -412,9 +420,10 @@ public class AdminController {
     })
     @RequiresPermission(StaffPermission.USER_READ)
     @GetMapping("/users/{userId}")
-    public ResponseEntity<SuccessDataResult<SafeUserDto>> user(@PathVariable UUID userId) {
+    public ResponseEntity<SuccessDataResult<AdminUserDetailDto>> user(@PathVariable UUID userId,
+                                                                      @AuthenticationPrincipal StaffPrincipal actor) {
         return ResponseEntity.ok(new SuccessDataResult<>(
-                userMapper.toSafeUserDto(userService.getById(userId)),
+                adminDetailService.getUserDetail(actor, userId),
                 AdminMessages.USER_FETCHED, HttpStatus.OK));
     }
 

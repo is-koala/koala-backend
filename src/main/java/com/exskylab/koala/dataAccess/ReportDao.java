@@ -31,6 +31,8 @@ public interface ReportDao extends JpaRepository<Report, UUID> {
 
     long countByReportedUserId(UUID reportedUserId);
 
+    long countByReporterId(UUID reporterId);
+
     @EntityGraph(attributePaths = {"reporter", "reporter.profilePicture",
             "reportedUser", "reportedUser.profilePicture",
             "reviewedBy", "reviewedBy.profilePicture", "job", "message", "image"})

@@ -39,6 +39,12 @@ public interface DisputeDao extends JpaRepository<Dispute, UUID> {
                                 @Param("statuses") List<DisputeStatus> statuses);
 
     @Query("""
+            select count(d) from Dispute d
+            where d.jobAssignment.worker.id = :userId or d.jobAssignment.job.creator.id = :userId
+            """)
+    long countInvolving(@Param("userId") UUID userId);
+
+    @Query("""
             select d from Dispute d
             left join d.jobAssignment assignment
             left join assignment.worker worker

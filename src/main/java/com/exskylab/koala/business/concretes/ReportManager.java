@@ -254,4 +254,16 @@ public class ReportManager implements ReportService {
                             : report.getDescription().trim());
         }
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countReceivedBy(UUID userId) {
+        return reportDao.countByReportedUserId(userId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countMadeBy(UUID userId) {
+        return reportDao.countByReporterId(userId);
+    }
 }

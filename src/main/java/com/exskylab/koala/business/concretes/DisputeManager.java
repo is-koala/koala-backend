@@ -327,4 +327,10 @@ public class DisputeManager implements DisputeService {
             throw new ValidationException(DisputeMessages.EVIDENCE_UPLOAD_FAILED);
         }
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countInvolving(UUID userId) {
+        return disputeDao.countInvolving(userId);
+    }
 }

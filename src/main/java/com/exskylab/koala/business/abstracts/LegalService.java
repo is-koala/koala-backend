@@ -9,6 +9,7 @@ import com.exskylab.koala.entities.ConsentRecord;
 import com.exskylab.koala.entities.User;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.time.Instant;
 import org.springframework.data.domain.Page;
@@ -40,4 +41,6 @@ public interface LegalService {
     List<UUID> findDueDeletionRequestIds(Instant dueBefore, Instant attemptBefore, Pageable pageable);
 
     boolean processDeletionRequest(UUID requestId);
+
+    Optional<UUID> findOpenDeletionRequestId(UUID userId);
 }

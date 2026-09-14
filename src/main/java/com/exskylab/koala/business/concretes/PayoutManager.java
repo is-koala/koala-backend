@@ -395,4 +395,9 @@ public class PayoutManager implements PayoutService {
         return paymentService.getSettledPaymentFor(jobAssignmentId);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public long countForWorker(UUID workerId) {
+        return payoutDao.countByWorkerId(workerId);
+    }
 }

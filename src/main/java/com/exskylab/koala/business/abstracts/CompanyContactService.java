@@ -24,4 +24,6 @@ public interface CompanyContactService {
     long countAdminsOfCompany(UUID companyId);
 
     void removeContact(CompanyContact contact);
+
+    java.util.List<CompanyContact> getMembershipsOf(UUID userId);
 }

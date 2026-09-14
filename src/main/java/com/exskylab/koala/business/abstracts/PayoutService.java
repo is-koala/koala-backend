@@ -47,4 +47,6 @@ public interface PayoutService {
 
     record AmountCount(BigDecimal amount, long count) {
     }
+
+    long countForWorker(UUID workerId);
 }
