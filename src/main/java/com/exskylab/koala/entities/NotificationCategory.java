@@ -8,6 +8,7 @@ public enum NotificationCategory {
     MARKETINGS(NotificationCategoryKind.COMMERCIAL),
     COMPANY_UPDATES(NotificationCategoryKind.TRANSACTIONAL),
     JOB_ALERTS(NotificationCategoryKind.ALERT),
+    MESSAGES(NotificationCategoryKind.ALERT),
     NEWSLETTER(NotificationCategoryKind.COMMERCIAL);
 
     private final NotificationCategoryKind kind;

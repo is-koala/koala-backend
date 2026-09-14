@@ -263,7 +263,7 @@ yoktu**; şimdi hepsinde var.
 
 | Uç | Gizlenen dal | Ortak anahtar |
 |---|---|---|
-| `GET/POST /conversations/{id}/messages`, `/read` | taraf değil | `messaging.conversation.not.found` |
+| `GET /conversations/{id}`, `GET/POST /conversations/{id}/messages`, `/read` | taraf değil | `messaging.conversation.not.found` |
 | `PUT/DELETE /users/me/educations/{id}` | başkasının kaydı | `education.not.found` |
 | `PUT/DELETE /users/me/experiences/{id}` | başkasının kaydı | `experience.not.found` |
 | `GET/DELETE /users/me/job-templates/{id}` | başkasının şablonu | `job.template.not.found` |
@@ -1127,6 +1127,48 @@ aRefundedWorkerLeftInTheCrewByAFailedListenerStillCannotWriteThere` dinleyicinin
 JDBC ile gruba geri yazarak taklit ediyor.
 
 **Grupta engelleme uygulanmaz.** İkili sohbette iki yönlü engel yerinde duruyor, ama grup aynı işte çalışan insanların iş kanalı — orada engel iletişimi keserdi. Ürün kararı.
+
+**Yeni mesaj push'u: alıcılar = katılımcılar − gönderen, gövde mesajı taşımaz (#267).** Mesaj bir süre yalnız
+STOMP ile duyuruluyordu; uygulama arka planda ya da kapalıyken hiçbir şey gitmiyordu. Artık `MessagingManager.sendMessage`
+kayıttan sonra `activityNotificationService.messageSent(saved)` çağırır ve yönlendirme kararı §2s'deki kurala uygun
+olarak `ActivityNotificationManager`'da: `DIRECT`'te karşı taraf, `GROUP`'ta gönderen dışındaki bütün katılımcılar.
+Alıcı kümesi ayrıca süzülmez — ödeme kapısı ve engel zaten **gönderimi** reddediyor (ikili sohbette iki yönlü engel
+403 verir, mesaj hiç yazılmaz), grupta engel uygulanmadığı için orada da uygulanmaz; katılımcı listesi kimin
+duyacağını belirleyen tek kaynaktır. Hesabı silinmiş alıcıyı `sendPushToUser`'ın kendi `isActiveUser` kontrolü eler.
+**Kategori `MESSAGES`, `kind = ALERT`:** kapatılabilir, varsayılanı açık, ticari değil. Kullanıcı
+`PUT /users/me/notification-preferences` ile `MESSAGES/PUSH`'u kapatırsa `NotificationManager` kapısı satırı hiç
+açmaz (§2at'nin tek kapısı, ayrı bir kontrol yazılmadı). Tercih görünümünde `MESSAGES/EMAIL` ve `MESSAGES/IN_APP`
+anahtarları da çıkar ama bugün hiçbir şey göndermez — `JOB_ALERTS` ile aynı durum.
+**Payload:** `title` = gönderenin adı soyadı (ikisi de boşsa "Koala"), `body` = "Yeni mesaj"/"New message"
+(`activity.message.received`), `data` = `type=MESSAGE`, `conversationId`, `messageId` (+ sunucunun her push'a
+eklediği `notificationId`). **Mesaj metni push'a girmez** — bilinçli: FCM gövdesi kilit ekranında, bildirim
+geçmişinde ve Google/Apple sunucularında düz metin durur; iş ilişkisi içindeki yazışma KVKK'da kişisel veri.
+"İlk 80 karakter" seçeneği bu yüzden elendi; istemci `conversationId` ile sohbeti açıp metni REST'ten alır.
+Gönderen sistem kullanıcısı değil, **insan gönderen** (`isSystemPush=false`): `notifications.sender_id` mesajı
+yazan kişi olur ve hesabını sildiğinde `PostgresAccountAnonymizer` `sender_id` üzerinden başlığı (adını) da temizler.
+**Outbox aynı transaction:** push satırı `Notification` outbox'ına (§2s "Notification satırı publish outbox'ıdır")
+mesajla aynı transaction'da yazılır; mesaj commit olmadan push yok, push hazırlığı düşerse mesaj da düşer.
+`ActivityNotificationManager`'ın diğer dallarındaki `try/catch` burada bilerek yok: `sendPushToUser`
+`@Transactional` ve çağıranın transaction'ına katılıyor, içinden çıkan `RuntimeException` transaction'ı
+rollback-only işaretler — yakalamak mesajı kurtarmaz, yalnız yanıltıcı bir log bırakır (§2o'daki
+`UnexpectedRollbackException` dersi). Grup fan-out'u önce `preparePushRecipients` ile alıcı kilitlerini sıralı
+alır (§2s'deki kilit protokolü), sonra alıcı başına `sendPushToUser`. `ConversationMessagingIT` üç kuralı HTTP
+üzerinden sabitliyor (tek alıcı ve gönderene yok; tercih kapalıysa satır yok ama mesaj var; grupta N−1),
+`ActivityNotificationRulesTest` payload ve kanal seçimini.
+
+**`GET /conversations/{id}/messages?after=<messageId>` — kopukluk sonrası artımlı çekim (#267).** `after`
+verilince yalnız o mesajdan sonra gönderilenler döner, sıra `sentAt` **artan** (eşitlikte `id`), aynı `page`/`size`
+ile; `sort` parametresi bu kipte yok sayılır (`MessageDao.findAllAfter`). Çapa `findByIdAndConversationId` ile
+**bu konuşmada** aranır: başka konuşmanın mesajı ile hiç var olmayan id **aynı** 400
+`MESSAGING_AFTER_UNKNOWN` alır (§2d2; ayrım yalnız `log.warn`'da). Boş sayfa yerine 400 seçildi çünkü boş sayfa
+"yeni mesaj yok" ile "çapan geçersiz" hâllerini birleştirirdi — moderasyonla silinmiş bir çapayı tutan istemci
+sonsuza dek yakalandığını sanırdı; 400 ona listeyi baştan çekmesini söyler. Taraf olmayan `after` verse de
+verilmese de aynı 404'ü alır: taraf kontrolü çapadan önce.
+
+**`GET /conversations/{id}` — listedeki satırın aynısı.** Bildirimden gelen istemci listeyi çekip aramak
+zorundaydı. Uç `ConversationDto`'yu liste ile aynı hesapla döner (`unreadCounts`, `closedFlags`, `membersOf` tek
+elemanlı listeyle çağrılır; ikinci bir hesap yolu yok). Taraf olmayan `messaging.conversation.not.found` ile aynı
+404 (`ExistenceConcealmentIT`).
 
 **Mesajlaşmanın bir penceresi var.** İş bittikten `messaging.grace-days-after-job` (7) gün sonra sohbet **salt okunur** olur: geçmiş okunur, yeni mesaj gönderilemez (409). Amaç ilişkinin süresiz açık kalıp platform dışına taşınmasını önlemek. `endDateTime` olmayan ilanlarda pencere hiç kapanmaz. `ConversationDto.closed` bunu istemciye söyler; karşılaştırma duvar saati olduğu için `messaging.zone-id` üzerinden yapılır. Hesap `MessagingAvailability.isWindowClosed` içinde, `MessagingManager`'da değil — mapper da aynı pencereyi okuyor.
 
@@ -2166,7 +2208,7 @@ Sayaç yerine gösterge (`Gauge`) seçildi: soru "kaç kez oldu" değil, "**şu 
 
 **Kanallar:**
 - `/topic/conversations/{id}` — `MESSAGE`, `TYPING`, `READ` olayları. Tek zarf: `RealtimeEventDto`.
-- `/user/queue/messages` — kullanıcıya özel akış, yalnızca `MESSAGE`.
+- `/user/queue/messages` — kullanıcıya özel akış, yalnızca `MESSAGE`. Uygulama arka plandayken aynı olay FCM ile gider (§2o "Yeni mesaj push'u").
 - `/topic/presence/{userId}` — o kullanıcının `PRESENCE` olayları.
 - `/app/conversations/{id}/typing` — istemcinin yazıyor bildirimi. **Sunucu tarafta yetki kontrolü var** (`assertParticipant`), yoksa yabancı biri herhangi bir konuşmaya olay basabilirdi.
 
@@ -3030,7 +3072,7 @@ değer taşıyor ve üç soruyu birden cevaplıyor: kapatılabilir mi, varsayıl
 | Kind | Kategoriler | Kapatılabilir | Varsayılan | Ticari |
 |---|---|---|---|---|
 | `TRANSACTIONAL` | `ACCOUNT_SECURITY`, `APPLICATION_UPDATES`, `IDENTITY_VERIFICATION`, `COMPANY_UPDATES` | **hayır** | açık | hayır |
-| `ALERT` | `JOB_ALERTS` | evet | **açık** | hayır |
+| `ALERT` | `JOB_ALERTS`, `MESSAGES` | evet | **açık** | hayır |
 | `COMMERCIAL` | `MARKETINGS`, `NEWSLETTER` | evet | **kapalı** | evet |
 
 Yeni bir kategori eklendiğinde tek karar `kind` seçmek; varsayılanı, kapatılabilirliği ve rıza kaydı

@@ -70,7 +70,8 @@ class CrewConversationRulesTest {
         manager = new MessagingManager(conversationDao, messageDao, userBlockDao, jobService,
                 jobAssignmentService, userService, securityService,
                 companyContactService, new PageableSanitizer(), mock(RealtimePublisher.class),
-                mock(MessagingMapper.class), availability, mock(UserMapper.class));
+                mock(MessagingMapper.class), availability, mock(UserMapper.class),
+                mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class));
 
         company = new Company();
         company.setId(UUID.randomUUID());
