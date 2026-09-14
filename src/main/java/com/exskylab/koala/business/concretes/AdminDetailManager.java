@@ -1,11 +1,14 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.AdminDetailService;
+import com.exskylab.koala.business.abstracts.CancellationService;
 import com.exskylab.koala.business.abstracts.DisputeService;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.PaymentService;
 import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.business.abstracts.ReportService;
+import com.exskylab.koala.business.abstracts.ReviewService;
+import com.exskylab.koala.business.abstracts.TimesheetService;
 import com.exskylab.koala.core.dtos.jobAssignment.response.AdminAssignmentDetailDto;
 import com.exskylab.koala.core.dtos.payment.response.AdminPaymentDto;
 import com.exskylab.koala.core.mappers.AdminDetailMapper;
@@ -30,16 +33,24 @@ public class AdminDetailManager implements AdminDetailService {
     private final PayoutService payoutService;
     private final DisputeService disputeService;
     private final ReportService reportService;
+    private final TimesheetService timesheetService;
+    private final CancellationService cancellationService;
+    private final ReviewService reviewService;
     private final AdminDetailMapper adminDetailMapper;
 
     public AdminDetailManager(JobAssignmentService jobAssignmentService, PaymentService paymentService,
                               PayoutService payoutService, DisputeService disputeService,
-                              ReportService reportService, AdminDetailMapper adminDetailMapper) {
+                              ReportService reportService, TimesheetService timesheetService,
+                              CancellationService cancellationService, ReviewService reviewService,
+                              AdminDetailMapper adminDetailMapper) {
         this.jobAssignmentService = jobAssignmentService;
         this.paymentService = paymentService;
         this.payoutService = payoutService;
         this.disputeService = disputeService;
         this.reportService = reportService;
+        this.timesheetService = timesheetService;
+        this.cancellationService = cancellationService;
+        this.reviewService = reviewService;
         this.adminDetailMapper = adminDetailMapper;
     }
 
@@ -49,6 +60,9 @@ public class AdminDetailManager implements AdminDetailService {
         JobAssignment assignment = jobAssignmentService.getDetailedById(assignmentId);
 
         return adminDetailMapper.toAdminAssignmentDetailDto(assignment,
+                timesheetService.getSessionsForStaff(assignmentId),
+                cancellationService.findForStaff(assignmentId).orElse(null),
+                reviewService.getReviewsForStaff(assignmentId),
                 paymentService.getAttemptsForStaff(assignmentId),
                 payoutService.findForAssignment(assignmentId).orElse(null),
                 disputeService.findAllForAssignment(assignmentId),

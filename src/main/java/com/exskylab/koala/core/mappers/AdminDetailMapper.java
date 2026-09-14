@@ -3,22 +3,30 @@ package com.exskylab.koala.core.mappers;
 import com.exskylab.koala.core.dtos.common.LinkedRecordDto;
 import com.exskylab.koala.core.dtos.job.response.AdminJobDetailDto;
 import com.exskylab.koala.core.dtos.job.response.AdminJobDto;
+import com.exskylab.koala.core.dtos.jobAssignment.response.AdminApplicationDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.AdminAssignmentDetailDto;
+import com.exskylab.koala.core.dtos.jobAssignment.response.AdminCancellationDto;
+import com.exskylab.koala.core.dtos.jobAssignment.response.AdminReviewDto;
 import com.exskylab.koala.core.dtos.payment.response.AdminPaymentDto;
 import com.exskylab.koala.core.dtos.payment.response.AdminRefundDto;
 import com.exskylab.koala.core.dtos.payment.response.AdminSettlementTaskDto;
 import com.exskylab.koala.core.dtos.payout.response.AdminPayoutDetailDto;
 import com.exskylab.koala.core.dtos.user.response.StaffPartyDto;
 import com.exskylab.koala.core.helpers.LogMasks;
+import com.exskylab.koala.core.helpers.PlainDecimalStringConverter;
+import com.exskylab.koala.entities.Cancellation;
 import com.exskylab.koala.entities.Dispute;
 import com.exskylab.koala.entities.Job;
+import com.exskylab.koala.entities.JobApplication;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.Payment;
 import com.exskylab.koala.entities.Payout;
 import com.exskylab.koala.entities.Refund;
 import com.exskylab.koala.entities.Report;
+import com.exskylab.koala.entities.Review;
 import com.exskylab.koala.entities.SettlementTask;
 import com.exskylab.koala.entities.User;
+import com.exskylab.koala.entities.WorkSession;
 import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -27,9 +35,9 @@ import java.util.List;
 
 @Mapper(componentModel = "spring",
         uses = {UserMapper.class, PricingDtoMapper.class, AddressMapper.class, CompanyMapper.class,
-                GalleryMapper.class, JobCategoryMapper.class},
+                GalleryMapper.class, JobCategoryMapper.class, TimesheetMapper.class},
         injectionStrategy = InjectionStrategy.CONSTRUCTOR,
-        imports = LogMasks.class)
+        imports = {LogMasks.class, PlainDecimalStringConverter.class})
 public interface AdminDetailMapper {
 
     StaffPartyDto toStaffPartyDto(User user);
@@ -102,25 +110,47 @@ public interface AdminDetailMapper {
                                                 List<SettlementTask> settlementTasks,
                                                 List<Payment> paymentAttempts);
 
+    AdminApplicationDto toAdminApplicationDto(JobApplication application);
+
+    @Mapping(target = "authorId", source = "author.id")
+    @Mapping(target = "subjectId", source = "subject.id")
+    AdminReviewDto toAdminReviewDto(Review review);
+
+    @Mapping(target = "feeRate", expression = "java(PlainDecimalStringConverter.convert(cancellation.getFeeRate()))")
+    @Mapping(target = "feeAmount", expression = "java(PlainDecimalStringConverter.convert(cancellation.getFeeAmount()))")
+    @Mapping(target = "refundAmount", expression = "java(PlainDecimalStringConverter.convert(cancellation.getRefundAmount()))")
+    @Mapping(target = "refundId", source = "refund.id")
+    AdminCancellationDto toAdminCancellationDto(Cancellation cancellation);
+
     @Mapping(target = "id", source = "assignment.id")
     @Mapping(target = "jobId", source = "assignment.job.id")
     @Mapping(target = "jobTitle", source = "assignment.job.title")
     @Mapping(target = "companyName", source = "assignment.job.company.name")
+    @Mapping(target = "employerType", source = "assignment.job.employerType")
     @Mapping(target = "worker", source = "assignment.worker")
     @Mapping(target = "employer", source = "assignment.job.creator")
     @Mapping(target = "status", source = "assignment.status")
     @Mapping(target = "paymentStatus", source = "assignment.paymentStatus")
     @Mapping(target = "assignmentDateTime", source = "assignment.assignmentDateTime")
+    @Mapping(target = "expectedCompletionDateTime", source = "assignment.expectedCompletionDateTime")
     @Mapping(target = "actualCompletionDateTime", source = "assignment.actualCompletionDateTime")
     @Mapping(target = "workHours", source = "assignment.workHours")
+    @Mapping(target = "notes", source = "assignment.notes")
     @Mapping(target = "pricing", source = "assignment")
+    @Mapping(target = "application", source = "assignment.application")
+    @Mapping(target = "workSessions", source = "workSessions")
+    @Mapping(target = "cancellation", source = "cancellation")
+    @Mapping(target = "reviews", source = "reviews")
     @Mapping(target = "payments", source = "payments")
     @Mapping(target = "payout", source = "payout")
     @Mapping(target = "disputes", source = "disputes")
     @Mapping(target = "reports", source = "reports")
-    AdminAssignmentDetailDto toAdminAssignmentDetailDto(JobAssignment assignment, List<Payment> payments,
-                                                        Payout payout, List<Dispute> disputes,
-                                                        List<Report> reports);
+    @Mapping(target = "createdAt", source = "assignment.createdAt")
+    @Mapping(target = "updatedAt", source = "assignment.updatedAt")
+    AdminAssignmentDetailDto toAdminAssignmentDetailDto(JobAssignment assignment, List<WorkSession> workSessions,
+                                                        Cancellation cancellation, List<Review> reviews,
+                                                        List<Payment> payments, Payout payout,
+                                                        List<Dispute> disputes, List<Report> reports);
 
     @Mapping(target = "id", source = "job.id")
     @Mapping(target = "title", source = "job.title")

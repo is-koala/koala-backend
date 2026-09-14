@@ -178,6 +178,12 @@ public class TimesheetManager implements TimesheetService {
         return workSessionDao.findAllByJobAssignmentIdOrderByCheckInAtAsc(jobAssignmentId);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<WorkSession> getSessionsForStaff(UUID jobAssignmentId) {
+        return workSessionDao.findAllByJobAssignmentIdOrderByCheckInAtAsc(jobAssignmentId);
+    }
+
     private JobAssignment requireWorker(UUID jobAssignmentId) {
         JobAssignment assignment = jobAssignmentService.getDetailedById(jobAssignmentId);
 
