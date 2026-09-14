@@ -225,6 +225,10 @@ class IbanVerificationIT extends AbstractStaffIntegrationTest {
                         org.hamcrest.Matchers.hasItem(verification.get("reference").asString())))
                 .andExpect(jsonPath("$.data.content[*].maskedIban",
                         org.hamcrest.Matchers.hasItem("TR18***2315")))
+                .andExpect(jsonPath("$.data.content[?(@.accountId == '" + accountId + "')].status")
+                        .value("PENDING"))
+                .andExpect(jsonPath("$.data.content[?(@.accountId == '" + accountId + "')].attemptsLeft")
+                        .value(verification.get("attemptsLeft").asInt()))
                 .andExpect(jsonPath("$.data.content[0].iban").doesNotExist())
                 .andExpect(content().string(not(containsString(OWN_IBAN_NORMALISED))));
 

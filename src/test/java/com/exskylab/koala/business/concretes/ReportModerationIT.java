@@ -16,8 +16,11 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.security.StaffPrincipal;
@@ -330,9 +333,39 @@ class ReportModerationIT extends AbstractStaffIntegrationTest {
         assertEquals(2L, decided.reportedUserReportCount());
         assertNull(decided.reviewedBy(),
                 "Personel karari eski marketplace reviewedBy alanini doldurmamali.");
+        assertEquals(staffId, decided.reviewedByStaffId(),
+                "Karari veren personel kuyruk satirinda gorunmeli.");
         assertEquals(staffId, jdbcTemplate.queryForObject(
                 "select reviewed_by_staff_id from reports where id = ?", UUID.class, openUserReportId));
         assertNull(jdbcTemplate.queryForObject(
                 "select reviewed_by_id from reports where id = ?", UUID.class, openUserReportId));
+    }
+
+    @Test
+    void aJobReportPointsAtTheAssignmentBetweenItsParties() {
+        UUID assignmentId = UUID.randomUUID();
+        UUID reportById = insertReport(reportedUserId, jobId, null, null, "FRAUD", "OPEN", false);
+        jdbcTemplate.update("""
+                insert into job_assignments (id, created_at, is_deleted, job_id, worker_id, status, payment_status,
+                                             assignment_date_time, work_hours)
+                values (?, now(), false, ?, ?, 'COMPLETED', 'RELEASED_TO_WORKER', now(), 8)
+                """, assignmentId, jobId, reportedUserId);
+        try {
+            Map<UUID, AdminReportDto> rows = reportService
+                    .searchForModeration(null, null, null, null, null, null, PageRequest.of(0, 100))
+                    .getContent().stream()
+                    .collect(Collectors.toMap(AdminReportDto::id, Function.identity()));
+
+            assertEquals(assignmentId, rows.get(reportById).jobAssignmentId(),
+                    "Ilan sahibinin isci hakkindaki sikayeti ikisinin atamasina baglanmali.");
+            assertNull(rows.get(jobReportId).jobAssignmentId(),
+                    "Taraflari atama kurmayan ilan sikayetinde atama yoktur.");
+            assertNull(rows.get(openUserReportId).jobAssignmentId(),
+                    "Ilansiz kullanici sikayetinde atama yoktur.");
+            assertEquals(assignmentId, reportService.getForModeration(reportById).report().jobAssignmentId());
+        } finally {
+            jdbcTemplate.update("delete from reports where id = ?", reportById);
+            jdbcTemplate.update("delete from job_assignments where id = ?", assignmentId);
+        }
     }
 }

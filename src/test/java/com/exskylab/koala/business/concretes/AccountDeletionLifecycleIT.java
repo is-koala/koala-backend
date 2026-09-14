@@ -3,6 +3,8 @@ package com.exskylab.koala.business.concretes;
 import com.exskylab.koala.business.abstracts.LegalService;
 import com.exskylab.koala.business.abstracts.IysService;
 import com.exskylab.koala.core.constants.LegalMessages;
+import com.exskylab.koala.core.dtos.legal.response.DeletionBlockerDto;
+import com.exskylab.koala.entities.DeletionBlockerType;
 import com.exskylab.koala.core.utilities.iys.IysConsentRequest;
 import com.exskylab.koala.core.utilities.iys.IysPermissionResult;
 import com.exskylab.koala.core.utilities.iys.IysProviderClient;
@@ -370,6 +372,21 @@ class AccountDeletionLifecycleIT extends AbstractIntegrationTest {
         var waitingRequest = legalService.getCurrentDeletionRequest(userId);
         assertEquals("REQUESTED", waitingRequest.getStatus().name());
         assertEquals(LegalMessages.DELETION_BLOCKED_BY_PENDING_PAYMENT, waitingRequest.getBlockedReason());
+
+        assertEquals(java.util.List.of(new DeletionBlockerDto(DeletionBlockerType.PENDING_PAYMENT, paymentId)),
+                legalService.findDeletionBlockers(java.util.List.of(waitingRequest)).get(requestId),
+                "Personel engelleyen kaydi tipi ve id'siyle gormeli; tamamlanmis atama etkin is sayilmaz.");
+
+        jdbcTemplate.update("update job_assignments set status = 'IN_PROGRESS' where id = ?", assignmentId);
+        assertEquals(java.util.List.of(
+                        new DeletionBlockerDto(DeletionBlockerType.PENDING_PAYMENT, paymentId),
+                        new DeletionBlockerDto(DeletionBlockerType.ACTIVE_WORK, assignmentId)),
+                legalService.findDeletionBlockers(java.util.List.of(waitingRequest)).get(requestId));
+
+        var rejected = legalService.rejectDeletionRequest(null, requestId, "Yasal inceleme sürüyor.");
+        assertEquals("Yasal inceleme sürüyor.", rejected.getRejectionReason());
+        assertEquals(java.util.Map.of(), legalService.findDeletionBlockers(java.util.List.of(rejected)),
+                "Reddedilmis talep icin engel hesaplanmaz.");
         assertFalse(Boolean.TRUE.equals(jdbcTemplate.queryForObject(
                 "select is_deleted from users where id = ?", Boolean.class, userId)));
         assertEquals(0, jdbcTemplate.queryForObject(

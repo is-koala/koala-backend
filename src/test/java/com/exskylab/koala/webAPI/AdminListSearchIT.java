@@ -14,6 +14,7 @@ import java.util.UUID;
 
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -294,6 +295,71 @@ class AdminListSearchIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
+    void theIdFiltersNarrowEachQueueAndIntersectWithTheSearch() throws Exception {
+        expectOnlyFiltered("/admin/job-assignments", financeToken, matchingAssignmentId, otherAssignmentId,
+                "workerId", workerId.toString());
+        expectOnlyFiltered("/admin/job-assignments", financeToken, matchingAssignmentId, otherAssignmentId,
+                "employerId", employerId.toString());
+        expectOnlyFiltered("/admin/job-assignments", financeToken, otherAssignmentId, matchingAssignmentId,
+                "jobId", otherJobId.toString());
+        filtered("/admin/job-assignments", financeToken, "workerId", workerId.toString(), "jobId", otherJobId.toString())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(0));
+        filtered("/admin/job-assignments", financeToken, "workerId", workerId.toString(), "query", "garson")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(0));
+
+        UUID companyId = UUID.randomUUID();
+        jdbc.update("insert into companies (id, created_at, is_deleted, name, tax_number, email, approval_status) "
+                        + "values (?, now(), false, ?, ?, ?, 'APPROVED')",
+                companyId, "Süzgeç Lojistik " + companyId, String.valueOf(Math.abs(companyId.hashCode())),
+                "filter-company-" + companyId + "@example.com");
+        jdbc.update("update jobs set company_id = ? where id = ?", companyId, otherJobId);
+        try {
+            expectOnlyFiltered("/admin/jobs", trustToken, matchingJobId, otherJobId, "employerId", employerId.toString());
+            expectOnlyFiltered("/admin/jobs", trustToken, otherJobId, matchingJobId, "companyId", companyId.toString());
+            filtered("/admin/jobs", trustToken, "companyId", companyId.toString(), "employerId", employerId.toString())
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.totalElements").value(0));
+        } finally {
+            jdbc.update("update jobs set company_id = null where id = ?", otherJobId);
+            jdbc.update("delete from companies where id = ?", companyId);
+        }
+
+        expectOnlyFiltered("/admin/disputes", trustToken, matchingDisputeId, otherDisputeId, "userId", workerId.toString());
+        expectOnlyFiltered("/admin/disputes", trustToken, matchingDisputeId, otherDisputeId, "userId", employerId.toString());
+        expectOnlyFiltered("/admin/disputes", trustToken, otherDisputeId, matchingDisputeId, "userId", bystanderId.toString());
+
+        expectOnlyFiltered("/admin/payouts", financeToken, matchingPayoutId, otherPayoutId, "workerId", workerId.toString());
+        filtered("/admin/payouts", financeToken, "workerId", bystanderId.toString(), "status", "COMPLETED")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content[0].id").value(otherPayoutId.toString()));
+        filtered("/admin/payouts", financeToken, "workerId", bystanderId.toString())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(0));
+
+        expectOnlyFiltered("/admin/reports", trustToken, matchingReportId, otherReportId, "reporterId", employerId.toString());
+        expectOnlyFiltered("/admin/reports", trustToken, otherReportId, matchingReportId, "reporterId", bystanderId.toString());
+        filtered("/admin/reports", trustToken, "reporterId", employerId.toString(), "reportedUserId", bystanderId.toString())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(0));
+        filtered("/admin/reports", trustToken, "reporterId", employerId.toString(), "reportedUserId", workerId.toString())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(1));
+    }
+
+    @Test
+    void anIdFilterIsAnAuditedSearch() throws Exception {
+        filtered("/admin/job-assignments", financeToken, "workerId", workerId.toString()).andExpect(status().isOk());
+
+        Integer rows = jdbc.queryForObject(
+                "select count(*) from admin_audit_entries where resource_type = 'job-assignments' and allowed = true",
+                Integer.class);
+        assertEquals(1, rows, "id süzgeciyle liste okuması denetim satırı yazmalı");
+    }
+
+    @Test
     void searchDoesNotWidenWhoMayReadAQueue() throws Exception {
         search("/admin/job-assignments", trustToken, workerEmail).andExpect(status().isForbidden());
         search("/admin/payouts", trustToken, workerEmail).andExpect(status().isForbidden());
@@ -314,6 +380,24 @@ class AdminListSearchIT extends AbstractStaffIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content[*]." + idField, hasItem(expected.toString())))
                 .andExpect(jsonPath("$.data.content[*]." + idField, not(hasItem(hidden.toString()))));
+    }
+
+    private void expectOnlyFiltered(String path, String token, UUID expected, UUID hidden, String... params)
+            throws Exception {
+        filtered(path, token, params)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[*].id", hasItem(expected.toString())))
+                .andExpect(jsonPath("$.data.content[*].id", not(hasItem(hidden.toString()))));
+    }
+
+    private ResultActions filtered(String path, String token, String... params) throws Exception {
+        var request = get(path)
+                .param("size", "100")
+                .header("Authorization", "Bearer " + token);
+        for (int i = 0; i + 1 < params.length; i += 2) {
+            request.param(params[i], params[i + 1]);
+        }
+        return mockMvc.perform(request);
     }
 
     private ResultActions search(String path, String token, String query, String... extraParams) throws Exception {

@@ -1956,6 +1956,117 @@ katman); diğer dördü `@RequiresPermission` ile yeterli, para hareketi yok.
 
 ---
 
+## 2s7. Personel DTO'ları — zaman çizelgesi, kullanıcı bağlamı, süzgeçler, karar veren personel (#283)
+
+Panel taraması (14.09.2026): personel nesne sayfalarında başvuru→kabul→ödeme→mesai→tamamlanma→hakediş
+çizelgesi kurulamıyor, `GET /admin/users/{id}` üç alanla bağlamsız, şirket nesnesinde yetkililer/ilanlar
+yok, kararı veren personel hiçbir DTO'da görünmüyordu. Veri entity'lerdeydi; eksik olan DTO ve süzgeçlerdi.
+Yeni yazma ucu **yok**; iki mevcut yazma ucu isteğe bağlı bir alan kazandı (aşağıda).
+
+| Uç | İzin | Eklenen |
+|---|---|---|
+| `GET /admin/job-assignments/{id}` | `payment.read` | `AdminAssignmentDetailDto`: `createdAt`, `updatedAt`, `expectedCompletionDateTime`, `employerType`, `notes`, `application{id,status,applicationDateTime,answeredDateTime,rejectionReason}`, `workSessions[]` (`WorkSessionDto`, plausibility bayraklarıyla), `cancellation{id,cancelledByParty,cancelledBy(SafeUserDto),reason,noticeMinutes,feeRate,feeAmount,refundAmount,refundId,cancelledAt}`, `reviews[]{id,authorId,subjectId,rating,comment,anonymous,createdAt}` |
+| `GET /admin/job-assignments` | `payment.read` | `workerId`, `employerId`, `jobId` süzgeçleri |
+| `GET /admin/users/{id}` | `user.read` (+ `user.read_pii` → e-posta/telefon) | yanıt `SafeUserDto` → **`AdminUserDetailDto`** |
+| `GET /admin/jobs` | `job.read` | `companyId`, `employerId` süzgeçleri |
+| `GET /admin/jobs/{id}` | `job.read` | `AdminJobDetailDto`: `cancelledAt`, `cancelReason`, `creator` (`SafeUserDto`) |
+| `GET /admin/companies`, `/{id}`, `approve`, `reject` | `company.approve` | `CompanyReviewDto`: `companyContacts[]`, `website`, `description`, `approvedByStaffId`, `jobCount` |
+| `GET /admin/payments/{id}`, `/admin/job-assignments/{id}/payments` | `payment.read` | `AdminPaymentDto.payoutId`; `refunds[].origin` (`CANCELLATION|DISPUTE|STAFF`), `refunds[].originId` |
+| `GET /admin/payouts/{id}` | `payout.reconcile` | `AdminPayoutDetailDto`: `bankAccountId`, `releaseOrigin`, `settledAt`, `reconciledByStaffId` |
+| `GET /admin/payouts` | `payout.reconcile` | `workerId` süzgeci |
+| `GET /admin/disputes`, `/{id}`, `resolve` | `dispute.resolve` | `DisputeDto`: `openedBySide` (`WORKER|EMPLOYER`), `resolvedByStaffId` (yalnız personel görünümünde) |
+| `GET /admin/disputes` | `dispute.resolve` | `userId` süzgeci (işçi, ilan sahibi ya da açan) |
+| `GET /admin/reports`, `/{id}`, `review` | `content.moderate` | `AdminReportDto`: `jobAssignmentId`, `reviewedByStaffId` |
+| `GET /admin/reports` | `content.moderate` | `reporterId` süzgeci (mevcut `reportedUserId`'nin yanına) |
+| `GET /admin/account-deletions`, `/{id}`, `reject` | `user.read_pii` / `user.deletion.manage` | `AccountDeletionDto`: `rejectionReason`, `rejectedByStaffId`, `blockers[]{type,id}` |
+| `GET /admin/identity-verifications`, `/{id}`, `approve`, `reject` | `identity.review` | `IdentityReviewDto.reviewedByStaffName` |
+| `GET /admin/bank-account-verifications` | `bank.account.verify` | `IbanPendingDto.status`, `attemptsLeft` |
+
+**`GET /admin/users/{id}` PII ayrımı tek uçta, iki izinle.** Uç `user.read` ile korunur; `email` ve `phoneNumber`
+yalnız aktör `user.read_pii` taşıyorsa dolar, taşımıyorsa **aynı gövde** `null` ile döner — ayrı bir uç açılmadı
+çünkü panelin "PII izinli bölüm"ü aynı sayfadadır (koala-admin#84). Denetim izi bunun için dürüst kalmalıydı:
+PII döndüğünde `AdminDetailManager.getUserDetail` `StaffAuditContext.reclassify(USER_READ_PII, "user.read_pii", true)`
+çağırır, yani satır `PERSONAL_DATA` sınıfında ve o izin koduyla yazılır; PII dönmeyen okuma `user.read` olarak kalır
+(`AdminDetailReadIT.theUserDetailCarriesContextAndRevealsContactDetailsOnlyWithThePiiPermission` iki satırı da
+ölçüyor). §2p'deki uyuşmazlık çözümünden sonra `reclassify`'ın ikinci çağıranı budur. `counts` sekiz sayaç
+(`applications`, `assignmentsAsWorker`, `assignmentsAsEmployer`, `payments`, `payouts`, `disputes`,
+`reportsReceived`, `reportsMade`) ve her biri kendi servisinden tek `count` sorgusu; tekil detay olduğu için çarpan
+yok. `companies[]{id,name,role}` `CompanyContactService.getMembershipsOf`, `badges[]` `BadgeService.getBadgesOf`,
+`identityReviewStatus` kullanıcının **son** kimlik incelemesinin durumu (`IdentityReviewDto.statusOf` — kuyruk
+satırıyla aynı kural), `pendingDeletionRequestId` `REQUESTED` durumdaki son talep.
+
+**Bileşim yine `AdminDetailManager`'da (§2s6).** Kullanıcı detayı, şirket inceleme sayfası ve ödeme/iade
+kaynağı orada kuruluyor; orkestratör hiçbir DAO'ya uzanmıyor, `Timesheet/Cancellation/Review/CompanyContact/
+Badge/IdentityDocumentReview/Legal/Company/Job` servislerinin yeni `*ForStaff`/`count*`/`find*` metotlarını çağırıyor.
+Bu metotların hiçbiri `securityService`'e uzanmıyor (`AdminStaffPrincipalGuardIT`). Şirket incelemesi
+`CompanyManager`'a konamazdı: `jobCount` `JobService`'ten gelir ve `JobManager → CompanyService` bağı zaten var
+(§2ae döngü). `approve`/`reject` uçları `companyService.approveCompany/rejectCompany`'yi **doğrudan** çağırmaya devam
+ediyor (`AdminStaffPrincipalGuardIT` o dördünü tarama içinde arıyor) ve yanıtı `adminDetailService.getCompany`
+ile yeniden okuyor.
+
+**Şirket yetkilileri ayrı sorguyla geliyor, grafiğe alınmıyor.** `Company.contacts` ve `Company.images` ikisi de
+`List` (bag); ikisini aynı `@EntityGraph`'e koymak `MultipleBagFetchException`. `CompanyDao.search` grafiği
+`images`'ı zaten taşıyor; yetkililer sayfa başına tek `CompanyContactDao.findAllByCompanyIdIn` (grafik `user`,
+`user.profilePicture`) ve ilan sayıları tek `JobDao.countByCompanyIds` `group by` ile geliyor. `approvedByStaffId`
+yeni `companies.approved_by_staff_id` sütunu; **onayda da redde de** kararı veren personel yazılır (alanın adı
+issue sözleşmesinden, anlamı "kararı veren"). Köprü aktörüyle verilen kararda `null`.
+
+**İade kaynağı okuma anında türetiliyor, sütun yok.** `Refund` tablosunda kaynak alanı yok ve eklemeye gerek
+kalmadı: `PaymentStateMachine.canRefund` yalnız `HELD_IN_ESCROW`'dan izin verdiği için bir ödemenin **en fazla bir**
+iadesi olur. Sıra: `cancellations.refund_id` iadeyi gösteriyorsa `CANCELLATION` + iptal id'si (kesin, yabancı
+anahtar); değilse atamanın **`RESOLVED` + `REFUND_EMPLOYER`** uyuşmazlığı varsa `DISPUTE` + uyuşmazlık id'si (uyuşmazlık
+çözümü iadeyi zorunlu yarattığı için o iade budur); ikisi de değilse `STAFF` + `null` (`POST /admin/job-assignments/
+{id}/refund`). Sayfa başına üç ek sorgu (iadeler, iptaller, uyuşmazlıklar) ve hakediş; `thePaymentListIsBuiltWithoutAQueryPerAttempt`
+deneme sayısıyla büyümediğini ölçüyor. `payoutId` atamanın hakedişi bu ödemeye bağlıysa dolar, diğer denemelerde `null`.
+
+**Hakediş kaynağı ise sütun: `payouts.release_origin` (`PayoutReleaseOrigin`: `AUTO_COMPLETION|DISPUTE|STAFF`).**
+Türetilemezdi — zamanlayıcının ve personelin çıkışı aynı izi bırakır. `PayoutService.releaseToWorker(id, origin)`
+üç çağıranından açıkça alır: `JobAssignmentManager.autoCompleteAssignment` → `AUTO_COMPLETION`, `DisputeManager`
+→ `DISPUTE`, `PayoutsController` → `STAFF` (`StaffPayoutService.releaseToWorker(actor, id, reason, origin)`).
+Mevcut satırlar için changelog `RESOLVED`+`RELEASE_TO_WORKER` uyuşmazlığı olan hakedişleri `DISPUTE` yazar,
+kalanlar **`null` kalır** — geçmişte personel mi zamanlayıcı mı çıkardı bilinmiyor, uydurulmadı. `reconciledByStaffId`
+yeni `reconciled_by_staff_id` sütunu, `PayoutService.confirmSettlement(id, evidence, reconciledByStaffId)` ile
+facade'dan gelen aktörle yazılır. `settledAt` **ayrı sütun değil** `completedAt`'in kendisi: hakedişte `completed_at`'i
+yazan tek yer mutabakat onayı ve oraya ekstredeki `settledAt` yazılır; ikinci bir sütun sessizce ayrışırdı (§2d2'nin
+kusur sınıfı). `bankAccountId` grafikteki `bankAccount`'tan.
+
+**İlan iptali iz bırakıyor.** `jobs.cancelled_at` iptalde damgalanır; `cancel_reason` için `POST /jobs/{id}/cancel`
+**isteğe bağlı** gövde kazandı (`CancelJobDto.reason`, en çok 500; `{job.cancel.reason.too.long}`) — yeni uç değil,
+mevcut ucun gövdesi. İstemciler göndermezse `cancelReason` `null` kalır; mobil/web'in göndermesi ayrı iş.
+`creator` `AdminJobDetailDto`'da `SafeUserDto` (kullanıcı adı ve profil fotoğrafı; `employer` alanı e-postalı
+`StaffPartyDto` olarak duruyor, ikisi aynı kişi).
+
+**Hesap silme talebi.** Ret artık `rejection_reason` + `rejected_by_staff_id` yazıyor; eskiden ret gerekçesi
+`blocked_reason`'a yazılıyordu (bir mesaj anahtarı kolonuna serbest metin). Changelog `REJECTED` satırlarda gerekçeyi
+taşır ve `blocked_reason`'ı boşaltır; `LegalService.rejectDeletionRequest(actor, id, reason)` aktörü alır.
+`blockers[]{type,id}` **yalnız `REQUESTED`** talepte ve **canlı** hesaplanır: `LegalService.findDeletionBlockers`
+sayfa başına dört sorgu (`PaymentDao.findPendingLinksForUsers`, `JobAssignmentDao.findMoneyLinksForUsers`/
+`findActiveLinksForUsers`, `DisputeDao.findActiveLinksForUsers`), hepsi `PartyLink(id, workerId, employerId)`
+projeksiyonu; tipler `DeletionBlockerType` (`PENDING_PAYMENT|ESCROW|ACTIVE_WORK|DISPUTE`) ve zamanlayıcının
+`findBlockedReason` sırasıyla aynı. `blockedReason` eski anlamını koruyor: zamanlayıcının **son denemesinde**
+bulduğu ilk engelin metni. Kullanıcı yüzeyi (`LegalController`) `toAccountDeletionDto` ile `rejectedByStaffId`'siz
+ve `blockers`'sız döner; personel yüzeyi `toStaffAccountDeletionDto`.
+
+**Aynı DTO, iki görünüm: `DisputeDto`.** `openedBySide` açanın atamanın işçisi olup olmadığından türer
+(`DisputeMapper.openedBySide`, `EvidenceUploaderSide` mantığıyla aynı). `resolvedByStaffId` yalnız `toStaffDisputeDto`'da
+dolar; kullanıcının `GET /job-assignments/{id}/disputes` çağrısı personel id'si taşımaz. `AdminReportDto.jobAssignmentId`
+şikayete konu ilanda, şikayet edenin ya da şikayet edilenin işçi olduğu **son** atama
+(`JobAssignmentService.findLatestByJobsAndWorkers`, sayfa başına tek sorgu; §2s6'nın "atamanın şikayetleri" kuralının
+tersi). `reviewedByStaffId` `Report.reviewedByStaff` proxy id'si. `IdentityReviewDto.reviewedByStaffName`
+`StaffAccountService.displayNamesOf` ile sayfa başına tek `findAllById`; görünen ad boşsa personel e-postası (§2av'nin
+`actorDisplayName` kuralıyla aynı). `IbanPendingDto.status` `BankAccountVerificationPolicy.effectiveStatus`,
+`attemptsLeft` `BankVerificationProperties.maxAttempts`'e göre (`BankAccountService.verificationAttemptsAllowed`).
+
+**Süzgeçler `StaffSearchQuery` sözleşmesine eklenir, onu değiştirmez.** Her id süzgeci `(:x is null or … = :x)` ile
+sorguya girer, `status` ve `query` ile **kesişir** (`AdminListSearchIT.theIdFiltersNarrowEachQueueAndIntersectWithTheSearch`).
+`AuditScope.hasFilter` sayfalama dışı her parametreyi süzgeç saydığı için id süzgeçli liste okuması denetim satırı
+yazar (`anIdFilterIsAnAuditedSearch`); §2av kural 5 kendiliğinden kapsıyor. `/admin/payments` diye bir liste ucu
+yok ve açılmadı; kullanıcı detayındaki `payments` sayacı `/admin/job-assignments?employerId=` üzerinden atamaya iner.
+
+**Panel tarafı is-koala/koala-admin#100.**
+
+---
+
 ## 2t. Iyzico mutabakat tetiği
 
 `approvePaymentSettlement` yazılmıştı ama **hiç çağrılmıyordu** — emanetteki para Iyzico tarafında alt üye işyerine hiç açılmıyordu. Faz 8B bunu bağladı:

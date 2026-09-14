@@ -24,6 +24,7 @@ public interface CancellationDao extends JpaRepository<Cancellation, UUID> {
     @Query("select c from Cancellation c where c.jobAssignment.id = :jobAssignmentId")
     Optional<Cancellation> findWithCancellerByJobAssignmentId(@Param("jobAssignmentId") UUID jobAssignmentId);
 
+    @EntityGraph(attributePaths = "refund")
     List<Cancellation> findAllByRefundIdIn(Collection<UUID> refundIds);
 
     boolean existsByJobAssignmentId(UUID jobAssignmentId);

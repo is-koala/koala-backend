@@ -285,7 +285,7 @@ class AssignmentOperationsAuthorizationTest {
                 DisputeResolution.RELEASE_TO_WORKER, "işçi haklı");
 
         assertEquals(DisputeStatus.RESOLVED, dispute.getStatus());
-        verify(payoutService).releaseToWorker(a.getId(), PayoutReleaseOrigin.AUTO_COMPLETION);
+        verify(payoutService).releaseToWorker(a.getId(), PayoutReleaseOrigin.DISPUTE);
         verify(payoutService, never()).refundEmployer(any(), any(), any());
     }
 

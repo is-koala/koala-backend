@@ -28,6 +28,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -193,6 +195,49 @@ class CompanyApprovalIT extends AbstractStaffIntegrationTest {
                 .content("{\"note\":\"Vergi levhası doğrulandı\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.approvalNote").value("Vergi levhası doğrulandı"));
+    }
+
+    @Test
+    void theReviewCarriesContactsJobCountProfileFieldsAndTheDecidingStaffMember() throws Exception {
+        Company company = pendingCompany("Yetkilili Nakliyat AŞ", "6200000014");
+        jdbcTemplate.update("update companies set website = 'https://nakliyat.example', "
+                + "description = 'Şehir içi nakliye' where id = ?", company.getId());
+        UUID jobId = UUID.randomUUID();
+        jdbcTemplate.update("""
+                insert into jobs (id, created_at, is_deleted, creator_id, company_id, title, status, employer_type,
+                                  insurance_required, address_public, experience_required, min_age, max_age)
+                values (?, now(), false, ?, ?, 'Şoför', 'OPEN', 'COMPANY', false, true, false, 18, 65)
+                """, jobId, founder.getId(), company.getId());
+        UUID operatorStaffId = jdbcTemplate.queryForObject(
+                "select id from staff_members where email like 'company-approval-%@iskoala.com' limit 1", UUID.class);
+
+        try {
+            asOperator(get("/admin/companies").param("query", "6200000014"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content[0].website").value("https://nakliyat.example"))
+                    .andExpect(jsonPath("$.data.content[0].description").value("Şehir içi nakliye"))
+                    .andExpect(jsonPath("$.data.content[0].jobCount").value(1))
+                    .andExpect(jsonPath("$.data.content[0].companyContacts", hasSize(1)))
+                    .andExpect(jsonPath("$.data.content[0].companyContacts[0].role").value("ADMIN"))
+                    .andExpect(jsonPath("$.data.content[0].companyContacts[0].user.id")
+                            .value(founder.getId().toString()))
+                    .andExpect(jsonPath("$.data.content[0].approvedByStaffId").value(nullValue()));
+
+            asOperator(post("/admin/companies/" + company.getId() + "/approve"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.approvalStatus").value("APPROVED"))
+                    .andExpect(jsonPath("$.data.approvedByStaffId").value(operatorStaffId.toString()))
+                    .andExpect(jsonPath("$.data.jobCount").value(1))
+                    .andExpect(jsonPath("$.data.companyContacts", hasSize(1)));
+
+            asOperator(get("/admin/companies/" + company.getId()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.approvedByStaffId").value(operatorStaffId.toString()))
+                    .andExpect(jsonPath("$.data.companyContacts[0].user.firstName").value("Elif"))
+                    .andExpect(jsonPath("$.data.jobCount").value(1));
+        } finally {
+            jdbcTemplate.update("delete from jobs where id = ?", jobId);
+        }
     }
 
     @Test
