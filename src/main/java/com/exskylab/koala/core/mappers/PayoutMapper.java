@@ -19,6 +19,11 @@ public interface PayoutMapper {
     @Mapping(target = "jobAssignmentId", source = "jobAssignment.id")
     @Mapping(target = "jobTitle", source = "jobAssignment.job.title")
     @Mapping(target = "companyName", source = "jobAssignment.job.company.name")
+    @Mapping(target = "maskedIban",
+            expression = "java(payout.getBankAccount() == null ? null : LogMasks.iban(payout.getBankAccount().getIban()))")
+    @Mapping(target = "bankAccountId", source = "bankAccount.id")
+    @Mapping(target = "releasedAt", source = "createdAt")
+    @Mapping(target = "settledAt", source = "completedAt")
     @Mapping(target = "amount", expression = "java(payout.getAmount() == null ? null : payout.getAmount().toPlainString())")
     PayoutDto toPayoutDto(Payout payout);
 
