@@ -49,10 +49,12 @@ public interface JobApplicationDao extends JpaRepository<JobApplication, UUID> {
     @EntityGraph(attributePaths = {"user", "user.profilePicture", "user.cv", "assignment"})
     List<JobApplication> findAllByJobId(UUID jobId);
 
-    @EntityGraph(attributePaths = {"job", "job.category", "job.address", "job.company", "assignment"})
+    @EntityGraph(attributePaths = {"job", "job.category", "job.address", "job.address.city", "job.address.district",
+            "job.company", "job.company.logo", "assignment"})
     Page<JobApplication> findAllByUserId(UUID userId, Pageable pageable);
 
-    @EntityGraph(attributePaths = {"job", "job.category", "job.address", "job.company", "assignment"})
+    @EntityGraph(attributePaths = {"job", "job.category", "job.address", "job.address.city", "job.address.district",
+            "job.company", "job.company.logo", "assignment"})
     Page<JobApplication> findAllByUserIdAndStatus(UUID userId, ApplicationStatus status, Pageable pageable);
 
     @EntityGraph(attributePaths = {"user", "user.profilePicture", "job", "job.company", "assignment"})

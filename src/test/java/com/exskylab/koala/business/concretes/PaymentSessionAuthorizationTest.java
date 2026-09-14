@@ -92,7 +92,9 @@ class PaymentSessionAuthorizationTest {
                 new com.exskylab.koala.core.properties.AutoCompletionProperties(),
                 new com.exskylab.koala.core.properties.UnpaidExpiryProperties(), passthroughSettings(),
                 mock(com.exskylab.koala.business.abstracts.GalleryService.class), mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class), mock(org.springframework.context.ApplicationEventPublisher.class),
-                new PaymentMetrics(meterRegistry));
+                new PaymentMetrics(meterRegistry),
+                mock(com.exskylab.koala.dataAccess.CancellationDao.class),
+                mock(com.exskylab.koala.business.abstracts.JobService.class));
     }
 
     @Test

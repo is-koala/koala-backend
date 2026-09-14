@@ -12,12 +12,30 @@ import org.springframework.data.domain.Pageable;
 
 import jakarta.persistence.LockModeType;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 @Repository
 public interface PaymentDao extends JpaRepository<Payment, UUID> {
+
+    @Query("""
+            select p.jobAssignment.id as jobAssignmentId, min(p.completedAt) as securedAt
+            from Payment p
+            where p.jobAssignment.id in :jobAssignmentIds
+              and p.status = :status
+              and p.completedAt is not null
+            group by p.jobAssignment.id
+            """)
+    List<SecuredAtView> findSecuredAtByJobAssignmentIds(@Param("jobAssignmentIds") Collection<UUID> jobAssignmentIds,
+                                                        @Param("status") PaymentAttemptStatus status);
+
+    interface SecuredAtView {
+        UUID getJobAssignmentId();
+
+        Instant getSecuredAt();
+    }
 
     @Query("select p.jobAssignment.id from Payment p where p.providerToken = :providerToken")
     Optional<UUID> findJobAssignmentIdByProviderToken(@Param("providerToken") String providerToken);

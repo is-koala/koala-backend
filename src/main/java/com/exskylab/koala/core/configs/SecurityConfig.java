@@ -155,6 +155,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/users/me/jobs").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/jobs/{jobId}/applications").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/jobs/{jobId}/applications").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/jobs/{jobId}/assignments").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/sitemap/jobs/**").permitAll()
 
 

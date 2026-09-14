@@ -7,7 +7,6 @@ import com.exskylab.koala.core.dtos.jobAssignment.response.MyAssignmentDto;
 
 import com.exskylab.koala.core.dtos.jobAssignment.request.AnswerAssignmentDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.PaymentSessionDto;
-import com.exskylab.koala.core.dtos.jobAssignment.response.JobAssignmentDto;
 import com.exskylab.koala.entities.JobAssignment;
 import jakarta.validation.Valid;
 
@@ -23,7 +22,7 @@ import org.springframework.data.domain.Pageable;
 public interface JobAssignmentService {
     JobAssignment save(JobAssignment jobAssignment);
 
-    JobAssignmentDto answerToAssignment(UUID assignmentId, AnswerAssignmentDto jobAssignmentsAssignmentIdStatusPatchRequestDto);
+    MyAssignmentDto answerToAssignment(UUID assignmentId, AnswerAssignmentDto jobAssignmentsAssignmentIdStatusPatchRequestDto);
 
     PaymentSessionDto initiatePaymentSession(UUID assignmentId, String clientIpAddress);
 
@@ -31,7 +30,9 @@ public interface JobAssignmentService {
 
     MyAssignmentDto getMyAssignment(UUID assignmentId);
 
-    JobAssignment completeAssignment(UUID assignmentId);
+    PageDto<MyAssignmentDto> getAssignmentsForJob(UUID jobId, Pageable pageable);
+
+    MyAssignmentDto completeAssignment(UUID assignmentId);
 
     List<UUID> findAutoCompletableAssignmentIds();
 

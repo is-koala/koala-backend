@@ -1,6 +1,10 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.business.abstracts.BadgeService;
 import com.exskylab.koala.business.abstracts.JobApplicationService;
+import com.exskylab.koala.business.abstracts.JobAssignmentService;
+import com.exskylab.koala.business.abstracts.ReviewService;
+import com.exskylab.koala.core.mappers.BadgeMapper;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.dtos.user.response.PublicProfileDto;
@@ -38,7 +42,8 @@ class EmployerSurfaceRulesTest {
         when(urls.urlFor(any())).thenAnswer(call -> "https://host/" + call.getArgument(0));
 
         manager = new PublicProfileManager(userService, jobApplicationService, securityService,
-                new MediaUrlResolver(urls));
+                new MediaUrlResolver(urls), mock(JobAssignmentService.class), mock(ReviewService.class),
+                mock(BadgeService.class), mock(BadgeMapper.class));
 
         when(userService.getById(worker.getId())).thenReturn(worker);
     }

@@ -9,7 +9,6 @@ import com.exskylab.koala.core.helpers.PlainDecimalStringConverter;
 import com.exskylab.koala.core.mappers.CancellationMapper;
 import com.exskylab.koala.core.mappers.CancellationMapperImpl;
 import com.exskylab.koala.core.mappers.DisputeMapper;
-import com.exskylab.koala.core.mappers.JobAssignmentMapper;
 import com.exskylab.koala.core.mappers.TimesheetMapper;
 import com.exskylab.koala.entities.Cancellation;
 import com.exskylab.koala.entities.CancellationParty;
@@ -91,7 +90,7 @@ class CancellationControllerJsonContractTest {
                                                                  CancellationMapper cancellationMapper) {
         return new JobAssignmentOperationsController(cancellationService, mock(DisputeService.class),
                 mock(TimesheetService.class), mock(JobAssignmentService.class),
-                mock(JobAssignmentMapper.class), cancellationMapper, mock(DisputeMapper.class),
+                cancellationMapper, mock(DisputeMapper.class),
                 mock(TimesheetMapper.class));
     }
 }

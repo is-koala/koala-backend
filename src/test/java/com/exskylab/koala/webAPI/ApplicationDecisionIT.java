@@ -17,6 +17,7 @@ import java.util.UUID;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -281,6 +282,59 @@ class ApplicationDecisionIT extends AbstractIntegrationTest {
                 .with(user(principal(secondWorkerId)))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"status\":\"ACCEPTED\"}"));
+    }
+
+    @Test
+    void theApplicantListCarriesTheAnswerTimeTheAssignmentAndTheRejectionReason() throws Exception {
+        mockMvc.perform(get("/jobs/{jobId}/applications", jobId).with(user(principal(ownerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.id == '" + firstApplicationId + "')].answeredDateTime").value(
+                        org.hamcrest.Matchers.contains(nullValue())))
+                .andExpect(jsonPath("$.data[?(@.id == '" + firstApplicationId + "')].assignmentId").value(
+                        org.hamcrest.Matchers.contains(nullValue())))
+                .andExpect(jsonPath("$.data[?(@.id == '" + firstApplicationId + "')].rejectionReason").value(
+                        org.hamcrest.Matchers.contains(nullValue())));
+
+        accept(firstApplicationId).andExpect(status().isOk());
+        mockMvc.perform(post("/job-applications/{id}/respond", secondApplicationId)
+                        .with(user(principal(ownerId)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"REJECTED\",\"rejectionReason\":\"Kontenjan doldu\"}"))
+                .andExpect(status().isOk());
+        String assignmentId = jdbc.queryForObject(
+                "select cast(id as varchar) from job_assignments where job_id = ? and worker_id = ?",
+                String.class, jobId, firstWorkerId);
+
+        mockMvc.perform(get("/jobs/{jobId}/applications", jobId).with(user(principal(ownerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.id == '" + firstApplicationId + "')].answeredDateTime").value(
+                        org.hamcrest.Matchers.contains(org.hamcrest.Matchers.notNullValue())))
+                .andExpect(jsonPath("$.data[?(@.id == '" + firstApplicationId + "')].assignmentId").value(
+                        org.hamcrest.Matchers.contains(assignmentId)))
+                .andExpect(jsonPath("$.data[?(@.id == '" + secondApplicationId + "')].status").value(
+                        org.hamcrest.Matchers.contains("REJECTED")))
+                .andExpect(jsonPath("$.data[?(@.id == '" + secondApplicationId + "')].rejectionReason").value(
+                        org.hamcrest.Matchers.contains("Kontenjan doldu")))
+                .andExpect(jsonPath("$.data[?(@.id == '" + secondApplicationId + "')].assignmentId").value(
+                        org.hamcrest.Matchers.contains(nullValue())));
+    }
+
+    @Test
+    void theJobDetailCountsApplicationsAndStampsCancellation() throws Exception {
+        mockMvc.perform(get("/jobs/{jobId}", jobId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.applicationCount").value(2))
+                .andExpect(jsonPath("$.data.updatedAt").value(nullValue()))
+                .andExpect(jsonPath("$.data.cancelledAt").value(nullValue()));
+
+        mockMvc.perform(post("/jobs/{jobId}/cancel", jobId).with(user(principal(ownerId))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/jobs/{jobId}", jobId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.data.cancelledAt").isNotEmpty())
+                .andExpect(jsonPath("$.data.updatedAt").isNotEmpty());
     }
 
     @Test

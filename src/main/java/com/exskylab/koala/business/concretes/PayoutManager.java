@@ -336,6 +336,15 @@ public class PayoutManager implements PayoutService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<Payout> findForAssignments(Collection<UUID> jobAssignmentIds) {
+        if (jobAssignmentIds.isEmpty()) {
+            return List.of();
+        }
+        return payoutDao.findAllByJobAssignmentIdIn(jobAssignmentIds);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<Refund> getRefundsForPayments(Collection<UUID> paymentIds) {
         if (paymentIds.isEmpty()) {
             return List.of();

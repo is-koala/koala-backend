@@ -26,11 +26,15 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
 
     @EntityGraph(attributePaths = {
             "worker",
+            "worker.profilePicture",
             "job",
             "job.creator",
+            "job.creator.profilePicture",
             "job.company",
+            "job.company.logo",
             "job.address",
-            "job.creator.address"
+            "job.creator.address",
+            "application"
     })
     Optional<JobAssignment> findWithDetailsForPaymentById(UUID id);
 
@@ -44,11 +48,20 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
     boolean existsActiveForUser(@Param("userId") UUID userId,
                                 @Param("statuses") java.util.List<AssignmentStatus> statuses);
 
-    @EntityGraph(attributePaths = {"job", "job.category", "job.address", "job.company", "worker", "worker.profilePicture"})
+    @EntityGraph(attributePaths = {"job", "job.category", "job.address", "job.address.city", "job.address.district",
+            "job.creator", "job.creator.profilePicture", "job.company", "job.company.logo",
+            "worker", "worker.profilePicture", "application"})
     Page<JobAssignment> findAllByWorkerId(UUID workerId, Pageable pageable);
 
-    @EntityGraph(attributePaths = {"job", "job.category", "job.address", "job.company", "worker", "worker.profilePicture"})
+    @EntityGraph(attributePaths = {"job", "job.category", "job.address", "job.address.city", "job.address.district",
+            "job.creator", "job.creator.profilePicture", "job.company", "job.company.logo",
+            "worker", "worker.profilePicture", "application"})
     Page<JobAssignment> findAllByJobCreatorId(UUID creatorId, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"job", "job.category", "job.address", "job.address.city", "job.address.district",
+            "job.creator", "job.creator.profilePicture", "job.company", "job.company.logo",
+            "worker", "worker.profilePicture", "application"})
+    Page<JobAssignment> findAllByJobId(UUID jobId, Pageable pageable);
 
     @Query("""
             select assignment from JobAssignment assignment

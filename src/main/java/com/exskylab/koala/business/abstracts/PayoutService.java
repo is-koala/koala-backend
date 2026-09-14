@@ -40,6 +40,8 @@ public interface PayoutService {
 
     Optional<Payout> findForAssignment(UUID jobAssignmentId);
 
+    List<Payout> findForAssignments(Collection<UUID> jobAssignmentIds);
+
     List<Refund> getRefundsForPayments(Collection<UUID> paymentIds);
 
     record AmountCount(BigDecimal amount, long count) {

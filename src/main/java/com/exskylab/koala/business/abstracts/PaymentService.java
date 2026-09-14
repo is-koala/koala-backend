@@ -7,6 +7,8 @@ import com.exskylab.koala.entities.PaymentAttemptStatus;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.Map;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -42,6 +44,8 @@ public interface PaymentService {
     Payment getForStaff(UUID paymentId);
 
     Payment getSettledPaymentFor(UUID jobAssignmentId);
+
+    Map<UUID, Instant> securedAtForAssignments(Collection<UUID> jobAssignmentIds);
 
     boolean hasPendingAttemptForAssignment(UUID jobAssignmentId);
 

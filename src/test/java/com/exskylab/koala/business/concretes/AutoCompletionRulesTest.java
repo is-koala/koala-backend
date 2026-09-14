@@ -56,7 +56,9 @@ class AutoCompletionRulesTest {
                 new AssignmentParticipants(contacts), badgeService,
                 payoutService, properties, new com.exskylab.koala.core.properties.UnpaidExpiryProperties(), passthroughSettings(), mock(com.exskylab.koala.business.abstracts.GalleryService.class),
                 mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class), mock(org.springframework.context.ApplicationEventPublisher.class),
-                new com.exskylab.koala.core.monitoring.PaymentMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()));
+                new com.exskylab.koala.core.monitoring.PaymentMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()),
+                mock(com.exskylab.koala.dataAccess.CancellationDao.class),
+                mock(com.exskylab.koala.business.abstracts.JobService.class));
 
         when(jobAssignmentDao.save(any())).thenAnswer(i -> i.getArgument(0));
     }

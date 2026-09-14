@@ -13,6 +13,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -20,13 +21,16 @@ import java.util.UUID;
 @Repository
 public interface PayoutDao extends JpaRepository<Payout, UUID> {
 
+    List<Payout> findAllByJobAssignmentIdIn(Collection<UUID> jobAssignmentIds);
+
     Optional<Payout> findByPaymentId(UUID paymentId);
 
     @EntityGraph(attributePaths = {"bankAccount", "payment"})
     @Query("select p from Payout p where p.id = :id")
     Optional<Payout> findForStaffById(@Param("id") UUID id);
 
-    @EntityGraph(attributePaths = {"jobAssignment", "worker", "bankAccount"})
+    @EntityGraph(attributePaths = {"jobAssignment", "jobAssignment.job", "jobAssignment.job.company", "worker",
+            "bankAccount"})
     List<Payout> findAllByWorkerIdOrderByCreatedAtDesc(UUID workerId);
 
     boolean existsByJobAssignmentId(UUID jobAssignmentId);

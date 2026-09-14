@@ -92,7 +92,7 @@ public interface JobDao extends JpaRepository<Job, UUID> {
                          @Param("maxLongitude") Double maxLongitude,
                          Pageable pageable);
 
-    @EntityGraph(attributePaths = {"category", "creator", "company", "address",
+    @EntityGraph(attributePaths = {"category", "creator", "company", "company.logo", "address",
             "address.city", "address.district", "address.city.country"})
     List<Job> findAllByIdIn(List<UUID> ids);
 
@@ -103,10 +103,10 @@ public interface JobDao extends JpaRepository<Job, UUID> {
 
     long countByCreatorId(UUID creatorId);
 
-    @EntityGraph(attributePaths = {"category", "company", "address", "address.city", "address.district"})
+    @EntityGraph(attributePaths = {"category", "company", "company.logo", "address", "address.city", "address.district"})
     Page<Job> findAllByCreatorId(UUID creatorId, Pageable pageable);
 
-    @EntityGraph(attributePaths = {"category", "company", "address", "address.city", "address.district"})
+    @EntityGraph(attributePaths = {"category", "company", "company.logo", "address", "address.city", "address.district"})
     Page<Job> findAllByCompanyId(UUID companyId, Pageable pageable);
 
     @Query("""

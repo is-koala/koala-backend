@@ -71,9 +71,9 @@ class MapperCharacterizationTest {
                 userMapper);
         PricingDtoMapper pricingDtoMapper = new PricingDtoMapper();
         jobMapper = new JobMapperImpl(userMapper, jobCategoryMapper, addressMapper, companyMapper,
-                galleryMapper, pricingDtoMapper);
+                galleryMapper, pricingDtoMapper, urls);
         jobAssignmentMapper = new JobAssignmentMapperImpl(jobMapper, userMapper, companyMapper,
-                pricingDtoMapper, new MessagingAvailability(new MessagingProperties()));
+                pricingDtoMapper, new MessagingAvailability(new MessagingProperties()), new CancellationMapperImpl());
         jobApplicationMapper = new JobApplicationMapperImpl(userMapper, jobMapper, jobAssignmentMapper, urls);
     }
 
@@ -126,22 +126,33 @@ class MapperCharacterizationTest {
         JobAssignment assignment = assignment(individualJob());
 
         var dto = assertDoesNotThrow(
-                () -> jobAssignmentMapper.toJobAssignmentsAssignmentIdStatusPatchResponseDto(assignment));
+                () -> jobAssignmentMapper.toMyAssignmentDto(assignment, null, null, null));
 
         assertNotNull(dto);
-        assertNull(dto.getCompany());
-        assertNotNull(dto.getJob());
-        assertNotNull(dto.getWorker());
+        assertNull(dto.company());
+        assertNull(dto.job().getCompanyLogoUrl());
+        assertNotNull(dto.job());
+        assertNotNull(dto.worker());
+        assertNotNull(dto.employer());
+        assertNull(dto.application());
+        assertNull(dto.cancellation());
+        assertNull(dto.payout());
+        assertNull(dto.paymentSecuredAt());
     }
 
     @Test
     void aCompanyJobAssignmentCarriesTheCompany() {
         JobAssignment assignment = assignment(companyJob());
 
-        var dto = jobAssignmentMapper.toJobAssignmentsAssignmentIdStatusPatchResponseDto(assignment);
+        assignment.getJob().getCompany().setLogo(image());
 
-        assertNotNull(dto.getCompany());
-        assertEquals("Akme AS", dto.getCompany().getName());
+        var dto = jobAssignmentMapper.toMyAssignmentDto(assignment, null, null, null);
+
+        assertNotNull(dto.company());
+        assertEquals("Akme AS", dto.company().name());
+        assertEquals(assignment.getJob().getCompany().getId(), dto.company().id());
+        assertEquals(PUBLIC_URL + "/images/abc-foto.png", dto.company().logoUrl());
+        assertEquals(PUBLIC_URL + "/images/abc-foto.png", dto.job().getCompanyLogoUrl());
     }
 
     @Test
@@ -244,7 +255,7 @@ class MapperCharacterizationTest {
     @Test
     void nestedApplicationAndAssignmentSummariesAlsoDefaultToApproximateCoordinates() {
         var application = jobApplicationMapper.toMyApplicationDto(application());
-        var assignment = jobAssignmentMapper.toMyAssignmentDto(assignment(individualJob()));
+        var assignment = jobAssignmentMapper.toMyAssignmentDto(assignment(individualJob()), null, null, null);
 
         assertEquals(40.99, application.job().getLatitude());
         assertEquals(AddressPrecision.APPROXIMATE, application.job().getAddressPrecision());
