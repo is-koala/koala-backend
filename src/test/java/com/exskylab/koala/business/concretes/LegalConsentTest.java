@@ -13,6 +13,7 @@ import com.exskylab.koala.dataAccess.AccountDeletionRequestDao;
 import com.exskylab.koala.dataAccess.AgreementVersionDao;
 import com.exskylab.koala.dataAccess.ConsentRecordDao;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
+import com.exskylab.koala.dataAccess.PartyLink;
 import com.exskylab.koala.entities.*;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import org.junit.jupiter.api.BeforeEach;
@@ -141,7 +142,7 @@ class LegalConsentTest {
 
     @Test
     void deletionRequestRemainsVisibleWhileMoneyIsStillInEscrow() {
-        when(jobAssignmentService.hasMoneyInEscrowFor(any())).thenReturn(true);
+        when(jobAssignmentService.findEscrowLinksForUsers(any())).thenReturn(linkTo(user));
 
         AccountDeletionRequest request = legalManager.requestAccountDeletion(user, "istemiyorum");
 
@@ -152,7 +153,7 @@ class LegalConsentTest {
 
     @Test
     void deletionRequestRemainsVisibleWhileWorkIsStillOngoing() {
-        when(jobAssignmentService.hasActiveWorkFor(any())).thenReturn(true);
+        when(jobAssignmentService.findActiveWorkLinksForUsers(any())).thenReturn(linkTo(user));
 
         AccountDeletionRequest request = legalManager.requestAccountDeletion(user, null);
 
@@ -162,7 +163,7 @@ class LegalConsentTest {
 
     @Test
     void deletionRequestRemainsVisibleWhileADisputeIsActive() {
-        when(disputeService.hasActiveDisputeForUser(user.getId())).thenReturn(true);
+        when(disputeService.findActiveLinksForUsers(any())).thenReturn(linkTo(user));
 
         AccountDeletionRequest request = legalManager.requestAccountDeletion(user, null);
 
@@ -171,7 +172,7 @@ class LegalConsentTest {
 
     @Test
     void deletionRequestRemainsVisibleWhileAPaymentIsPending() {
-        when(paymentService.hasPendingPaymentForUser(user.getId())).thenReturn(true);
+        when(paymentService.findPendingLinksForUsers(any())).thenReturn(linkTo(user));
 
         AccountDeletionRequest request = legalManager.requestAccountDeletion(user, null);
 
@@ -205,7 +206,7 @@ class LegalConsentTest {
 
     @Test
     void aQueuedButBlockedErasureRequestStillDropsTheAuditDetail() {
-        when(jobAssignmentService.hasMoneyInEscrowFor(user.getId())).thenReturn(true);
+        when(jobAssignmentService.findEscrowLinksForUsers(any())).thenReturn(linkTo(user));
 
         AccountDeletionRequest request = legalManager.requestAccountDeletion(user, "kvkk");
 
@@ -232,7 +233,7 @@ class LegalConsentTest {
     void aStillBlockedRequestStaysQueuedWithAVisibleReason() {
         AccountDeletionRequest request = deletionRequest();
         when(deletionDao.findByIdForUpdate(request.getId())).thenReturn(Optional.of(request));
-        when(disputeService.hasActiveDisputeForUser(user.getId())).thenReturn(true);
+        when(disputeService.findActiveLinksForUsers(any())).thenReturn(linkTo(user));
 
         assertFalse(legalManager.processDeletionRequest(request.getId()));
         assertEquals(AccountDeletionStatus.REQUESTED, request.getStatus());
@@ -264,5 +265,24 @@ class LegalConsentTest {
         request.setReason("kullanıcı gerekçesi");
         request.setRequestedAt(Instant.now().minusSeconds(86400));
         return request;
+    }
+
+    private static List<PartyLink> linkTo(User party) {
+        return List.of(new PartyLink() {
+            @Override
+            public UUID getId() {
+                return UUID.randomUUID();
+            }
+
+            @Override
+            public UUID getWorkerId() {
+                return party.getId();
+            }
+
+            @Override
+            public UUID getEmployerId() {
+                return UUID.randomUUID();
+            }
+        });
     }
 }

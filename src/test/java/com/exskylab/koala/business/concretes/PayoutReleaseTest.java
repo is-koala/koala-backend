@@ -164,7 +164,19 @@ class PayoutReleaseTest {
 
         assertEquals(PayoutStatus.PENDING, payout.getStatus());
         assertEquals(new BigDecimal("1000.00"), payout.getAmount());
+        assertEquals(PayoutReleaseOrigin.STAFF, payout.getReleaseOrigin());
         assertEquals(PaymentStatus.RELEASED_TO_WORKER, assignment.getPaymentStatus());
+    }
+
+    @Test
+    void everyReleaseOriginIsWrittenOnThePayoutItCreates() {
+        for (PayoutReleaseOrigin origin : PayoutReleaseOrigin.values()) {
+            assignment(AssignmentStatus.COMPLETED, PaymentStatus.HELD_IN_ESCROW);
+            settledPaymentExists();
+
+            assertEquals(origin, payoutManager.releaseToWorker(assignmentId, origin).getReleaseOrigin(),
+                    "hakedişin kaynağı çağıranın söylediği değer olmalı");
+        }
     }
 
     @Test

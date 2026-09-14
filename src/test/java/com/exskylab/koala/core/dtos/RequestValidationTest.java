@@ -19,6 +19,7 @@ import com.exskylab.koala.core.dtos.report.request.CreateReportDto;
 import com.exskylab.koala.core.dtos.report.request.ReviewReportDto;
 import com.exskylab.koala.core.dtos.timesheet.request.CheckPointDto;
 import com.exskylab.koala.entities.*;
+import com.exskylab.koala.core.dtos.job.request.CancelJobDto;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -57,6 +58,20 @@ class RequestValidationTest {
 
     private boolean isValid(Object dto) {
         return validator.validate(dto).isEmpty();
+    }
+
+    @Test
+    void aJobCancellationReasonIsOptionalButCappedAtFiveHundredCharacters() {
+        CancelJobDto empty = new CancelJobDto();
+        assertTrue(isValid(empty), "Gerekçe isteğe bağlı olmalı: " + messagesFor(empty));
+
+        CancelJobDto atTheCap = new CancelJobDto();
+        atTheCap.setReason("x".repeat(500));
+        assertTrue(isValid(atTheCap));
+
+        CancelJobDto tooLong = new CancelJobDto();
+        tooLong.setReason("x".repeat(501));
+        assertTrue(messagesFor(tooLong).contains("{job.cancel.reason.too.long}"));
     }
 
     @Test

@@ -1,6 +1,12 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.core.security.UserPrincipal;
+import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
+import org.springframework.http.MediaType;
+import jakarta.persistence.EntityManagerFactory;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -10,9 +16,14 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import java.util.Set;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.nullValue;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -31,6 +42,9 @@ class AdminListSearchIT extends AbstractStaffIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private EntityManagerFactory entityManagerFactory;
 
     private final UUID employerId = UUID.randomUUID();
     private final UUID workerId = UUID.randomUUID();
@@ -114,8 +128,8 @@ class AdminListSearchIT extends AbstractStaffIntegrationTest {
     @AfterEach
     void cleanUp() {
         jdbc.update("delete from admin_audit_entries");
-        jdbc.update("delete from staff_members where email like 'list-search-%@iskoala.com'");
         jdbc.update("delete from account_deletion_requests where id in (?, ?)", matchingDeletionId, otherDeletionId);
+        jdbc.update("delete from staff_members where email like 'list-search-%@iskoala.com'");
         jdbc.update("delete from user_verifications where id in (?, ?)", matchingReviewId, otherReviewId);
         jdbc.update("delete from reports where id in (?, ?)", matchingReportId, otherReportId);
         jdbc.update("delete from disputes where id in (?, ?)", matchingDisputeId, otherDisputeId);
@@ -350,6 +364,101 @@ class AdminListSearchIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
+    void aDeletionRequestShowsItsBlockersAndThenTheStaffMemberWhoRejectedIt() throws Exception {
+        UUID pendingPaymentId = UUID.randomUUID();
+        jdbc.update("""
+                insert into payments (id, created_at, is_deleted, job_assignment_id, conversation_id, status,
+                                      currency, verification_attempts)
+                values (?, now(), false, ?, ?, 'INITIATED', 'TRY', 0)
+                """, pendingPaymentId, matchingAssignmentId, "pending-" + pendingPaymentId);
+        UUID trustStaffId = jdbc.queryForObject(
+                "select id from staff_members where email like 'list-search-%@iskoala.com' and display_name = 'Güven'",
+                UUID.class);
+        var worker = user(new UserPrincipal(workerId, workerEmail, Set.of(Role.ROLE_USER), null));
+        try {
+            filtered("/admin/account-deletions/" + matchingDeletionId, trustToken)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.status").value("REQUESTED"))
+                    .andExpect(jsonPath("$.data.rejectionReason").value(nullValue()))
+                    .andExpect(jsonPath("$.data.rejectedByStaffId").value(nullValue()))
+                    .andExpect(jsonPath("$.data.blockers", hasSize(2)))
+                    .andExpect(jsonPath("$.data.blockers[?(@.type == 'PENDING_PAYMENT')].id")
+                            .value(pendingPaymentId.toString()))
+                    .andExpect(jsonPath("$.data.blockers[?(@.type == 'DISPUTE')].id")
+                            .value(matchingDisputeId.toString()));
+            filtered("/admin/account-deletions", trustToken, "status", "REQUESTED")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content[?(@.id == '" + matchingDeletionId + "')].blockers[*].type",
+                            hasItem("DISPUTE")));
+
+            mockMvc.perform(post("/admin/account-deletions/" + matchingDeletionId + "/reject")
+                            .header("Authorization", "Bearer " + trustToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"reason\":\"Açık uyuşmazlık kapanmadan silinemez\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.status").value("REJECTED"))
+                    .andExpect(jsonPath("$.data.rejectionReason").value("Açık uyuşmazlık kapanmadan silinemez"))
+                    .andExpect(jsonPath("$.data.rejectedByStaffId").value(trustStaffId.toString()))
+                    .andExpect(jsonPath("$.data.blockers", hasSize(0)));
+            filtered("/admin/account-deletions/" + matchingDeletionId, trustToken)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.rejectionReason").value("Açık uyuşmazlık kapanmadan silinemez"))
+                    .andExpect(jsonPath("$.data.rejectedByStaffId").value(trustStaffId.toString()));
+            assertEquals(trustStaffId, jdbc.queryForObject(
+                    "select rejected_by_staff_id from account_deletion_requests where id = ?", UUID.class,
+                    matchingDeletionId));
+
+            mockMvc.perform(get("/legal/account-deletion").with(worker))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.status").value("REJECTED"))
+                    .andExpect(jsonPath("$.data.blockedReason").value("Açık uyuşmazlık kapanmadan silinemez"))
+                    .andExpect(jsonPath("$.data.rejectionReason").value("Açık uyuşmazlık kapanmadan silinemez"))
+                    .andExpect(jsonPath("$.data.rejectedByStaffId").value(nullValue()))
+                    .andExpect(jsonPath("$.data.blockers").value(nullValue()));
+        } finally {
+            jdbc.update("delete from payments where id = ?", pendingPaymentId);
+        }
+    }
+
+    @Test
+    void theDeletionQueueResolvesBlockersWithoutAQueryPerRow() throws Exception {
+        UUID secondDeletionId = UUID.randomUUID();
+        jdbc.update("""
+                insert into account_deletion_requests
+                    (id, user_id, subject_id, status, reason, requested_at, created_at, is_deleted)
+                values (?, ?, ?, 'REQUESTED', 'n+1 testi', now() - interval '1 minute', now(), false)
+                """, secondDeletionId, employerId, employerId);
+        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        boolean wasEnabled = statistics.isStatisticsEnabled();
+        statistics.setStatisticsEnabled(true);
+        try {
+            statistics.clear();
+            filtered("/admin/account-deletions", trustToken, "status", "REQUESTED", "size", "1",
+                    "sort", "requestedAt,desc")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content", hasSize(1)))
+                    .andExpect(jsonPath("$.data.content[0].id").value(matchingDeletionId.toString()))
+                    .andExpect(jsonPath("$.data.content[0].blockers[*].type", hasItem("DISPUTE")));
+            long statementsForOneRow = statistics.getPrepareStatementCount();
+
+            statistics.clear();
+            filtered("/admin/account-deletions", trustToken, "status", "REQUESTED", "size", "2",
+                    "sort", "requestedAt,desc")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content", hasSize(2)))
+                    .andExpect(jsonPath("$.data.content[1].id").value(secondDeletionId.toString()))
+                    .andExpect(jsonPath("$.data.content[1].blockers[*].type", hasItem("DISPUTE")));
+            long statementsForTwoRows = statistics.getPrepareStatementCount();
+
+            assertEquals(statementsForOneRow, statementsForTwoRows,
+                    "silme kuyruğu engelleyicileri satır sayısıyla büyüyen sorgu atıyor (N+1)");
+        } finally {
+            statistics.setStatisticsEnabled(wasEnabled);
+            jdbc.update("delete from account_deletion_requests where id = ?", secondDeletionId);
+        }
+    }
+
+    @Test
     void anIdFilterIsAnAuditedSearch() throws Exception {
         filtered("/admin/job-assignments", financeToken, "workerId", workerId.toString()).andExpect(status().isOk());
 
@@ -391,11 +500,14 @@ class AdminListSearchIT extends AbstractStaffIntegrationTest {
     }
 
     private ResultActions filtered(String path, String token, String... params) throws Exception {
-        var request = get(path)
-                .param("size", "100")
-                .header("Authorization", "Bearer " + token);
+        var request = get(path).header("Authorization", "Bearer " + token);
+        boolean sized = false;
         for (int i = 0; i + 1 < params.length; i += 2) {
             request.param(params[i], params[i + 1]);
+            sized |= "size".equals(params[i]);
+        }
+        if (!sized) {
+            request.param("size", "100");
         }
         return mockMvc.perform(request);
     }

@@ -13,6 +13,9 @@ import com.exskylab.koala.entities.NotificationChannel;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.entities.User;
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
+import jakarta.persistence.EntityManagerFactory;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +27,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -60,6 +64,9 @@ class CompanyApprovalIT extends AbstractStaffIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private EntityManagerFactory entityManagerFactory;
 
     private User operator;
     private User founder;
@@ -237,6 +244,50 @@ class CompanyApprovalIT extends AbstractStaffIntegrationTest {
                     .andExpect(jsonPath("$.data.jobCount").value(1));
         } finally {
             jdbcTemplate.update("delete from jobs where id = ?", jobId);
+        }
+    }
+
+    @Test
+    void theQueueResolvesContactsAndJobCountsWithoutAQueryPerRow() throws Exception {
+        Company first = pendingCompany("Sayım Bir AŞ", "6200000015");
+        Company second = pendingCompany("Sayım İki AŞ", "6200000016");
+        List<UUID> jobIds = new ArrayList<>();
+        for (Company company : List.of(first, second)) {
+            UUID jobId = UUID.randomUUID();
+            jobIds.add(jobId);
+            jdbcTemplate.update("""
+                    insert into jobs (id, created_at, is_deleted, creator_id, company_id, title, status, employer_type,
+                                      insurance_required, address_public, experience_required, min_age, max_age)
+                    values (?, now(), false, ?, ?, 'Sayım', 'OPEN', 'COMPANY', false, true, false, 18, 65)
+                    """, jobId, founder.getId(), company.getId());
+        }
+        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        boolean wasEnabled = statistics.isStatisticsEnabled();
+        statistics.setStatisticsEnabled(true);
+        try {
+            statistics.clear();
+            asOperator(get("/admin/companies").param("query", "sayım").param("size", "1"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content", hasSize(1)))
+                    .andExpect(jsonPath("$.data.content[0].companyContacts", hasSize(1)))
+                    .andExpect(jsonPath("$.data.content[0].jobCount").value(1));
+            long statementsForOneRow = statistics.getPrepareStatementCount();
+
+            statistics.clear();
+            asOperator(get("/admin/companies").param("query", "sayım").param("size", "2"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content", hasSize(2)))
+                    .andExpect(jsonPath("$.data.content[1].companyContacts", hasSize(1)))
+                    .andExpect(jsonPath("$.data.content[1].jobCount").value(1));
+            long statementsForTwoRows = statistics.getPrepareStatementCount();
+
+            assertEquals(statementsForOneRow, statementsForTwoRows,
+                    "şirket kuyruğu yetkilileri ya da ilan sayılarını satır başına sorguyla çekiyor (N+1)");
+        } finally {
+            statistics.setStatisticsEnabled(wasEnabled);
+            for (UUID jobId : jobIds) {
+                jdbcTemplate.update("delete from jobs where id = ?", jobId);
+            }
         }
     }
 

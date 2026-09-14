@@ -119,6 +119,8 @@ class IbanOwnershipGateIT extends AbstractIntegrationTest {
 
         assertNotNull(payout.getId());
         assertEquals("RELEASED_TO_WORKER", paymentStatusOfTheAssignment());
+        assertEquals("STAFF", jdbcTemplate.queryForObject(
+                "select release_origin from payouts where id = ?", String.class, payout.getId()));
     }
 
     @Test

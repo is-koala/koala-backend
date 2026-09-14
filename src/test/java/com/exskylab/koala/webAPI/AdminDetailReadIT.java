@@ -1,6 +1,9 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.core.security.UserPrincipal;
+import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
+import org.springframework.http.MediaType;
 import jakarta.persistence.EntityManagerFactory;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
@@ -14,6 +17,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -23,7 +27,9 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -659,10 +665,9 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
         UUID reconciler = createStaffMember("detail-read-reconciler-" + UUID.randomUUID() + "@iskoala.com",
                 "Mutabakatçı", "FINANCE_OFFICER");
         String settledAt = java.time.Instant.now().toString();
-        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-                        .post("/admin/payouts/" + payoutId + "/reconcile")
+        mockMvc.perform(post("/admin/payouts/" + payoutId + "/reconcile")
                         .header("Authorization", "Bearer " + staffAccessToken(reconciler))
-                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"settlementReference": "TRF-283-%s", "providerReference": "iyz-transaction-4711",
                                  "amount": 1000.00, "currency": "TRY", "settledAt": "%s"}
@@ -674,6 +679,8 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
                 .andExpect(jsonPath("$.data.status").value("COMPLETED"))
                 .andExpect(jsonPath("$.data.settledAt").isNotEmpty())
                 .andExpect(jsonPath("$.data.reconciledByStaffId").value(reconciler.toString()));
+        assertEquals(reconciler, jdbcTemplate.queryForObject(
+                "select reconciled_by_staff_id from payouts where id = ?", UUID.class, payoutId));
     }
 
     @Test
@@ -688,14 +695,53 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
                 .andExpect(jsonPath("$.data.cancelledAt").value(nullValue()))
                 .andExpect(jsonPath("$.data.cancelReason").value(nullValue()));
 
-        jdbcTemplate.update("update jobs set status = 'CANCELLED', cancelled_at = now(), "
-                + "cancel_reason = 'Etkinlik ertelendi' where id = ?", otherJobId);
+        var employer = user(new UserPrincipal(employerId, employerEmail, Set.of(Role.ROLE_USER), null));
 
+        mockMvc.perform(post("/jobs/" + otherJobId + "/cancel").with(employer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"" + "x".repeat(501) + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details[0].field").value("reason"))
+                .andExpect(jsonPath("$.details[0].message").value("İptal gerekçesi en fazla 500 karakter olabilir."));
+        read("/admin/jobs/" + otherJobId, token)
+                .andExpect(jsonPath("$.data.status").value("OPEN"))
+                .andExpect(jsonPath("$.data.cancelledAt").value(nullValue()));
+
+        mockMvc.perform(post("/jobs/" + otherJobId + "/cancel").with(employer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"  Etkinlik ertelendi  \"}"))
+                .andExpect(status().isOk());
         read("/admin/jobs/" + otherJobId, token)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("CANCELLED"))
                 .andExpect(jsonPath("$.data.cancelledAt").isNotEmpty())
                 .andExpect(jsonPath("$.data.cancelReason").value("Etkinlik ertelendi"));
+
+        mockMvc.perform(post("/jobs/" + companyJobId + "/cancel").with(employer))
+                .andExpect(status().isOk());
+        read("/admin/jobs/" + companyJobId, token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.data.cancelledAt").isNotEmpty())
+                .andExpect(jsonPath("$.data.cancelReason").value(nullValue()));
+
+        UUID blankReasonJobId = UUID.randomUUID();
+        jdbcTemplate.update("""
+                insert into jobs (id, created_at, is_deleted, creator_id, title, status, employer_type,
+                                  insurance_required, address_public, experience_required, min_age, max_age)
+                values (?, now(), false, ?, 'Boş gerekçe', 'OPEN', 'INDIVIDUAL', false, false, false, 18, 65)
+                """, blankReasonJobId, employerId);
+        try {
+            mockMvc.perform(post("/jobs/" + blankReasonJobId + "/cancel").with(employer)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"reason\":\"   \"}"))
+                    .andExpect(status().isOk());
+            read("/admin/jobs/" + blankReasonJobId, token)
+                    .andExpect(jsonPath("$.data.cancelledAt").isNotEmpty())
+                    .andExpect(jsonPath("$.data.cancelReason").value(nullValue()));
+        } finally {
+            jdbcTemplate.update("delete from jobs where id = ?", blankReasonJobId);
+        }
     }
 
     @Test
@@ -741,6 +787,25 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
                 String.class, employerId.toString(), workerId.toString());
         assertEquals(List.of("user.read", "user.read_pii"), permissions,
                 "PII dönen okuma user.read_pii izniyle, dönmeyen user.read ile denetlenmeli");
+    }
+
+    @Test
+    void theDisputeCounterAndTheDisputeFilterAgreeOnWhoIsInvolved() throws Exception {
+        UUID openedByStranger = UUID.randomUUID();
+        jdbcTemplate.update("insert into disputes (id, created_at, is_deleted, job_assignment_id, opened_by_id, "
+                        + "status, reason) values (?, now(), false, ?, ?, 'OPEN', ?)",
+                openedByStranger, cancelledAssignmentId, strangerId, "Üçüncü kişi açtı");
+        try {
+            read("/admin/users/" + strangerId, tokenFor("SUPPORT_AGENT"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.counts.disputes").value(1));
+            read("/admin/disputes?userId=" + strangerId + "&size=100", tokenFor("DISPUTE_HANDLER"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.totalElements").value(1))
+                    .andExpect(jsonPath("$.data.content[0].id").value(openedByStranger.toString()));
+        } finally {
+            jdbcTemplate.update("delete from disputes where id = ?", openedByStranger);
+        }
     }
 
     @Test
