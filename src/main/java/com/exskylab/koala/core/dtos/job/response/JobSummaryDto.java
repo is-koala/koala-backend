@@ -67,4 +67,10 @@ public class JobSummaryDto {
 
     @Schema(description = "Harita koordinatının yaklaşık mı kesin mi olduğunu belirtir.")
     private AddressPrecision addressPrecision;
+
+    @Schema(types = {"number", "null"}, format = "double",
+            description = "Aramada lat/lng verildiğinde arayan ile ilanın herkese açık (yaklaşık) konumu arasındaki "
+                    + "büyük daire mesafesi, km, 1 ondalık. lat/lng verilmediğinde ya da ilanın koordinatı yoksa null.",
+            example = "3.4")
+    private Double distanceKm;
 }

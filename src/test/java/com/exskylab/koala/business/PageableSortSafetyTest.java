@@ -34,7 +34,8 @@ class PageableSortSafetyTest {
             new Exemption("CompanyManager", "getFollowedCompanies",
                     "saf devretme; sayfalama CompanyFollowManager icinde dogrulaniyor"),
             new Exemption("JobManager", "search",
-                    "saf devretme; sayfalama ortak listJobs yardimcisinda dogrulaniyor"),
+                    "saf devretme; sayfalama ortak listJobs yardimcisinda dogrulaniyor, "
+                            + "allowlist yalniz lat/lng verildiginde distance alanini icerir (#270)"),
             new Exemption("JobManager", "getJobsOfCurrentUser",
                     "saf devretme; sayfalama ortak listJobs yardimcisinda dogrulaniyor"),
             new Exemption("JobManager", "getJobsOfCompany",

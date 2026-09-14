@@ -6,6 +6,7 @@ import com.exskylab.koala.core.properties.JobSearchProperties;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
 
 @Component
@@ -28,5 +29,9 @@ public class JobAvailability {
 
     public LocalDateTime currentTime() {
         return LocalDateTime.now(clock.withZone(properties.zone()));
+    }
+
+    public LocalDateTime wallClock(Instant instant) {
+        return instant == null ? null : LocalDateTime.ofInstant(instant, properties.zone());
     }
 }

@@ -21,10 +21,31 @@ import java.util.UUID;
 @Repository
 public interface JobDao extends JpaRepository<Job, UUID> {
 
-    @Query("""
-            select j.id from Job j
+    String PUBLIC_LATITUDE = """
+            case when j.employerType = com.exskylab.koala.entities.JobEmployerType.COMPANY and j.addressPublic = true
+                 then j.address.latitude else round(j.address.latitude, 2) end""";
+
+    String PUBLIC_LONGITUDE = """
+            case when j.employerType = com.exskylab.koala.entities.JobEmployerType.COMPANY and j.addressPublic = true
+                 then j.address.longitude else round(j.address.longitude, 2) end""";
+
+    String DISTANCE_KM = "case when :located = true and j.address.latitude is not null and j.address.longitude is not null "
+            + "then 6371.0 * acos(least(1.0, greatest(-1.0, "
+            + "sin(radians(:latitude)) * sin(radians(" + PUBLIC_LATITUDE + ")) "
+            + "+ cos(radians(:latitude)) * cos(radians(" + PUBLIC_LATITUDE + ")) "
+            + "* cos(radians(" + PUBLIC_LONGITUDE + ") - radians(:longitude))))) else null end";
+
+    interface JobSearchHit {
+        UUID getId();
+
+        Double getDistance();
+    }
+
+    @Query("select j.id as id, " + DISTANCE_KM + " as distance from Job j " + """
             where j.status = :status
               and (j.endDateTime is null or j.endDateTime > :activeAfter)
+              and (:startFiltered = false
+                   or (j.startDateTime >= :startFrom and j.startDateTime <= :startTo))
               and (cast(:query as string) is null
                    or lower(j.title) like lower(concat('%', cast(:query as string), '%'))
                    or lower(j.description) like lower(concat('%', cast(:query as string), '%'))
@@ -45,8 +66,14 @@ public interface JobDao extends JpaRepository<Job, UUID> {
               and (:minLongitude is null or j.address.longitude >= :minLongitude)
               and (:maxLongitude is null or j.address.longitude <= :maxLongitude)
             """)
-    Page<UUID> searchIds(@Param("status") JobStatus status,
+    Page<JobSearchHit> searchIds(@Param("status") JobStatus status,
                          @Param("activeAfter") java.time.LocalDateTime activeAfter,
+                         @Param("startFiltered") boolean startFiltered,
+                         @Param("startFrom") java.time.LocalDateTime startFrom,
+                         @Param("startTo") java.time.LocalDateTime startTo,
+                         @Param("located") boolean located,
+                         @Param("latitude") double latitude,
+                         @Param("longitude") double longitude,
                          @Param("query") String query,
                          @Param("companyId") UUID companyId,
                          @Param("categoryId") UUID categoryId,

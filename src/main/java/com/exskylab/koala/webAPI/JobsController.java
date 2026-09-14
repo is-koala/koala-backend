@@ -67,15 +67,15 @@ public class JobsController {
 
     @SecurityRequirements
     @Operation(summary = "İlan ara",
-            description = "Metin, şirket kimliği, kategori, il, ilçe, tür, ücret aralığı, sigorta ve deneyim şartı ile süzer. Harita için minLatitude, maxLatitude, minLongitude ve maxLongitude ile sınırlayıcı kutu verilebilir. Yalnızca OPEN durumundaki ilanlar döner. Kart alanı coverImageUrl galerinin kapak görselinden gelir. updatedAt, ilanın veri tabanındaki son değişiklik anıdır ve sitemap lastModified için yetkili kaynaktır.")
+            description = "Metin, şirket kimliği, kategori, il, ilçe, tür, ücret aralığı, sigorta ve deneyim şartı ile süzer. Harita için minLatitude, maxLatitude, minLongitude ve maxLongitude ile sınırlayıcı kutu verilebilir. startFrom/startTo ilanın startDateTime duvar saatini kapsayıcı aralıkla süzer; dilimli ISO-8601 an alır ve job-search.zone-id (Europe/Istanbul) duvar saatine çevirir, ters aralık 400 döner. lat/lng (en fazla 6 ondalık, birlikte) verildiğinde her kartta distanceKm dolar ve sort=distance,asc ile en yakından uzağa sıralanır (distance,desc de kabul edilir; koordinatsız ilanlar iki yönde de en sonda gelir); mesafe ilanın herkese açık (yaklaşık) konumundan küresel kosinüs yasasıyla hesaplanır, tam adresten değil. lat/lng olmadan sort=distance 400 PAGE_SORT_FIELD_NOT_ALLOWED döner. Diğer sıralama alanları createdAt, salary, startDateTime, title. Yalnızca OPEN durumundaki ilanlar döner. Kart alanı coverImageUrl galerinin kapak görselinden gelir. updatedAt, ilanın veri tabanındaki son değişiklik anıdır ve sitemap lastModified için yetkili kaynaktır.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "İlanlar listelendi"),
-            @ApiResponse(responseCode = "400", description = "Sıralama alanı desteklenmiyor",
+            @ApiResponse(responseCode = "400", description = "Sıralama alanı desteklenmiyor, tarih aralığı ters, lat/lng eksik ya da biçimsiz",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @GetMapping
     public ResponseEntity<SuccessDataResult<PageDto<JobSummaryDto>>> searchJobs(
-            @ParameterObject JobSearchCriteriaDto criteria,
+            @Valid @ParameterObject JobSearchCriteriaDto criteria,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable,
             @AuthenticationPrincipal UserPrincipal viewer) {
 

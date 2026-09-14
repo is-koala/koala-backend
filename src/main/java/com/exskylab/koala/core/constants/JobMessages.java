@@ -15,6 +15,8 @@ public class JobMessages {
     public static final String SALARY_MIN_VALUE = "{job.salary.min.value}";
     public static final String START_DATE_TIME_NOT_NULL = "{job.start.date.time.not.null}";
     public static final String END_DATE_TIME_NOT_NULL = "{job.end.date.time.not.null}";
+    public static final String SEARCH_START_RANGE_INVALID = "{job.search.start.range.invalid}";
+    public static final String SEARCH_LOCATION_INCOMPLETE = "{job.search.location.incomplete}";
     public static final String MINIMUM_AGE_VALUE = "{job.minimum.age.value}";
     public static final String EXPERIENCE_REQUIRED_NOT_NULL = "{job.experience.required.not.null}";
     public static final String USER_IS_NOT_EMPLOYER = "{job.user.is.not.employer}";
