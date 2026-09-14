@@ -559,20 +559,23 @@ public class JobAssignmentManager implements JobAssignmentService {
                     "not the employer of the assignment");
         }
 
+        if (assignment.getStatus() != AssignmentStatus.CONFIRMED
+                && assignment.getStatus() != AssignmentStatus.IN_PROGRESS) {
+            throw new ConflictException(JobAssignmentMessages.NOT_COMPLETABLE);
+        }
+
         if (assignment.getPaymentStatus() != PaymentStatus.HELD_IN_ESCROW) {
             log.warn("Completion refused on assignment {}: money is not in escrow, payment status is {}",
                     assignmentId, assignment.getPaymentStatus());
             throw new ConflictException(JobAssignmentMessages.PAYMENT_NOT_SECURED);
         }
 
-        if (assignment.getStatus() != AssignmentStatus.CONFIRMED
-                && assignment.getStatus() != AssignmentStatus.IN_PROGRESS) {
-            throw new ConflictException(JobAssignmentMessages.NOT_COMPLETABLE);
-        }
-
         JobAssignment saved = markCompleted(assignment);
+        boolean released = payoutService.releaseToWorkerUnlessDisputed(assignmentId,
+                PayoutReleaseOrigin.EMPLOYER_COMPLETION);
 
-        log.info("Assignment {} marked completed by employer {}", assignmentId, actorId);
+        log.info("Assignment {} marked completed by employer {}, escrow released: {}",
+                assignmentId, actorId, released);
         activityNotificationService.assignmentCompleted(assignment);
         return toMyAssignmentDto(saved, actorId, false);
     }

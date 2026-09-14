@@ -180,6 +180,36 @@ class PayoutReleaseTest {
     }
 
     @Test
+    void theDisputeGatedReleaseSkipsQuietlyWhileADisputeIsOpen() {
+        JobAssignment assignment = assignment(AssignmentStatus.COMPLETED, PaymentStatus.HELD_IN_ESCROW);
+        settledPaymentExists();
+        when(disputeDao.existsByJobAssignmentIdAndStatusIn(assignmentId, DisputeManager.ACTIVE))
+                .thenReturn(true);
+
+        assertFalse(payoutManager.releaseToWorkerUnlessDisputed(assignmentId,
+                PayoutReleaseOrigin.EMPLOYER_COMPLETION));
+
+        assertEquals(PaymentStatus.HELD_IN_ESCROW, assignment.getPaymentStatus());
+        verify(payoutDao, never()).save(any());
+        verify(settlementService, never()).enqueue(any(), any(), any());
+    }
+
+    @Test
+    void theDisputeGatedReleaseReleasesWithTheCallersOriginWhenNoDisputeIsOpen() {
+        JobAssignment assignment = assignment(AssignmentStatus.COMPLETED, PaymentStatus.HELD_IN_ESCROW);
+        settledPaymentExists();
+
+        assertTrue(payoutManager.releaseToWorkerUnlessDisputed(assignmentId,
+                PayoutReleaseOrigin.EMPLOYER_COMPLETION));
+
+        ArgumentCaptor<Payout> saved = ArgumentCaptor.forClass(Payout.class);
+        verify(payoutDao).save(saved.capture());
+        assertEquals(PayoutReleaseOrigin.EMPLOYER_COMPLETION, saved.getValue().getReleaseOrigin());
+        assertEquals(PayoutStatus.PENDING, saved.getValue().getStatus());
+        assertEquals(PaymentStatus.RELEASED_TO_WORKER, assignment.getPaymentStatus());
+    }
+
+    @Test
     void moneyIsNotReleasedBeforeTheWorkIsCompleted() {
         JobAssignment assignment = assignment(AssignmentStatus.CONFIRMED, PaymentStatus.HELD_IN_ESCROW);
         settledPaymentExists();

@@ -157,6 +157,17 @@ public class PayoutManager implements PayoutService {
 
     @Override
     @Transactional
+    public boolean releaseToWorkerUnlessDisputed(UUID jobAssignmentId, PayoutReleaseOrigin origin) {
+        if (disputeDao.existsByJobAssignmentIdAndStatusIn(jobAssignmentId, DisputeManager.ACTIVE)) {
+            log.info("Assignment {} has an open dispute, escrow stays held until it is resolved.", jobAssignmentId);
+            return false;
+        }
+        releaseToWorker(jobAssignmentId, origin);
+        return true;
+    }
+
+    @Override
+    @Transactional
     public Refund refundEmployer(UUID jobAssignmentId, BigDecimal amount, String reason) {
         JobAssignment assignment = jobAssignmentDao.findByIdForUpdate(jobAssignmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(PayoutMessages.ASSIGNMENT_NOT_FOUND));

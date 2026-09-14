@@ -2028,10 +2028,12 @@ anahtar); değilse atamanın **`RESOLVED` + `REFUND_EMPLOYER`** uyuşmazlığı 
 {id}/refund`). Sayfa başına üç ek sorgu (iadeler, iptaller, uyuşmazlıklar) ve hakediş; `thePaymentListIsBuiltWithoutAQueryPerAttempt`
 deneme sayısıyla büyümediğini ölçüyor. `payoutId` atamanın hakedişi bu ödemeye bağlıysa dolar, diğer denemelerde `null`.
 
-**Hakediş kaynağı ise sütun: `payouts.release_origin` (`PayoutReleaseOrigin`: `AUTO_COMPLETION|DISPUTE|STAFF`).**
+**Hakediş kaynağı ise sütun: `payouts.release_origin` (`PayoutReleaseOrigin`: `AUTO_COMPLETION|EMPLOYER_COMPLETION|DISPUTE|STAFF`).**
 Türetilemezdi — zamanlayıcının ve personelin çıkışı aynı izi bırakır. `PayoutService.releaseToWorker(id, origin)`
-üç çağıranından açıkça alır: `JobAssignmentManager.autoCompleteAssignment` → `AUTO_COMPLETION`, `DisputeManager`
-→ `DISPUTE`, `PayoutsController` → `STAFF` (`StaffPayoutService.releaseToWorker(actor, id, reason, origin)`).
+dört çağıranından açıkça alır: `JobAssignmentManager.autoCompleteAssignment` → `AUTO_COMPLETION`, `completeAssignment`
+(işveren yolu, `releaseToWorkerUnlessDisputed` üzerinden, #289) → `EMPLOYER_COMPLETION`, `DisputeManager`
+→ `DISPUTE`, `PayoutsController` → `STAFF` (`StaffPayoutService.releaseToWorker(actor, id, reason, origin)`). Sütun
+`VARCHAR(32)`, CHECK kısıtı yok; yeni değer için changelog gerekmedi.
 Mevcut satırlar için changelog `RESOLVED`+`RELEASE_TO_WORKER` uyuşmazlığı olan hakedişleri `DISPUTE` yazar,
 kalanlar **`null` kalır** — geçmişte personel mi zamanlayıcı mı çıkardı bilinmiyor, uydurulmadı. `reconciledByStaffId`
 yeni `reconciled_by_staff_id` sütunu, `PayoutService.confirmSettlement(id, evidence, reconciledByStaffId)` ile
@@ -2101,6 +2103,8 @@ yok ve açılmadı; kullanıcı detayındaki `payments` sayacı `/admin/job-assi
 **Hiçbir kod atamayı `COMPLETED` yapmıyordu.** `AssignmentStatus.COMPLETED` yalnızca *okunuyordu*: değerlendirme bırakmanın şartı, `PaymentStateMachine.canRelease`'in şartı ve şimdi rozetin şartı. Yani hiçbir iş bitirilemiyor, hiçbir değerlendirme yazılamıyor ve **emanetteki para hiçbir zaman işçiye çıkamıyordu**. Domain kapalı bir halkaydı.
 
 `POST /job-assignments/{id}/complete` bunu açıyor: **ilan sahibi** (ya da şirket yetkilisi) işi tamamlanmış işaretler, `actualCompletionDateTime` damgalanır ve işçinin rozetleri yeniden değerlendirilir. Yalnızca `CONFIRMED`/`IN_PROGRESS` durumundan geçilebilir.
+
+**İşveren tamamlaması da emaneti çıkarır (#289).** `completeAssignment`, `markCompleted`'ın hemen ardından aynı transaction içinde `payoutService.releaseToWorkerUnlessDisputed(id, EMPLOYER_COMPLETION)` çağırır (`payouts.release_origin` bu değeri taşır, §2s7) — otomatik tamamlamayla aynı sıra ve kilit (`findByIdForUpdate`). Canlıda bu çağrı yoktu: işveren onaylayınca atama `COMPLETED` oluyor ama para `HELD_IN_ESCROW`'da kalıyor, `payouts`/`settlement_tasks` satırı hiç açılmıyordu; otomatik tamamlama da yalnız `CONFIRMED`/`IN_PROGRESS` taradığı için o atamayı bir daha almıyordu. Açık uyuşmazlık varken tamamlama **yine olur**, yalnız çıkış atlanır ve emanet uyuşmazlık kararına kalır; bu dal `BLOCKS_RELEASE` fırlatıp tamamlamayı geri almaz. Uyuşmazlık kontrolü `JobAssignmentManager`'da değil (§2ae döngüsü), `PayoutManager`'daki "varsa atla" varyantındadır. Yanıt `paymentStatus=RELEASED_TO_WORKER` ve `payout{status=PENDING}` taşır; işçiye `assignmentCompleted` ve `payoutReleased` bildirimleri birlikte gider. İkinci tamamlama 409 `NOT_COMPLETABLE` — bunun için durum kontrolü emanet kontrolünün önüne alındı, yoksa çıkış sonrası `RELEASED_TO_WORKER` olan atama işverene yanlış yere `PAYMENT_NOT_SECURED` derdi (yetki kontrolü yine en önde, §2ar3). **İşçinin birincil IBAN'ı yoksa tamamlama da geri alınır:** `releaseToWorker` 409 `PAYOUT_WORKER_IBAN_NOT_VERIFIED` fırlatır, atama `CONFIRMED`/`IN_PROGRESS` ve para emanette kalır, payout açılmaz — otomatik yolla aynı ve bilinçli: `COMPLETED` olup parası sessizce takılan bir atama üretmektense işverene gürültülü ret; işçi IBAN girince tamamlama tekrar denenir.
 
 **Cevapsız işverene karşı otomatik tamamlama var (Faz 11A).** `AssignmentAutoCompletionScheduler` saatte bir çalışır; işin `endDateTime`'ından `assignment.auto-completion.grace-days` (varsayılan 3) gün geçmiş, hâlâ `CONFIRMED`/`IN_PROGRESS` ve parası emanette olan atamaları kendiliğinden `COMPLETED` yapıp emaneti işçiye çıkarır. Yoksa işveren hiç onaylamayarak işçinin parasını süresiz tutabilirdi.
 
@@ -2527,7 +2531,7 @@ Bu yüzden kural iki parçalı:
 
 Muaf olan yedi yer ve nedenleri testte yazılı: `SecurityManager→UserDao` (altyapı, ters yön zaten bağlı), `BadgeManager→User/JobAssignment/RatingSummaryDao` (üç manager da `BadgeService`'e bağlı), `PayoutManager→JobAssignment/DisputeDao`, `SettlementManager→PayoutDao`.
 
-**Döngüyü kırmak için bir iş akışı da taşındı.** Otomatik tamamlamadaki uyuşmazlık kontrolü `JobAssignmentManager`'dan `AssignmentAutoCompletionScheduler`'a çıktı — iki aggregate'i koordine eden şey artık *orkestratör*, aggregate'in kendisi değil. Emanet çıkışındaki uyuşmazlık kilidi (asıl para kapısı) `PayoutManager`'da yerinde duruyor.
+**Döngüyü kırmak için bir iş akışı da taşındı.** Otomatik tamamlamadaki uyuşmazlık kontrolü `JobAssignmentManager`'dan `AssignmentAutoCompletionScheduler`'a çıktı — iki aggregate'i koordine eden şey artık *orkestratör*, aggregate'in kendisi değil. Emanet çıkışındaki uyuşmazlık kilidi (asıl para kapısı) `PayoutManager`'da yerinde duruyor. İşveren tamamlamasında orkestratör yok (tek transaction, §2u); oradaki koşullu çıkış `PayoutService.releaseToWorkerUnlessDisputed` ile yine `PayoutManager`'ın muaf `DisputeDao` erişimine yaslanır, `JobAssignmentManager` uyuşmazlığa dokunmaz.
 
 **Yeni servisler:** `AcademicReferenceService` (üniversite/fakülte/bölüm referans verisi `EducationManager`'dan ayrıldı), ve delegasyon için `UserService.getReference`, `JobAssignmentService.getDetailedById/countCompletedForWorker/hasMoneyInEscrowFor/hasActiveWorkFor`, `DisputeService.hasActiveDispute`, `PaymentService.getSettledPaymentFor`, `MessagingService.getMessageById`, `JobCategoryService.getById`, `CompanyContactService`'e dört metot. `JobApplicationService.hasApplied` bir süre bu listedeydi; tek çağıranı mesajlaşma kapısıydı ve #257 ile kapı ödemeye taşınınca düştü (yerine `JobAssignmentService.findLatestByJobAndWorker` / `findLatestByJobsAndWorkers`).
 
