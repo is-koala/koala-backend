@@ -106,15 +106,16 @@ public class ConversationsController {
     @Operation(summary = "Konuşmanın mesajları",
             description = "Taraf olmayan kullanıcı 404 alır; konuşmanın varlığı sızmaz. Sayfalıdır; varsayılan "
                     + "sıra en yeni önce. after=<messageId> verilirse yalnız o mesajdan sonra gelenler, gönderim "
-                    + "zamanına göre ARTAN sırada ve aynı sayfalamayla döner (kopukluk sonrası artımlı çekim); bu "
-                    + "kipte sort parametresi dikkate alınmaz. after bu konuşmanın bir mesajı değilse ya da "
+                    + "zamanına göre ARTAN sırada ve aynı sayfalamayla döner (kopukluk sonrası artımlı çekim); sıra "
+                    + "sabittir, bu kipte sort parametresi verilirse 400 PAGE_SORT_FIELD_NOT_ALLOWED. after bu "
+                    + "konuşmanın bir mesajı değilse ya da "
                     + "hiç yoksa 400 MESSAGING_AFTER_UNKNOWN döner ve iki hâl ayırt edilemez; istemci listeyi "
                     + "baştan çeker.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Mesajlar listelendi"),
             @ApiResponse(responseCode = "400",
-                    description = "Sıralama alanı desteklenmiyor ya da after bu konuşmada bilinmiyor "
-                            + "(MESSAGING_AFTER_UNKNOWN)",
+                    description = "Sıralama alanı desteklenmiyor (after ile her sort dahil) ya da after bu "
+                            + "konuşmada bilinmiyor (MESSAGING_AFTER_UNKNOWN)",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "404", description = "Konuşma bulunamadı ya da taraf değilsiniz",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))

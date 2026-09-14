@@ -48,6 +48,7 @@ public class MessagingManager implements MessagingService {
     private static final Set<String> SORTABLE = Set.of("createdAt", "lastMessageAt", "sentAt");
     private static final Sort CONVERSATION_SORT = Sort.by(Sort.Direction.DESC, "lastMessageAt");
     private static final Sort MESSAGE_SORT = Sort.by(Sort.Direction.DESC, "sentAt");
+    private static final Set<String> AFTER_SORTABLE = Set.of();
     private static final Sort MESSAGES_AFTER_SORT = Sort.by(Sort.Direction.ASC, "sentAt")
             .and(Sort.by(Sort.Direction.ASC, "id"));
 
@@ -243,6 +244,7 @@ public class MessagingManager implements MessagingService {
     @Transactional(readOnly = true)
     public Page<Message> getMessagesAfter(UUID conversationId, UUID afterMessageId, Pageable requested) {
         loadParticipating(conversationId);
+        pageableSanitizer.rejectUnknownSort(requested, AFTER_SORTABLE);
         Message anchor = messageDao.findByIdAndConversationId(afterMessageId, conversationId)
                 .orElseThrow(() -> {
                     log.warn("Incremental message fetch for conversation {} refused: anchor {} is not a message "
@@ -250,7 +252,7 @@ public class MessagingManager implements MessagingService {
                     return new ValidationException(MessagingMessages.AFTER_UNKNOWN);
                 });
         return messageDao.findAllAfter(conversationId, anchor.getSentAt(), anchor.getId(),
-                pageableSanitizer.sanitize(requested, Set.of(), MESSAGES_AFTER_SORT));
+                pageableSanitizer.sanitize(requested, AFTER_SORTABLE, MESSAGES_AFTER_SORT));
     }
 
     @Override

@@ -1158,7 +1158,9 @@ alır (§2s'deki kilit protokolü), sonra alıcı başına `sendPushToUser`. `Co
 
 **`GET /conversations/{id}/messages?after=<messageId>` — kopukluk sonrası artımlı çekim (#267).** `after`
 verilince yalnız o mesajdan sonra gönderilenler döner, sıra `sentAt` **artan** (eşitlikte `id`), aynı `page`/`size`
-ile; `sort` parametresi bu kipte yok sayılır (`MessageDao.findAllAfter`). Çapa `findByIdAndConversationId` ile
+ile (`MessageDao.findAllAfter`). Sıra sabit olduğu için bu kipte `sort` **verilemez**: `rejectUnknownSort` boş
+kümeyle çağrılır, herhangi bir `sort` 400 `PAGE_SORT_FIELD_NOT_ALLOWED` alır — sessizce yok saymak yerine
+(`PageableSortSafetyTest` her sayfalı metodun bu kapıdan geçmesini istiyor). Çapa `findByIdAndConversationId` ile
 **bu konuşmada** aranır: başka konuşmanın mesajı ile hiç var olmayan id **aynı** 400
 `MESSAGING_AFTER_UNKNOWN` alır (§2d2; ayrım yalnız `log.warn`'da). Boş sayfa yerine 400 seçildi çünkü boş sayfa
 "yeni mesaj yok" ile "çapan geçersiz" hâllerini birleştirirdi — moderasyonla silinmiş bir çapayı tutan istemci

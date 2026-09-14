@@ -197,6 +197,18 @@ class ConversationMessagingIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void afterDoesNotAcceptASortBecauseTheOrderIsFixed() throws Exception {
+        UUID first = insertMessage(directId, employerId, "1", "1 minute");
+
+        mockMvc.perform(get("/conversations/{id}/messages", directId)
+                        .param("after", first.toString())
+                        .param("sort", "sentAt,desc")
+                        .with(user(principal(firstWorkerId))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("PAGE_SORT_FIELD_NOT_ALLOWED"));
+    }
+
+    @Test
     void anAfterFromAnotherConversationLooksExactlyLikeAnUnknownOne() throws Exception {
         UUID foreign = insertMessage(crewId, employerId, "grup mesajı", "1 minute");
         UUID phantom = UUID.randomUUID();
