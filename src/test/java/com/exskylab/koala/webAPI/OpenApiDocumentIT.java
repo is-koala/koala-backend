@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasItem;
@@ -308,6 +309,8 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.paths['/locations/address-search-sessions/{sessionId}/candidates/{candidateId}/resolve'].post").exists())
                 .andExpect(jsonPath("$.paths['/locations/address-candidates/reverse'].post").exists())
                 .andExpect(jsonPath("$.components.schemas.AddressCandidateDto.properties.candidateToken").exists())
+                .andExpect(jsonPath("$.components.schemas.AddressCandidateDto.properties.precision.enum")
+                        .value(contains("BUILDING", "STREET", "NEIGHBORHOOD")))
                 .andExpect(jsonPath("$.components.schemas.AddressSuggestionDto.properties.placeId").doesNotExist());
     }
 
