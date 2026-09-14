@@ -445,6 +445,19 @@ class AssignmentOperationsAuthorizationTest {
     }
 
     @Test
+    void completingByTheEmployerReleasesTheEscrowThroughTheDisputeGate() {
+        JobAssignment a = assignment(AssignmentStatus.IN_PROGRESS, PaymentStatus.HELD_IN_ESCROW, inHours(-2));
+        when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
+
+        jobAssignmentManager.completeAssignment(a.getId());
+
+        var order = inOrder(jobAssignmentDao, payoutService);
+        order.verify(jobAssignmentDao).save(a);
+        order.verify(payoutService).releaseToWorkerUnlessDisputed(a.getId(), PayoutReleaseOrigin.EMPLOYER_COMPLETION);
+        verify(payoutService, never()).releaseToWorker(any(), any());
+    }
+
+    @Test
     void acceptingTheAssignmentStampsConfirmedAtAndAnswersWithTheTimelineDto() {
         JobAssignment a = assignment(AssignmentStatus.PENDING_CONFIRMATION, null, inHours(24));
         when(securityService.getAuthenticatedUser()).thenReturn(worker);

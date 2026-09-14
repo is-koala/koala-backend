@@ -23,6 +23,8 @@ public interface PayoutService {
 
     Payout releaseToWorker(UUID jobAssignmentId, PayoutReleaseOrigin origin);
 
+    boolean releaseToWorkerUnlessDisputed(UUID jobAssignmentId, PayoutReleaseOrigin origin);
+
     Refund refundEmployer(UUID jobAssignmentId, BigDecimal amount, String reason);
 
     Payout confirmSettlement(UUID payoutId, ConfirmPayoutSettlementDto evidence, UUID reconciledByStaffId);
