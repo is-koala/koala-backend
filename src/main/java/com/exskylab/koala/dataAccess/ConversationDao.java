@@ -10,6 +10,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -42,4 +44,49 @@ public interface ConversationDao extends JpaRepository<Conversation, UUID> {
               and exists (select 1 from ConversationParticipant b where b.conversation = c and b.user.id = :second)
             """)
     boolean existsBetweenParticipants(@Param("first") UUID first, @Param("second") UUID second);
+
+    @Query(value = """
+            select distinct on (p.conversation_id, p.user_id)
+                   p.conversation_id as "conversationId",
+                   p.user_id as "userId",
+                   u.first_name as "firstName",
+                   u.last_name as "lastName",
+                   picture.file_url as "profilePictureFileUrl",
+                   case when p.user_id = c.employer_id then 'EMPLOYER'
+                        when c.kind = 'DIRECT' then 'WORKER'
+                        when exists (select 1 from job_assignments a
+                                      where a.job_id = c.job_id and a.worker_id = p.user_id
+                                        and a.is_deleted = false) then 'WORKER'
+                        else 'COMPANY_CONTACT' end as "role",
+                   p.joined_at as "joinedAt",
+                   p.last_read_at as "lastReadAt",
+                   p.is_deleted as "leftConversation"
+            from conversation_participants p
+            join conversations c on c.id = p.conversation_id
+            join users u on u.id = p.user_id
+            left join media picture on picture.id = u.profile_picture_id and picture.is_deleted = false
+            where p.conversation_id in (:conversationIds)
+            order by p.conversation_id, p.user_id, p.is_deleted asc, p.joined_at desc
+            """, nativeQuery = true)
+    List<ParticipantView> findParticipantRows(@Param("conversationIds") Collection<UUID> conversationIds);
+
+    interface ParticipantView {
+        UUID getConversationId();
+
+        UUID getUserId();
+
+        String getFirstName();
+
+        String getLastName();
+
+        String getProfilePictureFileUrl();
+
+        String getRole();
+
+        Instant getJoinedAt();
+
+        Instant getLastReadAt();
+
+        Boolean getLeftConversation();
+    }
 }

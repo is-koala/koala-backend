@@ -19,6 +19,11 @@ public class MediaUrlResolver {
         return image == null ? null : storageUrlResolver.urlFor(image.getFileUrl());
     }
 
+    @Named("fileUrlToPublicUrl")
+    public String toPublicUrl(String fileUrl) {
+        return fileUrl == null ? null : storageUrlResolver.urlFor(fileUrl);
+    }
+
     @Named("mediaToPublicUrl")
     public String toFileUrl(Media media) {
         return media == null ? null : storageUrlResolver.urlFor(media.getFileUrl());

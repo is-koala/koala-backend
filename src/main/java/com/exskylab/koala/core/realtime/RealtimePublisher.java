@@ -7,6 +7,7 @@ import com.exskylab.koala.core.properties.RealtimeProperties;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.UUID;
 
@@ -37,8 +38,9 @@ public class RealtimePublisher {
         publish(CONVERSATION_TOPIC + conversationId, RealtimeEventDto.typing(conversationId, userId));
     }
 
-    public void conversationRead(UUID conversationId, UUID readerId, Collection<UUID> participantIds) {
-        RealtimeEventDto event = RealtimeEventDto.read(conversationId, readerId);
+    public void conversationRead(UUID conversationId, UUID readerId, Instant lastReadAt,
+                                 Collection<UUID> participantIds) {
+        RealtimeEventDto event = RealtimeEventDto.read(conversationId, readerId, lastReadAt);
 
         publish(CONVERSATION_TOPIC + conversationId, event);
         participantIds.forEach(participantId -> publishToUser(participantId, USER_MESSAGE_QUEUE, event));

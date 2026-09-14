@@ -93,4 +93,5 @@
     <include file="db/changelog/2026/09/13-01-crew-membership-follows-payment.xml"/>
     <include file="db/changelog/2026/09/13-02-unaccent-extension.xml"/>
     <include file="db/changelog/2026/09/14-01-job-read-staff-permission.xml"/>
+    <include file="db/changelog/2026/09/14-02-participant-last-read.xml"/>
 </databaseChangeLog>

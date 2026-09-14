@@ -68,6 +68,16 @@ public class Conversation extends BaseEntity {
         participants.add(participant);
     }
 
+    public Instant stampRead(UUID userId, Instant readAt) {
+        ConversationParticipant reader = participants.stream()
+                .filter(participant -> participant.getUser().getId().equals(userId))
+                .findFirst()
+                .orElseThrow();
+        Instant previous = reader.getLastReadAt();
+        reader.setLastReadAt(readAt);
+        return previous;
+    }
+
     public boolean removeParticipant(UUID userId) {
         return participants.removeIf(participant -> participant.getUser().getId().equals(userId));
     }

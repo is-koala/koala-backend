@@ -50,6 +50,9 @@ class CollectionQueryWithoutGraphTest {
             "CompanyContactInvitationDao.findByCompany",
             "CompanyContactInvitationDao.findByCompanyId",
             "CompanyDao.search",
+            // Native read model for ConversationDto.participants: one query per page, includes soft-deleted
+            // (left) participants the entity's @SQLRestriction hides, joins users/media itself (#281).
+            "ConversationDao.findParticipantRows",
             "CountryDao.findCountriesByOrderByNameAsc",
             "DepartmentDao.findAllByFacultyIdOrderByNameAsc",
             "DeviceDao.findAllByUser_IdAndPushTokenIsNotNull",
