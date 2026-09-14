@@ -526,12 +526,6 @@ public class PaymentManager implements PaymentService {
 
     @Override
     @Transactional(readOnly = true)
-    public boolean hasPendingPaymentForUser(UUID userId) {
-        return paymentDao.existsPendingForUser(userId, PENDING_STATUSES);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
     public SucceededVolume succeededVolume(Instant fromInclusive, Instant toExclusive, String currency) {
         List<Object[]> rows = paymentDao.summarizeSucceeded(
                 PaymentAttemptStatus.SUCCEEDED, currency, fromInclusive, toExclusive);

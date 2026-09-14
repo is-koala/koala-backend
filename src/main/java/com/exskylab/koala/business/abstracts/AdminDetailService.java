@@ -1,11 +1,15 @@
 package com.exskylab.koala.business.abstracts;
 
 import com.exskylab.koala.core.dtos.company.response.CompanyReviewDto;
+import com.exskylab.koala.core.dtos.identity.response.IdentityReviewDto;
+import com.exskylab.koala.core.dtos.legal.response.AccountDeletionDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.AdminAssignmentDetailDto;
 import com.exskylab.koala.core.dtos.payment.response.AdminPaymentDto;
 import com.exskylab.koala.core.dtos.user.response.AdminUserDetailDto;
 import com.exskylab.koala.core.security.StaffPrincipal;
+import com.exskylab.koala.entities.AccountDeletionRequest;
 import com.exskylab.koala.entities.CompanyApprovalStatus;
+import com.exskylab.koala.entities.IdentityVerification;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -25,4 +29,12 @@ public interface AdminDetailService {
     Page<CompanyReviewDto> searchCompanies(CompanyApprovalStatus status, String query, Pageable pageable);
 
     CompanyReviewDto getCompany(UUID companyId);
+
+    List<IdentityReviewDto> identityReviews(List<IdentityVerification> reviews);
+
+    IdentityReviewDto identityReview(IdentityVerification review);
+
+    List<AccountDeletionDto> deletionRequests(List<AccountDeletionRequest> requests);
+
+    AccountDeletionDto deletionRequest(AccountDeletionRequest request);
 }

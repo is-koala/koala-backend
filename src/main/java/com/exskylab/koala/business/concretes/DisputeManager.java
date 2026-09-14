@@ -215,12 +215,6 @@ public class DisputeManager implements DisputeService {
     }
 
     @Override
-    @Transactional(readOnly = true)
-    public boolean hasActiveDisputeForUser(UUID userId) {
-        return disputeDao.existsActiveForUser(userId, ACTIVE);
-    }
-
-    @Override
     @Transactional
     public DisputeEvidence attachEvidence(UUID disputeId, MultipartFile file) {
         UUID actorId = securityService.getAuthenticatedUserId();

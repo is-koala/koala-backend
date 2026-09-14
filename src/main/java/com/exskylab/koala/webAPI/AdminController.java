@@ -17,12 +17,10 @@ import com.exskylab.koala.business.abstracts.CompanyService;
 import com.exskylab.koala.business.abstracts.GalleryService;
 import com.exskylab.koala.business.abstracts.IdentityDocumentReviewService;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
-import com.exskylab.koala.business.abstracts.StaffAccountService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.dtos.identity.request.RejectIdentityReviewDto;
 import com.exskylab.koala.core.dtos.identity.response.IdentityReviewDto;
 import com.exskylab.koala.entities.IdentityReviewStatus;
-import com.exskylab.koala.entities.IdentityVerification;
 import com.exskylab.koala.core.constants.AdminMessages;
 import com.exskylab.koala.core.constants.BankAccountMessages;
 import com.exskylab.koala.core.dtos.bankAccount.request.ConfirmIbanTransferDto;
@@ -67,11 +65,7 @@ import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Tag(name = "Yönetim", description = "Yalnızca ADMIN rolüne açık işlemler.")
 @RestController
@@ -90,7 +84,6 @@ public class AdminController {
     private final SignedFileResponses signedFileResponses;
     private final AdminDetailService adminDetailService;
     private final JobService jobService;
-    private final StaffAccountService staffAccountService;
 
     public AdminController(CompanyService companyService, UserService userService, UserMapper userMapper,
                            GalleryService galleryService, RoleGrantMapper roleGrantMapper,
@@ -98,7 +91,7 @@ public class AdminController {
                            BankAccountService bankAccountService, BankAccountMapper bankAccountMapper,
                            IdentityDocumentReviewService identityDocumentReviewService,
                            SignedFileResponses signedFileResponses, AdminDetailService adminDetailService,
-                           JobService jobService, StaffAccountService staffAccountService) {
+                           JobService jobService) {
         this.companyService = companyService;
         this.userService = userService;
         this.userMapper = userMapper;
@@ -111,7 +104,6 @@ public class AdminController {
         this.signedFileResponses = signedFileResponses;
         this.adminDetailService = adminDetailService;
         this.jobService = jobService;
-        this.staffAccountService = staffAccountService;
     }
 
     @Operation(summary = "Atama kuyruğu",
@@ -143,8 +135,12 @@ public class AdminController {
             description = "Uyuşmazlık ve emanet ekranlarının ihtiyaç duyduğu okuma: taraflar, atama ve ödeme durumu, "
                     + "fiyat dökümü. Liste satırının alanlarına ek olarak bağlı kayıtların özetini (id + durum + oluşturulma) "
                     + "taşır: ödeme denemeleri (payments), hakediş (payout, yoksa null), uyuşmazlıklar (disputes) ve "
-                    + "taraflar arasındaki ya da ilana bağlı şikayetler (reports). Emanetteki tutar finansal veridir; "
-                    + "uç payment.read ile korunur.")
+                    + "taraflar arasındaki ya da ilana bağlı şikayetler (reports). Zaman çizelgesi için application "
+                    + "(başvuru; durum, başvuru ve yanıt anı, ret gerekçesi), workSessions (giriş/çıkış anları, dakika, "
+                    + "plausibility bayrakları), cancellation (iptal eden taraf ve kullanıcı, gerekçe, bildirim süresi, "
+                    + "kesinti ve iade tutarı, refundId; iptal yoksa null) ve reviews (yazar, konu, puan, yorum) ile "
+                    + "createdAt, expectedCompletionDateTime, employerType ve notes taşınır. Emanetteki tutar finansal "
+                    + "veridir; uç payment.read ile korunur.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Atama detayı döndürüldü"),
             @ApiResponse(responseCode = "404", description = "Atama bulunamadı",
@@ -161,8 +157,11 @@ public class AdminController {
     @Operation(summary = "Atamanın ödeme denemeleri (personel)",
             description = "Atamaya ait her ödeme denemesini yeniden eskiye sıralar. Her satır durum, tutar dökümü, "
                     + "sağlayıcı referansları (conversationId, providerPaymentId, providerTransactionId), doğrulama "
-                    + "sayacı, oluşturulma/güncellenme anları ve iade kayıtlarını taşır. Kart verisi ya da ödeme "
-                    + "token'ı dönmez. Uç payment.read ile korunur.")
+                    + "sayacı, oluşturulma/güncellenme anları ve iade kayıtlarını taşır. payoutId atamanın hakedişi bu "
+                    + "denemeye bağlıysa dolar, diğer denemelerde null. Her iade origin ve originId taşır: iptal kaydı "
+                    + "iadeyi gösteriyorsa CANCELLATION (iptal id'si), atamanın REFUND_EMPLOYER ile çözülmüş uyuşmazlığı "
+                    + "varsa DISPUTE (uyuşmazlık id'si), aksi hâlde personel iadesi STAFF (originId null). Kart verisi ya "
+                    + "da ödeme token'ı dönmez. Uç payment.read ile korunur.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Ödeme denemeleri listelendi"),
             @ApiResponse(responseCode = "404", description = "Atama bulunamadı",
@@ -179,8 +178,10 @@ public class AdminController {
 
     @Operation(summary = "Ödeme denemesi detayı",
             description = "Tek bir ödeme denemesi: bağlı atama/ilan/taraflar (SafeUser; e-posta yok), durum, tutar dökümü, "
-                    + "sağlayıcı referansları, doğrulama sayacı, oluşturulma/güncellenme anları ve iade kayıtları. "
-                    + "Kart verisi ya da ödeme token'ı dönmez. Uç payment.read ile korunur.")
+                    + "sağlayıcı referansları, doğrulama sayacı, oluşturulma/güncellenme anları, payoutId (hakediş bu "
+                    + "ödemeye bağlıysa) ve iade kayıtları; iadelerde origin/originId listedeki kuralla türetilir "
+                    + "(CANCELLATION, DISPUTE ya da STAFF). Kart verisi ya da ödeme token'ı dönmez. Uç payment.read ile "
+                    + "korunur.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Ödeme denemesi getirildi"),
             @ApiResponse(responseCode = "404", description = "Ödeme kaydı bulunamadı",
@@ -517,7 +518,7 @@ public class AdminController {
 
         var page = identityDocumentReviewService.search(status, query, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
-                PageDto.of(page, identityViews(page.getContent())),
+                PageDto.of(page, adminDetailService.identityReviews(page.getContent())),
                 AdminMessages.IDENTITY_REVIEWS_LISTED, HttpStatus.OK));
     }
 
@@ -532,7 +533,7 @@ public class AdminController {
     @GetMapping("/identity-verifications/{reviewId}")
     public ResponseEntity<SuccessDataResult<IdentityReviewDto>> identityReview(@PathVariable UUID reviewId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
-                identityView(identityDocumentReviewService.getById(reviewId)),
+                adminDetailService.identityReview(identityDocumentReviewService.getById(reviewId)),
                 AdminMessages.IDENTITY_REVIEW_FETCHED, HttpStatus.OK));
     }
 
@@ -557,7 +558,7 @@ public class AdminController {
             @AuthenticationPrincipal StaffPrincipal actor) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
-                identityView(identityDocumentReviewService.approve(actor, reviewId)),
+                adminDetailService.identityReview(identityDocumentReviewService.approve(actor, reviewId)),
                 AdminMessages.IDENTITY_REVIEW_APPROVED, HttpStatus.OK));
     }
 
@@ -580,7 +581,7 @@ public class AdminController {
             @AuthenticationPrincipal StaffPrincipal actor) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
-                identityView(identityDocumentReviewService.reject(actor, reviewId, request.getReason())),
+                adminDetailService.identityReview(identityDocumentReviewService.reject(actor, reviewId, request.getReason())),
                 AdminMessages.IDENTITY_REVIEW_REJECTED, HttpStatus.OK));
     }
 
@@ -598,18 +599,5 @@ public class AdminController {
     public ResponseEntity<?> downloadIdentityDocument(@PathVariable UUID reviewId, @PathVariable UUID documentId) {
         VerificationDocument document = identityDocumentReviewService.getDocumentForStaffDownload(reviewId, documentId);
         return signedFileResponses.attachment(document.getFileUrl(), document.getFileName());
-    }
-
-    private IdentityReviewDto identityView(IdentityVerification review) {
-        return identityViews(List.of(review)).getFirst();
-    }
-
-    private List<IdentityReviewDto> identityViews(List<IdentityVerification> reviews) {
-        Set<UUID> reviewerIds = reviews.stream()
-                .map(IdentityVerification::getReviewedByStaffId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        Map<UUID, String> names = staffAccountService.displayNamesOf(reviewerIds);
-        return reviews.stream().map(review -> IdentityReviewDto.from(review, names)).toList();
     }
 }

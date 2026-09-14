@@ -53,10 +53,6 @@ public interface JobAssignmentService {
 
     long countCompletedForEmployer(UUID employerId);
 
-    boolean hasMoneyInEscrowFor(UUID workerId);
-
-    boolean hasActiveWorkFor(UUID workerId);
-
     long countOccupiedSlots(UUID jobId);
 
     Optional<JobAssignment> findLatestByJobAndWorker(UUID jobId, UUID workerId);

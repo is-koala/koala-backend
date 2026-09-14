@@ -32,16 +32,10 @@ public interface DisputeDao extends JpaRepository<Dispute, UUID> {
     boolean existsByJobAssignmentIdAndStatusIn(UUID jobAssignmentId, List<DisputeStatus> statuses);
 
     @Query("""
-            select (count(d) > 0) from Dispute d
-            where d.status in :statuses
-              and (d.jobAssignment.worker.id = :userId or d.jobAssignment.job.creator.id = :userId)
-            """)
-    boolean existsActiveForUser(@Param("userId") UUID userId,
-                                @Param("statuses") List<DisputeStatus> statuses);
-
-    @Query("""
             select count(d) from Dispute d
-            where d.jobAssignment.worker.id = :userId or d.jobAssignment.job.creator.id = :userId
+            where d.jobAssignment.worker.id = :userId
+               or d.jobAssignment.job.creator.id = :userId
+               or d.openedBy.id = :userId
             """)
     long countInvolving(@Param("userId") UUID userId);
 

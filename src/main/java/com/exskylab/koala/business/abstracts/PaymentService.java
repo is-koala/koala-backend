@@ -51,8 +51,6 @@ public interface PaymentService {
 
     boolean hasPendingAttemptForAssignment(UUID jobAssignmentId);
 
-    boolean hasPendingPaymentForUser(UUID userId);
-
     SucceededVolume succeededVolume(Instant fromInclusive, Instant toExclusive, String currency);
 
     record SucceededVolume(BigDecimal employerVolume, BigDecimal koalaFee,

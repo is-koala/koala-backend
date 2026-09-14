@@ -59,4 +59,11 @@ public class IdentityVerification extends UserVerification {
     @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JoinColumn(name = "together_document_id")
     private VerificationDocument togetherDocument;
+
+    public IdentityReviewStatus reviewStatus() {
+        if (isVerified()) {
+            return IdentityReviewStatus.APPROVED;
+        }
+        return rejectedAt != null ? IdentityReviewStatus.REJECTED : IdentityReviewStatus.PENDING;
+    }
 }

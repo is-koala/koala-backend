@@ -126,8 +126,12 @@ public class PayoutsController {
                     + "(ilk 4 + son 4; tam IBAN dönmez), sağlayıcı ve ekstre referansları, tutar (ondalık metin), "
                     + "durum ve zaman damgaları. settlementTasks hakedişin ödemesine bağlı sağlayıcı mutabakat "
                     + "görevlerini (işlem, durum, deneme sayısı, son hata, sonraki deneme) taşır; paymentAttempts "
-                    + "atamanın ödeme denemelerinin özetidir (id + durum). İşçi hesabını silmişse worker null döner. "
-                    + "Uç payout.reconcile ile korunur.")
+                    + "atamanın ödeme denemelerinin özetidir (id + durum). releaseOrigin hakedişin nasıl açıldığını "
+                    + "söyler (AUTO_COMPLETION zamanlayıcı, DISPUTE uyuşmazlık çözümü, STAFF personel; bu alan eklenmeden "
+                    + "önce açılmış ve uyuşmazlığa bağlanamayan kayıtlarda null). settledAt ekstrede bildirilen "
+                    + "gerçekleşme anıdır ve completedAt ile aynı değerdir (yalnız mutabakat onayı yazar); "
+                    + "reconciledByStaffId onayı veren personel, bankAccountId hedef hesap. İşçi hesabını silmişse worker "
+                    + "null döner. Uç payout.reconcile ile korunur.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Hakediş detayı getirildi"),
             @ApiResponse(responseCode = "404", description = "Hakediş bulunamadı",

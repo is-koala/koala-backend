@@ -38,16 +38,6 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
     })
     Optional<JobAssignment> findWithDetailsForPaymentById(UUID id);
 
-    @Query("select count(a) > 0 from JobAssignment a where "
-            + "(a.worker.id = :userId or a.job.creator.id = :userId) and a.paymentStatus = :paymentStatus")
-    boolean existsMoneyForUser(@Param("userId") UUID userId,
-                               @Param("paymentStatus") PaymentStatus paymentStatus);
-
-    @Query("select count(a) > 0 from JobAssignment a where "
-            + "(a.worker.id = :userId or a.job.creator.id = :userId) and a.status in :statuses")
-    boolean existsActiveForUser(@Param("userId") UUID userId,
-                                @Param("statuses") java.util.List<AssignmentStatus> statuses);
-
     @Query("""
             select a.id as id, a.worker.id as workerId, a.job.creator.id as employerId
             from JobAssignment a

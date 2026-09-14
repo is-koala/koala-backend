@@ -252,27 +252,10 @@ public class LegalManager implements LegalService {
     }
 
     private String findBlockedReason(UUID userId) {
-        if (paymentService.hasPendingPaymentForUser(userId)) {
-            return LegalMessages.DELETION_BLOCKED_BY_PENDING_PAYMENT;
-        }
-
-        boolean hasEscrowedMoney = jobAssignmentService.hasMoneyInEscrowFor(userId);
-
-        if (hasEscrowedMoney) {
-            return LegalMessages.DELETION_BLOCKED_BY_ESCROW;
-        }
-
-        boolean hasActiveWork = jobAssignmentService.hasActiveWorkFor(userId);
-
-        if (hasActiveWork) {
-            return LegalMessages.DELETION_BLOCKED_BY_ACTIVE_WORK;
-        }
-
-        if (disputeService.hasActiveDisputeForUser(userId)) {
-            return LegalMessages.DELETION_BLOCKED_BY_DISPUTE;
-        }
-
-        return null;
+        return blockersOf(Set.of(userId)).getOrDefault(userId, List.of()).stream()
+                .findFirst()
+                .map(blocker -> blocker.type().getMessageKey())
+                .orElse(null);
     }
 
     private String truncate(String value) {
@@ -299,7 +282,15 @@ public class LegalManager implements LegalService {
         if (userByRequest.isEmpty()) {
             return Map.of();
         }
-        Set<UUID> userIds = new HashSet<>(userByRequest.values());
+        Map<UUID, List<DeletionBlockerDto>> byUser = blockersOf(new HashSet<>(userByRequest.values()));
+
+        Map<UUID, List<DeletionBlockerDto>> byRequest = new HashMap<>();
+        userByRequest.forEach((requestId, userId) ->
+                byRequest.put(requestId, byUser.getOrDefault(userId, List.of())));
+        return byRequest;
+    }
+
+    private Map<UUID, List<DeletionBlockerDto>> blockersOf(Set<UUID> userIds) {
         Map<UUID, List<DeletionBlockerDto>> byUser = new HashMap<>();
         collectBlockers(byUser, userIds, DeletionBlockerType.PENDING_PAYMENT,
                 paymentService.findPendingLinksForUsers(userIds));
@@ -309,11 +300,7 @@ public class LegalManager implements LegalService {
                 jobAssignmentService.findActiveWorkLinksForUsers(userIds));
         collectBlockers(byUser, userIds, DeletionBlockerType.DISPUTE,
                 disputeService.findActiveLinksForUsers(userIds));
-
-        Map<UUID, List<DeletionBlockerDto>> byRequest = new HashMap<>();
-        userByRequest.forEach((requestId, userId) ->
-                byRequest.put(requestId, byUser.getOrDefault(userId, List.of())));
-        return byRequest;
+        return byUser;
     }
 
     private static void collectBlockers(Map<UUID, List<DeletionBlockerDto>> byUser, Set<UUID> userIds,

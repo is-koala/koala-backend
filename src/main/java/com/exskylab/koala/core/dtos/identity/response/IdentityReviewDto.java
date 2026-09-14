@@ -33,13 +33,6 @@ public class IdentityReviewDto {
     private UUID togetherDocumentId;
     private Instant createdAt;
 
-    public static IdentityReviewStatus statusOf(IdentityVerification review) {
-        if (review.isVerified()) {
-            return IdentityReviewStatus.APPROVED;
-        }
-        return review.getRejectedAt() != null ? IdentityReviewStatus.REJECTED : IdentityReviewStatus.PENDING;
-    }
-
     public static IdentityReviewDto from(IdentityVerification review, Map<UUID, String> staffNames) {
         IdentityReviewDto dto = from(review);
         if (review.getReviewedByStaffId() != null) {
@@ -59,7 +52,7 @@ public class IdentityReviewDto {
         dto.setTcIdentityNumber(review.getTcIdentityNumber());
         dto.setTcDocumentNumber(review.getTcDocumentNumber());
         dto.setBirthDate(review.getBirthDate());
-        dto.setStatus(statusOf(review));
+        dto.setStatus(review.reviewStatus());
         dto.setRejectionReason(review.getRejectionReason());
         dto.setRejectedAt(review.getRejectedAt());
         dto.setVerifiedAt(review.getVerifiedAt());

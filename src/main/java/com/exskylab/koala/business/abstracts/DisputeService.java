@@ -32,8 +32,6 @@ public interface DisputeService {
 
     boolean hasActiveDispute(UUID jobAssignmentId);
 
-    boolean hasActiveDisputeForUser(UUID userId);
-
     DisputeEvidence attachEvidence(UUID disputeId, MultipartFile file);
 
     List<DisputeEvidence> getEvidence(UUID disputeId);

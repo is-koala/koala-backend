@@ -1,18 +1,15 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.business.abstracts.AdminDetailService;
 import com.exskylab.koala.business.abstracts.LegalService;
 import com.exskylab.koala.core.constants.LegalMessages;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.legal.request.RejectDeletionDto;
 import com.exskylab.koala.core.dtos.legal.response.AccountDeletionDto;
-import com.exskylab.koala.core.dtos.legal.response.DeletionBlockerDto;
-import com.exskylab.koala.core.helpers.MessageResolver;
-import com.exskylab.koala.core.mappers.LegalMapper;
 import com.exskylab.koala.core.security.RequiresPermission;
 import com.exskylab.koala.core.security.StaffPrincipal;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
-import com.exskylab.koala.entities.AccountDeletionRequest;
 import com.exskylab.koala.entities.AccountDeletionStatus;
 import com.exskylab.koala.entities.StaffPermission;
 import io.swagger.v3.oas.annotations.Operation;
@@ -33,8 +30,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 @Tag(name = "Hesap silme yönetimi")
@@ -43,14 +38,11 @@ import java.util.UUID;
 public class AccountDeletionController {
 
     private final LegalService legalService;
-    private final LegalMapper legalMapper;
-    private final MessageResolver messageResolver;
+    private final AdminDetailService adminDetailService;
 
-    public AccountDeletionController(LegalService legalService, LegalMapper legalMapper,
-                                     MessageResolver messageResolver) {
+    public AccountDeletionController(LegalService legalService, AdminDetailService adminDetailService) {
         this.legalService = legalService;
-        this.legalMapper = legalMapper;
-        this.messageResolver = messageResolver;
+        this.adminDetailService = adminDetailService;
     }
 
     @Operation(summary = "Hesap silme taleplerini listele",
@@ -68,11 +60,8 @@ public class AccountDeletionController {
             @RequestParam(required = false) String query,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
         var page = legalService.getDeletionRequests(status, query, pageable);
-        var blockers = legalService.findDeletionBlockers(page.getContent());
         return ResponseEntity.ok(new SuccessDataResult<>(
-                PageDto.of(page, page.getContent().stream()
-                        .map(request -> staffView(request, blockers))
-                        .toList()),
+                PageDto.of(page, adminDetailService.deletionRequests(page.getContent())),
                 LegalMessages.DELETIONS_LISTED, HttpStatus.OK));
     }
 
@@ -91,7 +80,7 @@ public class AccountDeletionController {
     public ResponseEntity<SuccessDataResult<AccountDeletionDto>> get(
             @PathVariable UUID requestId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
-                staffView(legalService.getDeletionRequest(requestId)),
+                adminDetailService.deletionRequest(legalService.getDeletionRequest(requestId)),
                 LegalMessages.DELETION_FETCHED, HttpStatus.OK));
     }
 
@@ -108,17 +97,7 @@ public class AccountDeletionController {
             @AuthenticationPrincipal StaffPrincipal actor) {
         var deletion = legalService.rejectDeletionRequest(actor, requestId, body.reason());
         return ResponseEntity.ok(new SuccessDataResult<>(
-                staffView(deletion),
+                adminDetailService.deletionRequest(deletion),
                 LegalMessages.DELETION_REJECTED, HttpStatus.OK));
-    }
-
-    private AccountDeletionDto staffView(AccountDeletionRequest request) {
-        return staffView(request, legalService.findDeletionBlockers(List.of(request)));
-    }
-
-    private AccountDeletionDto staffView(AccountDeletionRequest request,
-                                         Map<UUID, List<DeletionBlockerDto>> blockers) {
-        return legalMapper.toStaffAccountDeletionDto(request, blockers.getOrDefault(request.getId(), List.of()),
-                messageResolver);
     }
 }

@@ -21,7 +21,6 @@ import com.exskylab.koala.core.utilities.storage.FolderType;
 import com.exskylab.koala.core.utilities.storage.StorageService;
 import com.exskylab.koala.core.helpers.StaffSearchQuery;
 import com.exskylab.koala.dataAccess.IdentityVerificationDao;
-import com.exskylab.koala.core.dtos.identity.response.IdentityReviewDto;
 import com.exskylab.koala.entities.IdentityReviewStatus;
 import com.exskylab.koala.entities.IdentityVerification;
 import com.exskylab.koala.entities.User;
@@ -260,6 +259,6 @@ public class IdentityVerificationManager implements IdentityDocumentReviewServic
     @Transactional(readOnly = true)
     public Optional<IdentityReviewStatus> findLatestStatusFor(UUID userId) {
         return identityVerificationDao.findTopByUser_IdOrderByCreatedAtDesc(userId)
-                .map(IdentityReviewDto::statusOf);
+                .map(IdentityVerification::reviewStatus);
     }
 }

@@ -80,6 +80,9 @@ public class JobAssignmentManager implements JobAssignmentService {
     private static final Comparator<JobAssignment> OLDEST_FIRST =
             Comparator.comparing(JobAssignment::getCreatedAt, Comparator.nullsFirst(Comparator.naturalOrder()));
 
+    static final List<AssignmentStatus> ACTIVE_WORK_STATUSES =
+            List.of(AssignmentStatus.CONFIRMED, AssignmentStatus.IN_PROGRESS);
+
     private static final java.util.Set<AssignmentStatus> SLOT_OCCUPYING_STATUSES =
             java.util.EnumSet.of(AssignmentStatus.PENDING_CONFIRMATION, AssignmentStatus.CONFIRMED,
                     AssignmentStatus.IN_PROGRESS, AssignmentStatus.COMPLETED);
@@ -584,7 +587,7 @@ public class JobAssignmentManager implements JobAssignmentService {
                 .minusDays(graceDays);
 
         return jobAssignmentDao.findAutoCompletableIds(
-                List.of(AssignmentStatus.CONFIRMED, AssignmentStatus.IN_PROGRESS),
+                ACTIVE_WORK_STATUSES,
                 PaymentStatus.HELD_IN_ESCROW,
                 endedBefore,
                 PageRequest.of(0, autoCompletionProperties.getBatchSize()));
@@ -701,19 +704,6 @@ public class JobAssignmentManager implements JobAssignmentService {
 
     @Override
     @Transactional(readOnly = true)
-    public boolean hasMoneyInEscrowFor(UUID userId) {
-        return jobAssignmentDao.existsMoneyForUser(userId, PaymentStatus.HELD_IN_ESCROW);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public boolean hasActiveWorkFor(UUID userId) {
-        return jobAssignmentDao.existsActiveForUser(userId,
-                List.of(AssignmentStatus.CONFIRMED, AssignmentStatus.IN_PROGRESS));
-    }
-
-    @Override
-    @Transactional(readOnly = true)
     public long countAsWorker(UUID workerId) {
         return jobAssignmentDao.countByWorkerId(workerId);
     }
@@ -739,7 +729,6 @@ public class JobAssignmentManager implements JobAssignmentService {
         if (userIds.isEmpty()) {
             return List.of();
         }
-        return jobAssignmentDao.findActiveLinksForUsers(userIds,
-                List.of(AssignmentStatus.CONFIRMED, AssignmentStatus.IN_PROGRESS));
+        return jobAssignmentDao.findActiveLinksForUsers(userIds, ACTIVE_WORK_STATUSES);
     }
 }

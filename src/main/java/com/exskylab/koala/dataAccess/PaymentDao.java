@@ -102,14 +102,6 @@ public interface PaymentDao extends JpaRepository<Payment, UUID> {
     boolean existsByJobAssignmentIdAndStatusIn(UUID jobAssignmentId, List<PaymentAttemptStatus> statuses);
 
     @Query("""
-            select (count(p) > 0) from Payment p
-            where p.status in :statuses
-              and (p.jobAssignment.worker.id = :userId or p.jobAssignment.job.creator.id = :userId)
-            """)
-    boolean existsPendingForUser(@Param("userId") UUID userId,
-                                 @Param("statuses") List<PaymentAttemptStatus> statuses);
-
-    @Query("""
             select p.id as id, a.worker.id as workerId, a.job.creator.id as employerId
             from Payment p join p.jobAssignment a
             where p.status in :statuses

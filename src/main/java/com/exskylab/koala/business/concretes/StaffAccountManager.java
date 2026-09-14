@@ -500,8 +500,7 @@ public class StaffAccountManager implements StaffAccountService {
         }
         Map<UUID, String> names = new LinkedHashMap<>();
         for (StaffMember member : staffMemberDao.findAllById(staffIds)) {
-            names.put(member.getId(), member.getDisplayName() == null || member.getDisplayName().isBlank()
-                    ? member.getEmail() : member.getDisplayName());
+            names.put(member.getId(), displayNameOf(member));
         }
         return names;
     }

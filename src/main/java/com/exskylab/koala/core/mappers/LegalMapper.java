@@ -6,6 +6,7 @@ import com.exskylab.koala.core.dtos.legal.response.AccountDeletionDto;
 import com.exskylab.koala.core.dtos.legal.response.DeletionBlockerDto;
 import com.exskylab.koala.core.helpers.MessageResolver;
 import com.exskylab.koala.entities.AccountDeletionRequest;
+import com.exskylab.koala.entities.AccountDeletionStatus;
 import com.exskylab.koala.entities.AgreementVersion;
 import com.exskylab.koala.entities.ConsentRecord;
 import org.mapstruct.Mapper;
@@ -30,12 +31,18 @@ public interface LegalMapper {
     List<ConsentRecordDto> toConsentRecordDtoList(List<ConsentRecord> consentRecords);
 
     @Named("participantView")
-    @Mapping(target = "blockedReason",
-            expression = "java(messageResolver.resolve(request.getBlockedReason()))")
+    @Mapping(target = "blockedReason", expression = "java(participantBlockedReason(request, messageResolver))")
     @Mapping(target = "rejectedByStaffId", ignore = true)
     @Mapping(target = "blockers", ignore = true)
     AccountDeletionDto toAccountDeletionDto(AccountDeletionRequest request,
                                              @Context MessageResolver messageResolver);
+
+    default String participantBlockedReason(AccountDeletionRequest request, MessageResolver messageResolver) {
+        if (request.getStatus() == AccountDeletionStatus.REJECTED && request.getRejectionReason() != null) {
+            return request.getRejectionReason();
+        }
+        return messageResolver.resolve(request.getBlockedReason());
+    }
 
     @IterableMapping(qualifiedByName = "participantView")
     List<AccountDeletionDto> toAccountDeletionDtoList(List<AccountDeletionRequest> requests,

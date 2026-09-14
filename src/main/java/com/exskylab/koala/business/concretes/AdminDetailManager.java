@@ -15,9 +15,13 @@ import com.exskylab.koala.business.abstracts.PaymentService;
 import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.business.abstracts.ReportService;
 import com.exskylab.koala.business.abstracts.ReviewService;
+import com.exskylab.koala.business.abstracts.StaffAccountService;
 import com.exskylab.koala.business.abstracts.TimesheetService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.dtos.company.response.CompanyReviewDto;
+import com.exskylab.koala.core.dtos.identity.response.IdentityReviewDto;
+import com.exskylab.koala.core.dtos.legal.response.AccountDeletionDto;
+import com.exskylab.koala.core.dtos.legal.response.DeletionBlockerDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.AdminAssignmentDetailDto;
 import com.exskylab.koala.core.dtos.payment.response.AdminPaymentDto;
 import com.exskylab.koala.core.dtos.payment.response.AdminRefundDto;
@@ -25,9 +29,13 @@ import com.exskylab.koala.core.dtos.user.response.AdminUserCountsDto;
 import com.exskylab.koala.core.dtos.user.response.AdminUserDetailDto;
 import com.exskylab.koala.core.mappers.AdminDetailMapper;
 import com.exskylab.koala.core.mappers.CompanyMapper;
+import com.exskylab.koala.core.mappers.LegalMapper;
+import com.exskylab.koala.core.helpers.MessageResolver;
 import com.exskylab.koala.core.security.StaffAuditContext;
 import com.exskylab.koala.core.security.StaffPrincipal;
+import com.exskylab.koala.entities.AccountDeletionRequest;
 import com.exskylab.koala.entities.Cancellation;
+import com.exskylab.koala.entities.IdentityVerification;
 import com.exskylab.koala.entities.Company;
 import com.exskylab.koala.entities.CompanyApprovalStatus;
 import com.exskylab.koala.entities.CompanyContact;
@@ -50,6 +58,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -57,8 +66,6 @@ import java.util.stream.Collectors;
 @Service
 @Slf4j
 public class AdminDetailManager implements AdminDetailService {
-
-    static final String PII_READ_ACTION = "user.read_pii";
 
     private final JobAssignmentService jobAssignmentService;
     private final PaymentService paymentService;
@@ -76,8 +83,11 @@ public class AdminDetailManager implements AdminDetailService {
     private final LegalService legalService;
     private final CompanyService companyService;
     private final JobService jobService;
+    private final StaffAccountService staffAccountService;
     private final AdminDetailMapper adminDetailMapper;
     private final CompanyMapper companyMapper;
+    private final LegalMapper legalMapper;
+    private final MessageResolver messageResolver;
 
     public AdminDetailManager(JobAssignmentService jobAssignmentService, PaymentService paymentService,
                               PayoutService payoutService, DisputeService disputeService,
@@ -87,7 +97,8 @@ public class AdminDetailManager implements AdminDetailService {
                               CompanyContactService companyContactService, BadgeService badgeService,
                               IdentityDocumentReviewService identityDocumentReviewService,
                               LegalService legalService, CompanyService companyService, JobService jobService,
-                              AdminDetailMapper adminDetailMapper, CompanyMapper companyMapper) {
+                              StaffAccountService staffAccountService, AdminDetailMapper adminDetailMapper,
+                              CompanyMapper companyMapper, LegalMapper legalMapper, MessageResolver messageResolver) {
         this.jobAssignmentService = jobAssignmentService;
         this.paymentService = paymentService;
         this.payoutService = payoutService;
@@ -104,8 +115,44 @@ public class AdminDetailManager implements AdminDetailService {
         this.legalService = legalService;
         this.companyService = companyService;
         this.jobService = jobService;
+        this.staffAccountService = staffAccountService;
         this.adminDetailMapper = adminDetailMapper;
         this.companyMapper = companyMapper;
+        this.legalMapper = legalMapper;
+        this.messageResolver = messageResolver;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<IdentityReviewDto> identityReviews(List<IdentityVerification> reviews) {
+        Set<UUID> reviewerIds = reviews.stream()
+                .map(IdentityVerification::getReviewedByStaffId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, String> names = staffAccountService.displayNamesOf(reviewerIds);
+        return reviews.stream().map(review -> IdentityReviewDto.from(review, names)).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public IdentityReviewDto identityReview(IdentityVerification review) {
+        return identityReviews(List.of(review)).getFirst();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AccountDeletionDto> deletionRequests(List<AccountDeletionRequest> requests) {
+        Map<UUID, List<DeletionBlockerDto>> blockers = legalService.findDeletionBlockers(requests);
+        return requests.stream()
+                .map(request -> legalMapper.toStaffAccountDeletionDto(request,
+                        blockers.getOrDefault(request.getId(), List.of()), messageResolver))
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AccountDeletionDto deletionRequest(AccountDeletionRequest request) {
+        return deletionRequests(List.of(request)).getFirst();
     }
 
     @Override
@@ -137,7 +184,7 @@ public class AdminDetailManager implements AdminDetailService {
         User user = userService.getById(userId);
         boolean includePii = actor != null && actor.isRegistered() && actor.holds(StaffPermission.USER_READ_PII);
         if (includePii) {
-            StaffAuditContext.reclassify(StaffPermission.USER_READ_PII, PII_READ_ACTION, true);
+            StaffAuditContext.reclassify(StaffPermission.USER_READ_PII, StaffPermission.USER_READ_PII.getCode(), true);
             log.info("Staff {} reads user {} with contact details", actor.staffId(), userId);
         }
 

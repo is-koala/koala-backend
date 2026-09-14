@@ -944,6 +944,13 @@ değişkenleri `SITEMAP_MANIFEST_*` altındadır.
 
 `ClientContext.from(request, clientIpResolver)` güvenilir istemci IP'si, User-Agent, cihaz kimliği ve platformu tek nesnede toplar.
 
+**`GET /legal/account-deletion` yanıtında `blockedReason` reddedilmiş talepte ret gerekçesini taşımaya devam eder.** koala-mobile
+yalnız bu alanı okuyor (`account_deletion.dart` `isBlocked`, `account_deletion_view.dart`); #283 ret gerekçesini kendi sütununa
+(`rejection_reason`, ayrıca `rejectionReason` alanı) taşıdığında katılımcı görünümü `LegalMapper.participantBlockedReason` ile
+`REJECTED` talepte `blockedReason`'ı ret gerekçesiyle doldurmayı sürdürüyor; `rejectedByStaffId` ve `blockers` katılımcıya
+gitmez (`AdminListSearchIT.aDeletionRequestShowsItsBlockersAndThenTheStaffMemberWhoRejectedIt`). İstemci `rejectionReason`'a
+geçtiğinde bu geri uyumluluk kaldırılabilir; ondan önce `blockedReason`'ın anlamını daraltmak kullanıcıdan gerekçeyi saklar.
+
 **`GET /users/me` istemcinin yönlendirme kararı için gerekeni döner:** `employer`, `emailVerified`, `phoneVerified`, `identityVerified`, `roles` ve `companies[{companyId, companyName, role, approved}]`. Öncesinde `isEmployer` yalnızca tek seferlik kayıt akışında dönüyordu, giriş sonrası kullanıcının işveren mi çalışan mı olduğu öğrenilemiyordu.
 
 **`JobCategory` sabit bir `code` taşır.** İstemci ikon/pin/renk eşlemesini UUID'ye ya da görünen ada değil bu koda bağlar.
@@ -2034,18 +2041,26 @@ kusur sınıfı). `bankAccountId` grafikteki `bankAccount`'tan.
 **isteğe bağlı** gövde kazandı (`CancelJobDto.reason`, en çok 500; `{job.cancel.reason.too.long}`) — yeni uç değil,
 mevcut ucun gövdesi. İstemciler göndermezse `cancelReason` `null` kalır; mobil/web'in göndermesi ayrı iş.
 `creator` `AdminJobDetailDto`'da `SafeUserDto` (kullanıcı adı ve profil fotoğrafı; `employer` alanı e-postalı
-`StaffPartyDto` olarak duruyor, ikisi aynı kişi).
+`StaffPartyDto` olarak duruyor, ikisi aynı kişi). `AdminDetailReadIT.theJobDetailNamesItsCreatorAndCancellation` iptali
+SQL ile değil `POST /jobs/{id}/cancel` ile yapar: gövdesiz → `cancelReason` null, boşluk gerekçe → null, 501 karakter →
+400 (`details[].field=reason`), dolu gerekçe → personel detayında görünür.
 
 **Hesap silme talebi.** Ret artık `rejection_reason` + `rejected_by_staff_id` yazıyor; eskiden ret gerekçesi
 `blocked_reason`'a yazılıyordu (bir mesaj anahtarı kolonuna serbest metin). Changelog `REJECTED` satırlarda gerekçeyi
 taşır ve `blocked_reason`'ı boşaltır; `LegalService.rejectDeletionRequest(actor, id, reason)` aktörü alır.
-`blockers[]{type,id}` **yalnız `REQUESTED`** talepte ve **canlı** hesaplanır: `LegalService.findDeletionBlockers`
-sayfa başına dört sorgu (`PaymentDao.findPendingLinksForUsers`, `JobAssignmentDao.findMoneyLinksForUsers`/
-`findActiveLinksForUsers`, `DisputeDao.findActiveLinksForUsers`), hepsi `PartyLink(id, workerId, employerId)`
-projeksiyonu; tipler `DeletionBlockerType` (`PENDING_PAYMENT|ESCROW|ACTIVE_WORK|DISPUTE`) ve zamanlayıcının
-`findBlockedReason` sırasıyla aynı. `blockedReason` eski anlamını koruyor: zamanlayıcının **son denemesinde**
-bulduğu ilk engelin metni. Kullanıcı yüzeyi (`LegalController`) `toAccountDeletionDto` ile `rejectedByStaffId`'siz
-ve `blockers`'sız döner; personel yüzeyi `toStaffAccountDeletionDto`.
+**Katılımcı sözleşmesi değişmedi (§2m):** `toAccountDeletionDto` `REJECTED` talepte `blockedReason`'ı ret gerekçesiyle
+doldurur, çünkü mobil yalnız o alanı okuyor. `blockers[]{type,id}` **yalnız `REQUESTED`** talepte ve **canlı**
+hesaplanır: `LegalService.findDeletionBlockers` sayfa başına dört sorgu (`PaymentDao.findPendingLinksForUsers`,
+`JobAssignmentDao.findMoneyLinksForUsers`/`findActiveLinksForUsers`, `DisputeDao.findActiveLinksForUsers`), hepsi
+`PartyLink(id, workerId, employerId)` projeksiyonu; tipler `DeletionBlockerType` (`PENDING_PAYMENT|ESCROW|ACTIVE_WORK|
+DISPUTE`) ve her tip kendi mesaj anahtarını taşır. **Taksonomi tek yerde:** zamanlayıcının `findBlockedReason`'ı aynı
+`blockersOf` sonucunun ilk engelinden türer; eski dört boolean predicate (`hasPendingPaymentForUser`,
+`hasMoneyInEscrowFor`, `hasActiveWorkFor`, `hasActiveDisputeForUser`) ve DAO `exists*` sorguları silindi, etkin iş
+durumları `JobAssignmentManager.ACTIVE_WORK_STATUSES` sabitinde. `blockedReason` personel görünümünde eski anlamını
+koruyor: zamanlayıcının **son denemesinde** bulduğu ilk engelin metni. Kullanıcı yüzeyi (`LegalController`)
+`rejectedByStaffId`'siz ve `blockers`'sız döner; personel yüzeyi `toStaffAccountDeletionDto`, bileşimi
+`AdminDetailManager.deletionRequests` (sayfa başına tek `findDeletionBlockers`;
+`AdminListSearchIT.theDeletionQueueResolvesBlockersWithoutAQueryPerRow`).
 
 **Aynı DTO, iki görünüm: `DisputeDto`.** `openedBySide` açanın atamanın işçisi olup olmadığından türer
 (`DisputeMapper.openedBySide`, `EvidenceUploaderSide` mantığıyla aynı). `resolvedByStaffId` yalnız `toStaffDisputeDto`'da
@@ -2053,8 +2068,11 @@ dolar; kullanıcının `GET /job-assignments/{id}/disputes` çağrısı personel
 şikayete konu ilanda, şikayet edenin ya da şikayet edilenin işçi olduğu **son** atama
 (`JobAssignmentService.findLatestByJobsAndWorkers`, sayfa başına tek sorgu; §2s6'nın "atamanın şikayetleri" kuralının
 tersi). `reviewedByStaffId` `Report.reviewedByStaff` proxy id'si. `IdentityReviewDto.reviewedByStaffName`
-`StaffAccountService.displayNamesOf` ile sayfa başına tek `findAllById`; görünen ad boşsa personel e-postası (§2av'nin
-`actorDisplayName` kuralıyla aynı). `IbanPendingDto.status` `BankAccountVerificationPolicy.effectiveStatus`,
+`AdminDetailManager.identityReviews` içinde `StaffAccountService.displayNamesOf` ile sayfa başına tek `findAllById`;
+görünen ad boşsa personel e-postası (§2av'nin `actorDisplayName` kuralıyla aynı). Kimlik inceleme durumu kuralı
+(`APPROVED`/`REJECTED`/`PENDING`) entity'de: `IdentityVerification.reviewStatus()`; DTO ve kullanıcı sayacı onu çağırır,
+`IdentityVerificationDao.search` JPQL'i aynı üç koşulu metin olarak taşır (#254). Kullanıcı sayacı `disputes` ile
+`/admin/disputes?userId=` aynı predicate'i kullanır: işçi, ilan sahibi **ya da açan** (`DisputeDao.countInvolving`). `IbanPendingDto.status` `BankAccountVerificationPolicy.effectiveStatus`,
 `attemptsLeft` `BankVerificationProperties.maxAttempts`'e göre (`BankAccountService.verificationAttemptsAllowed`).
 
 **Süzgeçler `StaffSearchQuery` sözleşmesine eklenir, onu değiştirmez.** Her id süzgeci `(:x is null or … = :x)` ile
