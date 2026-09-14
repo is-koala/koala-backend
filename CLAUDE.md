@@ -3217,6 +3217,8 @@ taşıması ve dış ön koşulların tek kaynağı `docs/runbooks/iys.md` dosya
 
 **`user.role.manage` yalnız `OWNER`'a seed'lendi.** Marketplace `ROLE_ADMIN` basmak sistemdeki en geniş etkili işlem; `staff.manage` ve `role.manage` de aynı sebeple yalnız `OWNER`'da. Destek ya da güven dalına verilseydi, kendi hesabına admin rolü yazıp bütün izin grafiğini atlamak tek istek olurdu. `SUPPORT_AGENT` rol listesini zaten `user.read` üzerinden görebiliyor; yazma ayrı bir karar olarak `OWNER`'da bırakıldı.
 
+**Beşincisi `job.read` (#255).** `GET /admin/jobs` ve `GET /admin/jobs/{jobId}`; `PERSONAL_DATA`, non-mutating, seed'de `SUPPORT_AGENT` — yani `SUPPORT_AGENT`'ın etkili izinleri artık `user.read` + `job.read`, onu kapsayan trust dalı ve `COMPANY_APPROVER` da ikisini alır. Gerekçe §2s6'da; rol grafiğini sayan testler (`StaffAuthorizationIT`, `StaffIdentityIT`, `StaffRoleAdministrationIT`) buna göre yazılı.
+
 **Personel tabloları `BaseEntity`'yi genişletmez.** `BaseEntity` `created_by_id`/`updated_by_id` üzerinden `users`'a yabancı anahtar kurar; ADR-0010 iki yönde de bağ kurulmamasını şart koşuyor.
 
 **Para taşıyan metotlara anotasyon konmaz.** `PayoutService`/`PayoutManager` metotlarını otomatik tamamlama zamanlayıcısı boş bir `SecurityContext` ile çağırıyor; anotasyon konsaydı zamanlayıcı sessizce dururdu. Personel tarafı `StaffPayoutManager` facade'ından geçer: aktörü parametre olarak alır, izni denetler, sonra korumasız iç metodu çağırır. Aktör `null` ise istek köprü aşamasındaki marketplace `ROLE_ADMIN`'dendir.
