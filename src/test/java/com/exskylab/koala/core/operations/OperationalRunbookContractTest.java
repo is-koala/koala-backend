@@ -84,6 +84,30 @@ class OperationalRunbookContractTest {
     }
 
     @Test
+    void theReconciliationCeilingTheCallbackRecordsIsCoveredByAnAlertAndARunbookHeading() throws Exception {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        new PaymentMetrics(registry).callbackManualReviewRequired();
+        assertEquals(1.0, registry.get("koala.payment.operations")
+                .tag("operation", "callback").tag("outcome", "manual_review_required").counter().count());
+
+        String rule = alertRule("KoalaPaymentIntegrationFailure");
+        assertTrue(rule.contains("koala_payment_operations_total"), rule);
+        assertTrue(rule.contains("manual_review_required"),
+                "Tavana ulasan deneme sayaci yaziyor ama KoalaPaymentIntegrationFailure onu izlemiyor; "
+                        + "VERIFY_PENDING'de sikisan para kimseye ulasmaz.");
+
+        String responses = Files.readString(Path.of("docs/runbooks/alerts.md"));
+        assertTrue(responses.contains("manual_review_required"),
+                "Tavan sonucunun ilk mudahalesi alerts.md'de yazili olmali.");
+
+        String payments = Files.readString(Path.of("docs/runbooks/payments.md"));
+        assertTrue(payments.contains("3DS'siz SUCCESS ile VERIFY_PENDING'de kalan deneme"),
+                "Sikisan denemeyi kurtaran adim payments.md 1. bolumde bir baslik olmali.");
+        assertTrue(payments.contains("IYZICO_FORCE_3DS"),
+                "Runbook, 3DS'i zorlayan anahtarin adini operatore vermeli.");
+    }
+
+    @Test
     void thePayoutStuckWaitingForBankEvidenceIsActuallyCoveredByAnAlert() throws Exception {
         assertGaugeIsWatchedByAnAlert(metrics -> metrics.payoutsAwaitingSettlement(3),
                 "koala.payout.settlement.overdue");

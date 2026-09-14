@@ -9,8 +9,10 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class IyzicoEnvironmentSplitTest {
 
@@ -121,6 +123,20 @@ class IyzicoEnvironmentSplitTest {
                     assertEquals(IyzicoProperties.Deployment.LOCAL,
                             context.getBean(IyzicoProperties.class).getDeployment());
                 });
+    }
+
+    @Test
+    void theShippedConfigurationForcesThreeDSecureUnlessTheEnvironmentSwitchesItOff() {
+        new ApplicationContextRunner()
+                .withInitializer(new ConfigDataApplicationContextInitializer())
+                .withUserConfiguration(IyzicoConfiguration.class)
+                .run(context -> assertTrue(context.getBean(IyzicoProperties.class).isForceThreeDSecure()));
+
+        new ApplicationContextRunner()
+                .withInitializer(new ConfigDataApplicationContextInitializer())
+                .withUserConfiguration(IyzicoConfiguration.class)
+                .withPropertyValues("IYZICO_FORCE_3DS=false")
+                .run(context -> assertFalse(context.getBean(IyzicoProperties.class).isForceThreeDSecure()));
     }
 
     @Test

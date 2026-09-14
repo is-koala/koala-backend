@@ -235,6 +235,68 @@ class IyzicoProtocolTest {
         assertEquals("https://sandbox-cpp.iyzipay.com/checkoutform/example", result.getPaymentPageUrl());
     }
 
+    @Test
+    void everyCheckoutFormInitializeForcesThreeDSecure() {
+        server.expect(requestTo(BASE_URL + IyzicoEndpoints.CHECKOUT_FORM_INITIALIZE))
+                .andExpect(jsonPath("$.forceThreeDS").value(1))
+                .andExpect(jsonPath("$.conversationId").value("conv-1"))
+                .andRespond(withSuccess(signedInitializeBody(), MediaType.APPLICATION_JSON));
+
+        service.initiateCheckoutFormPayment(initializeRequest());
+
+        server.verify();
+    }
+
+    @Test
+    void theForcedThreeDSecureFlagIsPartOfTheSignedBody() {
+        server.expect(request -> {
+            String randomKey = request.getHeaders().getFirst("x-iyzi-rnd");
+            String authorization = new String(Base64.getDecoder().decode(
+                    request.getHeaders().getFirst("Authorization").substring("IYZWSv2 ".length())),
+                    StandardCharsets.UTF_8);
+            String body = new String(((org.springframework.mock.http.client.MockClientHttpRequest) request)
+                    .getBodyAsBytes(), StandardCharsets.UTF_8);
+
+            assertTrue(body.contains("\"forceThreeDS\":1"), body);
+            assertTrue(authorization.endsWith("&signature:"
+                    + hmac(randomKey + IyzicoEndpoints.CHECKOUT_FORM_INITIALIZE + body)));
+        }).andRespond(withSuccess(signedInitializeBody(), MediaType.APPLICATION_JSON));
+
+        service.initiateCheckoutFormPayment(initializeRequest());
+
+        server.verify();
+    }
+
+    @Test
+    void switchingTheFlagOffDropsTheFieldInsteadOfSendingZero() {
+        IyzicoProperties relaxed = new IyzicoProperties();
+        relaxed.setApiKey("sandbox-api-key");
+        relaxed.setSecretKey(SECRET);
+        relaxed.setBaseUrl(BASE_URL);
+        relaxed.setForceThreeDSecure(false);
+        IyzicoPaymentService relaxedService = new IyzicoPaymentService(restTemplate, relaxed, new ObjectMapper());
+        server.expect(requestTo(BASE_URL + IyzicoEndpoints.CHECKOUT_FORM_INITIALIZE))
+                .andExpect(jsonPath("$.forceThreeDS").doesNotExist())
+                .andRespond(withSuccess(signedInitializeBody(), MediaType.APPLICATION_JSON));
+
+        relaxedService.initiateCheckoutFormPayment(initializeRequest());
+
+        server.verify();
+    }
+
+    @Test
+    void theFlagDefaultsToForcingThreeDSecure() {
+        assertTrue(new IyzicoProperties().isForceThreeDSecure());
+    }
+
+    private static String signedInitializeBody() {
+        return """
+                {"status":"success","conversationId":"conv-1","token":"tok-1",
+                 "paymentPageUrl":"https://sandbox-cpp.iyzipay.com/checkoutform/example",
+                 "signature":"da244a6a48b4793ef8d0d6e0b5e46683c5a9bf0f6b4f73b60168667f4ae66a25"}
+                """;
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {
             "https://sandbox-api.iyzipay.com/checkoutform/example",

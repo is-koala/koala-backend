@@ -120,15 +120,70 @@ Payment <id> rejected: 3-D Secure verification did not succeed, mdStatus=<değer
 
 `mdStatus=null` ise yanıtta alan hiç yoktu. iyzico "yalnız 3DS işlemlerinde
 görünür" diyor, yani ya işlem 3DS'siz geçti ya da yanıt beklediğimiz gibi değil;
-ikisi ayırt edilemediği için ödeme doğrulama kuyruğunda tutulur. **Bu satırı canlıda görürsen
-olaydır** — Checkout Form 3DS'siz ödeme geçiriyor demektir ve karar
-(`forceThreeDS` mı, kapının gevşetilmesi mi) issue'ya yazılmalıdır. Kapıyı
-kendiliğinden gevşetme.
+ikisi ayırt edilemediği için ödeme doğrulama kuyruğunda tutulur. 14.09.2026
+sandbox'ta tam bu geldi (`paymentStatus=SUCCESS fraudStatus=1 mdStatus=null`,
+#276); o günden beri initialize her zaman `forceThreeDS=1` gönderir
+(`IYZICO_FORCE_3DS`, §6.3). **Bu satırı canlıda görürsen olaydır** — ya bayrak
+kapatılmıştır ya da iyzico bayrağa rağmen 3DS'siz geçirmiştir; ikisi de issue'ya
+yazılır. Kapıyı kendiliğinden gevşetme.
 
 3DS sonucu terminal sayılmaz: satır `VERIFY_PENDING` kalır ve tek aktif deneme
 indeksi yeni checkout'u engeller. Sağlayıcı tarafında tahsilat görünüyorsa
 panelden `conversation_id` ile elle iade et; sonuç kanıtlanmadan satırı `FAILED`
 yapma.
+
+**3DS'siz SUCCESS ile VERIFY_PENDING'de kalan deneme.** Yukarıdaki satırın
+yarattığı durum: `payments.status = VERIFY_PENDING`,
+`failure_reason = '{payment.3ds.verification.failed}'`, kart tarafında tahsilat
+var, emanet yok, işveren aynı atamada yeni checkout açamıyor
+(`{payment.attempt.in.progress}`). Bounded reconciliation aynı imzalı sonucu
+sekiz kez yeniden okur, her seferinde aynı karara varır ve tavanda
+`requires manual review` WARN satırı ile
+`koala.payment.operations{operation=callback,outcome=manual_review_required}`
+sayacını bırakır; sonrası bu adımdır. Sıra önemlidir:
+
+1. **Üretimde önce iade.** Panelde `conversation_id` ile işlemi bul ve tahsilatı
+   elle iade et; bizde `SUCCEEDED` bir ödeme olmadığı için admin refund ucu bu
+   kaydı seçmez. İade referansını olay kaydına yaz. Sandbox/test ortamında bu
+   adım atlanabilir — para gerçek değil.
+2. **Denemeyi kapat.** Uygulama bu durumu bilerek terminal yapmaz; kapatan sensin.
+   `PaymentManager.fail` ne yazıyorsa aynısını yaz:
+
+   ```sql
+   update payments
+   set status = 'FAILED',
+       failure_reason = '{payment.3ds.verification.failed}',
+       completed_at = now(),
+       next_verification_at = null
+   where id = '<payment_id>'
+     and is_deleted = false
+     and status = 'VERIFY_PENDING'
+     and failure_reason = '{payment.3ds.verification.failed}';
+   ```
+
+   `1 satır` beklenir; `0` ise satır bu arada değişmiştir (scheduler başarıya
+   çevirmiş ya da başka biri kapatmış olabilir), yeniden oku ve kör tekrar etme.
+3. **Atamaya dokunma.** `VERIFY_PENDING` atamanın `payment_status` alanını hiç
+   değiştirmez, o hâlâ `PENDING_COLLECTION`'dır; kod yolundaki `fail` onu
+   `FAILED` yapar ve `PaymentStateMachine.acceptsPayment` ikisini de yeni ödeme
+   için kabul eder. Yani atamada ek bir `update` gerekmez; işveren bu satırdan
+   sonra yeni checkout açabilir. Kontrol:
+
+   ```sql
+   select p.status, p.completed_at, a.payment_status
+   from payments p
+   join job_assignments a on a.id = p.job_assignment_id
+   where p.id = '<payment_id>';
+   ```
+
+   Beklenen `FAILED`, dolu `completed_at`, `PENDING_COLLECTION` (ya da `FAILED`).
+   `payment_status` `HELD_IN_ESCROW` veya sonrası ise aynı atamanın başka bir
+   denemesi başarmıştır — bu bir yükseltme, kapattığın satırı olay kaydına ekle.
+
+`StuckThreeDSecureAttemptRunbookIT` bu iki bloğu belgeden okuyup gerçek
+Postgres'te koşturur: kapatmadan önce ikinci checkout `ATTEMPT_IN_PROGRESS`
+ile reddedilir, kapattıktan sonra kabul edilir; `SUCCEEDED` bir satırda `0`
+satır güncellenir.
 
 **Sonucu bilinmeyen deneme.** `VERIFY_PENDING` aktif bir durumdur; benzersiz
 indeks aynı atamada ikinci checkout'u engeller. Token varsa
@@ -612,8 +667,15 @@ belgelenmiş gibi kullanmayın:
   özelliğidir, bizim gönderdiğimiz bir bayrak değil.
 - **`forceThreeDS` istek alanı.** Dört resmî SDK'da var (Java'da `Integer`,
   yani `0`/`1`), REST referansının iki kopyasında da yok, semantiği hiçbir yerde
-  yazılı değil. Bizim kodumuz bu alanı göndermiyor. 3DS'i her işlemde zorunlu
-  kılmak istenirse önce iyzico'dan yazılı teyit alınmalı.
+  yazılı değil. **Doğrulandı: 14.09.2026 sandbox'ta 3DS'siz SUCCESS geldi**
+  (`paymentStatus=SUCCESS fraudStatus=1 mdStatus=null`, #276) — yani CF'nin 3DS
+  seçimi bize bırakılmış değil ve iyzico'dan yazılı teyit beklemek para
+  yolunu kapalı tutuyordu. `IyzicoPaymentService.initiateCheckoutFormPayment`
+  artık her CF initialize gövdesine `forceThreeDS: 1` yazar
+  (`IYZICO_FORCE_3DS`, varsayılan `true`; `false` ise alan hiç gönderilmez).
+  Bayrağın canlıda 3DS'i gerçekten zorladığı **hâlâ** canlı işlemle
+  doğrulanacak; doğrulanana kadar `mdStatus=null` satırı §1'deki gibi olaydır.
+  Kapı (`mdStatus == 1`) bayraktan bağımsız aynı kalır.
 - **`callbackUrl`'in panelde allowlist'lenmesi gerektiği.** Belgelerde geçmiyor;
   tek yazılı şart geçerli SSL sertifikası. Canlı geçişte yine de sorulmalı.
 - **Sandbox'ta paranın gerçekten akıp akmadığı**, blokajın çözülmesi, alt üye

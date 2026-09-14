@@ -7,7 +7,7 @@ groups:
         labels: { severity: critical, owner: backend }
         annotations: { summary: "Backend HTTP 5xx oranı yüzde 5'i aştı" }
       - alert: KoalaPaymentIntegrationFailure
-        expr: sum(increase(koala_payment_operations_total{operation=~"initiation|callback",outcome=~"provider_error|persistence_error|amount_mismatch|three_ds_verification_failed"}[5m])) > 0
+        expr: sum(increase(koala_payment_operations_total{operation=~"initiation|callback",outcome=~"provider_error|persistence_error|amount_mismatch|three_ds_verification_failed|manual_review_required"}[5m])) > 0
         for: 1m
         labels: { severity: critical, owner: payments }
         annotations: { summary: "Ödeme başlatma veya callback entegrasyonu hata verdi" }

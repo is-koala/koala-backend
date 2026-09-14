@@ -24,8 +24,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import org.slf4j.LoggerFactory;
+
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -554,6 +561,52 @@ class PaymentCallbackTest {
         assertEquals(PaymentAttemptStatus.VERIFY_PENDING, result.getStatus());
         assertEquals(PaymentMessages.THREE_D_SECURE_FAILED, result.getFailureReason());
         assertNotEquals(PaymentStatus.HELD_IN_ESCROW, result.getJobAssignment().getPaymentStatus());
+    }
+
+    @Test
+    void aSilentThreeDSecureResultThatExhaustsReconciliationStaysPendingAndAsksForManualReview() {
+        verificationProperties.setMaxAttempts(2);
+        Payment payment = pendingPayment();
+        IyzicoPaymentResultResponseDto silent = providerSuccess();
+        silent.setMdStatus(null);
+        when(paymentDao.findByProviderToken(TOKEN)).thenReturn(Optional.of(payment));
+        when(paymentDao.findWithDetailsById(payment.getId())).thenReturn(Optional.of(payment));
+        when(iyzicoPaymentService.retrieveCheckoutFormResult(any())).thenReturn(silent);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        Logger logger = (Logger) LoggerFactory.getLogger(PaymentManager.class);
+        logger.addAppender(appender);
+
+        try {
+            paymentManager.completeFromCallback(TOKEN);
+            assertNotNull(payment.getNextVerificationAt());
+            assertTrue(manualReviewLines(appender).isEmpty());
+
+            assertFalse(paymentManager.reconcileAttempt(payment.getId()));
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+
+        assertEquals(PaymentAttemptStatus.VERIFY_PENDING, payment.getStatus());
+        assertEquals(PaymentMessages.THREE_D_SECURE_FAILED, payment.getFailureReason());
+        assertEquals(2, payment.getVerificationAttempts());
+        assertNull(payment.getNextVerificationAt());
+        assertNull(payment.getCompletedAt());
+        assertEquals(PaymentStatus.PENDING_COLLECTION, payment.getJobAssignment().getPaymentStatus());
+        List<String> lines = manualReviewLines(appender);
+        assertEquals(1, lines.size(), lines.toString());
+        assertTrue(lines.getFirst().contains(payment.getId().toString()));
+        assertTrue(lines.getFirst().contains("VERIFY_PENDING"));
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    private static List<String> manualReviewLines(ListAppender<ILoggingEvent> appender) {
+        return appender.list.stream()
+                .filter(event -> event.getLevel() == Level.WARN)
+                .map(ILoggingEvent::getFormattedMessage)
+                .filter(message -> message.contains("requires manual review"))
+                .toList();
     }
 
     @Test

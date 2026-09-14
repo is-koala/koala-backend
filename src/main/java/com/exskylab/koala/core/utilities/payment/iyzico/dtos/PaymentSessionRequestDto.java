@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.utilities.payment.iyzico.dtos;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.math.BigDecimal;
 import lombok.Getter;
 import lombok.Setter;
@@ -31,6 +32,9 @@ public class PaymentSessionRequestDto {
     private List<IyzicoBasketItemDto> basketItems;
 
     private IyzicoAddressDto billingAddress;
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private Integer forceThreeDS;
 
 
 }

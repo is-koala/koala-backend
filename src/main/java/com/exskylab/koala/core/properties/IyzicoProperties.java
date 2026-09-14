@@ -48,6 +48,8 @@ public class IyzicoProperties {
 
     private boolean settlementEnabled = true;
 
+    private boolean forceThreeDSecure = true;
+
     public void setDeployment(Deployment deployment) {
         this.deployment = deployment == null ? Deployment.LOCAL : deployment;
     }

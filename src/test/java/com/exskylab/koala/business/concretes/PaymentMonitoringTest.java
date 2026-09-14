@@ -249,6 +249,44 @@ class PaymentMonitoringTest {
     }
 
     @Test
+    void theManualReviewSeriesExistsAtZeroAndCountsOnlyTheReconciliationCeiling() {
+        verificationProperties.setMaxAttempts(2);
+        Payment payment = pendingPayment();
+        IyzicoPaymentResultResponseDto silent = new IyzicoPaymentResultResponseDto();
+        silent.setPaymentStatus("SUCCESS");
+        silent.setMdStatus(null);
+        silent.setFraudStatus(1);
+        silent.setPaymentId("pay-1");
+        silent.setPaymentTransactionId("txn-1");
+        silent.setConversationId(payment.getConversationId());
+        silent.setToken(TOKEN);
+        silent.setBasketId(payment.getJobAssignment().getId().toString());
+        silent.setCurrency("TRY");
+        silent.setPrice(new BigDecimal("1075.00"));
+        silent.setPaidPrice(new BigDecimal("1075.00"));
+        silent.setItemCount(1);
+        silent.setItemId(payment.getJobAssignment().getJob().getId().toString());
+        silent.setItemPrice(new BigDecimal("1075.00"));
+        silent.setItemPaidPrice(new BigDecimal("1075.00"));
+        silent.setItemSubMerchantPrice(new BigDecimal("1000.00"));
+        silent.setItemSubMerchantKey("submerchant-key");
+        when(paymentDao.findByProviderToken(TOKEN)).thenReturn(Optional.of(payment));
+        when(paymentDao.findWithDetailsById(payment.getId())).thenReturn(Optional.of(payment));
+        when(iyzicoPaymentService.retrieveCheckoutFormResult(any())).thenReturn(silent);
+
+        assertEquals(0.0, counter("callback", "manual_review_required"));
+
+        paymentManager.completeFromCallback(TOKEN);
+        assertEquals(0.0, counter("callback", "manual_review_required"));
+
+        paymentManager.reconcileAttempt(payment.getId());
+
+        assertEquals(1.0, counter("callback", "manual_review_required"));
+        assertEquals(2.0, counter("callback", "three_ds_verification_failed"));
+        assertEquals(PaymentAttemptStatus.VERIFY_PENDING, payment.getStatus());
+    }
+
+    @Test
     void anInitiationAbandonedBeforeTheProviderCallIsSweptIntoManualReconciliation() {
         verificationProperties.setInitiationDeadline(Duration.ofMinutes(15));
         Payment stuck = stuckInitiation(Duration.ofMinutes(30));
