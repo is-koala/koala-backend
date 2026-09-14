@@ -83,6 +83,48 @@ class GoogleGeocodingAddressProviderTest {
     }
 
     @Test
+    void aTurkishNeighborhoodDeliveredAsAdministrativeAreaLevel4IsMapped() {
+        server.expect(requestTo(containsString(BUILDING_TIER)))
+                .andRespond(withSuccess(results(sariyerStreetAddress()), MediaType.APPLICATION_JSON));
+
+        ProviderAddressCandidate candidate = provider.reverse(LATITUDE, LONGITUDE).orElseThrow();
+
+        assertEquals("İstanbul", candidate.city());
+        assertEquals("Sarıyer", candidate.district());
+        assertEquals("Rumeli Hisarı Mahallesi", candidate.neighborhood());
+        assertEquals("Okul Caddesi", candidate.thoroughfare());
+        assertEquals("15", candidate.buildingNumber());
+        assertEquals("34450", candidate.postalCode());
+        assertEquals(AddressCandidatePrecision.BUILDING, candidate.precision());
+        server.verify();
+    }
+
+    @Test
+    void aSublocalityThatMerelyRepeatsTheDistrictIsNotTakenAsTheNeighborhood() {
+        server.expect(requestTo(containsString(BUILDING_TIER)))
+                .andRespond(withSuccess(results(sariyerWithoutNeighborhood()), MediaType.APPLICATION_JSON));
+
+        ProviderAddressCandidate candidate = provider.reverse(LATITUDE, LONGITUDE).orElseThrow();
+
+        assertEquals("Sarıyer", candidate.district());
+        assertNull(candidate.neighborhood());
+        assertEquals(AddressCandidatePrecision.BUILDING, candidate.precision());
+        server.verify();
+    }
+
+    @Test
+    void aSublocalityDistinctFromTheDistrictFillsTheNeighborhoodAsALastResort() {
+        server.expect(requestTo(containsString(BUILDING_TIER)))
+                .andRespond(withSuccess(results(sublocalityNeighborhood()), MediaType.APPLICATION_JSON));
+
+        ProviderAddressCandidate candidate = provider.reverse(LATITUDE, LONGITUDE).orElseThrow();
+
+        assertEquals("Kadıköy", candidate.district());
+        assertEquals("Caferağa", candidate.neighborhood());
+        server.verify();
+    }
+
+    @Test
     void theMostDetailedOfSeveralBuildingTierResultsWins() {
         server.expect(requestTo(containsString(BUILDING_TIER)))
                 .andRespond(withSuccess(results(routeOnly(), neighborhoodOnly(), streetAddress()),
@@ -230,6 +272,46 @@ class GoogleGeocodingAddressProviderTest {
                   {"long_name":"Türkiye","short_name":"TR","types":["country"]},
                   {"long_name":"Kadıköy","short_name":"Kadıköy","types":["administrative_area_level_2"]},
                   {"long_name":"Caferağa Mahallesi","short_name":"Caferağa","types":["neighborhood"]},
+                  {"long_name":"34710","short_name":"34710","types":["postal_code"]}
+                ]}""";
+    }
+
+    private static String sariyerStreetAddress() {
+        return """
+                {"types":["street_address"],"address_components":[
+                  {"long_name":"15","short_name":"15","types":["street_number"]},
+                  {"long_name":"Okul Caddesi","short_name":"Okul Cd.","types":["route"]},
+                  {"long_name":"Rumeli Hisarı Mahallesi","short_name":"Rumeli Hisarı Mahallesi","types":["administrative_area_level_4","political"]},
+                  {"long_name":"Sarıyer","short_name":"Sarıyer","types":["political","sublocality","sublocality_level_1"]},
+                  {"long_name":"Sarıyer","short_name":"Sarıyer","types":["administrative_area_level_2","political"]},
+                  {"long_name":"İstanbul","short_name":"İstanbul","types":["administrative_area_level_1","political"]},
+                  {"long_name":"Türkiye","short_name":"TR","types":["country","political"]},
+                  {"long_name":"34450","short_name":"34450","types":["postal_code"]}
+                ]}""";
+    }
+
+    private static String sariyerWithoutNeighborhood() {
+        return """
+                {"types":["street_address"],"address_components":[
+                  {"long_name":"15","short_name":"15","types":["street_number"]},
+                  {"long_name":"Okul Caddesi","short_name":"Okul Cd.","types":["route"]},
+                  {"long_name":"Sarıyer","short_name":"Sarıyer","types":["political","sublocality","sublocality_level_1"]},
+                  {"long_name":"Sarıyer","short_name":"Sarıyer","types":["administrative_area_level_2","political"]},
+                  {"long_name":"İstanbul","short_name":"İstanbul","types":["administrative_area_level_1","political"]},
+                  {"long_name":"Türkiye","short_name":"TR","types":["country","political"]},
+                  {"long_name":"34450","short_name":"34450","types":["postal_code"]}
+                ]}""";
+    }
+
+    private static String sublocalityNeighborhood() {
+        return """
+                {"types":["street_address"],"address_components":[
+                  {"long_name":"12","short_name":"12","types":["street_number"]},
+                  {"long_name":"Moda Caddesi","short_name":"Moda Cd.","types":["route"]},
+                  {"long_name":"Caferağa","short_name":"Caferağa","types":["political","sublocality","sublocality_level_1"]},
+                  {"long_name":"Kadıköy","short_name":"Kadıköy","types":["administrative_area_level_2","political"]},
+                  {"long_name":"İstanbul","short_name":"İstanbul","types":["administrative_area_level_1","political"]},
+                  {"long_name":"Türkiye","short_name":"TR","types":["country","political"]},
                   {"long_name":"34710","short_name":"34710","types":["postal_code"]}
                 ]}""";
     }

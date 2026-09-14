@@ -15,8 +15,6 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.net.URI;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Optional;
 
 @Slf4j
@@ -95,44 +93,13 @@ public class GoogleGeocodingAddressProvider implements AddressReverseGeocoder {
     }
 
     private ProviderAddressCandidate map(JsonNode result, BigDecimal latitude, BigDecimal longitude) {
-        Map<String, String> longComponents = new HashMap<>();
-        Map<String, String> shortComponents = new HashMap<>();
-        for (JsonNode component : result.path("address_components")) {
-            String longText = text(component, "long_name");
-            String shortText = text(component, "short_name");
-            for (JsonNode type : component.path("types")) {
-                if (longText != null) longComponents.putIfAbsent(type.asText(), longText);
-                if (shortText != null) shortComponents.putIfAbsent(type.asText(), shortText);
-            }
-        }
-        return new ProviderAddressCandidate(
-                first(shortComponents, "country"),
-                first(longComponents, "administrative_area_level_1", "locality"),
-                first(longComponents, "administrative_area_level_2", "sublocality_level_1"),
-                first(longComponents, "neighborhood", "sublocality_level_2", "sublocality_level_3"),
-                first(longComponents, "route"),
-                first(longComponents, "premise"),
-                first(longComponents, "street_number"),
-                first(longComponents, "postal_code"),
-                latitude, longitude);
+        return GoogleAddressComponents.of(result.path("address_components"), "long_name", "short_name")
+                .toCandidate(latitude, longitude);
     }
 
     private void ensureConfigured() {
         if (!properties.isEnabled() || properties.getApiKey() == null || properties.getApiKey().isBlank()) {
             throw new ExternalServiceException(AddressMessages.SEARCH_PROVIDER_UNAVAILABLE);
         }
-    }
-
-    private static String first(Map<String, String> values, String... keys) {
-        for (String key : keys) {
-            String value = values.get(key);
-            if (value != null && !value.isBlank()) return value;
-        }
-        return null;
-    }
-
-    private static String text(JsonNode node, String field) {
-        JsonNode value = node.path(field);
-        return value.isMissingNode() || value.isNull() || value.asText().isBlank() ? null : value.asText();
     }
 }
