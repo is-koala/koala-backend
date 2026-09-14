@@ -13,6 +13,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -45,6 +46,8 @@ public interface ReportDao extends JpaRepository<Report, UUID> {
             left join r.job job
             where (:status is null or r.status = :status)
               and (:reason is null or r.reason = :reason)
+              and r.createdAt >= :from
+              and r.createdAt <= :to
               and (:reportedUserId is null or r.reportedUser.id = :reportedUserId)
               and (:reporterId is null or reporter.id = :reporterId)
               and (cast(:targetType as string) is null
@@ -68,6 +71,8 @@ public interface ReportDao extends JpaRepository<Report, UUID> {
                     left join r.job job
                     where (:status is null or r.status = :status)
                       and (:reason is null or r.reason = :reason)
+                      and r.createdAt >= :from
+                      and r.createdAt <= :to
                       and (:reportedUserId is null or r.reportedUser.id = :reportedUserId)
                       and (:reporterId is null or reporter.id = :reporterId)
                       and (cast(:targetType as string) is null
@@ -96,6 +101,8 @@ public interface ReportDao extends JpaRepository<Report, UUID> {
                         @Param("reportedUserId") UUID reportedUserId,
                         @Param("reporterId") UUID reporterId,
                         @Param("query") String query,
+                        @Param("from") Instant from,
+                        @Param("to") Instant to,
                         Pageable pageable);
 
     @Query("""

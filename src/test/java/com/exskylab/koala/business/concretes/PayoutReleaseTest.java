@@ -4,6 +4,7 @@ import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.exceptions.ExternalServiceException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
+import com.exskylab.koala.core.helpers.CreatedAtRange;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
 import com.exskylab.koala.business.abstracts.SettlementService;
 import com.exskylab.koala.dataAccess.BankAccountDao;
@@ -25,6 +26,7 @@ import com.exskylab.koala.core.mappers.PayoutMapper;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -423,12 +425,12 @@ class PayoutReleaseTest {
         ofVisible.setWorker(visible);
         Payout ofDeparted = new Payout();
         ofDeparted.setWorker(departed);
-        when(payoutDao.searchForStaff(eq(PayoutStatus.AWAITING_SETTLEMENT), isNull(), isNull(), any(Pageable.class)))
+        when(payoutDao.searchForStaff(eq(PayoutStatus.AWAITING_SETTLEMENT), isNull(), isNull(), any(Instant.class), any(Instant.class), any(Pageable.class)))
                 .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(ofVisible, ofDeparted)));
         when(userService.getAllByIdIn(java.util.Set.of(visible.getId(), departed.getId())))
                 .thenReturn(List.of(visible));
 
-        payoutManager.listForStaff(null, null, null, org.springframework.data.domain.PageRequest.of(0, 20));
+        payoutManager.listForStaff(null, null, null, CreatedAtRange.ANY, org.springframework.data.domain.PageRequest.of(0, 20));
 
         verify(userService, times(1)).getAllByIdIn(any());
         verify(payoutMapper).toStaffPayoutDto(ofVisible, visible);
@@ -437,13 +439,13 @@ class PayoutReleaseTest {
 
     @Test
     void staffListDefaultsToAwaitingSettlementAndCapsSize() {
-        when(payoutDao.searchForStaff(eq(PayoutStatus.AWAITING_SETTLEMENT), isNull(), isNull(), any(Pageable.class)))
+        when(payoutDao.searchForStaff(eq(PayoutStatus.AWAITING_SETTLEMENT), isNull(), isNull(), any(Instant.class), any(Instant.class), any(Pageable.class)))
                 .thenReturn(org.springframework.data.domain.Page.empty());
 
-        payoutManager.listForStaff(List.of(), " ", null, org.springframework.data.domain.PageRequest.of(0, 500));
+        payoutManager.listForStaff(List.of(), " ", null, CreatedAtRange.ANY, org.springframework.data.domain.PageRequest.of(0, 500));
 
         ArgumentCaptor<Pageable> requested = ArgumentCaptor.forClass(Pageable.class);
-        verify(payoutDao).searchForStaff(eq(PayoutStatus.AWAITING_SETTLEMENT), isNull(), isNull(), requested.capture());
+        verify(payoutDao).searchForStaff(eq(PayoutStatus.AWAITING_SETTLEMENT), isNull(), isNull(), any(Instant.class), any(Instant.class), requested.capture());
         assertEquals(50, requested.getValue().getPageSize());
         assertEquals(org.springframework.data.domain.Sort.Direction.DESC,
                 requested.getValue().getSort().getOrderFor("createdAt").getDirection());

@@ -36,7 +36,12 @@ public class FinanceController {
     @Operation(summary = "Dönem finans özeti",
             description = "SUCCEEDED ödemelerin işveren hacmi, Koala hizmet bedeli ve çalışan hak edişi; "
                     + "COMPLETED hakedişler dönemli, PENDING/PROCESSING hakedişler anlık yükümlülük. "
-                    + "from dahil, to hariç. İkisi de yoksa tüm geçmişten şimdiye.")
+                    + "from dahil, to hariç. İkisi de yoksa tüm geçmişten şimdiye. İki sayaç dönemden bağımsız ve "
+                    + "anlıktır: stuckPaymentCount, VERIFY_PENDING olup sonraki doğrulama anı boş kalmış (zamanlayıcıdan "
+                    + "düşmüş) ödeme denemeleri — /admin/payments?status=VERIFY_PENDING ile listelenir; "
+                    + "overduePayoutCount, payout.settlement.overdue-after eşiğinden (varsayılan 3 gün) uzun süredir "
+                    + "banka mutabakatı bekleyen PROCESSING hakedişler — koala_payout_settlement_overdue göstergesi ve "
+                    + "runbook kuyruğuyla aynı sorgu.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Özet döndürüldü"),
             @ApiResponse(responseCode = "400", description = "Dönem ya da para birimi geçersiz",

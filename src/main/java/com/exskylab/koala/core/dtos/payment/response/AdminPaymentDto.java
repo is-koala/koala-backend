@@ -7,7 +7,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-public record AdminPaymentDto(UUID id, UUID jobAssignmentId, UUID jobId, String jobTitle, String companyName,
+public record AdminPaymentDto(UUID id, UUID jobAssignmentId, UUID jobId, String jobTitle,
+                              UUID companyId, String companyName,
                               SafeUserDto worker, SafeUserDto employer,
                               PaymentAttemptStatus status, String currency, String pricingVersion,
                               PricingBreakdownDto pricing, String workerPayout, String commissionAmount,

@@ -3,6 +3,7 @@ package com.exskylab.koala.business.concretes;
 import com.exskylab.koala.support.FallbackSettings;
 import com.exskylab.koala.business.abstracts.CompanyContactService;
 import com.exskylab.koala.business.abstracts.SecurityService;
+import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.core.exceptions.ExternalServiceException;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
@@ -71,7 +72,7 @@ class PaymentMonitoringTest {
         paymentManager = new PaymentManager(paymentDao, iyzicoPaymentService, new PaymentStateMachine(),
                 mock(SecurityService.class), jobAssignmentDao,
                 new AssignmentParticipants(mock(CompanyContactService.class)), new PaymentMetrics(registry),
-                verificationProperties, mock(ApplicationEventPublisher.class));
+                verificationProperties, mock(ApplicationEventPublisher.class), new PageableSanitizer());
         when(paymentDao.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(paymentDao.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }

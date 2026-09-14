@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.mappers;
 
+import com.exskylab.koala.core.dtos.bankAccount.response.AdminBankAccountDto;
 import com.exskylab.koala.core.dtos.bankAccount.response.BankAccountDto;
 import com.exskylab.koala.core.dtos.bankAccount.response.IbanPendingDto;
 import com.exskylab.koala.core.dtos.bankAccount.response.IbanVerificationDto;
@@ -25,6 +26,14 @@ public interface BankAccountMapper {
     BankAccountDto toBankAccountDto(BankAccount account);
 
     List<BankAccountDto> toBankAccountDtoList(List<BankAccount> accounts);
+
+    @Mapping(target = "maskedIban", expression = "java(LogMasks.iban(account.getIban()))")
+    @Mapping(target = "primary", source = "primaryAccount")
+    @Mapping(target = "verificationStatus",
+            expression = "java(BankAccountVerificationPolicy.effectiveStatus(account, Instant.now()))")
+    AdminBankAccountDto toAdminBankAccountDto(BankAccount account);
+
+    List<AdminBankAccountDto> toAdminBankAccountDtoList(List<BankAccount> accounts);
 
     @Mapping(target = "accountId", source = "account.id")
     @Mapping(target = "maskedIban", expression = "java(LogMasks.iban(account.getIban()))")

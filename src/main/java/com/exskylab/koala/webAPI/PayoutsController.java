@@ -16,6 +16,7 @@ import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.StaffPayoutService;
 import com.exskylab.koala.core.constants.AdminMessages;
 import com.exskylab.koala.core.constants.PayoutMessages;
+import com.exskylab.koala.core.dtos.admin.request.CreatedAtRangeDto;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.payout.request.ConfirmPayoutSettlementDto;
 import com.exskylab.koala.core.dtos.payout.request.RefundRequestDto;
@@ -109,10 +110,12 @@ public class PayoutsController {
                     + "Onay mevcut reconcile ucundan yapılır; bu GET yalnız okur. "
                     + "query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) hakediş id'si, atama id'si ve alıcının "
                     + "ad-soyadı ile e-postasında büyük-küçük harf ve Türkçe karakter duyarsız arar; status süzgeciyle "
-                    + "kesişir; 100 karakteri aşarsa 400. workerId verilirse yalnız o işçinin hakedişleri döner.")
+                    + "kesişir; 100 karakteri aşarsa 400. workerId verilirse yalnız o işçinin hakedişleri döner. "
+                    + "from ve to hakedişin oluşturulma anını (createdAt) süzer, ikisi de dahildir ve dilimli ISO-8601 "
+                    + "an ister; yalnız biri verilebilir; status, query ve workerId ile kesişir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Hakedişler listelendi"),
-            @ApiResponse(responseCode = "400", description = "query 100 karakteri aşıyor",
+            @ApiResponse(responseCode = "400", description = "query 100 karakteri aşıyor ya da tarih dilimsiz",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @RequiresPermission(value = StaffPermission.PAYOUT_RECONCILE, action = "payout.reconcile")
@@ -121,11 +124,12 @@ public class PayoutsController {
             @RequestParam(required = false) List<PayoutStatus> status,
             @RequestParam(required = false) String query,
             @RequestParam(required = false) UUID workerId,
+            @ParameterObject CreatedAtRangeDto createdAt,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable,
             @AuthenticationPrincipal StaffPrincipal actor) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
-                staffPayoutService.listForStaff(actor, status, query, workerId, pageable),
+                staffPayoutService.listForStaff(actor, status, query, workerId, createdAt.toRange(), pageable),
                 PayoutMessages.LISTED, HttpStatus.OK));
     }
 

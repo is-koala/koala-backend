@@ -19,6 +19,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import com.exskylab.koala.core.helpers.CreatedAtRange;
 import java.util.List;
 import java.util.UUID;
 
@@ -54,13 +55,13 @@ public class StaffPayoutManager implements StaffPayoutService {
 
     @Override
     public PageDto<StaffPayoutDto> listForStaff(StaffPrincipal actor, List<PayoutStatus> statuses, String query,
-                                                UUID workerId, Pageable pageable) {
+                                                UUID workerId, CreatedAtRange createdAt, Pageable pageable) {
         if (lacks(actor, StaffPermission.PAYOUT_RECONCILE)) {
             log.warn("Payout queue read refused without staff permission: permission={} statuses={}",
                     StaffPermission.PAYOUT_RECONCILE.getCode(), statuses);
             throw new ForbiddenException(StaffMessages.PERMISSION_DENIED);
         }
-        return payoutService.listForStaff(statuses, query, workerId, pageable);
+        return payoutService.listForStaff(statuses, query, workerId, createdAt, pageable);
     }
 
     @Override

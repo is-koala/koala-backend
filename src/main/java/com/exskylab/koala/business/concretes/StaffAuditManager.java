@@ -1,6 +1,7 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.StaffAuditService;
+import com.exskylab.koala.core.helpers.CreatedAtRange;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.properties.AuditRetentionProperties;
 import com.exskylab.koala.core.security.StaffAuditRecord;
@@ -36,8 +37,6 @@ public class StaffAuditManager implements StaffAuditService {
 
     private static final Set<String> SORTABLE = Set.of("occurredAt");
     private static final Sort NEWEST_FIRST = Sort.by(Sort.Direction.DESC, "occurredAt");
-    private static final Instant BEGINNING_OF_TIME = Instant.EPOCH;
-    private static final Instant END_OF_TIME = Instant.parse("9999-12-31T23:59:59Z");
 
     private final AdminAuditEntryDao adminAuditEntryDao;
     private final AdminAuditEntryDetailDao adminAuditEntryDetailDao;
@@ -93,9 +92,10 @@ public class StaffAuditManager implements StaffAuditService {
         pageableSanitizer.rejectUnknownSort(pageable, SORTABLE);
         Pageable page = pageableSanitizer.sanitize(pageable, SORTABLE, NEWEST_FIRST);
 
+        CreatedAtRange occurredAt = CreatedAtRange.of(from, to);
         return adminAuditEntryDao.search(actor, blankToNull(action), blankToNull(permission),
                 blankToNull(resourceType), blankToNull(resourceId),
-                from == null ? BEGINNING_OF_TIME : from, to == null ? END_OF_TIME : to,
+                occurredAt.from(), occurredAt.to(),
                 allowed != null, Boolean.TRUE.equals(allowed), page);
     }
 

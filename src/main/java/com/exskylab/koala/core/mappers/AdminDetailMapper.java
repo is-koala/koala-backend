@@ -13,14 +13,16 @@ import com.exskylab.koala.core.dtos.payment.response.AdminSettlementTaskDto;
 import com.exskylab.koala.core.dtos.payout.response.AdminPayoutDetailDto;
 import com.exskylab.koala.core.dtos.user.response.AdminUserCompanyDto;
 import com.exskylab.koala.core.dtos.user.response.AdminUserCountsDto;
+import com.exskylab.koala.core.dtos.user.response.AdminSessionSummaryDto;
 import com.exskylab.koala.core.dtos.user.response.AdminUserDetailDto;
 import com.exskylab.koala.core.dtos.user.response.StaffPartyDto;
 import com.exskylab.koala.core.helpers.LogMasks;
 import com.exskylab.koala.core.helpers.MediaUrlResolver;
 import com.exskylab.koala.core.helpers.PlainDecimalStringConverter;
+import com.exskylab.koala.dataAccess.StaffAssignmentSummary;
 import com.exskylab.koala.entities.Cancellation;
 import com.exskylab.koala.entities.CompanyContact;
-import com.exskylab.koala.entities.IdentityReviewStatus;
+import com.exskylab.koala.entities.IdentityVerification;
 import com.exskylab.koala.entities.Dispute;
 import com.exskylab.koala.entities.Job;
 import com.exskylab.koala.entities.JobApplication;
@@ -71,12 +73,15 @@ public interface AdminDetailMapper {
     @Mapping(target = "companies", source = "memberships")
     @Mapping(target = "badges", source = "badges")
     @Mapping(target = "counts", source = "counts")
-    @Mapping(target = "identityReviewStatus", source = "identityReviewStatus")
+    @Mapping(target = "identityReviewId", source = "latestIdentityReview.id")
+    @Mapping(target = "identityReviewStatus",
+            expression = "java(latestIdentityReview == null ? null : latestIdentityReview.reviewStatus())")
     @Mapping(target = "pendingDeletionRequestId", source = "pendingDeletionRequestId")
+    @Mapping(target = "sessionSummary", source = "sessionSummary")
     AdminUserDetailDto toAdminUserDetailDto(User user, boolean includePii, List<CompanyContact> memberships,
                                             List<UserBadge> badges, AdminUserCountsDto counts,
-                                            IdentityReviewStatus identityReviewStatus,
-                                            UUID pendingDeletionRequestId);
+                                            IdentityVerification latestIdentityReview,
+                                            UUID pendingDeletionRequestId, AdminSessionSummaryDto sessionSummary);
 
     LinkedRecordDto toLinkedRecordDto(Payment payment);
 
@@ -105,11 +110,12 @@ public interface AdminDetailMapper {
 
     @Mapping(target = "id", source = "payment.id")
     @Mapping(target = "jobAssignmentId", source = "assignment.id")
-    @Mapping(target = "jobId", source = "assignment.job.id")
-    @Mapping(target = "jobTitle", source = "assignment.job.title")
-    @Mapping(target = "companyName", source = "assignment.job.company.name")
-    @Mapping(target = "worker", source = "assignment.worker")
-    @Mapping(target = "employer", source = "assignment.job.creator")
+    @Mapping(target = "jobId", source = "assignment.jobId")
+    @Mapping(target = "jobTitle", source = "assignment.jobTitle")
+    @Mapping(target = "companyId", source = "assignment.companyId")
+    @Mapping(target = "companyName", source = "assignment.companyName")
+    @Mapping(target = "worker", source = "worker")
+    @Mapping(target = "employer", source = "employer")
     @Mapping(target = "status", source = "payment.status")
     @Mapping(target = "currency", source = "payment.currency")
     @Mapping(target = "pricingVersion", source = "payment.pricingVersion")
@@ -129,13 +135,14 @@ public interface AdminDetailMapper {
     @Mapping(target = "updatedAt", source = "payment.updatedAt")
     @Mapping(target = "payoutId", source = "payoutId")
     @Mapping(target = "refunds", source = "refunds")
-    AdminPaymentDto toAdminPaymentDto(Payment payment, JobAssignment assignment, UUID payoutId,
-                                      List<AdminRefundDto> refunds);
+    AdminPaymentDto toAdminPaymentDto(Payment payment, StaffAssignmentSummary assignment, User worker, User employer,
+                                      UUID payoutId, List<AdminRefundDto> refunds);
 
     @Mapping(target = "id", source = "payout.id")
     @Mapping(target = "jobAssignmentId", source = "payout.jobAssignment.id")
     @Mapping(target = "jobId", source = "assignment.job.id")
     @Mapping(target = "jobTitle", source = "assignment.job.title")
+    @Mapping(target = "companyId", source = "assignment.job.company.id")
     @Mapping(target = "companyName", source = "assignment.job.company.name")
     @Mapping(target = "worker", source = "worker")
     @Mapping(target = "employer", source = "assignment.job.creator")
@@ -177,6 +184,7 @@ public interface AdminDetailMapper {
     @Mapping(target = "id", source = "assignment.id")
     @Mapping(target = "jobId", source = "assignment.job.id")
     @Mapping(target = "jobTitle", source = "assignment.job.title")
+    @Mapping(target = "companyId", source = "assignment.job.company.id")
     @Mapping(target = "companyName", source = "assignment.job.company.name")
     @Mapping(target = "employerType", source = "assignment.job.employerType")
     @Mapping(target = "worker", source = "assignment.worker")

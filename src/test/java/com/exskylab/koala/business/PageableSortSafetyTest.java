@@ -45,7 +45,9 @@ class PageableSortSafetyTest {
             new Exemption("StaffPayoutManager", "listForStaff",
                     "saf devretme; izin kapisindan sonra PayoutManager.listForStaff istemci sort'unu yok sayar"),
             new Exemption("AdminDetailManager", "searchCompanies",
-                    "saf devretme; sayfalama CompanyManager.searchCompanies icinde dogrulaniyor (#283)"));
+                    "saf devretme; sayfalama CompanyManager.searchCompanies icinde dogrulaniyor (#283)"),
+            new Exemption("AdminDetailManager", "searchPayments",
+                    "saf devretme; sayfalama PaymentManager.searchForStaff icinde dogrulaniyor (#301)"));
 
     @Test
     void everyPagedQuerySanitisesTheRequestedSort() throws IOException {

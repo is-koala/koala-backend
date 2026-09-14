@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import jakarta.persistence.LockModeType;
+import java.time.Instant;
 import java.util.List;
 import org.springframework.stereotype.Repository;
 
@@ -48,6 +49,17 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
                                            @Param("paymentStatus") PaymentStatus paymentStatus);
 
     @Query("""
+            select a.id as id, a.worker.id as workerId, job.id as jobId, job.title as jobTitle,
+                   creator.id as employerId, company.id as companyId, company.name as companyName
+            from JobAssignment a
+            left join a.job job
+            left join job.creator creator
+            left join job.company company
+            where a.id in :ids
+            """)
+    List<StaffAssignmentSummary> findStaffSummariesByIdIn(@Param("ids") java.util.Collection<UUID> ids);
+
+    @Query("""
             select a.id as id, a.worker.id as workerId, a.job.creator.id as employerId
             from JobAssignment a
             where a.status in :statuses
@@ -76,7 +88,10 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
             left join assignment.worker worker
             left join assignment.job job
             left join job.creator creator
-            where (:workerId is null or worker.id = :workerId)
+            where assignment.status in :statuses
+              and assignment.createdAt >= :from
+              and assignment.createdAt <= :to
+              and (:workerId is null or worker.id = :workerId)
               and (:employerId is null or creator.id = :employerId)
               and (:jobId is null or job.id = :jobId)
               and (cast(:query as string) is null
@@ -97,8 +112,10 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
             "job.creator.profilePicture",
             "job.company"
     })
-    Page<JobAssignment> findAllForStaff(@Param("query") String query, @Param("workerId") UUID workerId,
+    Page<JobAssignment> findAllForStaff(@Param("statuses") List<AssignmentStatus> statuses,
+                                        @Param("query") String query, @Param("workerId") UUID workerId,
                                         @Param("employerId") UUID employerId, @Param("jobId") UUID jobId,
+                                        @Param("from") Instant from, @Param("to") Instant to,
                                         Pageable pageable);
 
     long countByWorkerIdAndStatus(UUID workerId, AssignmentStatus status);

@@ -58,6 +58,9 @@ class CollectionQueryWithoutGraphTest {
             "ConversationDao.findParticipantRows",
             // Deletion blockers: id + party projection rows, not entities (#283).
             "DisputeDao.findActiveLinksForUsers",
+            // Staff payment list reads only status, resolution, id and jobAssignment.id (proxy identifier, no
+            // query) to attribute a refund to a dispute; nothing of the dispute is drawn (#301).
+            "DisputeDao.findAllByJobAssignmentIdInOrderByCreatedAtDesc",
             "CountryDao.findCountriesByOrderByNameAsc",
             "DepartmentDao.findAllByFacultyIdOrderByNameAsc",
             "DeviceDao.findAllByUser_IdAndPushTokenIsNotNull",
@@ -81,6 +84,9 @@ class CollectionQueryWithoutGraphTest {
             // Deletion blockers: id + party projection rows, not entities (#283).
             "JobAssignmentDao.findActiveLinksForUsers",
             "JobAssignmentDao.findMoneyLinksForUsers",
+            // Staff payment list: id/title/party-id projection rows per page, not entities; keeps a deleted
+            // worker's payments on the list where an entity load would INNER-join them away (#301, §2y3).
+            "JobAssignmentDao.findStaffSummariesByIdIn",
             // Aggregate COUNT rows per company for CompanyReviewDto.jobCount (#283).
             "JobDao.countByCompanyIds",
             "JobDao.searchIds",
@@ -103,6 +109,11 @@ class CollectionQueryWithoutGraphTest {
             // Deletion blockers: id + party projection rows, not entities (#283).
             "PaymentDao.findPendingLinksForUsers",
             "PaymentDao.findStuckInitiationIds",
+            // Staff payment list deliberately fetches no graph: Payment.jobAssignment and JobAssignment.worker are
+            // nullable=false under @SQLRestriction and a graph would INNER-join a deleted worker's payments away
+            // (§2y3). The page reads only jobAssignment.id (proxy, no query); assignment summaries and people come
+            // from two batch queries per page (#301).
+            "PaymentDao.searchForStaff",
             // Aggregate SUM/COUNT row, not an entity collection (#186).
             "PaymentDao.summarizeSucceeded",
             // MyAssignmentDto renders id, status and completedAt of the payout row plus jobAssignment.id (proxy

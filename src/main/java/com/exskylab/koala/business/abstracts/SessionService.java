@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.abstracts;
 
+import com.exskylab.koala.core.dtos.user.response.AdminSessionSummaryDto;
 import com.exskylab.koala.core.dtos.session.response.CreatedSessionDto;
 import com.exskylab.koala.entities.Device;
 import com.exskylab.koala.entities.Session;
@@ -23,4 +24,6 @@ public interface SessionService {
     void revokeSession(UUID sessionId);
 
     int revokeAllOtherSessions();
+
+    AdminSessionSummaryDto summarizeForStaff(UUID userId);
 }

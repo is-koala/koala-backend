@@ -257,8 +257,7 @@ public class IdentityVerificationManager implements IdentityDocumentReviewServic
 
     @Override
     @Transactional(readOnly = true)
-    public Optional<IdentityReviewStatus> findLatestStatusFor(UUID userId) {
-        return identityVerificationDao.findTopByUser_IdOrderByCreatedAtDesc(userId)
-                .map(IdentityVerification::reviewStatus);
+    public Optional<IdentityVerification> findLatestFor(UUID userId) {
+        return identityVerificationDao.findTopByUser_IdOrderByCreatedAtDesc(userId);
     }
 }

@@ -1,5 +1,7 @@
 package com.exskylab.koala.business.abstracts;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.Payment;
@@ -44,6 +46,10 @@ public interface PaymentService {
     List<Payment> getAttemptsForStaff(UUID jobAssignmentId);
 
     Payment getForStaff(UUID paymentId);
+
+    Page<Payment> searchForStaff(List<PaymentAttemptStatus> statuses, Pageable pageable);
+
+    long countStuckVerifications();
 
     Payment getSettledPaymentFor(UUID jobAssignmentId);
 

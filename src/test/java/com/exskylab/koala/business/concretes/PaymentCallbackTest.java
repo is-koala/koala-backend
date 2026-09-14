@@ -11,6 +11,7 @@ import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.IyzicoPaymentResultResponseDto;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.CompanyContactService;
+import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
 import com.exskylab.koala.dataAccess.PaymentDao;
@@ -65,7 +66,8 @@ class PaymentCallbackTest {
         paymentManager = new PaymentManager(paymentDao, iyzicoPaymentService, new PaymentStateMachine(),
                 mock(SecurityService.class), jobAssignmentDao,
                 new AssignmentParticipants(mock(CompanyContactService.class)),
-                new PaymentMetrics(new SimpleMeterRegistry()), verificationProperties, eventPublisher);
+                new PaymentMetrics(new SimpleMeterRegistry()), verificationProperties, eventPublisher,
+                new PageableSanitizer());
 
         when(paymentDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(paymentDao.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));

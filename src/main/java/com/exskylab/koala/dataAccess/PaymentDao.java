@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.stereotype.Repository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import jakarta.persistence.LockModeType;
@@ -19,6 +20,9 @@ import java.util.UUID;
 
 @Repository
 public interface PaymentDao extends JpaRepository<Payment, UUID> {
+
+    @Query("select p from Payment p where p.status in :statuses")
+    Page<Payment> searchForStaff(@Param("statuses") List<PaymentAttemptStatus> statuses, Pageable pageable);
 
     @Query("""
             select p.jobAssignment.id as jobAssignmentId, min(p.completedAt) as securedAt
@@ -96,6 +100,8 @@ public interface PaymentDao extends JpaRepository<Payment, UUID> {
             "jobAssignment.job.creator", "jobAssignment.job.company"})
     @Query("select p from Payment p where p.id = :id")
     Optional<Payment> findForStaffById(@Param("id") UUID id);
+
+    long countByStatusAndNextVerificationAtIsNull(PaymentAttemptStatus status);
 
     boolean existsByJobAssignmentIdAndStatus(UUID jobAssignmentId, PaymentAttemptStatus status);
 

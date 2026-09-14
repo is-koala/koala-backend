@@ -12,6 +12,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -19,6 +20,8 @@ import java.util.UUID;
 
 @Repository
 public interface DisputeDao extends JpaRepository<Dispute, UUID> {
+
+    List<Dispute> findAllByJobAssignmentIdInOrderByCreatedAtDesc(Collection<UUID> jobAssignmentIds);
 
     @Query("select d.jobAssignment.id from Dispute d where d.id = :id")
     Optional<UUID> findJobAssignmentIdById(@Param("id") UUID id);
@@ -56,6 +59,8 @@ public interface DisputeDao extends JpaRepository<Dispute, UUID> {
             left join job.creator creator
             left join d.openedBy opener
             where d.status in :statuses
+              and d.createdAt >= :from
+              and d.createdAt <= :to
               and (:userId is null or worker.id = :userId or creator.id = :userId or opener.id = :userId)
               and (cast(:query as string) is null
                    or cast(d.id as string) like lower(concat('%', cast(:query as string), '%'))
@@ -72,7 +77,8 @@ public interface DisputeDao extends JpaRepository<Dispute, UUID> {
             """)
     @EntityGraph(attributePaths = {"openedBy", "openedBy.profilePicture", "jobAssignment"})
     Page<Dispute> searchForStaff(@Param("statuses") List<DisputeStatus> statuses, @Param("query") String query,
-                                 @Param("userId") UUID userId, Pageable pageable);
+                                 @Param("userId") UUID userId, @Param("from") Instant from,
+                                 @Param("to") Instant to, Pageable pageable);
 
     @EntityGraph(attributePaths = {"openedBy", "openedBy.profilePicture", "jobAssignment"})
     @Query("select d from Dispute d where d.id = :id")

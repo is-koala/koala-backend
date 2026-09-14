@@ -12,6 +12,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.exskylab.koala.dataAccess.PartyLink;
 
+import com.exskylab.koala.core.helpers.CreatedAtRange;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
@@ -26,7 +27,10 @@ public interface DisputeService {
 
     List<Dispute> findAllForAssignment(UUID jobAssignmentId);
 
-    Page<Dispute> searchForStaff(DisputeStatus status, String query, UUID userId, Pageable pageable);
+    List<Dispute> findAllForAssignments(Collection<UUID> jobAssignmentIds);
+
+    Page<Dispute> searchForStaff(DisputeStatus status, String query, UUID userId, CreatedAtRange createdAt,
+                                 Pageable pageable);
 
     Dispute getForStaff(UUID disputeId);
 

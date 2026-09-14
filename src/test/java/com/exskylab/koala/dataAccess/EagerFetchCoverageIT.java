@@ -31,7 +31,7 @@ class EagerFetchCoverageIT extends AbstractIntegrationTest {
                     "bildirim sorgusu; takipçinin fotoğrafı hiçbir yanıtta çizilmiyor"),
             entry("JobDao.findAllByIdIn", "creator", "JobSummaryDto ilan sahibini çizmiyor"),
             entry("JobAssignmentDao.findAllForStaff", "job.company",
-                    "AdminAssignmentDto yalnızca companyName taşıyor"),
+                    "AdminAssignmentDto yalnızca companyId ve companyName taşıyor"),
             entry("JobDao.searchForStaff", "creator",
                     "AdminJobDto işvereni id, ad ve e-postayla çizer, fotoğrafını çizmez"),
             entry("JobDao.searchForStaff", "company", "AdminJobDto yalnızca companyId ve companyName taşıyor"),

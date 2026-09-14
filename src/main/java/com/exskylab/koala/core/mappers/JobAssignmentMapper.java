@@ -68,6 +68,7 @@ public interface JobAssignmentMapper {
 
     @Mapping(target = "jobId", source = "job.id")
     @Mapping(target = "jobTitle", source = "job.title")
+    @Mapping(target = "companyId", source = "job.company.id")
     @Mapping(target = "companyName", source = "job.company.name")
     @Mapping(target = "employer", source = "job.creator")
     @Mapping(target = "pricing", source = "jobAssignment")

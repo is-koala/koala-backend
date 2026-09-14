@@ -14,6 +14,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import com.exskylab.koala.business.abstracts.DisputeService;
 import com.exskylab.koala.core.constants.DisputeMessages;
+import com.exskylab.koala.core.dtos.admin.request.CreatedAtRangeDto;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.dispute.request.ResolveDisputeDto;
 import com.exskylab.koala.core.dtos.dispute.response.DisputeDto;
@@ -57,10 +58,12 @@ public class DisputesController {
                     + "query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) uyuşmazlık id'si, atama id'si ve "
                     + "tarafların (çalışan, ilan sahibi, açan) ad-soyadı ile e-postasında büyük-küçük harf ve Türkçe karakter "
                     + "duyarsız arar; status süzgeciyle kesişir; 100 karakteri aşarsa 400. userId verilirse yalnız o "
-                    + "kullanıcının taraf olduğu (çalışan, ilan sahibi ya da açan) uyuşmazlıklar döner.")
+                    + "kullanıcının taraf olduğu (çalışan, ilan sahibi ya da açan) uyuşmazlıklar döner. from ve to "
+                    + "uyuşmazlığın oluşturulma anını (createdAt) süzer, ikisi de dahildir ve dilimli ISO-8601 an ister; "
+                    + "yalnız biri verilebilir; status, query ve userId ile kesişir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Uyuşmazlıklar listelendi"),
-            @ApiResponse(responseCode = "400", description = "query 100 karakteri aşıyor ya da bilinmeyen sıralama alanı",
+            @ApiResponse(responseCode = "400", description = "query 100 karakteri aşıyor, tarih dilimsiz ya da bilinmeyen sıralama alanı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @RequiresPermission(StaffPermission.DISPUTE_RESOLVE)
@@ -69,9 +72,10 @@ public class DisputesController {
             @RequestParam(required = false) DisputeStatus status,
             @RequestParam(required = false) String query,
             @RequestParam(required = false) UUID userId,
+            @ParameterObject CreatedAtRangeDto createdAt,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
-        var page = disputeService.searchForStaff(status, query, userId, pageable);
+        var page = disputeService.searchForStaff(status, query, userId, createdAt.toRange(), pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
                 PageDto.of(page, disputeMapper.toStaffDisputeDtoList(page.getContent())),
                 DisputeMessages.LISTED, HttpStatus.OK));

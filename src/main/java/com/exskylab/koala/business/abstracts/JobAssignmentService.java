@@ -13,6 +13,9 @@ import jakarta.validation.Valid;
 import com.exskylab.koala.dataAccess.PartyLink;
 
 import java.util.Collection;
+import com.exskylab.koala.core.helpers.CreatedAtRange;
+import com.exskylab.koala.entities.AssignmentStatus;
+import com.exskylab.koala.dataAccess.StaffAssignmentSummary;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -46,8 +49,10 @@ public interface JobAssignmentService {
 
     JobAssignment getDetailedByIdForUpdate(UUID assignmentId);
 
-    Page<AdminAssignmentDto> listForStaff(String query, UUID workerId, UUID employerId, UUID jobId,
-                                          Pageable pageable);
+    Page<AdminAssignmentDto> listForStaff(List<AssignmentStatus> statuses, String query, UUID workerId,
+                                          UUID employerId, UUID jobId, CreatedAtRange createdAt, Pageable pageable);
+
+    List<StaffAssignmentSummary> findStaffSummaries(Collection<UUID> jobAssignmentIds);
 
     long countCompletedForWorker(UUID workerId);
 

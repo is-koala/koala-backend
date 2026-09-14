@@ -3,6 +3,7 @@ package com.exskylab.koala.webAPI;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import com.exskylab.koala.core.helpers.CreatedAtRange;
 import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.core.dtos.payout.response.PayoutDto;
 import com.exskylab.koala.core.dtos.payout.response.StaffPayoutDto;
@@ -471,12 +472,12 @@ class PayoutQueueIT extends AbstractStaffIntegrationTest {
         try {
             statistics.clear();
             List<StaffPayoutDto> oneRow = transactionTemplate.execute(status ->
-                    payoutService.listForStaff(null, null, null, PageRequest.of(0, 1)).content());
+                    payoutService.listForStaff(null, null, null, CreatedAtRange.ANY, PageRequest.of(0, 1)).content());
             long statementsForOneRow = statistics.getPrepareStatementCount();
 
             statistics.clear();
             List<StaffPayoutDto> fiveRows = transactionTemplate.execute(status ->
-                    payoutService.listForStaff(null, null, null, PageRequest.of(0, 5)).content());
+                    payoutService.listForStaff(null, null, null, CreatedAtRange.ANY, PageRequest.of(0, 5)).content());
             long statementsForFiveRows = statistics.getPrepareStatementCount();
 
             assertEquals(1, oneRow.size());

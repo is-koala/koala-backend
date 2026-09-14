@@ -11,6 +11,7 @@ import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.core.helpers.CommissionCalculator;
 import com.exskylab.koala.core.helpers.ConstraintViolations;
+import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.helpers.PaymentStateMachine;
 import com.exskylab.koala.core.monitoring.PaymentMetrics;
 import com.exskylab.koala.core.properties.PaymentVerificationProperties;
@@ -28,7 +29,10 @@ import com.exskylab.koala.core.constants.PayoutMessages;
 import com.exskylab.koala.core.events.AssignmentPaidEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
@@ -41,6 +45,7 @@ import java.util.Map;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -50,6 +55,9 @@ public class PaymentManager implements PaymentService {
     private static final String CURRENCY = "TRY";
     private static final Integer VERIFIED_BY_THREE_D_SECURE = 1;
     private static final List<PaymentAttemptStatus> PENDING_STATUSES = PaymentAttemptStatus.ACTIVE;
+    private static final Set<String> STAFF_LIST_SORTABLE = Set.of("createdAt", "updatedAt", "status",
+            "nextVerificationAt");
+    private static final Sort STAFF_LIST_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
 
     private final PaymentDao paymentDao;
     private final IyzicoPaymentService iyzicoPaymentService;
@@ -60,12 +68,13 @@ public class PaymentManager implements PaymentService {
     private final PaymentMetrics paymentMetrics;
     private final PaymentVerificationProperties verificationProperties;
     private final ApplicationEventPublisher eventPublisher;
+    private final PageableSanitizer pageableSanitizer;
 
     public PaymentManager(PaymentDao paymentDao, IyzicoPaymentService iyzicoPaymentService,
                           PaymentStateMachine stateMachine, SecurityService securityService,
                           JobAssignmentDao jobAssignmentDao, AssignmentParticipants assignmentParticipants,
                           PaymentMetrics paymentMetrics, PaymentVerificationProperties verificationProperties,
-                          ApplicationEventPublisher eventPublisher) {
+                          ApplicationEventPublisher eventPublisher, PageableSanitizer pageableSanitizer) {
         this.paymentDao = paymentDao;
         this.iyzicoPaymentService = iyzicoPaymentService;
         this.stateMachine = stateMachine;
@@ -75,6 +84,7 @@ public class PaymentManager implements PaymentService {
         this.paymentMetrics = paymentMetrics;
         this.verificationProperties = verificationProperties;
         this.eventPublisher = eventPublisher;
+        this.pageableSanitizer = pageableSanitizer;
     }
 
     @Override
@@ -373,6 +383,23 @@ public class PaymentManager implements PaymentService {
     public Payment getForStaff(UUID paymentId) {
         return paymentDao.findForStaffById(paymentId)
                 .orElseThrow(() -> new ResourceNotFoundException(PaymentMessages.NOT_FOUND));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<Payment> searchForStaff(List<PaymentAttemptStatus> statuses, Pageable requested) {
+        pageableSanitizer.rejectUnknownSort(requested, STAFF_LIST_SORTABLE);
+        List<PaymentAttemptStatus> filter = statuses == null || statuses.isEmpty()
+                ? List.of(PaymentAttemptStatus.values())
+                : List.copyOf(statuses);
+        return paymentDao.searchForStaff(filter,
+                pageableSanitizer.sanitize(requested, STAFF_LIST_SORTABLE, STAFF_LIST_SORT));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countStuckVerifications() {
+        return paymentDao.countByStatusAndNextVerificationAtIsNull(PaymentAttemptStatus.VERIFY_PENDING);
     }
 
     private String identityMismatch(Payment payment, IyzicoPaymentResultResponseDto result) {

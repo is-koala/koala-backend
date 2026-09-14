@@ -18,12 +18,14 @@ import com.exskylab.koala.business.abstracts.GalleryService;
 import com.exskylab.koala.business.abstracts.IdentityDocumentReviewService;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.UserService;
+import com.exskylab.koala.core.dtos.admin.request.CreatedAtRangeDto;
 import com.exskylab.koala.core.dtos.identity.request.RejectIdentityReviewDto;
 import com.exskylab.koala.core.dtos.identity.response.IdentityReviewDto;
 import com.exskylab.koala.entities.IdentityReviewStatus;
 import com.exskylab.koala.core.constants.AdminMessages;
 import com.exskylab.koala.core.constants.BankAccountMessages;
 import com.exskylab.koala.core.dtos.bankAccount.request.ConfirmIbanTransferDto;
+import com.exskylab.koala.core.dtos.bankAccount.response.AdminBankAccountDto;
 import com.exskylab.koala.core.dtos.bankAccount.response.BankAccountDto;
 import com.exskylab.koala.core.dtos.bankAccount.response.IbanPendingDto;
 import com.exskylab.koala.core.exceptions.ValidationException;
@@ -41,6 +43,8 @@ import com.exskylab.koala.core.dtos.job.response.AdminJobDetailDto;
 import com.exskylab.koala.core.dtos.job.response.AdminJobDto;
 import com.exskylab.koala.business.abstracts.AdminDetailService;
 import com.exskylab.koala.business.abstracts.JobService;
+import com.exskylab.koala.entities.AssignmentStatus;
+import com.exskylab.koala.entities.PaymentAttemptStatus;
 import com.exskylab.koala.entities.JobStatus;
 import com.exskylab.koala.core.dtos.user.request.GrantRoleDto;
 import com.exskylab.koala.core.dtos.user.response.RoleGrantDto;
@@ -108,24 +112,30 @@ public class AdminController {
 
     @Operation(summary = "Atama kuyruğu",
             description = "Son atamaları sayfalar. Yanıt AdminAssignmentDto'dur; UUID bakışı ile aynı SafeUser ve fiyat dökümü. "
-                    + "Emanet kuralları değişmez. query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) atama id'si, "
+                    + "Emanet kuralları değişmez. Satır companyId ve companyName taşır (bireysel ilanda ikisi de null). "
+                    + "status verilmezse her durum döner; birden çok değer verilebilir. from ve to atamanın oluşturulma "
+                    + "anını (createdAt) süzer, ikisi de dahildir ve dilimli ISO-8601 an ister; yalnız biri verilebilir. "
+                    + "query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) atama id'si, "
                     + "ilan başlığı, işveren ve çalışanın ad-soyadı ile e-postasında büyük-küçük harf ve Türkçe karakter "
-                    + "duyarsız arar; 100 karakteri aşarsa 400. workerId, employerId ve jobId süzgeçleri birbirleriyle ve "
-                    + "query ile kesişir; kullanıcı ve ilan detayları bu süzgeçlerle buraya bağlanır.")
+                    + "duyarsız arar; 100 karakteri aşarsa 400. workerId, employerId ve jobId süzgeçleri birbirleriyle, "
+                    + "status, tarih aralığı ve query ile kesişir; kullanıcı ve ilan detayları bu süzgeçlerle buraya bağlanır.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Atamalar listelendi"),
-            @ApiResponse(responseCode = "400", description = "query 100 karakteri aşıyor ya da bilinmeyen sıralama alanı",
+            @ApiResponse(responseCode = "400", description = "query 100 karakteri aşıyor, tarih dilimsiz ya da bilinmeyen sıralama alanı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @RequiresPermission(StaffPermission.PAYMENT_READ)
     @GetMapping("/job-assignments")
     public ResponseEntity<SuccessDataResult<PageDto<AdminAssignmentDto>>> assignments(
+            @RequestParam(required = false) List<AssignmentStatus> status,
             @RequestParam(required = false) String query,
             @RequestParam(required = false) UUID workerId,
             @RequestParam(required = false) UUID employerId,
             @RequestParam(required = false) UUID jobId,
+            @ParameterObject CreatedAtRangeDto createdAt,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
-        var page = jobAssignmentService.listForStaff(query, workerId, employerId, jobId, pageable);
+        var page = jobAssignmentService.listForStaff(status, query, workerId, employerId, jobId,
+                createdAt.toRange(), pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
                 PageDto.of(page, page.getContent()),
                 AdminMessages.ASSIGNMENTS_LISTED, HttpStatus.OK));
@@ -173,6 +183,32 @@ public class AdminController {
             @PathVariable UUID assignmentId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
                 adminDetailService.getPaymentsForAssignment(assignmentId),
+                AdminMessages.PAYMENTS_LISTED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "Ödeme denemeleri listesi (personel)",
+            description = "Bütün atamaların ödeme denemelerini sayfalar; takılı ve başarısız ödemeleri bulmak için. "
+                    + "status verilmezse her durum döner; birden çok değer verilebilir (INITIATED, VERIFY_PENDING, "
+                    + "IN_REVIEW, SUCCEEDED, FAILED). Satırlar tekil ödeme detayıyla aynı AdminPaymentDto'dur: bağlı "
+                    + "atama/ilan/şirket (companyId, companyName), taraflar (SafeUser; e-posta yok), durum, tutar dökümü, "
+                    + "sağlayıcı referansları, doğrulama sayacı ve sonraki doğrulama anı (nextVerificationAt; "
+                    + "VERIFY_PENDING'de null ise deneme zamanlayıcıdan düşmüştür), payoutId ve iade kayıtları. "
+                    + "Sıralama createdAt (varsayılan, yeniden eskiye), updatedAt, status ve nextVerificationAt "
+                    + "alanlarıyla; en eskiyi başa almak için sort=createdAt,asc. Kart verisi ya da ödeme token'ı "
+                    + "dönmez. Uç payment.read ile korunur.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Ödeme denemeleri listelendi"),
+            @ApiResponse(responseCode = "400", description = "Bilinmeyen sıralama alanı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(StaffPermission.PAYMENT_READ)
+    @GetMapping("/payments")
+    public ResponseEntity<SuccessDataResult<PageDto<AdminPaymentDto>>> payments(
+            @RequestParam(required = false) List<PaymentAttemptStatus> status,
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
+        var page = adminDetailService.searchPayments(status, pageable);
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                PageDto.of(page, page.getContent()),
                 AdminMessages.PAYMENTS_LISTED, HttpStatus.OK));
     }
 
@@ -255,7 +291,8 @@ public class AdminController {
             description = "status verilmezse ya da PENDING ise süresi dolmamış bekleyen transferler sayfalanır. "
                     + "Yanıt maskeli IBAN ve referans taşır; tam IBAN yoktur. Onay mevcut confirm ucundan yapılır; ret ucu yoktur. "
                     + "query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) hesap sahibinin ad-soyadı, e-postası ve "
-                    + "doğrulama referansında büyük-küçük harf ve Türkçe karakter duyarsız arar; 100 karakteri aşarsa 400.")
+                    + "doğrulama referansında büyük-küçük harf ve Türkçe karakter duyarsız arar; 100 karakteri aşarsa 400. "
+                    + "userId verilirse yalnız o kullanıcının bekleyen doğrulamaları döner; query ile kesişir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Bekleyen doğrulamalar listelendi"),
             @ApiResponse(responseCode = "400", description = "Yalnız PENDING kuyruğu vardır ya da query 100 karakteri aşıyor",
@@ -266,12 +303,13 @@ public class AdminController {
     public ResponseEntity<SuccessDataResult<PageDto<IbanPendingDto>>> pendingIbanVerifications(
             @RequestParam(defaultValue = "PENDING") BankAccountVerificationStatus status,
             @RequestParam(required = false) String query,
+            @RequestParam(required = false) UUID userId,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
         if (status != BankAccountVerificationStatus.PENDING) {
             throw new ValidationException(BankAccountMessages.PENDING_QUEUE_ONLY);
         }
-        var page = bankAccountService.listPendingForStaff(query, pageable);
+        var page = bankAccountService.listPendingForStaff(query, userId, pageable);
         int attemptsAllowed = bankAccountService.verificationAttemptsAllowed();
         return ResponseEntity.ok(new SuccessDataResult<>(
                 PageDto.of(page, page.getContent().stream()
@@ -424,7 +462,10 @@ public class AdminController {
             description = "SafeUserDto'nun üst kümesi: doğrulama bayrakları (e-posta, telefon, kimlik), işveren "
                     + "bayrağı, kayıt tarihi, şirket üyelikleri (id, ad, rol), rozetler, geçmiş sayaçları "
                     + "(başvuru, işçi/işveren olarak atama, ödeme, hakediş, uyuşmazlık, alınan/yapılan şikayet), "
-                    + "son kimlik incelemesinin durumu ve açık hesap silme talebinin id'si. email ve phoneNumber "
+                    + "son kimlik incelemesinin id'si ve durumu (identityReviewId, identityReviewStatus; inceleme yoksa "
+                    + "ikisi de null), açık hesap silme talebinin id'si ve oturum özeti (sessionSummary: etkin oturum "
+                    + "sayısı, son oturum açılışı, son oturumun cihaz platformu; cihaz kimliği dönmez, oturum yoksa "
+                    + "sayaç 0 ve diğer ikisi null). email ve phoneNumber "
                     + "yalnız user.read_pii taşıyan personele döner; taşımayana null gelir ve gövde aynı şekildedir. "
                     + "PII döndüğünde denetim satırı user.read_pii izniyle (PERSONAL_DATA) yazılır. Sayaçlar "
                     + "süzgeçli listelere bağlanır: /admin/job-assignments?workerId=|employerId=, "
@@ -442,6 +483,26 @@ public class AdminController {
         return ResponseEntity.ok(new SuccessDataResult<>(
                 adminDetailService.getUserDetail(actor, userId),
                 AdminMessages.USER_FETCHED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "Kullanıcının banka hesapları (personel)",
+            description = "Kullanıcının etkin banka hesapları: birincil önce, sonra eskiden yeniye. Her satır maskeli "
+                    + "IBAN (ilk 4 + *** + son 4; tam IBAN hiçbir zaman dönmez), etkin doğrulama durumu (süresi dolan "
+                    + "PENDING EXPIRED olarak gelir), primary bayrağı, hesap sahibi adı doğrulama bayrağı, verifiedAt ve "
+                    + "createdAt taşır. Bekleyen doğrulamanın referansı ve tutarı bu uçta yoktur; "
+                    + "/admin/bank-account-verifications?userId= ile bank.account.verify altında okunur. Uç "
+                    + "user.read_pii ile korunur (PERSONAL_DATA); her okuma denetim satırı yazar.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Banka hesapları listelendi"),
+            @ApiResponse(responseCode = "404", description = "Kullanıcı bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(StaffPermission.USER_READ_PII)
+    @GetMapping("/users/{userId}/bank-accounts")
+    public ResponseEntity<SuccessDataResult<List<AdminBankAccountDto>>> userBankAccounts(@PathVariable UUID userId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                adminDetailService.getBankAccountsOfUser(userId),
+                AdminMessages.USER_BANK_ACCOUNTS_LISTED, HttpStatus.OK));
     }
 
     @Operation(summary = "Kullanıcının rollerini listele",

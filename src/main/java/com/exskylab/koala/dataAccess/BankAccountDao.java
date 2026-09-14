@@ -39,6 +39,7 @@ public interface BankAccountDao extends JpaRepository<BankAccount, UUID> {
               and account.verificationStatus = com.exskylab.koala.entities.BankAccountVerificationStatus.PENDING
               and account.verificationReference is not null
               and (account.verificationExpiresAt is null or account.verificationExpiresAt > :now)
+              and (:userId is null or owner.id = :userId)
               and (cast(:query as string) is null
                    or unaccent(lower(account.verificationReference))
                       like unaccent(lower(concat('%', cast(:query as string), '%')))
@@ -48,7 +49,7 @@ public interface BankAccountDao extends JpaRepository<BankAccount, UUID> {
             """)
     @EntityGraph(attributePaths = {"user", "user.profilePicture"})
     Page<BankAccount> findAwaitingStaffConfirmation(@Param("now") Instant now, @Param("query") String query,
-                                                    Pageable pageable);
+                                                    @Param("userId") UUID userId, Pageable pageable);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update BankAccount account set account.primaryAccount = false "

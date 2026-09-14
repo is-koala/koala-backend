@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import com.exskylab.koala.business.abstracts.ReportService;
 import com.exskylab.koala.core.constants.ReportMessages;
+import com.exskylab.koala.core.dtos.admin.request.CreatedAtRangeDto;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.report.request.CreateReportDto;
 import com.exskylab.koala.core.dtos.report.request.ReviewReportDto;
@@ -92,10 +93,12 @@ public class ReportsController {
                     + "query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) şikayet edenin ve edilenin ad-soyadı ile "
                     + "e-postasında ve şikayete konu ilanın başlığında büyük-küçük harf ve Türkçe karakter duyarsız arar; "
                     + "diğer süzgeçlerle kesişir; 100 karakteri aşarsa 400. reporterId şikayet edene, reportedUserId "
-                    + "şikayet edilene göre süzer; ikisi birlikte verilebilir.")
+                    + "şikayet edilene göre süzer; ikisi birlikte verilebilir. from ve to şikayetin oluşturulma anını "
+                    + "(createdAt) süzer, ikisi de dahildir ve dilimli ISO-8601 an ister; yalnız biri verilebilir; "
+                    + "diğer süzgeçlerle kesişir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Şikayetler listelendi"),
-            @ApiResponse(responseCode = "400", description = "Bilinmeyen sıralama alanı ya da query 100 karakteri aşıyor",
+            @ApiResponse(responseCode = "400", description = "Bilinmeyen sıralama alanı, query 100 karakteri aşıyor ya da tarih dilimsiz",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @RequiresPermission(StaffPermission.CONTENT_MODERATE)
@@ -107,10 +110,11 @@ public class ReportsController {
             @RequestParam(required = false) UUID reportedUserId,
             @RequestParam(required = false) UUID reporterId,
             @RequestParam(required = false) String query,
+            @ParameterObject CreatedAtRangeDto createdAt,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
         var page = reportService.searchForModeration(status, reason, targetType, reportedUserId, reporterId, query,
-                pageable);
+                createdAt.toRange(), pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
                 PageDto.of(page, page.getContent()),
                 ReportMessages.LISTED, HttpStatus.OK));

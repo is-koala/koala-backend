@@ -1,5 +1,7 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.business.abstracts.PayoutService;
+import com.exskylab.koala.core.properties.PayoutSettlementProperties;
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -8,7 +10,9 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -29,6 +33,12 @@ class AdminFinanceSummaryIT extends AbstractStaffIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private PayoutService payoutService;
+
+    @Autowired
+    private PayoutSettlementProperties settlementProperties;
 
     private final UUID workerId = UUID.randomUUID();
     private final UUID inPeriodJob = UUID.randomUUID();
@@ -76,7 +86,33 @@ class AdminFinanceSummaryIT extends AbstractStaffIntegrationTest {
                 .andExpect(jsonPath("$.data.completedPayoutAmount").value("0.00"))
                 .andExpect(jsonPath("$.data.completedPayoutCount").value(0))
                 .andExpect(jsonPath("$.data.awaitingPayoutAmount").value("0.00"))
-                .andExpect(jsonPath("$.data.awaitingPayoutCount").value(0));
+                .andExpect(jsonPath("$.data.awaitingPayoutCount").value(0))
+                .andExpect(jsonPath("$.data.stuckPaymentCount").value(0))
+                .andExpect(jsonPath("$.data.overduePayoutCount").value(0));
+    }
+
+    @Test
+    void theSummaryCountsStuckVerificationsAndOverdueSettlementsRegardlessOfThePeriod() throws Exception {
+        seedLedger();
+        seedVerifyPending(awaitingAssignment, "stuck-" + awaitingAssignment, null);
+        seedVerifyPending(outPeriodAssignment, "scheduled-" + outPeriodAssignment, Instant.now().plusSeconds(600));
+        seedProcessingPayout(outPeriodAssignment, Instant.now().minus(Duration.ofDays(4)));
+        seedProcessingPayout(inPeriodAssignment, Instant.now().minus(Duration.ofHours(2)));
+
+        mockMvc.perform(get("/admin/finance/summary")
+                        .param("from", FROM.toString())
+                        .param("to", TO.toString())
+                        .header("Authorization", "Bearer " + tokenFor("FINANCE_ANALYST")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.succeededPaymentCount").value(1))
+                .andExpect(jsonPath("$.data.stuckPaymentCount").value(1))
+                .andExpect(jsonPath("$.data.overduePayoutCount").value(1))
+                .andExpect(jsonPath("$.data.awaitingPayoutCount").value(3));
+
+        List<UUID> overdue = payoutService.findPayoutsAwaitingSettlementLongerThan(settlementProperties.getOverdueAfter());
+        assertEquals(1, overdue.stream().filter(id -> jdbcTemplate.queryForObject(
+                "select worker_id from payouts where id = ?", UUID.class, id).equals(workerId)).count(),
+                "özetin saydığı vadesi geçmiş hakediş §2y3 kuyruğunun döndürdüğü satır olmalı");
     }
 
     @Test
@@ -162,6 +198,24 @@ class AdminFinanceSummaryIT extends AbstractStaffIntegrationTest {
                                       commission_amount, total_charged, completed_at)
                 values (?, now(), false, ?, ?, 'SUCCEEDED', 'TRY', '2026-09-v1', ?, 0.0750, ?, ?, ?)
                 """, UUID.randomUUID(), assignmentId, conversationId, workerPayout, fee, total, java.sql.Timestamp.from(completedAt));
+    }
+
+    private void seedVerifyPending(UUID assignmentId, String conversationId, Instant nextVerificationAt) {
+        jdbcTemplate.update("""
+                insert into payments (id, created_at, is_deleted, job_assignment_id, conversation_id, status,
+                                      currency, verification_attempts, next_verification_at)
+                values (?, now(), false, ?, ?, 'VERIFY_PENDING', 'TRY', 1, ?)
+                """, UUID.randomUUID(), assignmentId, conversationId,
+                nextVerificationAt == null ? null : java.sql.Timestamp.from(nextVerificationAt));
+    }
+
+    private void seedProcessingPayout(UUID assignmentId, Instant processingAt) {
+        jdbcTemplate.update("""
+                insert into payouts (id, created_at, is_deleted, job_assignment_id, worker_id,
+                                     amount, currency, status, provider_reference, processing_at)
+                values (?, now(), false, ?, ?, 500.00, 'TRY', 'PROCESSING', ?, ?)
+                """, UUID.randomUUID(), assignmentId, workerId, "PROV-" + UUID.randomUUID(),
+                java.sql.Timestamp.from(processingAt));
     }
 
     private void seedPayout(UUID assignmentId, String status, Instant completedAt, int amount) {
