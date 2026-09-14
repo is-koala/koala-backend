@@ -29,7 +29,6 @@ import com.exskylab.koala.core.properties.AppProperties;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.mappers.JobAssignmentMapper;
-import com.exskylab.koala.core.mappers.PricingDtoMapper;
 import com.exskylab.koala.core.monitoring.PaymentMetrics;
 import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.*;
@@ -124,7 +123,6 @@ public class JobAssignmentManager implements JobAssignmentService {
     private final CancellationDao cancellationDao;
     private final JobService jobService;
     private final ReviewDao reviewDao;
-    private final PricingDtoMapper pricingDtoMapper;
     private final JobAddressVisibility addressVisibility = new JobAddressVisibility();
 
 
@@ -139,8 +137,7 @@ public class JobAssignmentManager implements JobAssignmentService {
                                SettingsService settingsService, GalleryService galleryService,
                                ActivityNotificationService activityNotificationService,
                                ApplicationEventPublisher eventPublisher, PaymentMetrics paymentMetrics,
-                               CancellationDao cancellationDao, JobService jobService, ReviewDao reviewDao,
-                               PricingDtoMapper pricingDtoMapper) {
+                               CancellationDao cancellationDao, JobService jobService, ReviewDao reviewDao) {
         this.jobAssignmentDao = jobAssignmentDao;
         this.securityService = securityService;
         this.jobAssignmentMapper = jobAssignmentMapper;
@@ -166,7 +163,6 @@ public class JobAssignmentManager implements JobAssignmentService {
         this.cancellationDao = cancellationDao;
         this.jobService = jobService;
         this.reviewDao = reviewDao;
-        this.pricingDtoMapper = pricingDtoMapper;
     }
 
 
@@ -543,16 +539,16 @@ public class JobAssignmentManager implements JobAssignmentService {
             UUID authorId = review.getAuthor().getId();
             if (authorId.equals(viewerId)) {
                 myReview = review;
-            } else if (authorId.equals(workerId) != workerView) {
+            } else if (isCounterpartyOf(authorId, workerId, workerView)) {
                 counterpartyReviewed = true;
             }
         }
+        return new JobAssignmentMapper.ViewerFacts(workerView, myReview, counterpartyReviewed);
+    }
 
-        if (workerView) {
-            return new JobAssignmentMapper.ViewerFacts(null, null, myReview, counterpartyReviewed);
-        }
-        return new JobAssignmentMapper.ViewerFacts(assignment.getTotalCharged(),
-                pricingDtoMapper.toPricing(assignment), myReview, counterpartyReviewed);
+    private static boolean isCounterpartyOf(UUID authorId, UUID workerId, boolean viewerIsWorker) {
+        boolean authorIsWorker = authorId.equals(workerId);
+        return authorIsWorker != viewerIsWorker;
     }
 
     private LinkedRecords linkedRecordsOf(List<JobAssignment> assignments) {

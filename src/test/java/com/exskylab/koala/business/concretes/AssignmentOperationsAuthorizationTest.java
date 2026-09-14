@@ -119,8 +119,7 @@ class AssignmentOperationsAuthorizationTest {
                 mock(com.exskylab.koala.business.abstracts.GalleryService.class), mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class), mock(org.springframework.context.ApplicationEventPublisher.class),
                 new com.exskylab.koala.core.monitoring.PaymentMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()),
                 cancellationDao, mock(com.exskylab.koala.business.abstracts.JobService.class),
-                mock(com.exskylab.koala.dataAccess.ReviewDao.class),
-                new com.exskylab.koala.core.mappers.PricingDtoMapper());
+                mock(com.exskylab.koala.dataAccess.ReviewDao.class));
 
         when(cancellationDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(disputeDaoStub.save(any())).thenAnswer(i -> i.getArgument(0));

@@ -6,7 +6,6 @@ import com.exskylab.koala.core.dtos.jobAssignment.response.PaymentSessionDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.MyAssignmentDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.MyReviewDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.ShortJobAssignmentDto;
-import com.exskylab.koala.core.dtos.payment.response.PricingBreakdownDto;
 import com.exskylab.koala.core.dtos.payout.response.AssignmentPayoutDto;
 import com.exskylab.koala.core.helpers.MessagingAvailability;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.PaymentSessionResponseDto;
@@ -19,7 +18,6 @@ import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 
 @Mapper(componentModel = "spring",
@@ -42,8 +40,9 @@ public interface JobAssignmentMapper {
     @Mapping(target = "status", source = "jobAssignment.status")
     @Mapping(target = "createdAt", source = "jobAssignment.createdAt")
     @Mapping(target = "worker", source = "jobAssignment.worker")
-    @Mapping(target = "totalCharged", source = "viewer.totalCharged")
-    @Mapping(target = "pricing", source = "viewer.pricing")
+    @Mapping(target = "totalCharged", source = "jobAssignment.totalCharged",
+            conditionExpression = "java(!viewer.workerView())")
+    @Mapping(target = "pricing", source = "jobAssignment", conditionExpression = "java(!viewer.workerView())")
     @Mapping(target = "myReview", source = "viewer.myReview")
     @Mapping(target = "counterpartyReviewed", source = "viewer.counterpartyReviewed")
     @Mapping(target = "messagingAvailable", source = "jobAssignment", qualifiedByName = "messagingAvailable")
@@ -62,8 +61,7 @@ public interface JobAssignmentMapper {
 
     AssignmentApplicationDto toAssignmentApplicationDto(JobApplication application);
 
-    record ViewerFacts(BigDecimal totalCharged, PricingBreakdownDto pricing, Review myReview,
-                       boolean counterpartyReviewed) {
+    record ViewerFacts(boolean workerView, Review myReview, boolean counterpartyReviewed) {
     }
 
     AssignmentPayoutDto toAssignmentPayoutDto(Payout payout);

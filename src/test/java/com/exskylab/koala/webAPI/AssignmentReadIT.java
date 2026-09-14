@@ -117,10 +117,12 @@ class AssignmentReadIT extends AbstractIntegrationTest {
         jdbc.update("delete from user_badges where user_id in (?, ?, ?, ?, ?)",
                 employerId, workerId, companyAdminId, outsiderId, secondWorkerId);
         jdbc.update("delete from cancellations where id = ?", cancellationId);
-        jdbc.update("delete from payouts where id = ?", payoutId);
+        jdbc.update("delete from settlement_tasks where job_assignment_id in (?, ?)", assignmentId, secondAssignmentId);
+        jdbc.update("delete from payouts where job_assignment_id in (?, ?)", assignmentId, secondAssignmentId);
         jdbc.update("delete from payments where id = ?", paymentId);
         jdbc.update("delete from job_assignments where id in (?, ?)", assignmentId, secondAssignmentId);
         jdbc.update("delete from job_applications where id = ?", applicationId);
+        jdbc.update("delete from bank_accounts where user_id = ?", workerId);
         jdbc.update("delete from job_images where id = ?", coverEntryId);
         jdbc.update("update companies set logo_id = null where id = ?", companyId);
         jdbc.update("delete from media where id in (?, ?)", logoId, coverId);
@@ -451,6 +453,55 @@ class AssignmentReadIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.pricing").value(nullValue()))
                 .andExpect(jsonPath("$.data.myReview").value(nullValue()))
                 .andExpect(jsonPath("$.data.counterpartyReviewed").value(false));
+    }
+
+    @Test
+    void completingAsTheEmployerAnswersWithTheEmployerViewAndTheReviewState() throws Exception {
+        jdbc.update("insert into payments (id, created_at, is_deleted, job_assignment_id, conversation_id, status, "
+                        + "currency, pricing_version, worker_payout, commission_rate, commission_amount, "
+                        + "total_charged, provider_transaction_id, verification_attempts, completed_at) "
+                        + "values (?, now() - interval '1 hour', false, ?, ?, 'SUCCEEDED', 'TRY', 'v1', 100.00, "
+                        + "0.1000, 10.00, 110.00, ?, 1, now() - interval '1 hour')",
+                paymentId, assignmentId, "conv-" + paymentId, "txn-" + paymentId);
+        jdbc.update("insert into bank_accounts (id, created_at, is_deleted, user_id, iban, is_primary, is_active, "
+                        + "verification_status, verification_attempts, account_holder_name_verified) "
+                        + "values (?, now(), false, ?, 'TR180006200119000006672315', true, true, 'VERIFIED', 0, true)",
+                UUID.randomUUID(), workerId);
+
+        mockMvc.perform(post("/job-assignments/{assignmentId}/complete", assignmentId)
+                        .with(user(principal(employerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.workerPayout").value(100.00))
+                .andExpect(jsonPath("$.data.totalCharged").value(110.00))
+                .andExpect(jsonPath("$.data.pricing.serviceFeeAmount").value("10.00"))
+                .andExpect(jsonPath("$.data.pricing.employerTotal").value("110.00"))
+                .andExpect(jsonPath("$.data.myReview").value(nullValue()))
+                .andExpect(jsonPath("$.data.counterpartyReviewed").value(false));
+    }
+
+    @Test
+    void aCompanyContactNeitherOwnsNorCountsAColleaguesReview() throws Exception {
+        jdbc.update("update job_assignments set status = 'COMPLETED', payment_status = 'RELEASED_TO_WORKER' "
+                + "where id = ?", assignmentId);
+        UUID creatorReviewId = UUID.randomUUID();
+        insertReview(creatorReviewId, employerId, workerId, 5, "Dakik");
+
+        getAssignmentAs(companyAdminId)
+                .andExpect(jsonPath("$.data.myReview").value(nullValue()))
+                .andExpect(jsonPath("$.data.counterpartyReviewed").value(false));
+        getAssignmentAs(employerId)
+                .andExpect(jsonPath("$.data.myReview.id").value(creatorReviewId.toString()))
+                .andExpect(jsonPath("$.data.counterpartyReviewed").value(false));
+        getAssignmentAs(workerId)
+                .andExpect(jsonPath("$.data.myReview").value(nullValue()))
+                .andExpect(jsonPath("$.data.counterpartyReviewed").value(true));
+
+        insertReview(UUID.randomUUID(), workerId, employerId, 4, "Net brief");
+
+        getAssignmentAs(companyAdminId)
+                .andExpect(jsonPath("$.data.myReview").value(nullValue()))
+                .andExpect(jsonPath("$.data.counterpartyReviewed").value(true));
     }
 
     @Test

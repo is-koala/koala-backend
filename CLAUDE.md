@@ -1250,6 +1250,24 @@ MessagingAvailability.class` ile `@Named` niteleyicilerden dolduruyor, ek sorgu 
 
 **`RatingSummary` biriktirir, yeniden hesaplamaz.** `reviewCount` ve `ratingSum` artırılıp ortalama türetiliyor; her profil görüntülemesinde toplama sorgusu atılmıyor. Ortalama `NUMERIC(3,2)`, `HALF_UP`.
 
+**Anonim değerlendirme kararı ve gizlemenin mapper'da tek yerde oluşu §2am'de** ("Anonim değerlendirme — karar tersine döndü" ve devamı); aşağıdaki iki paragraf onun üzerine kurulu.
+
+**"Değerlendirdim mi" bilgisinin doğruluk kaynağı sunucu (#293).** İstemciler bunu cihazda (SharedPreferences)
+tutup 409'a kadar düğmeyi yeniden gösteriyordu. `MyAssignmentDto.myReview {id, rating, comment, createdAt}`
+görüntüleyenin **kendi** yazdığı değerlendirme (yoksa null), `counterpartyReviewed` karşı tarafın yazıp yazmadığı —
+yalnız varlık, içerik ve yazar yok. Karşı taraf işçi merkezli tanımlanır: yazar işçiyse işçi tarafı, değilse
+işveren tarafı; görüntüleyen şirketin başka bir yetkilisiyse aynı taraftaki meslektaşının değerlendirmesi ne
+`myReview` ne `counterpartyReviewed` sayılır. Liste yolunda sayfa başına **tek** ek sorgu
+(`ReviewDao.findAllByJobAssignmentIdIn`, `JobAssignmentManager.linkedRecordsOf`; `author.id`/`jobAssignment.id`
+proxy kimliği, `CollectionQueryWithoutGraphTest` allowlist'inde). `JobAssignmentManager → ReviewDao` §2ae
+muafiyeti: `ReviewManager` zaten `JobAssignmentService`'e bağlı, servis üzerinden gitmek döngü olurdu.
+
+**`ReviewDto.jobAssignmentId` yalnız yazarın aldığı POST yanıtında dolu, herkese açık listede null.** İki
+profilde aynı atama kimliğini görmek anonim yazarı açığa çıkarırdı: A'nın profilindeki anonim değerlendirme ile
+B'nin profilindeki adlı değerlendirme aynı `jobAssignmentId`'yi taşısaydı üçüncü kişi anonim yazarın B olduğunu
+çıkarırdı. `ReviewMapper.toOwnReviewDto` (`toOwnNamedReviewDto`/`toOwnAnonymousReviewDto`, `jobAssignment.id`'den)
+kimliği ekler; `toReviewDto`/`toReviewDtoList` `ignore` ile boş bırakır.
+
 ## 2p. İptal, uyuşmazlık, şikayet ve puantaj
 
 **İptal politikası tek yerde: `core/helpers/CancellationPolicy`.** Girdisi taraf + tahsil edilen tutar + işin başlangıcına kalan süre; çıktısı oran, ceza ve iade. Saf hesap, Spring'siz test edilir.
@@ -2765,21 +2783,6 @@ Asıl gerekçe frontend'den geldi ve doğru: bir daha çalışmayacağı bir iş
 
 **Sonradan değiştirilemez:** güncelleme ucu yok ve eklenmeyecek.
 
-**"Değerlendirdim mi" bilgisinin doğruluk kaynağı sunucu (#293).** İstemciler bunu cihazda (SharedPreferences)
-tutup 409'a kadar düğmeyi yeniden gösteriyordu. `MyAssignmentDto.myReview {id, rating, comment, createdAt}`
-görüntüleyenin **kendi** yazdığı değerlendirme (yoksa null), `counterpartyReviewed` karşı tarafın yazıp yazmadığı —
-yalnız varlık, içerik ve yazar yok. Karşı taraf işçi merkezli tanımlanır: yazar işçiyse işçi tarafı, değilse
-işveren tarafı; görüntüleyen şirketin başka bir yetkilisiyse aynı taraftaki meslektaşının değerlendirmesi ne
-`myReview` ne `counterpartyReviewed` sayılır. Liste yolunda sayfa başına **tek** ek sorgu
-(`ReviewDao.findAllByJobAssignmentIdIn`, `JobAssignmentManager.linkedRecordsOf`; `author.id`/`jobAssignment.id`
-proxy kimliği, `CollectionQueryWithoutGraphTest` allowlist'inde). `JobAssignmentManager → ReviewDao` §2ae
-muafiyeti: `ReviewManager` zaten `JobAssignmentService`'e bağlı, servis üzerinden gitmek döngü olurdu.
-
-**`ReviewDto.jobAssignmentId` yalnız yazarın aldığı POST yanıtında dolu, herkese açık listede null.** İki
-profilde aynı atama kimliğini görmek anonim yazarı açığa çıkarırdı: A'nın profilindeki anonim değerlendirme ile
-B'nin profilindeki adlı değerlendirme aynı `jobAssignmentId`'yi taşısaydı üçüncü kişi anonim yazarın B olduğunu
-çıkarırdı. `ReviewMapper.toOwnReviewDto` kimliği ekler; `toReviewDto`/`toReviewDtoList` `ignore` ile boş bırakır.
-
 ## 2an. E-posta şablonları
 
 **Şablon adı kodda düz metin, dosya `resources/templates/emails` altında.** `EmailConsumer` `templateEngine.process("emails/" + templateName, context)` çağırıyor; ad tutmazsa Thymeleaf `TemplateInputException` fırlatır, `Notification` `FAILED`'a düşer ve **kimse haberdar olmaz** — kullanıcı e-postayı beklemeye devam eder.
@@ -4249,7 +4252,10 @@ yanıtı işverene gittiği için tam gelir. Ürün kararı: işçi yalnız kend
 mobil `PricingBreakdown.fromJson` fee alanlarını `requiredDecimalString` ile okuyor — alanı null bir nesne
 `FormatException` fırlatır, `pricing: null` ise `Assignment.fromJson`'da tolere edilir ve `WorkDetailPage`
 etiketi `workerPayout`'tan üretir; web `backend-contract.ts` de `pricing?.workerPayout ?? workerPayout` okur.
-Yani sözleşme değişikliği yayındaki iki istemciyle geriye uyumlu. `MyAssignmentDto.job.pricing` (`JobSummaryDto`)
+Yani sözleşme değişikliği yayındaki iki istemciyle geriye uyumlu. Mapper tarafında `totalCharged` ve `pricing`
+`conditionExpression = "java(!viewer.workerView())"` ile koşullu eşlenir (`AdminDetailMapper`'ın `includePii`
+ifadesiyle aynı kalıp); `PricingDtoMapper` yalnız mapper'ın `uses` listesinde, manager'a girmez. Karşı taraf kuralı
+`JobAssignmentManager.isCounterpartyOf` (yazar işçi mi ≠ görüntüleyen işçi mi). `MyAssignmentDto.job.pricing` (`JobSummaryDto`)
 bilerek dokunulmadı: ilan listelerinde herkese açık olan aynı nesne, ayrı issue.
 
 Testler: `AssignmentReadIT` (null hâl, dolu hâl, başarısız ödeme sayılmaz, respond `confirmedAt`, iki işveren rolü

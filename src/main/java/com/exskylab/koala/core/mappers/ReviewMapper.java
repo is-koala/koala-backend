@@ -28,13 +28,18 @@ public interface ReviewMapper {
         return review.isAnonymous() ? toAnonymousReviewDto(review) : toNamedReviewDto(review);
     }
 
+    @Mapping(target = "jobAssignmentId", source = "jobAssignment.id")
+    ReviewDto toOwnNamedReviewDto(Review review);
+
+    @Mapping(target = "jobAssignmentId", source = "jobAssignment.id")
+    @Mapping(target = "author", ignore = true)
+    ReviewDto toOwnAnonymousReviewDto(Review review);
+
     default ReviewDto toOwnReviewDto(Review review) {
-        ReviewDto dto = toReviewDto(review);
-        if (dto == null) {
+        if (review == null) {
             return null;
         }
-        return new ReviewDto(dto.id(), review.getJobAssignment().getId(), dto.author(), dto.rating(),
-                dto.comment(), dto.anonymous(), dto.createdAt());
+        return review.isAnonymous() ? toOwnAnonymousReviewDto(review) : toOwnNamedReviewDto(review);
     }
 
     default List<ReviewDto> toReviewDtoList(List<Review> reviews) {
