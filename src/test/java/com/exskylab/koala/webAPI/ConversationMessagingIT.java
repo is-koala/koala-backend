@@ -161,6 +161,18 @@ class ConversationMessagingIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void aWorkerWhoLeftTheCrewNoLongerGetsItsPushes() throws Exception {
+        jdbc.update("update conversation_participants set is_deleted = true, deleted_at = now() "
+                + "where conversation_id = ? and user_id = ?", crewId, secondWorkerId);
+
+        send(employerId, crewId, "kalanlara").andExpect(status().isCreated());
+
+        List<Map<String, Object>> pushes = messagePushes();
+        assertEquals(1, pushes.size(), "Soft delete edilen katılımcı push almaz; yalnız kalan aktif katılımcı");
+        assertEquals(firstWorkerId, pushes.get(0).get("recipient_id"));
+    }
+
+    @Test
     void afterReturnsOnlyTheMessagesSentLaterInAscendingOrder() throws Exception {
         UUID first = insertMessage(directId, employerId, "1", "3 minutes");
         UUID second = insertMessage(directId, firstWorkerId, "2", "2 minutes");
