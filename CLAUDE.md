@@ -1250,6 +1250,24 @@ MessagingAvailability.class` ile `@Named` niteleyicilerden dolduruyor, ek sorgu 
 
 **`RatingSummary` biriktirir, yeniden hesaplamaz.** `reviewCount` ve `ratingSum` artırılıp ortalama türetiliyor; her profil görüntülemesinde toplama sorgusu atılmıyor. Ortalama `NUMERIC(3,2)`, `HALF_UP`.
 
+**Anonim değerlendirme kararı ve gizlemenin mapper'da tek yerde oluşu §2am'de** ("Anonim değerlendirme — karar tersine döndü" ve devamı); aşağıdaki iki paragraf onun üzerine kurulu.
+
+**"Değerlendirdim mi" bilgisinin doğruluk kaynağı sunucu (#293).** İstemciler bunu cihazda (SharedPreferences)
+tutup 409'a kadar düğmeyi yeniden gösteriyordu. `MyAssignmentDto.myReview {id, rating, comment, createdAt}`
+görüntüleyenin **kendi** yazdığı değerlendirme (yoksa null), `counterpartyReviewed` karşı tarafın yazıp yazmadığı —
+yalnız varlık, içerik ve yazar yok. Karşı taraf işçi merkezli tanımlanır: yazar işçiyse işçi tarafı, değilse
+işveren tarafı; görüntüleyen şirketin başka bir yetkilisiyse aynı taraftaki meslektaşının değerlendirmesi ne
+`myReview` ne `counterpartyReviewed` sayılır. Liste yolunda sayfa başına **tek** ek sorgu
+(`ReviewDao.findAllByJobAssignmentIdIn`, `JobAssignmentManager.linkedRecordsOf`; `author.id`/`jobAssignment.id`
+proxy kimliği, `CollectionQueryWithoutGraphTest` allowlist'inde). `JobAssignmentManager → ReviewDao` §2ae
+muafiyeti: `ReviewManager` zaten `JobAssignmentService`'e bağlı, servis üzerinden gitmek döngü olurdu.
+
+**`ReviewDto.jobAssignmentId` yalnız yazarın aldığı POST yanıtında dolu, herkese açık listede null.** İki
+profilde aynı atama kimliğini görmek anonim yazarı açığa çıkarırdı: A'nın profilindeki anonim değerlendirme ile
+B'nin profilindeki adlı değerlendirme aynı `jobAssignmentId`'yi taşısaydı üçüncü kişi anonim yazarın B olduğunu
+çıkarırdı. `ReviewMapper.toOwnReviewDto` (`toOwnNamedReviewDto`/`toOwnAnonymousReviewDto`, `jobAssignment.id`'den)
+kimliği ekler; `toReviewDto`/`toReviewDtoList` `ignore` ile boş bırakır.
+
 ## 2p. İptal, uyuşmazlık, şikayet ve puantaj
 
 **İptal politikası tek yerde: `core/helpers/CancellationPolicy`.** Girdisi taraf + tahsil edilen tutar + işin başlangıcına kalan süre; çıktısı oran, ceza ve iade. Saf hesap, Spring'siz test edilir.
@@ -4173,11 +4191,13 @@ iptal edildiyse null).
 sayfa başına tek `min(completedAt) … group by` satırı (`CollectionQueryWithoutGraphTest` allowlist'inde, aggregate);
 başarısız denemeler sayılmaz. `PaymentService.securedAtForAssignments` ile servis üzerinden.
 
-**Bağlı kayıtlar sayfa başına üç toplu sorguyla, satır başına değil (§2af, §2o'daki `findLatestByJobsAndWorkers`
+**Bağlı kayıtlar sayfa başına dört toplu sorguyla, satır başına değil (§2af, §2o'daki `findLatestByJobsAndWorkers`
 kalıbı).** `JobAssignmentManager.linkedRecordsOf` sayfanın id'leriyle `CancellationDao.findAllByJobAssignmentIdIn`,
-`PayoutService.findForAssignments` ve `PaymentService.securedAtForAssignments` çağırır, sonuçları id'ye anahtarlar
-(şema atama başına tek iptal ve tek hakediş garanti ediyor, birleştirme yok) ve MapStruct'a dört kaynaklı
-`toMyAssignmentDto(assignment, cancellation, payout, paymentSecuredAt)` ile verir; iptal özeti `CancellationMapper.
+`PayoutService.findForAssignments`, `PaymentService.securedAtForAssignments` ve (#293'ten beri)
+`ReviewDao.findAllByJobAssignmentIdIn` çağırır, sonuçları id'ye anahtarlar
+(şema atama başına tek iptal ve tek hakediş garanti ediyor, birleştirme yok; değerlendirme atama başına liste) ve
+MapStruct'a beş kaynaklı `toMyAssignmentDto(assignment, cancellation, payout, paymentSecuredAt, viewerFacts)` ile
+verir; iptal özeti `CancellationMapper.
 toAssignmentCancellationDto` ile (`CancellationDto`'nun exact-decimal ifadeleriyle aynı yerde). Beş üretici
 (`getMyAssignments`, `getAssignmentsForJob`, `getMyAssignment`, `answerToAssignment`, `completeAssignment`) iki
 private yardımcıdan geçer — sayfalar `toPage`, tekiller üç parametreli `toMyAssignmentDto` — ve ikisi de adres
@@ -4221,8 +4241,27 @@ yoksa `0`/`0` — `EmployerStatsDto` ile aynı karar; `/users/{id}/rating-summar
 `badges[]` (`BadgeService.getBadgesOf`, `/users/{id}/badges` ile aynı liste ve grafik). `PublicProfileManager`
 orkestratör kaldı, DAO'ya uzanmaz.
 
+**Fiyat alanları görüntüleyene göre kısılır — adres görünürlüğüyle aynı kalıp (#293).** Görüntüleyen atamanın
+işçisiyse (`assignment.worker.id == viewerId`; ek sorgu yok) `totalCharged = null` ve **`pricing = null`** (nesne
+hiç gelmez); işçi kendi kazancını üst düzey `workerPayout`'tan okur. İşveren ve şirket yetkilisi için değişiklik
+yok; personel uçları (`AdminAssignmentDto`) etkilenmez. `respond` yanıtı işçiye gittiği için kısılmış, `complete`
+yanıtı işverene gittiği için tam gelir. Ürün kararı: işçi yalnız kendi kazancını görür; komisyon ve işverenden
+çekilen toplam yalnız işverene. Görüntüleyene bağlı dört alan (`totalCharged`, `pricing`, `myReview`,
+`counterpartyReviewed`) mapper'a tek kaynaktan, `JobAssignmentMapper.ViewerFacts` ile girer;
+`JobAssignmentManager.viewerFactsOf` üretir. **Neden alanları null'lanmış bir nesne değil de `null`:** yayındaki
+mobil `PricingBreakdown.fromJson` fee alanlarını `requiredDecimalString` ile okuyor — alanı null bir nesne
+`FormatException` fırlatır, `pricing: null` ise `Assignment.fromJson`'da tolere edilir ve `WorkDetailPage`
+etiketi `workerPayout`'tan üretir; web `backend-contract.ts` de `pricing?.workerPayout ?? workerPayout` okur.
+Yani sözleşme değişikliği yayındaki iki istemciyle geriye uyumlu. Mapper tarafında `totalCharged` ve `pricing`
+`conditionExpression = "java(!viewer.workerView())"` ile koşullu eşlenir (`AdminDetailMapper`'ın `includePii`
+ifadesiyle aynı kalıp); `PricingDtoMapper` yalnız mapper'ın `uses` listesinde, manager'a girmez. Karşı taraf kuralı
+`JobAssignmentManager.isCounterpartyOf` (yazar işçi mi ≠ görüntüleyen işçi mi). `MyAssignmentDto.job.pricing` (`JobSummaryDto`)
+bilerek dokunulmadı: ilan listelerinde herkese açık olan aynı nesne, ayrı issue.
+
 Testler: `AssignmentReadIT` (null hâl, dolu hâl, başarısız ödeme sayılmaz, respond `confirmedAt`, iki işveren rolü
-listeler / işçi ve yabancı 404 / bilinmeyen ilanla aynı gövde / bilinmeyen sıralama 400, N+1), `ExistenceConcealmentIT`,
+listeler / işçi ve yabancı 404 / bilinmeyen ilanla aynı gövde / bilinmeyen sıralama 400, N+1 — değerlendirme
+tohumlu, işçi/işveren fiyat görünümü, respond işçi görünümü, `myReview`/`counterpartyReviewed` üç aktörle iki
+yönde ve herkese açık listede `jobAssignmentId` null), `ExistenceConcealmentIT`,
 `ApplicationDecisionIT` (aday listesi üç alan, ilan detayı sayım ve iptal damgası), `PayoutQueueIT`, `PublicProfileIT`,
 `AssignmentOperationsAuthorizationTest` (kabul damgalar, ret damgalamaz), `MapperCharacterizationTest`,
 `OpenApiDocumentIT`, `EagerFetchCoverageIT`, `EntityGraphPathsIT`, `CollectionQueryWithoutGraphTest`,

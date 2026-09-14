@@ -111,11 +111,18 @@ class AssignmentReadIT extends AbstractIntegrationTest {
                 employerId, workerId, companyAdminId, outsiderId, secondWorkerId,
                 employerId, workerId, companyAdminId, outsiderId, secondWorkerId,
                 employerId, workerId, companyAdminId, outsiderId, secondWorkerId);
+        jdbc.update("delete from reviews where job_assignment_id in (?, ?)", assignmentId, secondAssignmentId);
+        jdbc.update("delete from rating_summaries where user_id in (?, ?, ?, ?, ?)",
+                employerId, workerId, companyAdminId, outsiderId, secondWorkerId);
+        jdbc.update("delete from user_badges where user_id in (?, ?, ?, ?, ?)",
+                employerId, workerId, companyAdminId, outsiderId, secondWorkerId);
         jdbc.update("delete from cancellations where id = ?", cancellationId);
-        jdbc.update("delete from payouts where id = ?", payoutId);
+        jdbc.update("delete from settlement_tasks where job_assignment_id in (?, ?)", assignmentId, secondAssignmentId);
+        jdbc.update("delete from payouts where job_assignment_id in (?, ?)", assignmentId, secondAssignmentId);
         jdbc.update("delete from payments where id = ?", paymentId);
         jdbc.update("delete from job_assignments where id in (?, ?)", assignmentId, secondAssignmentId);
         jdbc.update("delete from job_applications where id = ?", applicationId);
+        jdbc.update("delete from bank_accounts where user_id = ?", workerId);
         jdbc.update("delete from job_images where id = ?", coverEntryId);
         jdbc.update("update companies set logo_id = null where id = ?", companyId);
         jdbc.update("delete from media where id in (?, ?)", logoId, coverId);
@@ -280,6 +287,8 @@ class AssignmentReadIT extends AbstractIntegrationTest {
         insertSucceededPayment();
         insertCancellation();
         insertPayout();
+        insertReview(UUID.randomUUID(), employerId, workerId, 5, "Dakik");
+        insertReview(UUID.randomUUID(), workerId, employerId, 4, "Net brief");
         Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
         boolean wasEnabled = statistics.isStatisticsEnabled();
         statistics.setStatisticsEnabled(true);
@@ -294,7 +303,11 @@ class AssignmentReadIT extends AbstractIntegrationTest {
             mockMvc.perform(get("/jobs/{jobId}/assignments", jobId).param("size", "2")
                             .with(user(principal(employerId))))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.content", hasSize(2)));
+                    .andExpect(jsonPath("$.data.content", hasSize(2)))
+                    .andExpect(jsonPath("$.data.content[1].myReview.rating").value(5))
+                    .andExpect(jsonPath("$.data.content[1].counterpartyReviewed").value(true))
+                    .andExpect(jsonPath("$.data.content[0].myReview").value(nullValue()))
+                    .andExpect(jsonPath("$.data.content[0].counterpartyReviewed").value(false));
             long statementsForTwoRows = statistics.getPrepareStatementCount();
 
             assertEquals(statementsForOneRow, statementsForTwoRows,
@@ -343,6 +356,12 @@ class AssignmentReadIT extends AbstractIntegrationTest {
                 payoutId, assignmentId, workerId, "iyz-" + payoutId, "stl-" + payoutId);
     }
 
+    private void insertReview(UUID id, UUID authorId, UUID subjectId, int rating, String comment) {
+        jdbc.update("insert into reviews (id, created_at, is_deleted, job_assignment_id, author_id, subject_id, "
+                        + "rating, comment, anonymous) values (?, now(), false, ?, ?, ?, ?, ?, false)",
+                id, assignmentId, authorId, subjectId, rating, comment);
+    }
+
     private void insertSecondAssignment() {
         insertUser(secondWorkerId, false);
         jdbc.update("insert into job_assignments (id, created_at, is_deleted, job_id, worker_id, status, "
@@ -383,6 +402,166 @@ class AssignmentReadIT extends AbstractIntegrationTest {
         getAssignmentAs(workerId)
                 .andExpect(jsonPath("$.data.job.addressPrecision").value("EXACT"))
                 .andExpect(jsonPath("$.data.job.latitude").value(40.987654));
+    }
+
+    @Test
+    void theWorkerSeesOnlyTheirPayoutWhileTheEmployerSideSeesThePricingBreakdown() throws Exception {
+        getAssignmentAs(workerId)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.workerPayout").value(100.00))
+                .andExpect(jsonPath("$.data.totalCharged").value(nullValue()))
+                .andExpect(jsonPath("$.data.pricing").value(nullValue()));
+
+        for (UUID actorId : new UUID[]{employerId, companyAdminId}) {
+            getAssignmentAs(actorId)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.workerPayout").value(100.00))
+                    .andExpect(jsonPath("$.data.totalCharged").value(110.00))
+                    .andExpect(jsonPath("$.data.pricing.workerPayout").value("100.00"))
+                    .andExpect(jsonPath("$.data.pricing.serviceFeeRate").value("0.1000"))
+                    .andExpect(jsonPath("$.data.pricing.serviceFeeAmount").value("10.00"))
+                    .andExpect(jsonPath("$.data.pricing.employerTotal").value("110.00"));
+        }
+
+        mockMvc.perform(get("/users/me/assignments").with(user(principal(workerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].workerPayout").value(100.00))
+                .andExpect(jsonPath("$.data.content[0].totalCharged").value(nullValue()))
+                .andExpect(jsonPath("$.data.content[0].pricing").value(nullValue()));
+        mockMvc.perform(get("/users/me/assignments").param("asEmployer", "true").with(user(principal(employerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].totalCharged").value(110.00))
+                .andExpect(jsonPath("$.data.content[0].pricing.serviceFeeAmount").value("10.00"));
+        mockMvc.perform(get("/jobs/{jobId}/assignments", jobId).with(user(principal(companyAdminId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].totalCharged").value(110.00))
+                .andExpect(jsonPath("$.data.content[0].pricing.employerTotal").value("110.00"));
+    }
+
+    @Test
+    void respondingAsTheWorkerAnswersWithTheWorkerViewOfThePrice() throws Exception {
+        jdbc.update("update job_assignments set status = 'PENDING_CONFIRMATION', payment_status = null where id = ?",
+                assignmentId);
+
+        mockMvc.perform(post("/job-assignments/{assignmentId}/respond", assignmentId)
+                        .with(user(principal(workerId)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"accepted\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.workerPayout").value(100.00))
+                .andExpect(jsonPath("$.data.totalCharged").value(nullValue()))
+                .andExpect(jsonPath("$.data.pricing").value(nullValue()))
+                .andExpect(jsonPath("$.data.myReview").value(nullValue()))
+                .andExpect(jsonPath("$.data.counterpartyReviewed").value(false));
+    }
+
+    @Test
+    void completingAsTheEmployerAnswersWithTheEmployerViewAndTheReviewState() throws Exception {
+        jdbc.update("insert into payments (id, created_at, is_deleted, job_assignment_id, conversation_id, status, "
+                        + "currency, pricing_version, worker_payout, commission_rate, commission_amount, "
+                        + "total_charged, provider_transaction_id, verification_attempts, completed_at) "
+                        + "values (?, now() - interval '1 hour', false, ?, ?, 'SUCCEEDED', 'TRY', 'v1', 100.00, "
+                        + "0.1000, 10.00, 110.00, ?, 1, now() - interval '1 hour')",
+                paymentId, assignmentId, "conv-" + paymentId, "txn-" + paymentId);
+        jdbc.update("insert into bank_accounts (id, created_at, is_deleted, user_id, iban, is_primary, is_active, "
+                        + "verification_status, verification_attempts, account_holder_name_verified) "
+                        + "values (?, now(), false, ?, 'TR180006200119000006672315', true, true, 'VERIFIED', 0, true)",
+                UUID.randomUUID(), workerId);
+
+        mockMvc.perform(post("/job-assignments/{assignmentId}/complete", assignmentId)
+                        .with(user(principal(employerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.workerPayout").value(100.00))
+                .andExpect(jsonPath("$.data.totalCharged").value(110.00))
+                .andExpect(jsonPath("$.data.pricing.serviceFeeAmount").value("10.00"))
+                .andExpect(jsonPath("$.data.pricing.employerTotal").value("110.00"))
+                .andExpect(jsonPath("$.data.myReview").value(nullValue()))
+                .andExpect(jsonPath("$.data.counterpartyReviewed").value(false));
+    }
+
+    @Test
+    void aCompanyContactNeitherOwnsNorCountsAColleaguesReview() throws Exception {
+        jdbc.update("update job_assignments set status = 'COMPLETED', payment_status = 'RELEASED_TO_WORKER' "
+                + "where id = ?", assignmentId);
+        UUID creatorReviewId = UUID.randomUUID();
+        insertReview(creatorReviewId, employerId, workerId, 5, "Dakik");
+
+        getAssignmentAs(companyAdminId)
+                .andExpect(jsonPath("$.data.myReview").value(nullValue()))
+                .andExpect(jsonPath("$.data.counterpartyReviewed").value(false));
+        getAssignmentAs(employerId)
+                .andExpect(jsonPath("$.data.myReview.id").value(creatorReviewId.toString()))
+                .andExpect(jsonPath("$.data.counterpartyReviewed").value(false));
+        getAssignmentAs(workerId)
+                .andExpect(jsonPath("$.data.myReview").value(nullValue()))
+                .andExpect(jsonPath("$.data.counterpartyReviewed").value(true));
+
+        insertReview(UUID.randomUUID(), workerId, employerId, 4, "Net brief");
+
+        getAssignmentAs(companyAdminId)
+                .andExpect(jsonPath("$.data.myReview").value(nullValue()))
+                .andExpect(jsonPath("$.data.counterpartyReviewed").value(true));
+    }
+
+    @Test
+    void myReviewIsTheViewersOwnAndCounterpartyReviewedLooksTheOtherWay() throws Exception {
+        jdbc.update("update job_assignments set status = 'COMPLETED', payment_status = 'RELEASED_TO_WORKER' "
+                + "where id = ?", assignmentId);
+
+        for (UUID actorId : new UUID[]{workerId, employerId, companyAdminId}) {
+            getAssignmentAs(actorId)
+                    .andExpect(jsonPath("$.data.myReview").value(nullValue()))
+                    .andExpect(jsonPath("$.data.counterpartyReviewed").value(false));
+        }
+
+        String body = mockMvc.perform(post("/job-assignments/{assignmentId}/reviews", assignmentId)
+                        .with(user(principal(workerId)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"rating\":4,\"comment\":\"Net brief\",\"anonymous\":true}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.jobAssignmentId").value(assignmentId.toString()))
+                .andExpect(jsonPath("$.data.author").value(nullValue()))
+                .andReturn().getResponse().getContentAsString();
+        String reviewId = com.jayway.jsonpath.JsonPath.read(body, "$.data.id");
+
+        getAssignmentAs(workerId)
+                .andExpect(jsonPath("$.data.myReview.id").value(reviewId))
+                .andExpect(jsonPath("$.data.myReview.rating").value(4))
+                .andExpect(jsonPath("$.data.myReview.comment").value("Net brief"))
+                .andExpect(jsonPath("$.data.myReview.createdAt").isNotEmpty())
+                .andExpect(jsonPath("$.data.counterpartyReviewed").value(false));
+        for (UUID actorId : new UUID[]{employerId, companyAdminId}) {
+            getAssignmentAs(actorId)
+                    .andExpect(jsonPath("$.data.myReview").value(nullValue()))
+                    .andExpect(jsonPath("$.data.counterpartyReviewed").value(true));
+        }
+
+        UUID employerReviewId = UUID.randomUUID();
+        insertReview(employerReviewId, employerId, workerId, 5, "Dakik");
+
+        getAssignmentAs(employerId)
+                .andExpect(jsonPath("$.data.myReview.id").value(employerReviewId.toString()))
+                .andExpect(jsonPath("$.data.myReview.rating").value(5))
+                .andExpect(jsonPath("$.data.counterpartyReviewed").value(true));
+        getAssignmentAs(companyAdminId)
+                .andExpect(jsonPath("$.data.myReview").value(nullValue()))
+                .andExpect(jsonPath("$.data.counterpartyReviewed").value(true));
+        getAssignmentAs(workerId)
+                .andExpect(jsonPath("$.data.myReview.id").value(reviewId))
+                .andExpect(jsonPath("$.data.counterpartyReviewed").value(true));
+
+        mockMvc.perform(get("/users/me/assignments").with(user(principal(workerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].myReview.id").value(reviewId))
+                .andExpect(jsonPath("$.data.content[0].counterpartyReviewed").value(true));
+
+        mockMvc.perform(get("/users/{userId}/reviews", employerId).with(user(principal(outsiderId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content", hasSize(1)))
+                .andExpect(jsonPath("$.data.content[0].id").value(reviewId))
+                .andExpect(jsonPath("$.data.content[0].jobAssignmentId").value(nullValue()))
+                .andExpect(jsonPath("$.data.content[0].author").value(nullValue()));
     }
 
     @Test

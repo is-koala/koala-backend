@@ -17,6 +17,7 @@ import com.exskylab.koala.core.dtos.jobAssignment.response.PaymentSessionDto;
 import com.exskylab.koala.core.constants.JobMessages;
 import com.exskylab.koala.business.abstracts.JobService;
 import com.exskylab.koala.dataAccess.CancellationDao;
+import com.exskylab.koala.dataAccess.ReviewDao;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.BankAccountService;
 import com.exskylab.koala.business.abstracts.PaymentService;
@@ -60,6 +61,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -120,6 +122,7 @@ public class JobAssignmentManager implements JobAssignmentService {
     private final PaymentMetrics paymentMetrics;
     private final CancellationDao cancellationDao;
     private final JobService jobService;
+    private final ReviewDao reviewDao;
     private final JobAddressVisibility addressVisibility = new JobAddressVisibility();
 
 
@@ -134,7 +137,7 @@ public class JobAssignmentManager implements JobAssignmentService {
                                SettingsService settingsService, GalleryService galleryService,
                                ActivityNotificationService activityNotificationService,
                                ApplicationEventPublisher eventPublisher, PaymentMetrics paymentMetrics,
-                               CancellationDao cancellationDao, JobService jobService) {
+                               CancellationDao cancellationDao, JobService jobService, ReviewDao reviewDao) {
         this.jobAssignmentDao = jobAssignmentDao;
         this.securityService = securityService;
         this.jobAssignmentMapper = jobAssignmentMapper;
@@ -159,6 +162,7 @@ public class JobAssignmentManager implements JobAssignmentService {
         this.paymentMetrics = paymentMetrics;
         this.cancellationDao = cancellationDao;
         this.jobService = jobService;
+        this.reviewDao = reviewDao;
     }
 
 
@@ -518,14 +522,38 @@ public class JobAssignmentManager implements JobAssignmentService {
                                               boolean activeWorker) {
         UUID id = assignment.getId();
         MyAssignmentDto dto = jobAssignmentMapper.toMyAssignmentDto(assignment,
-                linked.cancellations().get(id), linked.payouts().get(id), linked.paymentSecuredAt().get(id));
+                linked.cancellations().get(id), linked.payouts().get(id), linked.paymentSecuredAt().get(id),
+                viewerFactsOf(assignment, linked.reviews().getOrDefault(id, List.of()), viewerId));
         addressVisibility.protect(assignment.getJob(), dto.job(), viewerId, activeWorker);
         return dto;
     }
 
+    private JobAssignmentMapper.ViewerFacts viewerFactsOf(JobAssignment assignment, List<Review> reviews,
+                                                          UUID viewerId) {
+        UUID workerId = assignment.getWorker() == null ? null : assignment.getWorker().getId();
+        boolean workerView = workerId != null && workerId.equals(viewerId);
+
+        Review myReview = null;
+        boolean counterpartyReviewed = false;
+        for (Review review : reviews) {
+            UUID authorId = review.getAuthor().getId();
+            if (authorId.equals(viewerId)) {
+                myReview = review;
+            } else if (isCounterpartyOf(authorId, workerId, workerView)) {
+                counterpartyReviewed = true;
+            }
+        }
+        return new JobAssignmentMapper.ViewerFacts(workerView, myReview, counterpartyReviewed);
+    }
+
+    private static boolean isCounterpartyOf(UUID authorId, UUID workerId, boolean viewerIsWorker) {
+        boolean authorIsWorker = authorId.equals(workerId);
+        return authorIsWorker != viewerIsWorker;
+    }
+
     private LinkedRecords linkedRecordsOf(List<JobAssignment> assignments) {
         if (assignments.isEmpty()) {
-            return new LinkedRecords(Map.of(), Map.of(), Map.of());
+            return new LinkedRecords(Map.of(), Map.of(), Map.of(), Map.of());
         }
         List<UUID> ids = assignments.stream().map(JobAssignment::getId).toList();
 
@@ -539,11 +567,16 @@ public class JobAssignmentManager implements JobAssignmentService {
             payouts.put(payout.getJobAssignment().getId(), payout);
         }
 
-        return new LinkedRecords(cancellations, payouts, paymentService.securedAtForAssignments(ids));
+        Map<UUID, List<Review>> reviews = new HashMap<>();
+        for (Review review : reviewDao.findAllByJobAssignmentIdIn(ids)) {
+            reviews.computeIfAbsent(review.getJobAssignment().getId(), key -> new ArrayList<>()).add(review);
+        }
+
+        return new LinkedRecords(cancellations, payouts, paymentService.securedAtForAssignments(ids), reviews);
     }
 
     private record LinkedRecords(Map<UUID, Cancellation> cancellations, Map<UUID, Payout> payouts,
-                                 Map<UUID, Instant> paymentSecuredAt) {
+                                 Map<UUID, Instant> paymentSecuredAt, Map<UUID, List<Review>> reviews) {
     }
 
     @Override

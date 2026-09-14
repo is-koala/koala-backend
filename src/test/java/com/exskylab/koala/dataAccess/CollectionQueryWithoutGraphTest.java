@@ -113,6 +113,9 @@ class CollectionQueryWithoutGraphTest {
             "PayoutDao.summarizeAwaiting",
             "PayoutDao.summarizeCompleted",
             "RefundDao.findAllByPaymentIdOrderByCreatedAtDesc",
+            // MyAssignmentDto renders myReview/counterpartyReviewed from author.id and jobAssignment.id (proxy
+            // identifiers, no query); the assignments are already in the persistence context (#293).
+            "ReviewDao.findAllByJobAssignmentIdIn",
             // Staff payment detail reads only the refund row and payment.id (proxy identifier, no query); the
             // payments themselves are already in the persistence context (#255).
             "RefundDao.findAllByPaymentIdInOrderByCreatedAtDesc",

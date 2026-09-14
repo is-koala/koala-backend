@@ -42,7 +42,7 @@ public class ReviewsController {
     }
 
     @Operation(summary = "Değerlendirme bırak",
-            description = "Yalnızca tamamlanmış işte bırakılabilir. Her taraf bir kez yazabilir. Puan 1 ile 5 arasındadır. Anonim değerlendirme yoktur.")
+            description = "Yalnızca tamamlanmış işte bırakılabilir. Her taraf bir kez yazabilir. Puan 1 ile 5 arasındadır. Yanıt, değerlendirmenin yazıldığı atamanın kimliğini (jobAssignmentId) taşır; herkese açık listede bu alan null gelir.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Değerlendirme kaydedildi"),
             @ApiResponse(responseCode = "400", description = "Puan aralık dışında",
@@ -57,7 +57,7 @@ public class ReviewsController {
             @PathVariable UUID assignmentId, @RequestBody @Valid CreateReviewDto request) {
 
         return ResponseEntity.status(HttpStatus.CREATED).body(new SuccessDataResult<>(
-                reviewMapper.toReviewDto(reviewService.leaveReview(
+                reviewMapper.toOwnReviewDto(reviewService.leaveReview(
                         assignmentId, request.getRating(), request.getComment(),
                         Boolean.TRUE.equals(request.getAnonymous()))),
                 ReviewMessages.CREATED, HttpStatus.CREATED));

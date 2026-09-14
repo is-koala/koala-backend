@@ -19,7 +19,14 @@ import java.util.UUID;
 public record MyAssignmentDto(UUID id, JobSummaryDto job, SafeUserDto worker,
                               AssignmentStatus status, PaymentStatus paymentStatus,
                               Instant assignmentDateTime, Instant actualCompletionDateTime,
-                              int workHours, BigDecimal workerPayout, BigDecimal totalCharged,
+                              int workHours,
+                              @Schema(description = "İşçinin kazancı. Her iki taraf için de dolu; işçi görünümünde tek fiyat alanı budur.")
+                              BigDecimal workerPayout,
+                              @Schema(types = {"number", "null"},
+                                      description = "İşverenden çekilen toplam tutar. Yalnız işveren tarafı görür; görüntüleyen işçiyse null.")
+                              BigDecimal totalCharged,
+                              @Schema(types = {"object", "null"},
+                                      description = "Fiyat dökümü (hizmet bedeli oranı ve tutarı, işveren toplamı). Yalnız işveren tarafı görür; görüntüleyen işçiyse null — işçi kendi kazancını workerPayout'tan okur.")
                               PricingBreakdownDto pricing,
                               boolean messagingAvailable,
                               MessagingAvailabilityReason messagingAvailableReason,
@@ -43,5 +50,10 @@ public record MyAssignmentDto(UUID id, JobSummaryDto job, SafeUserDto worker,
                               @Schema(description = "İptal edilmişse iptal özeti; değilse null.")
                               AssignmentCancellationDto cancellation,
                               @Schema(description = "Hakediş kaydı; emanet çıkışa verilmediyse null.")
-                              AssignmentPayoutDto payout) {
+                              AssignmentPayoutDto payout,
+                              @Schema(types = {"object", "null"},
+                                      description = "Görüntüleyen kullanıcının bu atamaya yazdığı değerlendirme; yazmadıysa null.")
+                              MyReviewDto myReview,
+                              @Schema(description = "Karşı taraf bu atamayı değerlendirdi mi. Yalnız varlık bilgisidir; içerik ve yazar kimliği taşınmaz.")
+                              boolean counterpartyReviewed) {
 }

@@ -94,7 +94,8 @@ class PaymentSessionAuthorizationTest {
                 mock(com.exskylab.koala.business.abstracts.GalleryService.class), mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class), mock(org.springframework.context.ApplicationEventPublisher.class),
                 new PaymentMetrics(meterRegistry),
                 mock(com.exskylab.koala.dataAccess.CancellationDao.class),
-                mock(com.exskylab.koala.business.abstracts.JobService.class));
+                mock(com.exskylab.koala.business.abstracts.JobService.class),
+                mock(com.exskylab.koala.dataAccess.ReviewDao.class));
     }
 
     @Test
