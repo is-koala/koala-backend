@@ -14,6 +14,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -100,5 +101,14 @@ public class CompanyContactManager implements CompanyContactService {
     @Transactional(readOnly = true)
     public List<CompanyContact> getMembershipsOf(UUID userId) {
         return companyContactDao.findAllByUserId(userId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<CompanyContact> getContactsOfCompanies(Collection<UUID> companyIds) {
+        if (companyIds.isEmpty()) {
+            return List.of();
+        }
+        return companyContactDao.findAllByCompanyIdIn(companyIds);
     }
 }

@@ -26,4 +26,6 @@ public interface CompanyContactService {
     void removeContact(CompanyContact contact);
 
     java.util.List<CompanyContact> getMembershipsOf(UUID userId);
+
+    java.util.List<CompanyContact> getContactsOfCompanies(java.util.Collection<UUID> companyIds);
 }

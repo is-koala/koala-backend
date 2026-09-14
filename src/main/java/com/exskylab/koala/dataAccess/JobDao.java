@@ -14,6 +14,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -102,6 +103,18 @@ public interface JobDao extends JpaRepository<Job, UUID> {
     Optional<Job> findWithDetailsById(UUID id);
 
     long countByCreatorId(UUID creatorId);
+
+    long countByCompanyId(UUID companyId);
+
+    @Query("select j.company.id as companyId, count(j) as total from Job j "
+            + "where j.company.id in :companyIds group by j.company.id")
+    List<CompanyJobCount> countByCompanyIds(@Param("companyIds") Collection<UUID> companyIds);
+
+    interface CompanyJobCount {
+        UUID getCompanyId();
+
+        long getTotal();
+    }
 
     @EntityGraph(attributePaths = {"category", "company", "company.logo", "address", "address.city", "address.district"})
     Page<Job> findAllByCreatorId(UUID creatorId, Pageable pageable);

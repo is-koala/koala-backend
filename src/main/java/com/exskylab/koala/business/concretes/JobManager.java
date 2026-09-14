@@ -47,6 +47,7 @@ import java.time.Instant;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
@@ -624,4 +625,19 @@ public class JobManager implements JobService {
                         jobIds, viewerId, ADDRESS_VISIBLE_ASSIGNMENT_STATUSES));
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public long countForCompany(UUID companyId) {
+        return jobDao.countByCompanyId(companyId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, Long> countForCompanies(Collection<UUID> companyIds) {
+        if (companyIds.isEmpty()) {
+            return Map.of();
+        }
+        return jobDao.countByCompanyIds(companyIds).stream()
+                .collect(Collectors.toMap(JobDao.CompanyJobCount::getCompanyId, JobDao.CompanyJobCount::getTotal));
+    }
 }

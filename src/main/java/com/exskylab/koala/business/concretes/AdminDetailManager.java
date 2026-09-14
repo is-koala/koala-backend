@@ -4,10 +4,12 @@ import com.exskylab.koala.business.abstracts.AdminDetailService;
 import com.exskylab.koala.business.abstracts.BadgeService;
 import com.exskylab.koala.business.abstracts.CancellationService;
 import com.exskylab.koala.business.abstracts.CompanyContactService;
+import com.exskylab.koala.business.abstracts.CompanyService;
 import com.exskylab.koala.business.abstracts.DisputeService;
 import com.exskylab.koala.business.abstracts.IdentityDocumentReviewService;
 import com.exskylab.koala.business.abstracts.JobApplicationService;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
+import com.exskylab.koala.business.abstracts.JobService;
 import com.exskylab.koala.business.abstracts.LegalService;
 import com.exskylab.koala.business.abstracts.PaymentService;
 import com.exskylab.koala.business.abstracts.PayoutService;
@@ -15,19 +17,33 @@ import com.exskylab.koala.business.abstracts.ReportService;
 import com.exskylab.koala.business.abstracts.ReviewService;
 import com.exskylab.koala.business.abstracts.TimesheetService;
 import com.exskylab.koala.business.abstracts.UserService;
+import com.exskylab.koala.core.dtos.company.response.CompanyReviewDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.AdminAssignmentDetailDto;
 import com.exskylab.koala.core.dtos.payment.response.AdminPaymentDto;
+import com.exskylab.koala.core.dtos.payment.response.AdminRefundDto;
 import com.exskylab.koala.core.dtos.user.response.AdminUserCountsDto;
 import com.exskylab.koala.core.dtos.user.response.AdminUserDetailDto;
 import com.exskylab.koala.core.mappers.AdminDetailMapper;
+import com.exskylab.koala.core.mappers.CompanyMapper;
 import com.exskylab.koala.core.security.StaffAuditContext;
 import com.exskylab.koala.core.security.StaffPrincipal;
+import com.exskylab.koala.entities.Cancellation;
+import com.exskylab.koala.entities.Company;
+import com.exskylab.koala.entities.CompanyApprovalStatus;
+import com.exskylab.koala.entities.CompanyContact;
+import com.exskylab.koala.entities.Dispute;
+import com.exskylab.koala.entities.DisputeResolution;
+import com.exskylab.koala.entities.DisputeStatus;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.Payment;
+import com.exskylab.koala.entities.Payout;
 import com.exskylab.koala.entities.Refund;
+import com.exskylab.koala.entities.RefundOrigin;
 import com.exskylab.koala.entities.StaffPermission;
 import com.exskylab.koala.entities.User;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -58,7 +74,10 @@ public class AdminDetailManager implements AdminDetailService {
     private final BadgeService badgeService;
     private final IdentityDocumentReviewService identityDocumentReviewService;
     private final LegalService legalService;
+    private final CompanyService companyService;
+    private final JobService jobService;
     private final AdminDetailMapper adminDetailMapper;
+    private final CompanyMapper companyMapper;
 
     public AdminDetailManager(JobAssignmentService jobAssignmentService, PaymentService paymentService,
                               PayoutService payoutService, DisputeService disputeService,
@@ -67,7 +86,8 @@ public class AdminDetailManager implements AdminDetailService {
                               UserService userService, JobApplicationService jobApplicationService,
                               CompanyContactService companyContactService, BadgeService badgeService,
                               IdentityDocumentReviewService identityDocumentReviewService,
-                              LegalService legalService, AdminDetailMapper adminDetailMapper) {
+                              LegalService legalService, CompanyService companyService, JobService jobService,
+                              AdminDetailMapper adminDetailMapper, CompanyMapper companyMapper) {
         this.jobAssignmentService = jobAssignmentService;
         this.paymentService = paymentService;
         this.payoutService = payoutService;
@@ -82,7 +102,33 @@ public class AdminDetailManager implements AdminDetailService {
         this.badgeService = badgeService;
         this.identityDocumentReviewService = identityDocumentReviewService;
         this.legalService = legalService;
+        this.companyService = companyService;
+        this.jobService = jobService;
         this.adminDetailMapper = adminDetailMapper;
+        this.companyMapper = companyMapper;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<CompanyReviewDto> searchCompanies(CompanyApprovalStatus status, String query, Pageable pageable) {
+        Page<Company> companies = companyService.searchCompanies(status, query, pageable);
+        List<UUID> ids = companies.getContent().stream().map(Company::getId).toList();
+        Map<UUID, List<CompanyContact>> contacts = companyContactService.getContactsOfCompanies(ids).stream()
+                .collect(Collectors.groupingBy(contact -> contact.getCompany().getId()));
+        Map<UUID, Long> jobCounts = jobService.countForCompanies(ids);
+
+        return companies.map(company -> companyMapper.toCompanyReviewDto(company,
+                contacts.getOrDefault(company.getId(), List.of()),
+                jobCounts.getOrDefault(company.getId(), 0L)));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CompanyReviewDto getCompany(UUID companyId) {
+        Company company = companyService.getCompanyById(companyId);
+        return companyMapper.toCompanyReviewDto(company,
+                companyContactService.getContactsOfCompany(companyId),
+                jobService.countForCompany(companyId));
     }
 
     @Override
@@ -132,28 +178,52 @@ public class AdminDetailManager implements AdminDetailService {
     @Transactional(readOnly = true)
     public List<AdminPaymentDto> getPaymentsForAssignment(UUID assignmentId) {
         JobAssignment assignment = jobAssignmentService.getDetailedById(assignmentId);
-        List<Payment> attempts = paymentService.getAttemptsForStaff(assignmentId);
-        Map<UUID, List<Refund>> refunds = refundsByPayment(attempts);
-
-        return attempts.stream()
-                .map(payment -> adminDetailMapper.toAdminPaymentDto(payment, assignment,
-                        refunds.getOrDefault(payment.getId(), List.of())))
-                .toList();
+        return paymentDtos(assignment, paymentService.getAttemptsForStaff(assignmentId));
     }
 
     @Override
     @Transactional(readOnly = true)
     public AdminPaymentDto getPayment(UUID paymentId) {
         Payment payment = paymentService.getForStaff(paymentId);
-        List<Refund> refunds = refundsByPayment(List.of(payment)).getOrDefault(paymentId, List.of());
-
-        return adminDetailMapper.toAdminPaymentDto(payment, payment.getJobAssignment(), refunds);
+        return paymentDtos(payment.getJobAssignment(), List.of(payment)).getFirst();
     }
 
-    private Map<UUID, List<Refund>> refundsByPayment(List<Payment> payments) {
-        Set<UUID> ids = payments.stream().map(Payment::getId).collect(Collectors.toSet());
-        return payoutService.getRefundsForPayments(ids).stream()
-                .collect(Collectors.groupingBy(refund -> refund.getPayment().getId()));
+    private List<AdminPaymentDto> paymentDtos(JobAssignment assignment, List<Payment> attempts) {
+        Set<UUID> paymentIds = attempts.stream().map(Payment::getId).collect(Collectors.toSet());
+        List<Refund> refunds = payoutService.getRefundsForPayments(paymentIds);
+        Map<UUID, UUID> cancellationByRefund = cancellationService
+                .findAllByRefundIds(refunds.stream().map(Refund::getId).toList()).stream()
+                .collect(Collectors.toMap(cancellation -> cancellation.getRefund().getId(), Cancellation::getId));
+        UUID refundingDispute = disputeService.findAllForAssignment(assignment.getId()).stream()
+                .filter(dispute -> dispute.getStatus() == DisputeStatus.RESOLVED
+                        && dispute.getResolution() == DisputeResolution.REFUND_EMPLOYER)
+                .map(Dispute::getId)
+                .findFirst()
+                .orElse(null);
+        Payout payout = payoutService.findForAssignment(assignment.getId()).orElse(null);
+        UUID paidOutPaymentId = payout == null || payout.getPayment() == null ? null : payout.getPayment().getId();
+
+        Map<UUID, List<AdminRefundDto>> refundsByPayment = refunds.stream()
+                .collect(Collectors.groupingBy(refund -> refund.getPayment().getId(),
+                        Collectors.mapping(refund -> refundDto(refund, cancellationByRefund, refundingDispute),
+                                Collectors.toList())));
+
+        return attempts.stream()
+                .map(payment -> adminDetailMapper.toAdminPaymentDto(payment, assignment,
+                        payment.getId().equals(paidOutPaymentId) ? payout.getId() : null,
+                        refundsByPayment.getOrDefault(payment.getId(), List.of())))
+                .toList();
+    }
+
+    private AdminRefundDto refundDto(Refund refund, Map<UUID, UUID> cancellationByRefund, UUID refundingDispute) {
+        UUID cancellationId = cancellationByRefund.get(refund.getId());
+        if (cancellationId != null) {
+            return adminDetailMapper.toAdminRefundDto(refund, RefundOrigin.CANCELLATION, cancellationId);
+        }
+        if (refundingDispute != null) {
+            return adminDetailMapper.toAdminRefundDto(refund, RefundOrigin.DISPUTE, refundingDispute);
+        }
+        return adminDetailMapper.toAdminRefundDto(refund, RefundOrigin.STAFF, null);
     }
 
     private static Set<UUID> partiesOf(JobAssignment assignment) {

@@ -15,5 +15,5 @@ public record AdminPaymentDto(UUID id, UUID jobAssignmentId, UUID jobId, String 
                               String conversationId, String providerPaymentId, String providerTransactionId,
                               String failureReason, Integer verificationAttempts, Instant nextVerificationAt,
                               Instant completedAt, Instant createdAt, Instant updatedAt,
-                              List<AdminRefundDto> refunds) {
+                              UUID payoutId, List<AdminRefundDto> refunds) {
 }

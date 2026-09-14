@@ -46,7 +46,6 @@ import com.exskylab.koala.core.dtos.user.request.GrantRoleDto;
 import com.exskylab.koala.core.dtos.user.response.RoleGrantDto;
 import com.exskylab.koala.core.dtos.user.response.AdminUserDetailDto;
 import com.exskylab.koala.core.dtos.user.response.SafeUserDto;
-import com.exskylab.koala.core.mappers.CompanyMapper;
 import com.exskylab.koala.core.mappers.RoleGrantMapper;
 import com.exskylab.koala.core.mappers.UserMapper;
 import com.exskylab.koala.entities.Image;
@@ -75,7 +74,6 @@ public class AdminController {
 
     private final CompanyService companyService;
     private final UserService userService;
-    private final CompanyMapper companyMapper;
     private final UserMapper userMapper;
     private final GalleryService galleryService;
     private final RoleGrantMapper roleGrantMapper;
@@ -87,8 +85,7 @@ public class AdminController {
     private final AdminDetailService adminDetailService;
     private final JobService jobService;
 
-    public AdminController(CompanyService companyService, UserService userService,
-                           CompanyMapper companyMapper, UserMapper userMapper,
+    public AdminController(CompanyService companyService, UserService userService, UserMapper userMapper,
                            GalleryService galleryService, RoleGrantMapper roleGrantMapper,
                            JobAssignmentService jobAssignmentService,
                            BankAccountService bankAccountService, BankAccountMapper bankAccountMapper,
@@ -97,7 +94,6 @@ public class AdminController {
                            JobService jobService) {
         this.companyService = companyService;
         this.userService = userService;
-        this.companyMapper = companyMapper;
         this.userMapper = userMapper;
         this.galleryService = galleryService;
         this.roleGrantMapper = roleGrantMapper;
@@ -306,9 +302,9 @@ public class AdminController {
             @RequestParam(required = false) String query,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
-        var page = companyService.searchCompanies(status, query, pageable);
+        var page = adminDetailService.searchCompanies(status, query, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
-                PageDto.of(page, page.getContent().stream().map(companyMapper::toCompanyReviewDto).toList()),
+                PageDto.of(page, page.getContent()),
                 AdminMessages.COMPANIES_LISTED, HttpStatus.OK));
     }
 
@@ -324,7 +320,7 @@ public class AdminController {
     @GetMapping("/companies/{companyId}")
     public ResponseEntity<SuccessDataResult<CompanyReviewDto>> company(@PathVariable UUID companyId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
-                companyMapper.toCompanyReviewDto(companyService.getCompanyById(companyId)),
+                adminDetailService.getCompany(companyId),
                 AdminMessages.COMPANY_FETCHED, HttpStatus.OK));
     }
 
@@ -364,8 +360,9 @@ public class AdminController {
             @AuthenticationPrincipal StaffPrincipal actor) {
 
         String note = request == null ? null : request.getNote();
+        companyService.approveCompany(actor, companyId, note);
         return ResponseEntity.ok(new SuccessDataResult<>(
-                companyMapper.toCompanyReviewDto(companyService.approveCompany(actor, companyId, note)),
+                adminDetailService.getCompany(companyId),
                 AdminMessages.COMPANY_APPROVED, HttpStatus.OK));
     }
 
@@ -388,8 +385,9 @@ public class AdminController {
             @RequestBody @Valid RejectCompanyDto request,
             @AuthenticationPrincipal StaffPrincipal actor) {
 
+        companyService.rejectCompany(actor, companyId, request.getReason());
         return ResponseEntity.ok(new SuccessDataResult<>(
-                companyMapper.toCompanyReviewDto(companyService.rejectCompany(actor, companyId, request.getReason())),
+                adminDetailService.getCompany(companyId),
                 AdminMessages.COMPANY_REJECTED, HttpStatus.OK));
     }
 

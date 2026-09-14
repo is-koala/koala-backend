@@ -28,6 +28,7 @@ import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.Payment;
 import com.exskylab.koala.entities.Payout;
 import com.exskylab.koala.entities.Refund;
+import com.exskylab.koala.entities.RefundOrigin;
 import com.exskylab.koala.entities.Report;
 import com.exskylab.koala.entities.Review;
 import com.exskylab.koala.entities.SettlementTask;
@@ -85,9 +86,19 @@ public interface AdminDetailMapper {
 
     LinkedRecordDto toLinkedRecordDto(Report report);
 
-    @Mapping(target = "paymentId", source = "payment.id")
+    @Mapping(target = "id", source = "refund.id")
+    @Mapping(target = "paymentId", source = "refund.payment.id")
     @Mapping(target = "amount", expression = "java(refund.getAmount() == null ? null : refund.getAmount().toPlainString())")
-    AdminRefundDto toAdminRefundDto(Refund refund);
+    @Mapping(target = "currency", source = "refund.currency")
+    @Mapping(target = "status", source = "refund.status")
+    @Mapping(target = "reason", source = "refund.reason")
+    @Mapping(target = "providerRefundId", source = "refund.providerRefundId")
+    @Mapping(target = "origin", source = "origin")
+    @Mapping(target = "originId", source = "originId")
+    @Mapping(target = "completedAt", source = "refund.completedAt")
+    @Mapping(target = "createdAt", source = "refund.createdAt")
+    @Mapping(target = "updatedAt", source = "refund.updatedAt")
+    AdminRefundDto toAdminRefundDto(Refund refund, RefundOrigin origin, UUID originId);
 
     @Mapping(target = "amount", expression = "java(task.getAmount() == null ? null : task.getAmount().toPlainString())")
     AdminSettlementTaskDto toAdminSettlementTaskDto(SettlementTask task);
@@ -116,8 +127,10 @@ public interface AdminDetailMapper {
     @Mapping(target = "completedAt", source = "payment.completedAt")
     @Mapping(target = "createdAt", source = "payment.createdAt")
     @Mapping(target = "updatedAt", source = "payment.updatedAt")
+    @Mapping(target = "payoutId", source = "payoutId")
     @Mapping(target = "refunds", source = "refunds")
-    AdminPaymentDto toAdminPaymentDto(Payment payment, JobAssignment assignment, List<Refund> refunds);
+    AdminPaymentDto toAdminPaymentDto(Payment payment, JobAssignment assignment, UUID payoutId,
+                                      List<AdminRefundDto> refunds);
 
     @Mapping(target = "id", source = "payout.id")
     @Mapping(target = "jobAssignmentId", source = "payout.jobAssignment.id")
@@ -127,6 +140,10 @@ public interface AdminDetailMapper {
     @Mapping(target = "worker", source = "worker")
     @Mapping(target = "employer", source = "assignment.job.creator")
     @Mapping(target = "paymentId", source = "payout.payment.id")
+    @Mapping(target = "bankAccountId", source = "payout.bankAccount.id")
+    @Mapping(target = "releaseOrigin", source = "payout.releaseOrigin")
+    @Mapping(target = "settledAt", source = "payout.completedAt")
+    @Mapping(target = "reconciledByStaffId", source = "payout.reconciledByStaffId")
     @Mapping(target = "maskedIban",
             expression = "java(payout.getBankAccount() == null ? null : LogMasks.iban(payout.getBankAccount().getIban()))")
     @Mapping(target = "amount", expression = "java(payout.getAmount() == null ? null : payout.getAmount().toPlainString())")

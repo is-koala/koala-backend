@@ -6,6 +6,7 @@ import com.exskylab.koala.core.dtos.company.response.CompanySummaryDto;
 import com.exskylab.koala.core.dtos.company.response.JobCompanyDto;
 import com.exskylab.koala.core.dtos.company.response.OnlyCompanyDto;
 import com.exskylab.koala.entities.Company;
+import com.exskylab.koala.entities.CompanyContact;
 import com.exskylab.koala.entities.CompanyImage;
 import com.exskylab.koala.entities.Image;
 import com.exskylab.koala.core.helpers.MediaUrlResolver;
@@ -32,9 +33,26 @@ public interface CompanyMapper {
     @Mapping(target = "approved", expression = "java(company.getApprovalStatus().isApproved())")
     CompanyDto toCompanyDto(Company company);
 
-    @Mapping(target = "logoUrl", source = "logo", qualifiedByName = "imageToPublicUrl")
-    @Mapping(target = "galleryImageIds", source = "images", qualifiedByName = "companyGalleryImageIds")
-    CompanyReviewDto toCompanyReviewDto(Company company);
+    @Mapping(target = "id", source = "company.id")
+    @Mapping(target = "name", source = "company.name")
+    @Mapping(target = "email", source = "company.email")
+    @Mapping(target = "phoneNumber", source = "company.phoneNumber")
+    @Mapping(target = "taxNumber", source = "company.taxNumber")
+    @Mapping(target = "type", source = "company.type")
+    @Mapping(target = "logoUrl", source = "company.logo", qualifiedByName = "imageToPublicUrl")
+    @Mapping(target = "website", source = "company.website")
+    @Mapping(target = "description", source = "company.description")
+    @Mapping(target = "approvalStatus", source = "company.approvalStatus")
+    @Mapping(target = "approvalNote", source = "company.approvalNote")
+    @Mapping(target = "approvalDecidedAt", source = "company.approvalDecidedAt")
+    @Mapping(target = "approvedByStaffId", source = "company.approvedByStaffId")
+    @Mapping(target = "createdAt", source = "company.createdAt")
+    @Mapping(target = "createdBy", source = "company.createdBy")
+    @Mapping(target = "address", source = "company.address")
+    @Mapping(target = "galleryImageIds", source = "company.images", qualifiedByName = "companyGalleryImageIds")
+    @Mapping(target = "companyContacts", source = "contacts")
+    @Mapping(target = "jobCount", source = "jobCount")
+    CompanyReviewDto toCompanyReviewDto(Company company, List<CompanyContact> contacts, Long jobCount);
 
     @Mapping(target = "logoUrl", source = "logo", qualifiedByName = "imageToPublicUrl")
     OnlyCompanyDto toOnlyCompanyDto(Company company);
