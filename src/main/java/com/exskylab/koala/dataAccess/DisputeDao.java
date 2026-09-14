@@ -52,6 +52,7 @@ public interface DisputeDao extends JpaRepository<Dispute, UUID> {
             left join job.creator creator
             left join d.openedBy opener
             where d.status in :statuses
+              and (:userId is null or worker.id = :userId or creator.id = :userId or opener.id = :userId)
               and (cast(:query as string) is null
                    or cast(d.id as string) like lower(concat('%', cast(:query as string), '%'))
                    or cast(assignment.id as string) like lower(concat('%', cast(:query as string), '%'))
@@ -67,7 +68,7 @@ public interface DisputeDao extends JpaRepository<Dispute, UUID> {
             """)
     @EntityGraph(attributePaths = {"openedBy", "openedBy.profilePicture", "jobAssignment"})
     Page<Dispute> searchForStaff(@Param("statuses") List<DisputeStatus> statuses, @Param("query") String query,
-                                 Pageable pageable);
+                                 @Param("userId") UUID userId, Pageable pageable);
 
     @EntityGraph(attributePaths = {"openedBy", "openedBy.profilePicture", "jobAssignment"})
     @Query("select d from Dispute d where d.id = :id")

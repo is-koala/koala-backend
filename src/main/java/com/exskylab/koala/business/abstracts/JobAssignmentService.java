@@ -44,7 +44,8 @@ public interface JobAssignmentService {
 
     JobAssignment getDetailedByIdForUpdate(UUID assignmentId);
 
-    Page<AdminAssignmentDto> listForStaff(String query, Pageable pageable);
+    Page<AdminAssignmentDto> listForStaff(String query, UUID workerId, UUID employerId, UUID jobId,
+                                          Pageable pageable);
 
     long countCompletedForWorker(UUID workerId);
 

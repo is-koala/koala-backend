@@ -652,9 +652,10 @@ public class JobAssignmentManager implements JobAssignmentService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<AdminAssignmentDto> listForStaff(String query, Pageable requested) {
+    public Page<AdminAssignmentDto> listForStaff(String query, UUID workerId, UUID employerId, UUID jobId,
+                                                 Pageable requested) {
         pageableSanitizer.rejectUnknownSort(requested, ADMIN_LIST_SORTABLE);
-        return jobAssignmentDao.findAllForStaff(StaffSearchQuery.normalize(query),
+        return jobAssignmentDao.findAllForStaff(StaffSearchQuery.normalize(query), workerId, employerId, jobId,
                         pageableSanitizer.sanitize(requested, ADMIN_LIST_SORTABLE, ADMIN_LIST_SORT))
                 .map(jobAssignmentMapper::toAdminAssignmentDto);
     }

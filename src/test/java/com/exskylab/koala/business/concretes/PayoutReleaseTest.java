@@ -381,12 +381,12 @@ class PayoutReleaseTest {
         ofVisible.setWorker(visible);
         Payout ofDeparted = new Payout();
         ofDeparted.setWorker(departed);
-        when(payoutDao.searchForStaff(eq(PayoutStatus.AWAITING_SETTLEMENT), isNull(), any(Pageable.class)))
+        when(payoutDao.searchForStaff(eq(PayoutStatus.AWAITING_SETTLEMENT), isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(ofVisible, ofDeparted)));
         when(userService.getAllByIdIn(java.util.Set.of(visible.getId(), departed.getId())))
                 .thenReturn(List.of(visible));
 
-        payoutManager.listForStaff(null, null, org.springframework.data.domain.PageRequest.of(0, 20));
+        payoutManager.listForStaff(null, null, null, org.springframework.data.domain.PageRequest.of(0, 20));
 
         verify(userService, times(1)).getAllByIdIn(any());
         verify(payoutMapper).toStaffPayoutDto(ofVisible, visible);
@@ -395,13 +395,13 @@ class PayoutReleaseTest {
 
     @Test
     void staffListDefaultsToAwaitingSettlementAndCapsSize() {
-        when(payoutDao.searchForStaff(eq(PayoutStatus.AWAITING_SETTLEMENT), isNull(), any(Pageable.class)))
+        when(payoutDao.searchForStaff(eq(PayoutStatus.AWAITING_SETTLEMENT), isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(org.springframework.data.domain.Page.empty());
 
-        payoutManager.listForStaff(List.of(), " ", org.springframework.data.domain.PageRequest.of(0, 500));
+        payoutManager.listForStaff(List.of(), " ", null, org.springframework.data.domain.PageRequest.of(0, 500));
 
         ArgumentCaptor<Pageable> requested = ArgumentCaptor.forClass(Pageable.class);
-        verify(payoutDao).searchForStaff(eq(PayoutStatus.AWAITING_SETTLEMENT), isNull(), requested.capture());
+        verify(payoutDao).searchForStaff(eq(PayoutStatus.AWAITING_SETTLEMENT), isNull(), isNull(), requested.capture());
         assertEquals(50, requested.getValue().getPageSize());
         assertEquals(org.springframework.data.domain.Sort.Direction.DESC,
                 requested.getValue().getSort().getOrderFor("createdAt").getDirection());

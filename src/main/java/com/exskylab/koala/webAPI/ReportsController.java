@@ -91,7 +91,8 @@ public class ReportsController {
                     + "kuyruğun tamamı üzerinden hesaplanmış toplam şikayet sayısını taşır. "
                     + "query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) şikayet edenin ve edilenin ad-soyadı ile "
                     + "e-postasında ve şikayete konu ilanın başlığında büyük-küçük harf ve Türkçe karakter duyarsız arar; "
-                    + "diğer süzgeçlerle kesişir; 100 karakteri aşarsa 400.")
+                    + "diğer süzgeçlerle kesişir; 100 karakteri aşarsa 400. reporterId şikayet edene, reportedUserId "
+                    + "şikayet edilene göre süzer; ikisi birlikte verilebilir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Şikayetler listelendi"),
             @ApiResponse(responseCode = "400", description = "Bilinmeyen sıralama alanı ya da query 100 karakteri aşıyor",
@@ -104,10 +105,12 @@ public class ReportsController {
             @RequestParam(required = false) ReportReason reason,
             @RequestParam(required = false) ReportTargetType targetType,
             @RequestParam(required = false) UUID reportedUserId,
+            @RequestParam(required = false) UUID reporterId,
             @RequestParam(required = false) String query,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
-        var page = reportService.searchForModeration(status, reason, targetType, reportedUserId, query, pageable);
+        var page = reportService.searchForModeration(status, reason, targetType, reportedUserId, reporterId, query,
+                pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
                 PageDto.of(page, page.getContent()),
                 ReportMessages.LISTED, HttpStatus.OK));

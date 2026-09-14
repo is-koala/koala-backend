@@ -170,11 +170,11 @@ public class ReportManager implements ReportService {
     @Transactional(readOnly = true)
     public Page<AdminReportDto> searchForModeration(ReportStatus status, ReportReason reason,
                                                     ReportTargetType targetType, UUID reportedUserId,
-                                                    String query, Pageable requested) {
+                                                    UUID reporterId, String query, Pageable requested) {
         pageableSanitizer.rejectUnknownSort(requested, SORTABLE);
 
         Page<Report> page = reportDao.search(status, reason,
-                targetType == null ? null : targetType.name(), reportedUserId,
+                targetType == null ? null : targetType.name(), reportedUserId, reporterId,
                 StaffSearchQuery.normalize(query),
                 pageableSanitizer.sanitize(requested, SORTABLE, DEFAULT_SORT));
 

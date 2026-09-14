@@ -25,7 +25,7 @@ public interface StaffPayoutService {
     Payout confirmSettlement(StaffPrincipal actor, UUID payoutId, ConfirmPayoutSettlementDto evidence);
 
     PageDto<StaffPayoutDto> listForStaff(StaffPrincipal actor, List<PayoutStatus> statuses, String query,
-                                         Pageable pageable);
+                                         UUID workerId, Pageable pageable);
 
     AdminPayoutDetailDto getForStaff(StaffPrincipal actor, UUID payoutId);
 

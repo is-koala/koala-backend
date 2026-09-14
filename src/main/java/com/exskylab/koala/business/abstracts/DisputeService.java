@@ -23,7 +23,7 @@ public interface DisputeService {
 
     List<Dispute> findAllForAssignment(UUID jobAssignmentId);
 
-    Page<Dispute> searchForStaff(DisputeStatus status, String query, Pageable pageable);
+    Page<Dispute> searchForStaff(DisputeStatus status, String query, UUID userId, Pageable pageable);
 
     Dispute getForStaff(UUID disputeId);
 

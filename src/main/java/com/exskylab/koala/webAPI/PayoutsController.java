@@ -101,7 +101,7 @@ public class PayoutsController {
                     + "Onay mevcut reconcile ucundan yapılır; bu GET yalnız okur. "
                     + "query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) hakediş id'si, atama id'si ve alıcının "
                     + "ad-soyadı ile e-postasında büyük-küçük harf ve Türkçe karakter duyarsız arar; status süzgeciyle "
-                    + "kesişir; 100 karakteri aşarsa 400.")
+                    + "kesişir; 100 karakteri aşarsa 400. workerId verilirse yalnız o işçinin hakedişleri döner.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Hakedişler listelendi"),
             @ApiResponse(responseCode = "400", description = "query 100 karakteri aşıyor",
@@ -112,11 +112,12 @@ public class PayoutsController {
     public ResponseEntity<SuccessDataResult<PageDto<StaffPayoutDto>>> list(
             @RequestParam(required = false) List<PayoutStatus> status,
             @RequestParam(required = false) String query,
+            @RequestParam(required = false) UUID workerId,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable,
             @AuthenticationPrincipal StaffPrincipal actor) {
 
         return ResponseEntity.ok(new SuccessDataResult<>(
-                staffPayoutService.listForStaff(actor, status, query, pageable),
+                staffPayoutService.listForStaff(actor, status, query, workerId, pageable),
                 PayoutMessages.LISTED, HttpStatus.OK));
     }
 

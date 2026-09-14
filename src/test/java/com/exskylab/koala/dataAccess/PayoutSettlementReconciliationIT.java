@@ -304,7 +304,7 @@ class PayoutSettlementReconciliationIT extends AbstractIntegrationTest {
         Set<UUID> seeded = Set.of(overdue, orphaned, withoutAssignment);
 
         Set<UUID> listed = onlySeeded(payoutService
-                .listForStaff(List.of(PayoutStatus.PROCESSING), null, PageRequest.of(0, 50))
+                .listForStaff(List.of(PayoutStatus.PROCESSING), null, null, PageRequest.of(0, 50))
                 .content().stream()
                 .map(StaffPayoutDto::id)
                 .toList(), seeded);

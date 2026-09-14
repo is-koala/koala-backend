@@ -114,7 +114,8 @@ public class AdminController {
             description = "Son atamaları sayfalar. Yanıt AdminAssignmentDto'dur; UUID bakışı ile aynı SafeUser ve fiyat dökümü. "
                     + "Emanet kuralları değişmez. query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) atama id'si, "
                     + "ilan başlığı, işveren ve çalışanın ad-soyadı ile e-postasında büyük-küçük harf ve Türkçe karakter "
-                    + "duyarsız arar; 100 karakteri aşarsa 400.")
+                    + "duyarsız arar; 100 karakteri aşarsa 400. workerId, employerId ve jobId süzgeçleri birbirleriyle ve "
+                    + "query ile kesişir; kullanıcı ve ilan detayları bu süzgeçlerle buraya bağlanır.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Atamalar listelendi"),
             @ApiResponse(responseCode = "400", description = "query 100 karakteri aşıyor ya da bilinmeyen sıralama alanı",
@@ -124,8 +125,11 @@ public class AdminController {
     @GetMapping("/job-assignments")
     public ResponseEntity<SuccessDataResult<PageDto<AdminAssignmentDto>>> assignments(
             @RequestParam(required = false) String query,
+            @RequestParam(required = false) UUID workerId,
+            @RequestParam(required = false) UUID employerId,
+            @RequestParam(required = false) UUID jobId,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
-        var page = jobAssignmentService.listForStaff(query, pageable);
+        var page = jobAssignmentService.listForStaff(query, workerId, employerId, jobId, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
                 PageDto.of(page, page.getContent()),
                 AdminMessages.ASSIGNMENTS_LISTED, HttpStatus.OK));
@@ -190,8 +194,9 @@ public class AdminController {
             description = "İlanları durum süzgeci ve aramayla sayfalar; status verilmezse her durum döner. "
                     + "query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) ilan id'si, ilan başlığı, şirket adı, "
                     + "işverenin ad-soyadı ile e-postasında büyük-küçük harf ve Türkçe karakter duyarsız arar; "
-                    + "100 karakteri aşarsa 400. Satır işvereni id, ad ve e-postayla, başvuru ve atama sayılarıyla "
-                    + "taşır. Uç job.read ile korunur.")
+                    + "100 karakteri aşarsa 400. companyId ve employerId süzgeçleri status ve query ile kesişir; "
+                    + "şirket ve kullanıcı detayları ilanlarına bu süzgeçlerle bağlanır. Satır işvereni id, ad ve "
+                    + "e-postayla, başvuru ve atama sayılarıyla taşır. Uç job.read ile korunur.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "İlanlar listelendi"),
             @ApiResponse(responseCode = "400", description = "query 100 karakteri aşıyor ya da bilinmeyen sıralama alanı",
@@ -202,9 +207,11 @@ public class AdminController {
     public ResponseEntity<SuccessDataResult<PageDto<AdminJobDto>>> jobs(
             @RequestParam(required = false) List<JobStatus> status,
             @RequestParam(required = false) String query,
+            @RequestParam(required = false) UUID companyId,
+            @RequestParam(required = false) UUID employerId,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
         return ResponseEntity.ok(new SuccessDataResult<>(
-                jobService.searchForStaff(status, query, pageable),
+                jobService.searchForStaff(status, query, companyId, employerId, pageable),
                 AdminMessages.JOBS_LISTED, HttpStatus.OK));
     }
 

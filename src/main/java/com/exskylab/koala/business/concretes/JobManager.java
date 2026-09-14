@@ -509,14 +509,16 @@ public class JobManager implements JobService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageDto<AdminJobDto> searchForStaff(List<JobStatus> statuses, String query, Pageable requested) {
+    public PageDto<AdminJobDto> searchForStaff(List<JobStatus> statuses, String query, UUID companyId,
+                                               UUID employerId, Pageable requested) {
         pageableSanitizer.rejectUnknownSort(requested, SORTABLE_FIELDS);
         Pageable pageable = pageableSanitizer.sanitize(requested, SORTABLE_FIELDS, DEFAULT_SORT);
         List<JobStatus> filter = statuses == null || statuses.isEmpty()
                 ? List.of(JobStatus.values())
                 : List.copyOf(statuses);
 
-        Page<Job> jobs = jobDao.searchForStaff(filter, StaffSearchQuery.normalize(query), pageable);
+        Page<Job> jobs = jobDao.searchForStaff(filter, StaffSearchQuery.normalize(query), companyId, employerId,
+                pageable);
         List<UUID> ids = jobs.getContent().stream().map(Job::getId).toList();
         Map<UUID, Long> applications = ids.isEmpty() ? Map.of() : jobApplicationDao.countByJobIds(ids).stream()
                 .collect(Collectors.toMap(JobApplicationDao.JobApplicationCount::getJobId,

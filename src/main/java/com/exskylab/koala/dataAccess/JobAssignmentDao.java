@@ -68,15 +68,18 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
             left join assignment.worker worker
             left join assignment.job job
             left join job.creator creator
-            where cast(:query as string) is null
-               or cast(assignment.id as string) like lower(concat('%', cast(:query as string), '%'))
-               or unaccent(lower(job.title)) like unaccent(lower(concat('%', cast(:query as string), '%')))
-               or unaccent(lower(worker.email)) like unaccent(lower(concat('%', cast(:query as string), '%')))
-               or unaccent(lower(concat(worker.firstName, ' ', worker.lastName)))
-                  like unaccent(lower(concat('%', cast(:query as string), '%')))
-               or unaccent(lower(creator.email)) like unaccent(lower(concat('%', cast(:query as string), '%')))
-               or unaccent(lower(concat(creator.firstName, ' ', creator.lastName)))
-                  like unaccent(lower(concat('%', cast(:query as string), '%')))
+            where (:workerId is null or worker.id = :workerId)
+              and (:employerId is null or creator.id = :employerId)
+              and (:jobId is null or job.id = :jobId)
+              and (cast(:query as string) is null
+                   or cast(assignment.id as string) like lower(concat('%', cast(:query as string), '%'))
+                   or unaccent(lower(job.title)) like unaccent(lower(concat('%', cast(:query as string), '%')))
+                   or unaccent(lower(worker.email)) like unaccent(lower(concat('%', cast(:query as string), '%')))
+                   or unaccent(lower(concat(worker.firstName, ' ', worker.lastName)))
+                      like unaccent(lower(concat('%', cast(:query as string), '%')))
+                   or unaccent(lower(creator.email)) like unaccent(lower(concat('%', cast(:query as string), '%')))
+                   or unaccent(lower(concat(creator.firstName, ' ', creator.lastName)))
+                      like unaccent(lower(concat('%', cast(:query as string), '%'))))
             """)
     @EntityGraph(attributePaths = {
             "worker",
@@ -86,7 +89,9 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
             "job.creator.profilePicture",
             "job.company"
     })
-    Page<JobAssignment> findAllForStaff(@Param("query") String query, Pageable pageable);
+    Page<JobAssignment> findAllForStaff(@Param("query") String query, @Param("workerId") UUID workerId,
+                                        @Param("employerId") UUID employerId, @Param("jobId") UUID jobId,
+                                        Pageable pageable);
 
     long countByWorkerIdAndStatus(UUID workerId, AssignmentStatus status);
 

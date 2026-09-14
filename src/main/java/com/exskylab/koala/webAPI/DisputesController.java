@@ -56,7 +56,8 @@ public class DisputesController {
                     + "Tutarlar DisputeDto'da yoktur; GET /admin/job-assignments/{id} (payment.read) otoriter kaynaktır. "
                     + "query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) uyuşmazlık id'si, atama id'si ve "
                     + "tarafların (çalışan, ilan sahibi, açan) ad-soyadı ile e-postasında büyük-küçük harf ve Türkçe karakter "
-                    + "duyarsız arar; status süzgeciyle kesişir; 100 karakteri aşarsa 400.")
+                    + "duyarsız arar; status süzgeciyle kesişir; 100 karakteri aşarsa 400. userId verilirse yalnız o "
+                    + "kullanıcının taraf olduğu (çalışan, ilan sahibi ya da açan) uyuşmazlıklar döner.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Uyuşmazlıklar listelendi"),
             @ApiResponse(responseCode = "400", description = "query 100 karakteri aşıyor ya da bilinmeyen sıralama alanı",
@@ -67,9 +68,10 @@ public class DisputesController {
     public ResponseEntity<SuccessDataResult<PageDto<DisputeDto>>> list(
             @RequestParam(required = false) DisputeStatus status,
             @RequestParam(required = false) String query,
+            @RequestParam(required = false) UUID userId,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
-        var page = disputeService.searchForStaff(status, query, pageable);
+        var page = disputeService.searchForStaff(status, query, userId, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
                 PageDto.of(page, disputeMapper.toDisputeDtoList(page.getContent())),
                 DisputeMessages.LISTED, HttpStatus.OK));

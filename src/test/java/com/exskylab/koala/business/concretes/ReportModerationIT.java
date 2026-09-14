@@ -146,7 +146,7 @@ class ReportModerationIT extends AbstractStaffIntegrationTest {
     }
 
     private AdminReportDto rowFor(UUID reportId) {
-        return reportService.searchForModeration(null, null, null, null, null, PageRequest.of(0, 100))
+        return reportService.searchForModeration(null, null, null, null, null, null, PageRequest.of(0, 100))
                 .getContent().stream()
                 .filter(row -> row.id().equals(reportId))
                 .findFirst()
@@ -155,7 +155,7 @@ class ReportModerationIT extends AbstractStaffIntegrationTest {
 
     private Page<AdminReportDto> queue(ReportStatus status, ReportReason reason,
                                        ReportTargetType targetType, UUID reportedUser) {
-        return reportService.searchForModeration(status, reason, targetType, reportedUser, null,
+        return reportService.searchForModeration(status, reason, targetType, reportedUser, null, null,
                 PageRequest.of(0, 100));
     }
 
@@ -257,7 +257,7 @@ class ReportModerationIT extends AbstractStaffIntegrationTest {
     @Test
     void theHistoryCountComesFromTheWholeQueueNotFromTheVisiblePage() {
         Page<AdminReportDto> onePerPage = reportService.searchForModeration(
-                null, null, null, reportedUserId, null, PageRequest.of(0, 1));
+                null, null, null, reportedUserId, null, null, PageRequest.of(0, 1));
 
         assertEquals(1, onePerPage.getContent().size(), "Sayfa boyutu bir olmali.");
         assertEquals(2L, onePerPage.getContent().get(0).reportedUserReportCount(),

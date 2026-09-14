@@ -61,7 +61,8 @@ public interface JobService {
 
     long countJobsCreatedBy(UUID userId);
 
-    PageDto<AdminJobDto> searchForStaff(List<JobStatus> statuses, String query, Pageable pageable);
+    PageDto<AdminJobDto> searchForStaff(List<JobStatus> statuses, String query, UUID companyId, UUID employerId,
+                                        Pageable pageable);
 
     AdminJobDetailDto getAdminDetail(UUID jobId);
 

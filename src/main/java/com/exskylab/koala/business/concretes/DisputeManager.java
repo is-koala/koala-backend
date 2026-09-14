@@ -192,10 +192,10 @@ public class DisputeManager implements DisputeService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Dispute> searchForStaff(DisputeStatus status, String query, Pageable requested) {
+    public Page<Dispute> searchForStaff(DisputeStatus status, String query, UUID userId, Pageable requested) {
         pageableSanitizer.rejectUnknownSort(requested, SORTABLE);
         List<DisputeStatus> statuses = status == null ? ACTIVE : List.of(status);
-        return disputeDao.searchForStaff(statuses, StaffSearchQuery.normalize(query),
+        return disputeDao.searchForStaff(statuses, StaffSearchQuery.normalize(query), userId,
                 pageableSanitizer.sanitize(requested, SORTABLE, DEFAULT_SORT));
     }
 

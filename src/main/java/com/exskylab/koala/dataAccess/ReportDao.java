@@ -46,6 +46,7 @@ public interface ReportDao extends JpaRepository<Report, UUID> {
             where (:status is null or r.status = :status)
               and (:reason is null or r.reason = :reason)
               and (:reportedUserId is null or r.reportedUser.id = :reportedUserId)
+              and (:reporterId is null or reporter.id = :reporterId)
               and (cast(:targetType as string) is null
                    or (cast(:targetType as string) = 'USER' and r.reportedUser.id is not null)
                    or (cast(:targetType as string) = 'JOB' and r.job.id is not null)
@@ -68,6 +69,7 @@ public interface ReportDao extends JpaRepository<Report, UUID> {
                     where (:status is null or r.status = :status)
                       and (:reason is null or r.reason = :reason)
                       and (:reportedUserId is null or r.reportedUser.id = :reportedUserId)
+                      and (:reporterId is null or reporter.id = :reporterId)
                       and (cast(:targetType as string) is null
                            or (cast(:targetType as string) = 'USER' and r.reportedUser.id is not null)
                            or (cast(:targetType as string) = 'JOB' and r.job.id is not null)
@@ -92,6 +94,7 @@ public interface ReportDao extends JpaRepository<Report, UUID> {
                         @Param("reason") ReportReason reason,
                         @Param("targetType") String targetType,
                         @Param("reportedUserId") UUID reportedUserId,
+                        @Param("reporterId") UUID reporterId,
                         @Param("query") String query,
                         Pageable pageable);
 

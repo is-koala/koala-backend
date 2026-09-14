@@ -35,7 +35,7 @@ public interface PayoutService {
 
     AmountCount awaitingVolume(String currency);
 
-    PageDto<StaffPayoutDto> listForStaff(List<PayoutStatus> statuses, String query, Pageable pageable);
+    PageDto<StaffPayoutDto> listForStaff(List<PayoutStatus> statuses, String query, UUID workerId, Pageable pageable);
 
     AdminPayoutDetailDto getStaffDetail(UUID payoutId);
 
