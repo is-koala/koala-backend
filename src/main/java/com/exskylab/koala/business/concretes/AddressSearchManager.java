@@ -158,6 +158,7 @@ public class AddressSearchManager implements AddressSearchService, AddressCandid
             throw new ValidationException(AddressMessages.SEARCH_OUTSIDE_SERVICE_AREA);
         }
         ProviderAddressCandidate providerCandidate = reverseGeocoder.reverse(latitude, longitude)
+                .filter(AddressSearchManager::carriesCityAndDistrict)
                 .orElseThrow(() -> new ValidationException(AddressMessages.REVERSE_NO_RESULT));
         ResolvedReferences references = resolveReferences(providerCandidate);
         return candidate(providerCandidate, references, securityService.getAuthenticatedUserId(),
@@ -193,6 +194,7 @@ public class AddressSearchManager implements AddressSearchService, AddressCandid
                 references.district.getId(), references.district.getName(),
                 components,
                 new AddressPositionDto(latitude, longitude, AddressPositionSource.valueOf(source.name())),
+                providerCandidate.precision(),
                 candidateToken, needsReview, "Google Maps");
     }
 
@@ -307,6 +309,10 @@ public class AddressSearchManager implements AddressSearchService, AddressCandid
 
     private static boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private static boolean carriesCityAndDistrict(ProviderAddressCandidate candidate) {
+        return !isBlank(candidate.city()) && !isBlank(candidate.district());
     }
 
     private static final class SearchSession {

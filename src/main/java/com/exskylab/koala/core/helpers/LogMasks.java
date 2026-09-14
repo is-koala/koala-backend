@@ -1,5 +1,8 @@
 package com.exskylab.koala.core.helpers;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+
 public final class LogMasks {
 
     private static final String REDACTED = "***";
@@ -60,5 +63,13 @@ public final class LogMasks {
 
     public static String maskedIdentityNumber(String identityNumber) {
         return identityNumber == null || identityNumber.isBlank() ? null : "***********";
+    }
+
+    public static String coordinates(BigDecimal latitude, BigDecimal longitude) {
+        if (latitude == null || longitude == null) {
+            return REDACTED;
+        }
+        return latitude.setScale(2, RoundingMode.HALF_UP).toPlainString() + ","
+                + longitude.setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
 }

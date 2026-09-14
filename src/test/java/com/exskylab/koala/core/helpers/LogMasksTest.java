@@ -2,6 +2,8 @@ package com.exskylab.koala.core.helpers;
 
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
@@ -48,5 +50,13 @@ class LogMasksTest {
         assertEquals("***4567, ***8901", LogMasks.phones(new String[]{"05321234567", "05339998901"}));
         assertEquals("***", LogMasks.phones(new String[]{}));
         assertEquals("***", LogMasks.phones(null));
+    }
+
+    @Test
+    void aCoordinateIsCoarsenedToAboutAKilometre() {
+        assertEquals("40.98,29.03", LogMasks.coordinates(new BigDecimal("40.982512"), new BigDecimal("29.025411")));
+        assertEquals("41.00,29.00", LogMasks.coordinates(new BigDecimal("40.995"), new BigDecimal("28.995")));
+        assertEquals("***", LogMasks.coordinates(null, new BigDecimal("29.025411")));
+        assertEquals("***", LogMasks.coordinates(new BigDecimal("40.982512"), null));
     }
 }

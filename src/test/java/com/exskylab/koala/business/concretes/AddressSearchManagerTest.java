@@ -6,6 +6,8 @@ import com.exskylab.koala.core.dtos.address.request.AddressComponentsRequestDto;
 import com.exskylab.koala.core.dtos.address.request.AddressPositionRequestDto;
 import com.exskylab.koala.core.dtos.address.request.AddressWriteDto;
 import com.exskylab.koala.core.dtos.address.request.ConfirmedPositionSource;
+import com.exskylab.koala.core.dtos.address.request.ReverseGeocodeRequestDto;
+import com.exskylab.koala.entities.AddressCandidatePrecision;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.properties.AddressSearchProperties;
 import com.exskylab.koala.core.utilities.location.AddressSearchProvider;
@@ -37,8 +39,10 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -105,6 +109,7 @@ class AddressSearchManagerTest {
         assertEquals(city.getId(), candidate.cityId());
         assertEquals(district.getId(), candidate.districtId());
         assertEquals("Caferağa Mahallesi", candidate.components().getNeighborhood());
+        assertEquals(AddressCandidatePrecision.BUILDING, candidate.precision());
         assertFalse(candidate.needsUserReview());
         assertEquals("Google Maps", candidate.attribution());
 
@@ -205,6 +210,68 @@ class AddressSearchManagerTest {
         AddressWriteDto write = write(candidate.candidateToken());
         write.getPosition().setSource(ConfirmedPositionSource.REVERSE_GEOCODE_CONFIRMED);
         assertDoesNotThrow(() -> manager.verifyAndConsume(USER_ID, write));
+    }
+
+    @Test
+    void aStreetLevelReverseResultStillResolvesTheDistrictAndAsksForReview() {
+        authenticatedAs(USER_ID);
+        when(reverseGeocoder.reverse(new BigDecimal("40.982512"), new BigDecimal("29.025411")))
+                .thenReturn(Optional.of(new ProviderAddressCandidate(
+                        "TR", "İstanbul", "Kadıköy", "Caferağa Mahallesi", "Moda Caddesi",
+                        null, null, "34710", new BigDecimal("40.982512"), new BigDecimal("29.025411"))));
+        referencesAreAvailable();
+
+        var candidate = manager.reverse(new ReverseGeocodeRequestDto(
+                new BigDecimal("40.982512"), new BigDecimal("29.025411")));
+
+        assertEquals(AddressCandidatePrecision.STREET, candidate.precision());
+        assertEquals(district.getId(), candidate.districtId());
+        assertEquals("Moda Caddesi", candidate.components().getThoroughfare());
+        assertNull(candidate.components().getBuildingNumber());
+        assertTrue(candidate.needsUserReview());
+    }
+
+    @Test
+    void aNeighborhoodLevelReverseResultIsReturnedWithEmptyStreetAndBuilding() {
+        authenticatedAs(USER_ID);
+        when(reverseGeocoder.reverse(new BigDecimal("40.982512"), new BigDecimal("29.025411")))
+                .thenReturn(Optional.of(new ProviderAddressCandidate(
+                        "TR", "İstanbul", "Kadıköy", "Caferağa Mahallesi", null,
+                        null, null, "34710", new BigDecimal("40.982512"), new BigDecimal("29.025411"))));
+        referencesAreAvailable();
+
+        var candidate = manager.reverse(new ReverseGeocodeRequestDto(
+                new BigDecimal("40.982512"), new BigDecimal("29.025411")));
+
+        assertEquals(AddressCandidatePrecision.NEIGHBORHOOD, candidate.precision());
+        assertEquals("Caferağa Mahallesi", candidate.components().getNeighborhood());
+        assertEquals("", candidate.components().getThoroughfare());
+        assertTrue(candidate.needsUserReview());
+    }
+
+    @Test
+    void aReverseResultWithoutADistrictIsNoResultRatherThanOutsideTheServiceArea() {
+        when(reverseGeocoder.reverse(new BigDecimal("40.982512"), new BigDecimal("29.025411")))
+                .thenReturn(Optional.of(new ProviderAddressCandidate(
+                        "TR", "İstanbul", null, null, null,
+                        null, null, "34710", new BigDecimal("40.982512"), new BigDecimal("29.025411"))));
+
+        ValidationException thrown = assertThrows(ValidationException.class, () -> manager.reverse(
+                new ReverseGeocodeRequestDto(new BigDecimal("40.982512"), new BigDecimal("29.025411"))));
+
+        assertEquals("ADDRESS_REVERSE_NORESULT", thrown.getErrorCode());
+        verify(locationService, never()).getDistrictsByCityId(any());
+    }
+
+    @Test
+    void anEmptyReverseResultIsNoResult() {
+        when(reverseGeocoder.reverse(new BigDecimal("40.982512"), new BigDecimal("29.025411")))
+                .thenReturn(Optional.empty());
+
+        ValidationException thrown = assertThrows(ValidationException.class, () -> manager.reverse(
+                new ReverseGeocodeRequestDto(new BigDecimal("40.982512"), new BigDecimal("29.025411"))));
+
+        assertEquals("ADDRESS_REVERSE_NORESULT", thrown.getErrorCode());
     }
 
     private void referencesAreAvailable() {

@@ -3941,6 +3941,22 @@ Marketplace seed geri gelmez (ADR-0008). Gelen kutu kabulü #4'te insan işi.
 
 ---
 
+## 2az. Ters geokod kademeli düşüş ve `precision` (#273)
+
+**İki kademe, tek ek istek.** `GoogleGeocodingAddressProvider.reverse` önce `result_type=street_address|premise` sorar; `ZERO_RESULTS` gelirse aynı pin için bir kez daha `route|sublocality|neighborhood|postal_code` sorar; o da boşsa `Optional.empty()` → `REVERSE_NO_RESULT`. Bir yanıtta birden çok sonuç varsa en ayrıntılı bileşen kümesi seçilir: önce `precision` (`BUILDING` > `STREET` > `NEIGHBORHOOD`), eşitlikte dolu bileşen sayısı, o da eşitse sağlayıcının sırası. Park, kıyı ve site içi noktalarda Türkiye'de bina düzeyi sonuç yok ama cadde/mahalle düzeyi var; ADR-0007 zaten "kullanıcı görüp onaylar" dediği için eksik bina numarası kullanıcıya bırakılır (`needsUserReview=true`).
+
+**`AddressCandidateDto.precision` sağlayıcıdan değil bileşenlerden türer.** `ProviderAddressCandidate.precision()`: bina numarası ya da site adı varsa `BUILDING`, yalnız cadde/sokak varsa `STREET`, aksi hâlde `NEIGHBORHOOD`. Aynı kural autocomplete `resolve` yolunda da dolar; istemci `STREET`/`NEIGHBORHOOD` görünce "bina numarasını girin" ipucu gösterir. Enum `AddressCandidatePrecision` kardeşi `AddressPositionSource` gibi `entities` altında (§1), değerler OpenAPI'de enum olarak görünür (`OpenApiDocumentIT`).
+
+**İl/ilçe olmayan kademeli sonuç `REVERSE_NO_RESULT`, `SEARCH_OUTSIDE_SERVICE_AREA` değil.** `resolveReferences` il/ilçe UUID'sini zorunlu tutar; aday sözleşmesi ilçesiz bir aday tanımlamaz (`AddressWriteV2` de `districtId` ister). Pin zaten `IstanbulServiceArea` kutusundan geçmişken "hizmet alanı dışında" yanlış bir cümle olurdu; doğru cümle "bu pin için adres üretilemedi" ve kullanıcı manuel akışa düşer. Sağlayıcının ilçe **adı** verip Koala referansına eşleyemediği durum (kutu kenarında Kocaeli gibi) eskisi gibi `SEARCH_OUTSIDE_SERVICE_AREA` kalır.
+
+**Sağlayıcı durumu artık logda.** `status` `OK`/`ZERO_RESULTS` dışındaysa (REQUEST_DENIED, OVER_QUERY_LIMIT, INVALID_REQUEST…) tek WARN satırı `status`'u, istenen `result_type` kademesini ve pini **iki ondalıkla** (`LogMasks.coordinates` → `40.98,29.03`, ~1 km) yazar; hassas koordinat, anahtar ve istek URL'si satıra girmez. Taşıma hatasında yalnız istisna sınıfının adı yazılır — Spring'in `ResourceAccessException` mesajı `key=` içeren URL'yi taşır, o yüzden istisna nesnesi logger'a **verilmez** (bu, §2i "istisnayı logger'a ver" kuralının bilinçli istisnası; `log.error` değil `log.warn`). Yanıt istemciye eskisi gibi 502 `SEARCH_PROVIDER_UNAVAILABLE`.
+
+**Bu turda çıkan gerçek kusur: `result_type` çift kodlanıyordu.** URL `UriComponentsBuilder…encode().toUriString()` ile `String` olarak `RestTemplate.exchange`'e veriliyordu; `RestTemplate` string şablonu bir daha kodlar, `%7C` → `%257C` olur ve Google `street_address%7Cpremise` diye tek bir geçersiz tip görürdü. Artık `URI` nesnesi geçiliyor; `GoogleGeocodingAddressProviderTest` istek URI'sinde `%25` olmadığını sabitliyor. `GooglePlacesAddressProvider` de aynı turda `URI` geçişine alındı; place id ve oturum belirteci bugün `%` üretmese de kalıp tekrar etmesin.
+
+Testler: `GoogleGeocodingAddressProviderTest` (üç kademe, çoklu sonuçta en ayrıntılı seçim, REQUEST_DENIED ve taşıma hatası günlüğü, ikinci kademenin yalnız alan tiplerini istemesi), `AddressSearchManagerTest` (STREET/NEIGHBORHOOD adayı, ilçesiz aday → `REVERSE_NO_RESULT`, referans sorgusuna hiç gidilmez), `AddressReverseGeocodeIT` (gerçek HTTP ve seed Kadıköy referansıyla üç kademe + boş + REQUEST_DENIED 502; paylaşılan `RestTemplate`'e `MockRestServiceServer` bağlanır ve `@AfterEach` istek fabrikasını geri koyar — yeni context açılmaz), `LogMasksTest`.
+
+---
+
 ## 3. Testler
 
 `src/test/resources/application.properties` testlerin ayağa kalkması için gereken minimum değerleri sağlar. Buradan bir satır silmeden önce neye yaradığını bil:

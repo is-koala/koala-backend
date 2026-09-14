@@ -84,6 +84,10 @@ _Avoid_: Google sonucu, adres adayı
 Onaylanan pinin autocomplete, ters geocoding veya manuel seçim yolundan hangisiyle oluştuğunu belirten veri soyu.
 _Avoid_: Adres doğruluk garantisi, provider kimliği
 
+**Aday Hassasiyeti**:
+Adres adayında sağlayıcının bulabildiği en ince düzey: bina (kapı numarası ya da site adı), cadde/sokak ya da yalnız mahalle/posta kodu; istemciye eksik kalan alanı kullanıcıdan istemesi için ipucu verir.
+_Avoid_: Yaklaşık konum (ilan gizliliği), koordinat doğruluğu
+
 **İş Konumu**:
 İlan yayımlanırken onaylı adresten alınan ve profil ya da şirket adresi sonradan değişse de ilanla birlikte sabit kalan konum snapshot'ı.
 _Avoid_: Güncel profil adresi, şirketin varsayılan adresi
