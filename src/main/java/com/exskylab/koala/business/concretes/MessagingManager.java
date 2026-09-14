@@ -11,6 +11,8 @@ import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.messaging.response.ConversationDto;
+import com.exskylab.koala.core.dtos.messaging.response.ConversationParticipantDto;
+import com.exskylab.koala.core.dtos.messaging.response.MessageDto;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.helpers.Concealment;
 import com.exskylab.koala.core.helpers.MessagingAvailability;
@@ -20,9 +22,7 @@ import com.exskylab.koala.entities.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import com.exskylab.koala.core.dtos.user.response.SafeUserDto;
 import com.exskylab.koala.core.mappers.MessagingMapper;
-import com.exskylab.koala.core.mappers.UserMapper;
 import com.exskylab.koala.core.realtime.RealtimePublisher;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.JobService;
@@ -32,6 +32,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -64,7 +65,6 @@ public class MessagingManager implements MessagingService {
     private final RealtimePublisher realtimePublisher;
     private final MessagingMapper messagingMapper;
     private final MessagingAvailability messagingAvailability;
-    private final UserMapper userMapper;
     private final ActivityNotificationService activityNotificationService;
 
     public MessagingManager(ConversationDao conversationDao, MessageDao messageDao,
@@ -73,7 +73,7 @@ public class MessagingManager implements MessagingService {
                             SecurityService securityService, CompanyContactService companyContactService,
                             PageableSanitizer pageableSanitizer, RealtimePublisher realtimePublisher,
                             MessagingMapper messagingMapper, MessagingAvailability messagingAvailability,
-                            UserMapper userMapper, ActivityNotificationService activityNotificationService) {
+                            ActivityNotificationService activityNotificationService) {
         this.conversationDao = conversationDao;
         this.messageDao = messageDao;
         this.userBlockDao = userBlockDao;
@@ -86,7 +86,6 @@ public class MessagingManager implements MessagingService {
         this.realtimePublisher = realtimePublisher;
         this.messagingMapper = messagingMapper;
         this.messagingAvailability = messagingAvailability;
-        this.userMapper = userMapper;
         this.activityNotificationService = activityNotificationService;
     }
 
@@ -198,7 +197,7 @@ public class MessagingManager implements MessagingService {
 
     @Override
     @Transactional
-    public Message sendMessage(UUID conversationId, String body) {
+    public MessageDto sendMessage(UUID conversationId, String body) {
         Conversation conversation = loadParticipating(conversationId);
         UUID senderId = securityService.getAuthenticatedUserId();
 
@@ -224,25 +223,25 @@ public class MessagingManager implements MessagingService {
 
         activityNotificationService.messageSent(saved);
 
-        realtimePublisher.messageSent(conversationId, messagingMapper.toMessageDto(saved),
-                conversation.participantIds());
+        MessageDto sent = messagingMapper.toMessageDto(saved, sendersOf(conversationId).get(senderId));
+        realtimePublisher.messageSent(conversationId, sent, conversation.participantIds());
 
         log.info("Message {} sent in conversation {}", saved.getId(), conversationId);
-        return saved;
+        return sent;
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Message> getMessages(UUID conversationId, Pageable requested) {
+    public PageDto<MessageDto> getMessages(UUID conversationId, Pageable requested) {
         loadParticipating(conversationId);
         pageableSanitizer.rejectUnknownSort(requested, SORTABLE);
-        return messageDao.findAllByConversationIdOrderBySentAtDesc(conversationId,
-                pageableSanitizer.sanitize(requested, SORTABLE, MESSAGE_SORT));
+        return withSenders(conversationId, messageDao.findAllByConversationIdOrderBySentAtDesc(conversationId,
+                pageableSanitizer.sanitize(requested, SORTABLE, MESSAGE_SORT)));
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<Message> getMessagesAfter(UUID conversationId, UUID afterMessageId, Pageable requested) {
+    public PageDto<MessageDto> getMessagesAfter(UUID conversationId, UUID afterMessageId, Pageable requested) {
         loadParticipating(conversationId);
         pageableSanitizer.rejectUnknownSort(requested, AFTER_SORTABLE);
         Message anchor = messageDao.findByIdAndConversationId(afterMessageId, conversationId)
@@ -251,8 +250,20 @@ public class MessagingManager implements MessagingService {
                             + "of this conversation", conversationId, afterMessageId);
                     return new ValidationException(MessagingMessages.AFTER_UNKNOWN);
                 });
-        return messageDao.findAllAfter(conversationId, anchor.getSentAt(), anchor.getId(),
-                pageableSanitizer.sanitize(requested, AFTER_SORTABLE, MESSAGES_AFTER_SORT));
+        return withSenders(conversationId, messageDao.findAllAfter(conversationId, anchor.getSentAt(), anchor.getId(),
+                pageableSanitizer.sanitize(requested, AFTER_SORTABLE, MESSAGES_AFTER_SORT)));
+    }
+
+    private PageDto<MessageDto> withSenders(UUID conversationId, Page<Message> page) {
+        Map<UUID, ConversationDao.ParticipantView> senders = page.isEmpty() ? Map.of() : sendersOf(conversationId);
+        return PageDto.of(page, page.getContent().stream()
+                .map(message -> messagingMapper.toMessageDto(message, senders.get(message.getSender().getId())))
+                .toList());
+    }
+
+    private Map<UUID, ConversationDao.ParticipantView> sendersOf(UUID conversationId) {
+        return conversationDao.findParticipantRows(List.of(conversationId)).stream()
+                .collect(Collectors.toMap(ConversationDao.ParticipantView::getUserId, Function.identity()));
     }
 
     @Override
@@ -262,7 +273,7 @@ public class MessagingManager implements MessagingService {
         return messagingMapper.toConversationDto(conversation,
                 unreadCounts(List.of(conversationId)).getOrDefault(conversationId, 0L),
                 closedFlags(List.of(conversation)).get(conversationId),
-                membersOf(conversation));
+                membersOf(List.of(conversation)).getOrDefault(conversationId, List.of()));
     }
 
     @Override
@@ -275,12 +286,13 @@ public class MessagingManager implements MessagingService {
 
         Map<UUID, Long> unread = unreadCounts(page.getContent().stream().map(Conversation::getId).toList());
         Map<UUID, Boolean> closed = closedFlags(page.getContent());
+        Map<UUID, List<ConversationParticipantDto>> members = membersOf(page.getContent());
 
         return PageDto.of(page, page.getContent().stream()
                 .map(conversation -> messagingMapper.toConversationDto(conversation,
                         unread.getOrDefault(conversation.getId(), 0L),
                         closed.get(conversation.getId()),
-                        membersOf(conversation)))
+                        members.getOrDefault(conversation.getId(), List.of())))
                 .toList());
     }
 
@@ -313,10 +325,16 @@ public class MessagingManager implements MessagingService {
     public int markRead(UUID conversationId) {
         Conversation conversation = loadParticipating(conversationId);
         UUID readerId = securityService.getAuthenticatedUserId();
+        Instant readAt = Instant.now();
 
-        int marked = messageDao.markConversationRead(conversationId, readerId, Instant.now());
-        if (marked > 0) {
-            realtimePublisher.conversationRead(conversationId, readerId, conversation.participantIds());
+        int marked = messageDao.markConversationRead(conversationId, readerId, readAt);
+        Instant previousStamp = conversation.stampRead(readerId, readAt);
+        conversationDao.save(conversation);
+
+        boolean caughtUp = conversation.getLastMessageAt() != null
+                && (previousStamp == null || conversation.getLastMessageAt().isAfter(previousStamp));
+        if (marked > 0 || caughtUp) {
+            realtimePublisher.conversationRead(conversationId, readerId, readAt, conversation.participantIds());
         }
         return marked;
     }
@@ -354,10 +372,16 @@ public class MessagingManager implements MessagingService {
         return userBlockDao.findAllByBlockerId(securityService.getAuthenticatedUserId());
     }
 
-    private List<SafeUserDto> membersOf(Conversation conversation) {
-        return conversation.getParticipants().stream()
-                .map(participant -> userMapper.toSafeUserDto(participant.getUser()))
-                .toList();
+    private Map<UUID, List<ConversationParticipantDto>> membersOf(List<Conversation> conversations) {
+        if (conversations.isEmpty()) {
+            return Map.of();
+        }
+        return conversationDao.findParticipantRows(conversations.stream().map(Conversation::getId).toList())
+                .stream()
+                .sorted(Comparator.comparing(ConversationDao.ParticipantView::getJoinedAt,
+                        Comparator.nullsLast(Comparator.naturalOrder())))
+                .collect(Collectors.groupingBy(ConversationDao.ParticipantView::getConversationId,
+                        Collectors.mapping(messagingMapper::toParticipantDto, Collectors.toList())));
     }
 
     private void assertMessagingWindowOpen(Job job) {

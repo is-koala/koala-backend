@@ -26,6 +26,7 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -48,6 +49,9 @@ class ConversationMessagingIT extends AbstractIntegrationTest {
     private final UUID firstWorkerId = UUID.randomUUID();
     private final UUID secondWorkerId = UUID.randomUUID();
     private final UUID outsiderId = UUID.randomUUID();
+    private final UUID contactId = UUID.randomUUID();
+    private final UUID ghostId = UUID.randomUUID();
+    private final UUID employerPictureId = UUID.randomUUID();
     private final UUID categoryId = UUID.randomUUID();
     private final UUID jobId = UUID.randomUUID();
     private final UUID directId = UUID.randomUUID();
@@ -56,10 +60,17 @@ class ConversationMessagingIT extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        jdbc.update("insert into media (id, created_at, media_type, file_name, file_type, file_url, file_size) "
+                + "values (?, now(), 'IMAGE', 'isveren.jpg', 'image/jpeg', 'profiles/isveren.jpg', 1024)",
+                employerPictureId);
         insertUser(employerId, "İşveren", "Bey");
+        jdbc.update("update users set profile_picture_id = ? where id = ?", employerPictureId, employerId);
         insertUser(firstWorkerId, "Ayşe", "Yılmaz");
         insertUser(secondWorkerId, "Mehmet", "Kaya");
         insertUser(outsiderId, "Yabancı", "Kişi");
+        insertUser(contactId, "Yetkili", "Hanım");
+        insertUser(ghostId, "Anonim", "Kullanıcı");
+        jdbc.update("update users set is_deleted = true, deleted_at = now() where id = ?", ghostId);
         for (UUID userId : users) {
             jdbc.update("insert into devices (id, created_at, is_deleted, user_id, type, name, client_device_id, "
                             + "push_token) values (?, now(), false, ?, 'ANDROID', 'telefon', ?, ?)",
@@ -91,6 +102,10 @@ class ConversationMessagingIT extends AbstractIntegrationTest {
         addParticipant(crewId, employerId);
         addParticipant(crewId, firstWorkerId);
         addParticipant(crewId, secondWorkerId);
+        addParticipant(crewId, contactId);
+        addParticipant(crewId, ghostId);
+        jdbc.update("update conversation_participants set is_deleted = true, deleted_at = now() "
+                + "where conversation_id = ? and user_id = ?", crewId, ghostId);
     }
 
     @AfterEach
@@ -108,7 +123,9 @@ class ConversationMessagingIT extends AbstractIntegrationTest {
         jdbc.update("delete from job_categories where id = ?", categoryId);
         jdbc.update("delete from devices where user_id in (?, ?, ?, ?)", ids);
         jdbc.update("delete from authorities where user_id in (?, ?, ?, ?)", ids);
-        jdbc.update("delete from users where id in (?, ?, ?, ?)", ids);
+        jdbc.update("delete from users where id in (?, ?, ?, ?, ?, ?)", employerId, firstWorkerId, secondWorkerId,
+                outsiderId, contactId, ghostId);
+        jdbc.update("delete from media where id = ?", employerPictureId);
     }
 
     @Test
@@ -268,12 +285,174 @@ class ConversationMessagingIT extends AbstractIntegrationTest {
         mockMvc.perform(get("/conversations/{id}", crewId).with(user(principal(secondWorkerId))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.kind").value("GROUP"))
-                .andExpect(jsonPath("$.data.participants", hasSize(3)))
+                .andExpect(jsonPath("$.data.participants", hasSize(5)))
                 .andExpect(jsonPath("$.data.unreadCount").value(0));
 
         mockMvc.perform(get("/conversations/{id}", directId).with(user(principal(outsiderId))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("MESSAGING_CONVERSATION_NOT_FOUND"));
+    }
+
+    @Test
+    void aGroupReadStampsOnlyTheReadersParticipantRow() throws Exception {
+        insertMessage(crewId, employerId, "Ekip, yarın 09:00", "2 minutes");
+        insertMessage(crewId, secondWorkerId, "Tamam", "1 minute");
+
+        mockMvc.perform(post("/conversations/{id}/read", crewId).with(user(principal(firstWorkerId))))
+                .andExpect(status().isOk());
+
+        Map<UUID, Object> stamps = new java.util.HashMap<>();
+        jdbc.queryForList("select user_id, last_read_at from conversation_participants where conversation_id = ?",
+                crewId).forEach(row -> stamps.put((UUID) row.get("user_id"), row.get("last_read_at")));
+        assertNotNull(stamps.get(firstWorkerId), "okuyanın damgası yazılmalı");
+        assertNull(stamps.get(employerId), "okumayanın damgasına dokunulmaz");
+        assertNull(stamps.get(secondWorkerId), "okumayanın damgasına dokunulmaz");
+        assertNull(stamps.get(contactId), "okumayanın damgasına dokunulmaz");
+
+        Map<UUID, Map<String, Object>> participants = participantsSeenBy(secondWorkerId, crewId);
+        assertNotNull(participants.get(firstWorkerId).get("lastReadAt"));
+        assertNull(participants.get(secondWorkerId).get("lastReadAt"));
+        assertEquals("EMPLOYER", participants.get(employerId).get("role"));
+        assertEquals("WORKER", participants.get(firstWorkerId).get("role"));
+        assertEquals("WORKER", participants.get(secondWorkerId).get("role"));
+        assertEquals("COMPANY_CONTACT", participants.get(contactId).get("role"), "atamasız işveren tarafı yetkilidir");
+        assertNotNull(participants.get(firstWorkerId).get("joinedAt"));
+        assertEquals(false, participants.get(firstWorkerId).get("left"));
+        assertEquals("İşveren", participants.get(employerId).get("firstName"));
+        assertEquals("Bey", participants.get(employerId).get("lastName"));
+        assertEquals("http://localhost:8080/uploads/profiles/isveren.jpg",
+                participants.get(employerId).get("profilePictureUrl"));
+        assertNull(participants.get(firstWorkerId).get("profilePictureUrl"));
+
+        mockMvc.perform(post("/conversations/{id}/read", crewId).with(user(principal(secondWorkerId))))
+                .andExpect(status().isOk());
+        participants = participantsSeenBy(employerId, crewId);
+        assertNotNull(participants.get(secondWorkerId).get("lastReadAt"),
+                "read_at ilk okuyanla dolmuş olsa da ikinci okuyanın damgası kendi satırına yazılır");
+        assertNotNull(participants.get(firstWorkerId).get("lastReadAt"));
+        assertNull(participants.get(employerId).get("lastReadAt"));
+    }
+
+    @Test
+    void aDirectReadStillMarksTheCounterpartsMessagesAndStampsTheReader() throws Exception {
+        UUID theirs = insertMessage(directId, employerId, "Yarın 09:00", "2 minutes");
+        UUID mine = insertMessage(directId, firstWorkerId, "Tamam", "1 minute");
+
+        mockMvc.perform(post("/conversations/{id}/read", directId).with(user(principal(firstWorkerId))))
+                .andExpect(status().isOk());
+
+        assertNotNull(jdbc.queryForObject("select read_at from messages where id = ?", Object.class, theirs),
+                "ikili sohbette karşı tarafın mesajı read_at ile işaretlenir");
+        assertNull(jdbc.queryForObject("select read_at from messages where id = ?", Object.class, mine),
+                "kendi mesajım işaretlenmez");
+        Map<UUID, Map<String, Object>> participants = participantsSeenBy(employerId, directId);
+        assertNotNull(participants.get(firstWorkerId).get("lastReadAt"));
+        assertNull(participants.get(employerId).get("lastReadAt"));
+        assertEquals("WORKER", participants.get(firstWorkerId).get("role"));
+        assertEquals("EMPLOYER", participants.get(employerId).get("role"));
+
+        mockMvc.perform(get("/conversations/{id}/messages", directId).with(user(principal(employerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[1].id").value(theirs.toString()))
+                .andExpect(jsonPath("$.data.content[1].readAt").isNotEmpty())
+                .andExpect(jsonPath("$.data.content[0].readAt").isEmpty());
+    }
+
+    @Test
+    void aParticipantWhoLeftStaysInTheListMarkedLeftSoOldMessagesKeepTheirName() throws Exception {
+        UUID theirs = insertMessage(crewId, secondWorkerId, "Ben ayrılıyorum", "1 minute");
+        jdbc.update("update conversation_participants set is_deleted = true, deleted_at = now() "
+                + "where conversation_id = ? and user_id = ?", crewId, secondWorkerId);
+
+        Map<UUID, Map<String, Object>> participants = participantsSeenBy(firstWorkerId, crewId);
+        assertEquals(5, participants.size(), "ayrılanlar da listede");
+        assertEquals(true, participants.get(secondWorkerId).get("left"));
+        assertEquals("Mehmet", participants.get(secondWorkerId).get("firstName"));
+        assertEquals("WORKER", participants.get(secondWorkerId).get("role"));
+        assertEquals(false, participants.get(firstWorkerId).get("left"));
+        assertEquals(true, participants.get(ghostId).get("left"));
+        assertEquals("Anonim", participants.get(ghostId).get("firstName"), "hesabını silen katılımcı anonim adıyla");
+        assertEquals("Kullanıcı", participants.get(ghostId).get("lastName"));
+
+        mockMvc.perform(get("/conversations/{id}/messages", crewId).with(user(principal(firstWorkerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].id").value(theirs.toString()))
+                .andExpect(jsonPath("$.data.content[0].senderId").value(secondWorkerId.toString()))
+                .andExpect(jsonPath("$.data.content[0].senderName").value("Mehmet Kaya"))
+                .andExpect(jsonPath("$.data.content[0].senderProfilePictureUrl").isEmpty());
+
+        mockMvc.perform(get("/conversations/{id}", crewId).with(user(principal(secondWorkerId))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("MESSAGING_CONVERSATION_NOT_FOUND"));
+    }
+
+    @Test
+    void aDeletedSendersMessageStaysOnThePageUnderItsAnonymisedNameAndTheBadgeAgrees() throws Exception {
+        UUID ghost = insertMessage(crewId, ghostId, "silinmeden önce", "3 minutes");
+        insertMessage(crewId, employerId, "duyuru", "2 minutes");
+        insertMessage(crewId, secondWorkerId, "tamam", "1 minute");
+
+        mockMvc.perform(get("/conversations/{id}", crewId).with(user(principal(firstWorkerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.unreadCount").value(3));
+
+        mockMvc.perform(get("/conversations/{id}/messages", crewId).with(user(principal(firstWorkerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(3))
+                .andExpect(jsonPath("$.data.content", hasSize(3)))
+                .andExpect(jsonPath("$.data.content[2].id").value(ghost.toString()))
+                .andExpect(jsonPath("$.data.content[2].senderId").value(ghostId.toString()))
+                .andExpect(jsonPath("$.data.content[2].senderName").value("Anonim Kullanıcı"))
+                .andExpect(jsonPath("$.data.content[2].senderProfilePictureUrl").isEmpty())
+                .andExpect(jsonPath("$.data.content[1].senderName").value("İşveren Bey"));
+
+        mockMvc.perform(get("/conversations/{id}/messages", crewId)
+                        .param("after", ghost.toString())
+                        .with(user(principal(firstWorkerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(2))
+                .andExpect(jsonPath("$.data.content[0].senderName").value("İşveren Bey"))
+                .andExpect(jsonPath("$.data.content[1].senderName").value("Mehmet Kaya"));
+    }
+
+    @Test
+    void messagesCarryTheSenderNameAndPicture() throws Exception {
+        insertMessage(directId, employerId, "Merhaba", "1 minute");
+
+        mockMvc.perform(get("/conversations/{id}/messages", directId).with(user(principal(firstWorkerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].senderId").value(employerId.toString()))
+                .andExpect(jsonPath("$.data.content[0].senderName").value("İşveren Bey"))
+                .andExpect(jsonPath("$.data.content[0].senderProfilePictureUrl")
+                        .value("http://localhost:8080/uploads/profiles/isveren.jpg"));
+
+        send(firstWorkerId, directId, "Selam")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.senderName").value("Ayşe Yılmaz"))
+                .andExpect(jsonPath("$.data.senderProfilePictureUrl").isEmpty());
+    }
+
+    @Test
+    void anOutsiderMarkingReadGetsTheSameNotFoundAndLeavesNoStamp() throws Exception {
+        mockMvc.perform(post("/conversations/{id}/read", crewId).with(user(principal(outsiderId))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("MESSAGING_CONVERSATION_NOT_FOUND"));
+
+        assertEquals(0, jdbc.queryForObject("select count(*) from conversation_participants "
+                + "where conversation_id = ? and last_read_at is not null", Integer.class, crewId));
+    }
+
+    private Map<UUID, Map<String, Object>> participantsSeenBy(UUID viewerId, UUID conversationId) throws Exception {
+        String body = mockMvc.perform(get("/conversations/{id}", conversationId).with(user(principal(viewerId))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        List<Map<String, Object>> rows = objectMapper.convertValue(
+                objectMapper.readTree(body).get("data").get("participants"),
+                new TypeReference<List<Map<String, Object>>>() {
+                });
+        Map<UUID, Map<String, Object>> byId = new java.util.HashMap<>();
+        rows.forEach(row -> byId.put(UUID.fromString((String) row.get("id")), row));
+        return byId;
     }
 
     private List<Map<String, Object>> messagePushes() {

@@ -1,10 +1,12 @@
 package com.exskylab.koala.business.abstracts;
 
+import com.exskylab.koala.core.dtos.common.PageDto;
+import com.exskylab.koala.core.dtos.messaging.response.ConversationDto;
+import com.exskylab.koala.core.dtos.messaging.response.MessageDto;
 import com.exskylab.koala.entities.Conversation;
 import com.exskylab.koala.entities.User;
 import com.exskylab.koala.entities.Message;
 import com.exskylab.koala.entities.UserBlock;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
@@ -24,15 +26,15 @@ public interface MessagingService {
 
     Conversation openConversation(UUID jobId, UUID workerId);
 
-    Message sendMessage(UUID conversationId, String body);
+    MessageDto sendMessage(UUID conversationId, String body);
 
-    Page<Message> getMessages(UUID conversationId, Pageable pageable);
+    PageDto<MessageDto> getMessages(UUID conversationId, Pageable pageable);
 
-    Page<Message> getMessagesAfter(UUID conversationId, UUID afterMessageId, Pageable pageable);
+    PageDto<MessageDto> getMessagesAfter(UUID conversationId, UUID afterMessageId, Pageable pageable);
 
-    com.exskylab.koala.core.dtos.messaging.response.ConversationDto getConversation(UUID conversationId);
+    ConversationDto getConversation(UUID conversationId);
 
-    com.exskylab.koala.core.dtos.common.PageDto<com.exskylab.koala.core.dtos.messaging.response.ConversationDto> getMyConversations(Pageable pageable);
+    PageDto<ConversationDto> getMyConversations(Pageable pageable);
 
     int markRead(UUID conversationId);
 

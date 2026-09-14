@@ -9,7 +9,6 @@ import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.helpers.MessagingAvailability;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.mappers.MessagingMapper;
-import com.exskylab.koala.core.mappers.UserMapper;
 import com.exskylab.koala.core.properties.MessagingProperties;
 import com.exskylab.koala.core.realtime.RealtimePublisher;
 import com.exskylab.koala.dataAccess.ConversationDao;
@@ -70,7 +69,7 @@ class CrewConversationRulesTest {
         manager = new MessagingManager(conversationDao, messageDao, userBlockDao, jobService,
                 jobAssignmentService, userService, securityService,
                 companyContactService, new PageableSanitizer(), mock(RealtimePublisher.class),
-                mock(MessagingMapper.class), availability, mock(UserMapper.class),
+                mock(MessagingMapper.class), availability,
                 mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class));
 
         company = new Company();

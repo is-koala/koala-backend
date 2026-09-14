@@ -4,7 +4,6 @@ import com.exskylab.koala.entities.Message;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
@@ -33,12 +32,10 @@ public interface MessageDao extends JpaRepository<Message, UUID> {
     Optional<Message> findReportableByIdForUpdate(@Param("messageId") UUID messageId,
                                                    @Param("participantId") UUID participantId);
 
-    @EntityGraph(attributePaths = {"sender", "sender.profilePicture"})
     Page<Message> findAllByConversationIdOrderBySentAtDesc(UUID conversationId, Pageable pageable);
 
     Optional<Message> findByIdAndConversationId(UUID id, UUID conversationId);
 
-    @EntityGraph(attributePaths = {"sender", "sender.profilePicture"})
     @Query("""
             select m from Message m
             where m.conversation.id = :conversationId

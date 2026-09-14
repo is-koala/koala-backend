@@ -69,6 +69,23 @@ class RealtimeFanoutTest {
     }
 
     @Test
+    void aReadEventNamesTheReaderAndCarriesTheirNewStamp() {
+        Instant stamp = Instant.now();
+
+        publisher.conversationRead(conversationId, workerId, stamp, List.of(employerId, workerId));
+
+        ArgumentCaptor<RealtimeEventDto> captor = ArgumentCaptor.forClass(RealtimeEventDto.class);
+        verify(messagingTemplate).convertAndSend(eq("/topic/conversations/" + conversationId), captor.capture());
+        assertEquals(RealtimeEventType.READ, captor.getValue().type());
+        assertEquals(workerId, captor.getValue().userId());
+        assertEquals(stamp, captor.getValue().lastReadAt());
+        verify(messagingTemplate).convertAndSendToUser(
+                eq(employerId.toString()), eq("/queue/messages"), any(RealtimeEventDto.class));
+        verify(messagingTemplate).convertAndSendToUser(
+                eq(workerId.toString()), eq("/queue/messages"), any(RealtimeEventDto.class));
+    }
+
+    @Test
     void presenceGoesToThePersonsOwnTopicNotAGlobalOne() {
         publisher.presenceChanged(workerId, true);
 
@@ -107,6 +124,6 @@ class RealtimeFanoutTest {
     }
 
     private static MessageDto message(UUID senderId) {
-        return new MessageDto(UUID.randomUUID(), senderId, "merhaba", Instant.now(), null);
+        return new MessageDto(UUID.randomUUID(), senderId, "Ayşe Yılmaz", null, "merhaba", Instant.now(), null);
     }
 }

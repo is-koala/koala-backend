@@ -7,6 +7,7 @@ import com.exskylab.koala.core.dtos.notification.request.SendEmailDto;
 import com.exskylab.koala.core.dtos.notification.request.SendInAppDto;
 import com.exskylab.koala.core.dtos.notification.request.SendPushToUserDto;
 import com.exskylab.koala.core.properties.AppProperties;
+import com.exskylab.koala.core.helpers.DisplayNames;
 import com.exskylab.koala.core.helpers.MessageResolver;
 import com.exskylab.koala.entities.ApplicationStatus;
 import com.exskylab.koala.entities.AssignmentStatus;
@@ -30,10 +31,8 @@ import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
 import java.util.List;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.Map;
-import java.util.stream.Stream;
 
 @Service
 @Slf4j
@@ -219,12 +218,8 @@ public class ActivityNotificationManager implements ActivityNotificationService 
     }
 
     private String displayNameOf(User user) {
-        String name = String.join(" ", Stream.of(user.getFirstName(), user.getLastName())
-                .filter(Objects::nonNull)
-                .map(String::trim)
-                .filter(part -> !part.isEmpty())
-                .toList());
-        return name.isEmpty() ? messageResolver.resolve(ActivityMessages.MESSAGE_RECEIVED_TITLE) : name;
+        String name = DisplayNames.of(user.getFirstName(), user.getLastName());
+        return name == null ? messageResolver.resolve(ActivityMessages.MESSAGE_RECEIVED_TITLE) : name;
     }
 
     private User employerOf(JobAssignment assignment) {

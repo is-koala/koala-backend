@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-14-02-01-participant-last-read-at" author="koala">
+        <addColumn tableName="conversation_participants">
+            <column name="last_read_at" type="TIMESTAMPTZ"/>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="2026-09-14-02-02-backfill-direct-last-read-at" author="koala">
+        <sql>
+            UPDATE conversation_participants p
+               SET last_read_at = latest.read_at
+              FROM (SELECT m.conversation_id, m.sender_id, MAX(m.read_at) AS read_at
+                      FROM messages m
+                     WHERE m.read_at IS NOT NULL
+                     GROUP BY m.conversation_id, m.sender_id) latest
+              JOIN conversations c ON c.id = latest.conversation_id AND c.kind = 'DIRECT'
+             WHERE p.conversation_id = latest.conversation_id
+               AND p.user_id &lt;&gt; latest.sender_id
+               AND p.last_read_at IS NULL
+        </sql>
+        <rollback>
+            <sql>
+                UPDATE conversation_participants p
+                   SET last_read_at = NULL
+                  FROM (SELECT m.conversation_id, m.sender_id, MAX(m.read_at) AS read_at
+                          FROM messages m
+                         WHERE m.read_at IS NOT NULL
+                         GROUP BY m.conversation_id, m.sender_id) latest
+                  JOIN conversations c ON c.id = latest.conversation_id AND c.kind = 'DIRECT'
+                 WHERE p.conversation_id = latest.conversation_id
+                   AND p.user_id &lt;&gt; latest.sender_id
+                   AND p.last_read_at = latest.read_at
+            </sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

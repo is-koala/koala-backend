@@ -69,7 +69,6 @@ class MessagingAuthorizationTest {
                 jobAssignmentService, userService, securityService, companyContactService,
                 new PageableSanitizer(), realtimePublisher, messagingMapper,
                 new MessagingAvailability(properties),
-                mock(com.exskylab.koala.core.mappers.UserMapper.class),
                 mock(com.exskylab.koala.business.abstracts.ActivityNotificationService.class));
 
         job = new Job();
@@ -81,6 +80,8 @@ class MessagingAuthorizationTest {
         when(jobService.getById(job.getId())).thenReturn(job);
         when(conversationDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(messageDao.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(messageDao.findAllByConversationIdOrderBySentAtDesc(any(), any()))
+                .thenReturn(org.springframework.data.domain.Page.empty());
         when(userService.getReference(any())).thenAnswer(i -> {
             User u = new User();
             u.setId(i.getArgument(0));
@@ -467,11 +468,58 @@ class MessagingAuthorizationTest {
         assignment(AssignmentStatus.CONFIRMED, PaymentStatus.HELD_IN_ESCROW);
         when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());
 
-        Message sent = manager.sendMessage(c.getId(), "Musaitim");
+        manager.sendMessage(c.getId(), "Musaitim");
 
-        assertEquals("Musaitim", sent.getBody());
-        assertNotNull(sent.getSentAt());
-        assertEquals(sent.getSentAt(), c.getLastMessageAt());
+        org.mockito.ArgumentCaptor<Message> saved = org.mockito.ArgumentCaptor.forClass(Message.class);
+        verify(messageDao).save(saved.capture());
+        assertEquals("Musaitim", saved.getValue().getBody());
+        assertNotNull(saved.getValue().getSentAt());
+        assertEquals(saved.getValue().getSentAt(), c.getLastMessageAt());
+    }
+
+    @Test
+    void aMessagePageResolvesItsSendersFromTheParticipantRowsInOneQuery() {
+        Conversation c = conversation();
+        when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());
+        Message first = messageFrom(c, employer);
+        Message second = messageFrom(c, worker);
+        when(messageDao.findAllByConversationIdOrderBySentAtDesc(eq(c.getId()), any()))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(first, second)));
+        ConversationDao.ParticipantView employerRow = participantRow(employer.getId());
+        ConversationDao.ParticipantView workerRow = participantRow(worker.getId());
+        when(conversationDao.findParticipantRows(List.of(c.getId()))).thenReturn(List.of(employerRow, workerRow));
+
+        manager.getMessages(c.getId(), org.springframework.data.domain.PageRequest.of(0, 10));
+
+        verify(conversationDao, times(1)).findParticipantRows(any());
+        verify(messagingMapper).toMessageDto(first, employerRow);
+        verify(messagingMapper).toMessageDto(second, workerRow);
+    }
+
+    @Test
+    void anEmptyMessagePageAsksForNoSenders() {
+        Conversation c = conversation();
+        when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());
+
+        manager.getMessages(c.getId(), org.springframework.data.domain.PageRequest.of(0, 10));
+
+        verify(conversationDao, never()).findParticipantRows(any());
+    }
+
+    private static Message messageFrom(Conversation conversation, User sender) {
+        Message message = new Message();
+        message.setId(UUID.randomUUID());
+        message.setConversation(conversation);
+        message.setSender(sender);
+        message.setBody("mesaj");
+        message.setSentAt(Instant.now());
+        return message;
+    }
+
+    private static ConversationDao.ParticipantView participantRow(UUID userId) {
+        ConversationDao.ParticipantView row = mock(ConversationDao.ParticipantView.class);
+        when(row.getUserId()).thenReturn(userId);
+        return row;
     }
 
     @Test
@@ -517,6 +565,85 @@ class MessagingAuthorizationTest {
         manager.markRead(c.getId());
 
         verify(messageDao).markConversationRead(eq(c.getId()), eq(worker.getId()), any());
+    }
+
+    @Test
+    void markingReadStampsOnlyTheCallersParticipantRow() {
+        Conversation c = conversation();
+        when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());
+        when(messageDao.markConversationRead(any(), any(), any())).thenReturn(2);
+
+        manager.markRead(c.getId());
+
+        assertNotNull(participantOf(c, worker.getId()).getLastReadAt(), "okuyanın damgası çekilmeli");
+        assertNull(participantOf(c, employer.getId()).getLastReadAt(), "karşı tarafın damgası dokunulmaz");
+        verify(conversationDao).save(c);
+        org.mockito.ArgumentCaptor<Instant> published = org.mockito.ArgumentCaptor.forClass(Instant.class);
+        verify(realtimePublisher).conversationRead(eq(c.getId()), eq(worker.getId()), published.capture(),
+                eq(c.participantIds()));
+        assertEquals(participantOf(c, worker.getId()).getLastReadAt(), published.getValue(),
+                "READ olayı satıra yazılan damganın aynısını taşır");
+    }
+
+    @Test
+    void aSecondGroupReaderStillAnnouncesTheirReadAlthoughTheSharedReadAtWasAlreadySet() {
+        User secondWorker = user();
+        Conversation crew = new Conversation();
+        crew.setId(UUID.randomUUID());
+        crew.setJob(job);
+        crew.setEmployer(employer);
+        crew.setKind(ConversationKind.GROUP);
+        crew.addParticipant(employer);
+        crew.addParticipant(worker);
+        crew.addParticipant(secondWorker);
+        crew.setLastMessageAt(Instant.now().minusSeconds(60));
+        when(conversationDao.findWithParticipantsById(crew.getId())).thenReturn(Optional.of(crew));
+        when(messageDao.markConversationRead(any(), any(), any())).thenReturn(0);
+        when(securityService.getAuthenticatedUserId()).thenReturn(secondWorker.getId());
+
+        manager.markRead(crew.getId());
+
+        assertNotNull(participantOf(crew, secondWorker.getId()).getLastReadAt());
+        assertNull(participantOf(crew, worker.getId()).getLastReadAt());
+        verify(realtimePublisher).conversationRead(eq(crew.getId()), eq(secondWorker.getId()), any(),
+                eq(crew.participantIds()));
+    }
+
+    @Test
+    void readingAgainWithNothingNewSinceTheLastStampPublishesNoEvent() {
+        Conversation c = conversation();
+        c.setLastMessageAt(Instant.now().minusSeconds(120));
+        participantOf(c, worker.getId()).setLastReadAt(Instant.now().minusSeconds(60));
+        when(messageDao.markConversationRead(any(), any(), any())).thenReturn(0);
+        when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());
+
+        manager.markRead(c.getId());
+
+        verify(realtimePublisher, never()).conversationRead(any(), any(), any(), any());
+        assertTrue(participantOf(c, worker.getId()).getLastReadAt().isAfter(Instant.now().minusSeconds(5)),
+                "olay yayımlanmasa da damga ilerler");
+    }
+
+    @Test
+    void participantsOfAWholePageComeFromOneQuery() {
+        Conversation first = conversation();
+        Conversation second = conversation();
+        when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
+        when(conversationDao.findAllForParticipant(eq(employer.getId()), any()))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(first, second)));
+        when(messageDao.countUnreadByConversationIds(any(), any())).thenReturn(List.of());
+        when(jobAssignmentService.findLatestByJobsAndWorkers(any(), any())).thenReturn(List.of());
+
+        manager.getMyConversations(org.springframework.data.domain.PageRequest.of(0, 20));
+
+        verify(conversationDao, times(1)).findParticipantRows(List.of(first.getId(), second.getId()));
+    }
+
+    private static ConversationParticipant participantOf(Conversation conversation, UUID userId) {
+        return conversation.getParticipants().stream()
+                .filter(participant -> participant.getUser().getId().equals(userId))
+                .findFirst()
+                .orElseThrow();
     }
 
     @Test

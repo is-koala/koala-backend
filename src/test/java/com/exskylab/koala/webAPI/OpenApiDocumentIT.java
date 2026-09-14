@@ -18,6 +18,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasItem;
@@ -124,6 +125,24 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
                         .value(hasItems("string", "null")))
                 .andExpect(jsonPath("$.components.schemas.SitemapJobDto.properties.updatedAt.format")
                         .value("date-time"));
+    }
+
+    @Test
+    void conversationParticipantsDocumentTheirRoleReadStampAndDeparture() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.components.schemas.ConversationDto.properties.participants.items.$ref")
+                        .value("#/components/schemas/ConversationParticipantDto"))
+                .andExpect(jsonPath("$.components.schemas.ConversationParticipantDto.properties.role.enum")
+                        .value(containsInAnyOrder("EMPLOYER", "COMPANY_CONTACT", "WORKER")))
+                .andExpect(jsonPath("$.components.schemas.ConversationParticipantDto.properties.lastReadAt.format")
+                        .value("date-time"))
+                .andExpect(jsonPath("$.components.schemas.ConversationParticipantDto.properties.joinedAt").exists())
+                .andExpect(jsonPath("$.components.schemas.ConversationParticipantDto.properties.left.type")
+                        .value("boolean"))
+                .andExpect(jsonPath("$.components.schemas.MessageDto.properties.senderName").exists())
+                .andExpect(jsonPath("$.components.schemas.MessageDto.properties.senderProfilePictureUrl").exists())
+                .andExpect(jsonPath("$.components.schemas.MessageDto.properties.readBy").doesNotExist());
     }
 
     @Test

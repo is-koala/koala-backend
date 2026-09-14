@@ -36,4 +36,7 @@ public class ConversationParticipant extends BaseEntity {
 
     @Column(name = "joined_at", nullable = false)
     private Instant joinedAt;
+
+    @Column(name = "last_read_at")
+    private Instant lastReadAt;
 }

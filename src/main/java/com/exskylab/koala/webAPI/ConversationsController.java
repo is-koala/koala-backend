@@ -43,7 +43,8 @@ public class ConversationsController {
     }
 
     @Operation(summary = "Konuşmalarım",
-            description = "Her satır son mesaj metnini ve okunmamış sayısını taşır; satır başına ek istek gerekmez. Sayfalıdır.")
+            description = "Her satır son mesaj metnini, okunmamış sayısını ve katılımcıları (rol, joinedAt, "
+                    + "lastReadAt, ayrılanlar left=true) taşır; satır başına ek istek gerekmez. Sayfalıdır.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Konuşmalar listelendi"),
             @ApiResponse(responseCode = "400", description = "Sıralama alanı desteklenmiyor",
@@ -88,9 +89,9 @@ public class ConversationsController {
     }
 
     @Operation(summary = "Tek konuşma",
-            description = "Konuşma listesindeki satırın aynısı: tür, katılımcılar, son mesaj, okunmamış sayısı ve "
-                    + "closed. Bildirimden gelen istemci listeyi çekmeden tek konuşmayı okur. "
-                    + "Taraf olmayan kullanıcı 404 alır; konuşmanın varlığı sızmaz.")
+            description = "Konuşma listesindeki satırın aynısı: tür, katılımcılar (rol, joinedAt, lastReadAt, "
+                    + "ayrılanlar left=true), son mesaj, okunmamış sayısı ve closed. Bildirimden gelen istemci "
+                    + "listeyi çekmeden tek konuşmayı okur. Taraf olmayan kullanıcı 404 alır; konuşmanın varlığı sızmaz.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Konuşma getirildi"),
             @ApiResponse(responseCode = "404", description = "Konuşma bulunamadı ya da taraf değilsiniz",
@@ -127,11 +128,10 @@ public class ConversationsController {
             @RequestParam(required = false) UUID after,
             @ParameterObject @PageableDefault(size = 30) Pageable pageable) {
 
-        var page = after == null
-                ? messagingService.getMessages(conversationId, pageable)
-                : messagingService.getMessagesAfter(conversationId, after, pageable);
         return ResponseEntity.ok(new SuccessDataResult<>(
-                PageDto.of(page, messagingMapper.toMessageDtoList(page.getContent())),
+                after == null
+                        ? messagingService.getMessages(conversationId, pageable)
+                        : messagingService.getMessagesAfter(conversationId, after, pageable),
                 MessagingMessages.MESSAGES_LISTED, HttpStatus.OK));
     }
 
@@ -158,12 +158,15 @@ public class ConversationsController {
             @PathVariable UUID conversationId, @RequestBody @Valid SendMessageDto request) {
 
         return ResponseEntity.status(HttpStatus.CREATED).body(new SuccessDataResult<>(
-                messagingMapper.toMessageDto(messagingService.sendMessage(conversationId, request.getBody())),
+                messagingService.sendMessage(conversationId, request.getBody()),
                 MessagingMessages.MESSAGE_SENT, HttpStatus.CREATED));
     }
 
     @Operation(summary = "Konuşmayı okundu işaretle",
-            description = "Okunmamış mesajları okundu yapar ve READ olayını iki tarafın kişisel kuyruğuna yayınlar; kullanıcının diğer cihazındaki rozet de düşer.")
+            description = "Çağıranın katılımcı satırındaki lastReadAt damgasını şimdiye çeker, okunmamış mesajları "
+                    + "okundu yapar ve READ olayını (userId = okuyan, lastReadAt) konuşma topic'ine ve bütün "
+                    + "katılımcıların kişisel kuyruğuna yayınlar; kullanıcının diğer cihazındaki rozet de düşer. "
+                    + "Grupta 'kim gördü' katılımcı başına lastReadAt ile okunur.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Okundu işaretlendi"),
             @ApiResponse(responseCode = "404", description = "Konuşma bulunamadı ya da taraf değilsiniz",

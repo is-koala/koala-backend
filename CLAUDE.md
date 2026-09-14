@@ -1179,6 +1179,51 @@ zorundaydı. Uç `ConversationDto`'yu liste ile aynı hesapla döner (`unreadCou
 elemanlı listeyle çağrılır; ikinci bir hesap yolu yok). Taraf olmayan `messaging.conversation.not.found` ile aynı
 404 (`ExistenceConcealmentIT`).
 
+**Grupta "kim gördü" katılımcı başına damgayla okunur, mesaj başına listeyle değil (#281).** `messages.read_at`
+tek sütun: ikili sohbette "karşı taraf okudu" demek, grupta ilk okuyan herkes adına dolduruyordu ve ikinci
+okuyanın izi hiç kalmıyordu. `conversation_participants.last_read_at` (`2026/09/14-02`) bunu kişiye bağlar:
+`POST /conversations/{id}/read` çağıranın katılımcı satırını `now()`'a çeker (`Conversation.stampRead`), ikili
+sohbetteki `read_at` yazımı ve `unreadCount` hesabı **olduğu gibi** durur (`markConversationRead` her iki türde
+de koşar; grupta `unreadCount` hâlâ paylaşılan `read_at`'e bakar — kişi bazlı sayım ayrı iş). Migration
+ikili sohbetlerin damgasını `read_at`'lerden geri doldurur (katılımcının damgası = karşı tarafın mesajlarındaki
+en büyük `read_at`); grupta hangi okuyanın yazdığı bilinemediği için orada `null` kalır. Backfill'in `rollback`'i
+**yalnız kendi yazdığını** siler: aynı `MAX(read_at)` hesabını yeniden kurup damgası hâlâ o değere eşit satırları
+`null` yapar — uygulamanın sonradan `now()` ile ilerlettiği damga eşit olamayacağı için korunur. STOMP `READ` olayı
+`userId` = okuyan ve yeni alan `lastReadAt` (satıra yazılan damganın aynısı) taşır; ayrı bir `readerId` alanı
+açılmadı, `userId` zaten her olay tipinde "olayın öznesi". Olay `marked > 0` **ya da** damga son mesajı yeni
+geçtiyse yayımlanır (`lastMessageAt > önceki damga`) — grupta ikinci okuyanın `marked` değeri sıfırdır, olay
+yine gider; aynı kişinin arka arkaya ikinci çağrısı sessizdir (`MessagingAuthorizationTest` üç hâli sabitliyor).
+**`readBy` yok:** istemci "görüldü"yü `participants[].lastReadAt >= message.sentAt` ile hesaplar; mesaj başına
+okuyan listesi N+1 olurdu.
+
+**`ConversationDto.participants[]` artık `ConversationParticipantDto` — `SafeUserDto` değil.** Alanlar `id`
+(kullanıcı id'si, `MessageDto.senderId` ile eşleşir), `firstName`, `lastName`, `profilePictureUrl`, `role`
+(`EMPLOYER` | `COMPANY_CONTACT` | `WORKER`), `joinedAt`, `lastReadAt`, `left`. **Ayrılanlar listede kalır,
+`left=true`** — eski mesajların adı çözülsün diye; katılımcı entity'si `@SQLRestriction("is_deleted = false")`
+taşıdığı için bunlar JPA koleksiyonundan gelemez, `ConversationDao.findParticipantRows` **native** bir okuma
+modeli: sayfadaki bütün konuşmalar için **tek** sorgu, `users` ve `media` join'ini kendisi yapar (silinmiş
+hesabın satırı anonimleştirilmiş adıyla — "Anonim Kullanıcı" — döner, `@SQLRestriction` devre dışı), aynı kişi
+çıkıp yeniden girdiyse `distinct on` aktif satırı seçer. Önceki `membersOf` her satırda lazy `participants`
+yüklüyordu — liste sayfasında satır başına bir sorgu; şimdi sayfa başına bir. **Rol sütun değil, okuma anında
+hesap:** ilan sahibi → `EMPLOYER`; `DIRECT`'te diğer taraf → `WORKER`; grupta `(ilan, kullanıcı)` için
+`job_assignments` satırı varsa `WORKER`, yoksa `COMPANY_CONTACT` — grup tam bu iki yoldan kuruluyor (ödenmiş
+atama / `company_contacts`), sütun eklemek eski binary'nin `INSERT`'ini kırardı ve şirketten sonradan çıkarılan
+yetkilinin rolü de doğru kalır. Liste **yalnız taraflara** görünür (`loadParticipating` önce koşar); taraf
+olmayan `POST /read` de aynı 404'ü alır ve damga bırakmaz (`ExistenceConcealmentIT`). `MessageDto` `senderName`
+(ad soyad, ikisi de boşsa `null`; `DisplayNames.of`, push başlığıyla aynı yardımcı) ve `senderProfilePictureUrl`
+taşır — **gönderen de aynı katılımcı okuma modelinden çözülür, entity'den değil.** İlk tur `sender` +
+`sender.profilePicture`'ı mesaj sayfasının grafiğine koymuştu; `Message.sender` `nullable = false` ve `User`
+`@SQLRestriction` taşıdığı için Hibernate 7 join'i INNER üretiyor (§2y3'teki #231 tuzağı) ve hesabını silmiş
+gönderenin mesajı sayfadan **düşüyordu** — `countUnreadByConversationIds` onu saymaya devam ederken (rozet 3,
+sayfa 2). İki sayfa sorgusu artık **grafsız** (`CollectionQueryWithoutGraphTest` allowlist'inde gerekçesiyle),
+mapper `sender`'dan yalnız `getId()` okur (proxy, sorgusuz) ve ad/fotoğraf `findParticipantRows`'un o konuşma
+için döndürdüğü satırlardan gelir — sayfa başına **bir** ek sorgu, silinmiş gönderen "Anonim Kullanıcı" ve
+avatar `null` ile sayfada kalır, katılımcı listesiyle aynı kaynak. Gönderim de aynı yoldan: `sendMessage`
+`MessageDto` döner (REST yanıtı ve STOMP `MESSAGE` olayı aynı nesne). `ConversationMessagingIT` altı kuralı HTTP üzerinden sabitliyor: grup damgası kişi bazlı ve
+ikinci okuyanın damgası kendi satırına, ikili `read_at` + damga, ayrılan `left=true` ve mesajının adı çözülüyor
+(ayrılan konuşmayı artık okuyamaz), silinmiş gönderenin mesajı anonim adıyla sayfada ve `unreadCount` ile
+`totalElements` eşit (`after` kipinde de), gönderen adı/fotoğrafı, yabancının 404'ü damga bırakmıyor.
+
 **Mesajlaşmanın bir penceresi var.** İş bittikten `messaging.grace-days-after-job` (7) gün sonra sohbet **salt okunur** olur: geçmiş okunur, yeni mesaj gönderilemez (409). Amaç ilişkinin süresiz açık kalıp platform dışına taşınmasını önlemek. `endDateTime` olmayan ilanlarda pencere hiç kapanmaz. `ConversationDto.closed` bunu istemciye söyler; karşılaştırma duvar saati olduğu için `messaging.zone-id` üzerinden yapılır. Hesap `MessagingAvailability.isWindowClosed` içinde, `MessagingManager`'da değil — mapper da aynı pencereyi okuyor.
 
 **İstemci ipucu atama yanıtlarında.** `MyAssignmentDto` (`GET /users/me/assignments`, `GET /users/me/work`
@@ -2235,7 +2280,7 @@ Sayaç yerine gösterge (`Gauge`) seçildi: soru "kaç kez oldu" değil, "**şu 
 
 **Presence kullanıcı başına topic'ten yayınlanıyor.** Öncesinde tek bir `/topic/presence` vardı ve herkese açıktı: her kullanıcının çevrimiçi/çevrimdışı değişimi bağlı olan herkese gidiyordu. Ölçeklenmemesi bir yana, asıl sorun **davranış izleme** idi — hiç etkileşime girmediğin bir işçinin ne zaman çevrimiçi olduğunu izleyebiliyordun. Frontend'in önerisi kullanıcı başına topic'ti; ona **abonelik yetkisi** eklendi (aşağıda §2ai).
 
-**Okundu bilgisi de kişisel kuyruğa gidiyor.** `conversationRead` hem konuşma topic'ine hem iki tarafın kuyruğuna yazıyor; kullanıcı sohbeti telefonunda okuduğunda tabletindeki listede rozet düşüyor. Aksi hâlde "okumadığım mesaj var" yanılgısı kalıyordu.
+**Okundu bilgisi de kişisel kuyruğa gidiyor.** `conversationRead` hem konuşma topic'ine hem bütün katılımcıların kuyruğuna yazıyor; kullanıcı sohbeti telefonunda okuduğunda tabletindeki listede rozet düşüyor. Aksi hâlde "okumadığım mesaj var" yanılgısı kalıyordu. `READ` zarfında `userId` okuyan, `lastReadAt` okuyanın yeni damgası (§2o, #281).
 
 **Yayın hiçbir zaman iş akışını düşürmez.** `RealtimePublisher` her gönderimi `try/catch` eder ve yalnızca uyarı loglar; soket katmanı çökse bile mesaj veritabanına yazılmış olur ve REST'ten okunur. Gerçek zamanlı katman **iyileştirme, tek kaynak değil**.
 
