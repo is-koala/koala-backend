@@ -403,16 +403,12 @@ class AssignmentReadIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void theWorkerSeesOnlyTheirPayoutWhileTheEmployerSideSeesTheServiceFee() throws Exception {
+    void theWorkerSeesOnlyTheirPayoutWhileTheEmployerSideSeesThePricingBreakdown() throws Exception {
         getAssignmentAs(workerId)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.workerPayout").value(100.00))
                 .andExpect(jsonPath("$.data.totalCharged").value(nullValue()))
-                .andExpect(jsonPath("$.data.pricing.workerPayout").value("100.00"))
-                .andExpect(jsonPath("$.data.pricing.currency").value("TRY"))
-                .andExpect(jsonPath("$.data.pricing.serviceFeeRate").value(nullValue()))
-                .andExpect(jsonPath("$.data.pricing.serviceFeeAmount").value(nullValue()))
-                .andExpect(jsonPath("$.data.pricing.employerTotal").value(nullValue()));
+                .andExpect(jsonPath("$.data.pricing").value(nullValue()));
 
         for (UUID actorId : new UUID[]{employerId, companyAdminId}) {
             getAssignmentAs(actorId)
@@ -427,9 +423,9 @@ class AssignmentReadIT extends AbstractIntegrationTest {
 
         mockMvc.perform(get("/users/me/assignments").with(user(principal(workerId))))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].workerPayout").value(100.00))
                 .andExpect(jsonPath("$.data.content[0].totalCharged").value(nullValue()))
-                .andExpect(jsonPath("$.data.content[0].pricing.workerPayout").value("100.00"))
-                .andExpect(jsonPath("$.data.content[0].pricing.serviceFeeAmount").value(nullValue()));
+                .andExpect(jsonPath("$.data.content[0].pricing").value(nullValue()));
         mockMvc.perform(get("/users/me/assignments").param("asEmployer", "true").with(user(principal(employerId))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content[0].totalCharged").value(110.00))
@@ -452,9 +448,7 @@ class AssignmentReadIT extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.workerPayout").value(100.00))
                 .andExpect(jsonPath("$.data.totalCharged").value(nullValue()))
-                .andExpect(jsonPath("$.data.pricing.workerPayout").value("100.00"))
-                .andExpect(jsonPath("$.data.pricing.serviceFeeRate").value(nullValue()))
-                .andExpect(jsonPath("$.data.pricing.employerTotal").value(nullValue()))
+                .andExpect(jsonPath("$.data.pricing").value(nullValue()))
                 .andExpect(jsonPath("$.data.myReview").value(nullValue()))
                 .andExpect(jsonPath("$.data.counterpartyReviewed").value(false));
     }

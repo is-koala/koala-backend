@@ -30,7 +30,6 @@ import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ForbiddenException;
 import com.exskylab.koala.core.mappers.JobAssignmentMapper;
 import com.exskylab.koala.core.mappers.PricingDtoMapper;
-import com.exskylab.koala.core.dtos.payment.response.PricingBreakdownDto;
 import com.exskylab.koala.core.monitoring.PaymentMetrics;
 import com.exskylab.koala.core.utilities.payment.iyzico.IyzicoPaymentService;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.*;
@@ -549,13 +548,11 @@ public class JobAssignmentManager implements JobAssignmentService {
             }
         }
 
-        PricingBreakdownDto pricing = pricingDtoMapper.toPricing(assignment);
         if (workerView) {
-            return new JobAssignmentMapper.ViewerFacts(null, pricing == null ? null : pricing.workerView(),
-                    myReview, counterpartyReviewed);
+            return new JobAssignmentMapper.ViewerFacts(null, null, myReview, counterpartyReviewed);
         }
-        return new JobAssignmentMapper.ViewerFacts(assignment.getTotalCharged(), pricing, myReview,
-                counterpartyReviewed);
+        return new JobAssignmentMapper.ViewerFacts(assignment.getTotalCharged(),
+                pricingDtoMapper.toPricing(assignment), myReview, counterpartyReviewed);
     }
 
     private LinkedRecords linkedRecordsOf(List<JobAssignment> assignments) {

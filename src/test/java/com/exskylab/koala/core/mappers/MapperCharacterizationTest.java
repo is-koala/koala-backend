@@ -147,6 +147,7 @@ class MapperCharacterizationTest {
     @Test
     void theViewerFactsCarryTheReviewStateAndTheViewerSidedPricing() {
         JobAssignment assignment = assignment(individualJob());
+        assignment.setWorkerPayout(new BigDecimal("100.00"));
         assignment.setTotalCharged(new BigDecimal("110.00"));
         Review review = new Review();
         review.setId(UUID.randomUUID());
@@ -160,7 +161,7 @@ class MapperCharacterizationTest {
         var employerDto = jobAssignmentMapper.toMyAssignmentDto(assignment, null, null, null,
                 new JobAssignmentMapper.ViewerFacts(assignment.getTotalCharged(), pricing(), null, true));
         var workerDto = jobAssignmentMapper.toMyAssignmentDto(assignment, null, null, null,
-                new JobAssignmentMapper.ViewerFacts(null, pricing().workerView(), review, false));
+                new JobAssignmentMapper.ViewerFacts(null, null, review, false));
 
         assertEquals(new BigDecimal("110.00"), employerDto.totalCharged());
         assertEquals("10.00", employerDto.pricing().serviceFeeAmount());
@@ -168,10 +169,8 @@ class MapperCharacterizationTest {
         assertTrue(employerDto.counterpartyReviewed());
 
         assertNull(workerDto.totalCharged());
-        assertEquals("100.00", workerDto.pricing().workerPayout());
-        assertNull(workerDto.pricing().serviceFeeRate());
-        assertNull(workerDto.pricing().serviceFeeAmount());
-        assertNull(workerDto.pricing().employerTotal());
+        assertNull(workerDto.pricing());
+        assertEquals(assignment.getWorkerPayout(), workerDto.workerPayout());
         assertEquals(review.getId(), workerDto.myReview().id());
         assertEquals(4, workerDto.myReview().rating());
         assertEquals("Dakik", workerDto.myReview().comment());

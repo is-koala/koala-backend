@@ -19,11 +19,13 @@ import java.util.UUID;
 public record MyAssignmentDto(UUID id, JobSummaryDto job, SafeUserDto worker,
                               AssignmentStatus status, PaymentStatus paymentStatus,
                               Instant assignmentDateTime, Instant actualCompletionDateTime,
-                              int workHours, BigDecimal workerPayout,
+                              int workHours,
+                              @Schema(description = "İşçinin kazancı. Her iki taraf için de dolu; işçi görünümünde tek fiyat alanı budur.")
+                              BigDecimal workerPayout,
                               @Schema(types = {"number", "null"},
                                       description = "İşverenden çekilen toplam tutar. Yalnız işveren tarafı görür; görüntüleyen işçiyse null.")
                               BigDecimal totalCharged,
-                              @Schema(description = "Fiyat dökümü. Görüntüleyen işçiyse yalnız workerPayout dolu gelir; serviceFeeRate, serviceFeeAmount ve employerTotal null'dur.")
+                              @Schema(description = "Fiyat dökümü (hizmet bedeli oranı ve tutarı, işveren toplamı). Yalnız işveren tarafı görür; görüntüleyen işçiyse null — işçi kendi kazancını workerPayout'tan okur.")
                               PricingBreakdownDto pricing,
                               boolean messagingAvailable,
                               MessagingAvailabilityReason messagingAvailableReason,

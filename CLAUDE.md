@@ -4239,17 +4239,18 @@ yoksa `0`/`0` — `EmployerStatsDto` ile aynı karar; `/users/{id}/rating-summar
 orkestratör kaldı, DAO'ya uzanmaz.
 
 **Fiyat alanları görüntüleyene göre kısılır — adres görünürlüğüyle aynı kalıp (#293).** Görüntüleyen atamanın
-işçisiyse (`assignment.worker.id == viewerId`; ek sorgu yok) `totalCharged = null` ve `pricing` yalnız
-`pricingVersion/currency/workerPayout` taşır, `serviceFeeRate/serviceFeeAmount/employerTotal` null
-(`PricingBreakdownDto.workerView()`). İşveren ve şirket yetkilisi için değişiklik yok; personel uçları
-(`AdminAssignmentDto`) etkilenmez. `respond` yanıtı işçiye gittiği için kısılmış, `complete` yanıtı işverene gittiği
-için tam gelir. Ürün kararı: işçi yalnız kendi kazancını görür; komisyon ve işverenden çekilen toplam yalnız
-işverene. Görüntüleyene bağlı dört alan (`totalCharged`, `pricing`, `myReview`, `counterpartyReviewed`) mapper'a
-tek kaynaktan, `JobAssignmentMapper.ViewerFacts` ile girer; `JobAssignmentManager.viewerFactsOf` üretir. Bilinçli
-sözleşme değişikliği: eski mobil `PricingBreakdown.fromJson` bu üç alanı `requiredDecimalString` ile okuyor,
-null'da `FormatException` atar — yayın sırası için §2as asgari istemci sürümü kapısı ve is-koala/koala istemci issue'su.
-`MyAssignmentDto.job.pricing` (`JobSummaryDto`) bilerek dokunulmadı: ilan listelerinde herkese açık olan aynı
-nesne, ayrı karar.
+işçisiyse (`assignment.worker.id == viewerId`; ek sorgu yok) `totalCharged = null` ve **`pricing = null`** (nesne
+hiç gelmez); işçi kendi kazancını üst düzey `workerPayout`'tan okur. İşveren ve şirket yetkilisi için değişiklik
+yok; personel uçları (`AdminAssignmentDto`) etkilenmez. `respond` yanıtı işçiye gittiği için kısılmış, `complete`
+yanıtı işverene gittiği için tam gelir. Ürün kararı: işçi yalnız kendi kazancını görür; komisyon ve işverenden
+çekilen toplam yalnız işverene. Görüntüleyene bağlı dört alan (`totalCharged`, `pricing`, `myReview`,
+`counterpartyReviewed`) mapper'a tek kaynaktan, `JobAssignmentMapper.ViewerFacts` ile girer;
+`JobAssignmentManager.viewerFactsOf` üretir. **Neden alanları null'lanmış bir nesne değil de `null`:** yayındaki
+mobil `PricingBreakdown.fromJson` fee alanlarını `requiredDecimalString` ile okuyor — alanı null bir nesne
+`FormatException` fırlatır, `pricing: null` ise `Assignment.fromJson`'da tolere edilir ve `WorkDetailPage`
+etiketi `workerPayout`'tan üretir; web `backend-contract.ts` de `pricing?.workerPayout ?? workerPayout` okur.
+Yani sözleşme değişikliği yayındaki iki istemciyle geriye uyumlu. `MyAssignmentDto.job.pricing` (`JobSummaryDto`)
+bilerek dokunulmadı: ilan listelerinde herkese açık olan aynı nesne, ayrı issue.
 
 Testler: `AssignmentReadIT` (null hâl, dolu hâl, başarısız ödeme sayılmaz, respond `confirmedAt`, iki işveren rolü
 listeler / işçi ve yabancı 404 / bilinmeyen ilanla aynı gövde / bilinmeyen sıralama 400, N+1 — değerlendirme
