@@ -1794,9 +1794,9 @@ kayıtları özetlemiyordu. Beş uç eklendi, altıncısı zenginleşti:
 
 **Bağlı kayıt özetleri tek şekil: `LinkedRecordDto(id, status, createdAt)`.** Atama detayı ödeme denemelerini,
 hakedişi (yoksa `null`), uyuşmazlıkları ve şikayetleri bununla listeler; panel her satırdan kendi detay ucuna
-bağlanır. Şikayet kapsamı **tarafların birbirine ya da ilana yaptığı** şikayetler: `reporter ∈ {işçi, ilan
-sahibi}` ve (`reportedUser ∈ taraflar` ya da `job = ilan`). İlan hakkında üçüncü kişinin şikayeti atamaya
-ait değildir, ilan detayına aittir. Liste satırı `AdminAssignmentDto` **değişmedi**; detay ayrı kayıt tipi, çünkü
+bağlanır. Şikayet kapsamı **bu atamanın ilanına** bağlı ve **taraflardan birinin** açtığı şikayetler
+(`job = ilan` ve `reporter ∈ {işçi, ilan sahibi}`). İlan hakkında üçüncü kişinin şikayeti ilan detayına aittir;
+aynı iki tarafın **başka bir ilandaki** şikayeti de o atamaya girmez (`AdminDetailReadIT` ikisini de ölçüyor). Liste satırı `AdminAssignmentDto` **değişmedi**; detay ayrı kayıt tipi, çünkü
 özetler sayfa başına dört ek sorgu demek ve liste onları çizmiyor.
 
 **Bileşim `AdminDetailManager` orkestratöründe** (`MyWorkManager`/`StatisticsManager` deseni, §2al/§2am): hiçbir
@@ -1824,8 +1824,11 @@ delerdi. IBAN `LogMasks.iban` ile maskeli, tam IBAN gövdeye girmiyor (`AdminDet
 DTO'da yok** — ilki checkout oturumunun sırrı (§2k "provider token dahili korelasyon sırrıdır"), ikincisi alt üye
 işyeri anahtarı; ikisi de panelin işine yaramaz. Liste ve tekil detay aynı DTO; iadeler sayfa başına tek
 `findAllByPaymentIdInOrderByCreatedAtDesc` ile (`CollectionQueryWithoutGraphTest` allowlist'inde — DTO refund
-satırından yalnız `payment.id` okur). Taraflar `StaffPartyDto(id, firstName, lastName, email)`: personel
-yüzeyi, `SafeUserDto` değil — issue e-postayı açıkça istiyor ve kuyruk aramaları zaten e-postayla yapılıyor (§2s5).
+satırından yalnız `payment.id` okur; `SettlementTaskDao.findAllByPaymentIdOrderByCreatedAtAsc` de aynı listede ve
+tarayıcının 400 karakterlik penceresine komşu grafik girmesin diye dosyanın başında). **Ödeme DTO'sundaki
+taraflar `SafeUserDto`** — kardeşi `AdminAssignmentDetailDto` ile aynı `payment.read` altında aynı şekil, e-posta
+yok; e-posta yalnız `job.read` (`PERSONAL_DATA`) yüzeyinde ve issue'nun açıkça istediği hakediş detayında
+(`StaffPartyDto(id, firstName, lastName, email)`, `payout.reconcile`).
 
 **`job.read` yeni izin: `PERSONAL_DATA`, non-mutating, seed'de `SUPPORT_AGENT`** (`14-01-job-read-staff-permission.xml`;
 `MODERATOR`/`DISPUTE_HANDLER`/`COMPANY_APPROVER`/`TRUST_LEAD`/`OWNER` kapsama yoluyla alır, finans dalı almaz —

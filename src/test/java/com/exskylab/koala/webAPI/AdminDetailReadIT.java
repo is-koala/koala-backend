@@ -62,6 +62,8 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
     private final UUID disputeId = UUID.randomUUID();
     private final UUID reportId = UUID.randomUUID();
     private final UUID unrelatedReportId = UUID.randomUUID();
+    private final UUID otherJobId = UUID.randomUUID();
+    private final UUID otherJobReportId = UUID.randomUUID();
 
     private String employerEmail;
     private String workerEmail;
@@ -173,13 +175,24 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
                                      reason, description, status)
                 values (?, now(), false, ?, ?, ?, 'FRAUD', 'ilgisiz şikayet', 'OPEN')
                 """, unrelatedReportId, strangerId, employerId, jobId);
+        jdbcTemplate.update("""
+                insert into jobs (id, created_at, is_deleted, creator_id, title, status, employer_type,
+                                  insurance_required, address_public, experience_required, min_age, max_age)
+                values (?, now(), false, ?, 'Başka ilan', 'OPEN', 'INDIVIDUAL', false, false, false, 18, 65)
+                """, otherJobId, employerId);
+        jdbcTemplate.update("""
+                insert into reports (id, created_at, is_deleted, reporter_id, reported_user_id, job_id,
+                                     reason, description, status)
+                values (?, now(), false, ?, ?, ?, 'FRAUD', 'aynı taraflar, başka ilan', 'OPEN')
+                """, otherJobReportId, workerId, employerId, otherJobId);
     }
 
     @AfterEach
     void cleanUp() {
         jdbcTemplate.update("delete from admin_audit_entries");
         jdbcTemplate.update("delete from staff_members where email like 'detail-read-%@iskoala.com'");
-        jdbcTemplate.update("delete from reports where id in (?, ?)", reportId, unrelatedReportId);
+        jdbcTemplate.update("delete from reports where id in (?, ?, ?)", reportId, unrelatedReportId,
+                otherJobReportId);
         jdbcTemplate.update("delete from disputes where id = ?", disputeId);
         jdbcTemplate.update("delete from settlement_tasks where id = ?", settlementTaskId);
         jdbcTemplate.update("delete from payouts where id = ?", payoutId);
@@ -188,7 +201,7 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
         jdbcTemplate.update("delete from payments where job_assignment_id = ?", assignmentId);
         jdbcTemplate.update("delete from job_applications where job_id = ?", jobId);
         jdbcTemplate.update("delete from job_assignments where id = ?", assignmentId);
-        jdbcTemplate.update("delete from jobs where id in (?, ?)", jobId, companyJobId);
+        jdbcTemplate.update("delete from jobs where id in (?, ?, ?)", jobId, companyJobId, otherJobId);
         jdbcTemplate.update("delete from addresses where id = ?", addressId);
         jdbcTemplate.update("delete from companies where id = ?", companyId);
         jdbcTemplate.update("delete from users where id in (?, ?, ?)", employerId, workerId, strangerId);
@@ -210,9 +223,10 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
         return mockMvc.perform(get(path).header("Authorization", "Bearer " + token));
     }
 
-    private void assertRefusedIdentically(Function<UUID, String> path, String token) throws Exception {
-        String real = normalise(read(path.apply(payoutId), token)
-                .andExpect(status().isForbidden()).andReturn().getResponse().getContentAsString(), payoutId);
+    private void assertRefusedIdentically(Function<UUID, String> path, UUID existing, String token)
+            throws Exception {
+        String real = normalise(read(path.apply(existing), token)
+                .andExpect(status().isForbidden()).andReturn().getResponse().getContentAsString(), existing);
         UUID random = UUID.randomUUID();
         String missing = normalise(read(path.apply(random), token)
                 .andExpect(status().isForbidden()).andReturn().getResponse().getContentAsString(), random);
@@ -256,7 +270,7 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
 
     @Test
     void aFinanceAnalystIsRefusedThePayoutDetailWhetherOrNotItExists() throws Exception {
-        assertRefusedIdentically(id -> "/admin/payouts/" + id, tokenFor("FINANCE_ANALYST"));
+        assertRefusedIdentically(id -> "/admin/payouts/" + id, payoutId, tokenFor("FINANCE_ANALYST"));
     }
 
     @Test
@@ -274,8 +288,10 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
                 .andExpect(jsonPath("$.data[0].id").value(paymentId.toString()))
                 .andExpect(jsonPath("$.data[0].status").value("SUCCEEDED"))
                 .andExpect(jsonPath("$.data[0].jobAssignmentId").value(assignmentId.toString()))
-                .andExpect(jsonPath("$.data[0].worker.email").value(workerEmail))
-                .andExpect(jsonPath("$.data[0].employer.email").value(employerEmail))
+                .andExpect(jsonPath("$.data[0].worker.id").value(workerId.toString()))
+                .andExpect(jsonPath("$.data[0].worker.firstName").value("Işıl"))
+                .andExpect(jsonPath("$.data[0].employer.id").value(employerId.toString()))
+                .andExpect(jsonPath("$.data[0].worker.email").doesNotExist())
                 .andExpect(jsonPath("$.data[0].totalCharged").value("1075.00"))
                 .andExpect(jsonPath("$.data[0].pricing.employerTotal").value("1075.00"))
                 .andExpect(jsonPath("$.data[0].providerPaymentId").value("iyz-payment-4711"))
@@ -290,7 +306,9 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
                 .andExpect(jsonPath("$.data[1].refunds", hasSize(0)))
                 .andExpect(jsonPath("$.data[0].providerToken").doesNotExist())
                 .andExpect(content().string(not(containsString(PROVIDER_TOKEN))))
-                .andExpect(content().string(not(containsString(SUBMERCHANT_KEY))));
+                .andExpect(content().string(not(containsString(SUBMERCHANT_KEY))))
+                .andExpect(content().string(not(containsString(workerEmail))))
+                .andExpect(content().string(not(containsString(employerEmail))));
     }
 
     @Test
@@ -306,15 +324,18 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
                 .andExpect(jsonPath("$.data.commissionAmount").value("75.00"))
                 .andExpect(jsonPath("$.data.verificationAttempts").value(1))
                 .andExpect(jsonPath("$.data.refunds[0].providerRefundId").value("iyz-refund-1"))
+                .andExpect(jsonPath("$.data.employer.email").doesNotExist())
                 .andExpect(content().string(not(containsString(PROVIDER_TOKEN))))
-                .andExpect(content().string(not(containsString(SUBMERCHANT_KEY))));
+                .andExpect(content().string(not(containsString(SUBMERCHANT_KEY))))
+                .andExpect(content().string(not(containsString(workerEmail))))
+                .andExpect(content().string(not(containsString(employerEmail))));
     }
 
     @Test
     void aDisputeHandlerIsRefusedThePaymentSurfacesWhetherOrNotTheyExist() throws Exception {
         String token = tokenFor("DISPUTE_HANDLER");
-        assertRefusedIdentically(id -> "/admin/payments/" + id, token);
-        assertRefusedIdentically(id -> "/admin/job-assignments/" + id + "/payments", token);
+        assertRefusedIdentically(id -> "/admin/payments/" + id, paymentId, token);
+        assertRefusedIdentically(id -> "/admin/job-assignments/" + id + "/payments", assignmentId, token);
     }
 
     @Test
@@ -346,7 +367,8 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
                 .andExpect(jsonPath("$.data.reports", hasSize(1)))
                 .andExpect(jsonPath("$.data.reports[0].id").value(reportId.toString()))
                 .andExpect(jsonPath("$.data.reports[0].status").value("OPEN"))
-                .andExpect(content().string(not(containsString(unrelatedReportId.toString()))));
+                .andExpect(content().string(not(containsString(unrelatedReportId.toString()))))
+                .andExpect(content().string(not(containsString(otherJobReportId.toString()))));
     }
 
     @Test
@@ -355,20 +377,28 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
 
         read("/admin/jobs?query=" + employerEmail, token)
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.content", hasSize(2)))
+                .andExpect(jsonPath("$.data.content", hasSize(3)))
                 .andExpect(jsonPath("$.data.content[*].id", hasItem(jobId.toString())))
                 .andExpect(jsonPath("$.data.content[*].id", hasItem(companyJobId.toString())))
+                .andExpect(jsonPath("$.data.content[*].id", hasItem(otherJobId.toString())))
                 .andExpect(jsonPath("$.data.content[*].employer.email", hasItem(employerEmail)));
 
-        read("/admin/jobs?status=OPEN&query=" + employerEmail, token)
+        read("/admin/jobs?status=CLOSED&query=" + employerEmail, token)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content", hasSize(1)))
-                .andExpect(jsonPath("$.data.content[0].id").value(jobId.toString()))
-                .andExpect(jsonPath("$.data.content[0].status").value("OPEN"))
-                .andExpect(jsonPath("$.data.content[0].applicationCount").value(1))
-                .andExpect(jsonPath("$.data.content[0].assignmentCount").value(1))
-                .andExpect(jsonPath("$.data.content[0].employer.id").value(employerId.toString()))
-                .andExpect(jsonPath("$.data.content[0].pricing.employerTotal").value("1075.00"));
+                .andExpect(jsonPath("$.data.content[0].id").value(companyJobId.toString()))
+                .andExpect(jsonPath("$.data.content[0].status").value("CLOSED"));
+
+        read("/admin/jobs?status=OPEN&query=depo görevlisi", token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[*].id", hasItem(jobId.toString())))
+                .andExpect(jsonPath("$.data.content[*].id", not(hasItem(companyJobId.toString()))))
+                .andExpect(jsonPath("$.data.content[?(@.id == '" + jobId + "')].applicationCount").value(1))
+                .andExpect(jsonPath("$.data.content[?(@.id == '" + jobId + "')].assignmentCount").value(1))
+                .andExpect(jsonPath("$.data.content[?(@.id == '" + jobId + "')].employer.id")
+                        .value(employerId.toString()))
+                .andExpect(jsonPath("$.data.content[?(@.id == '" + jobId + "')].pricing.employerTotal")
+                        .value("1075.00"));
 
         read("/admin/jobs?query=detay lojistik " + companyId, token)
                 .andExpect(status().isOk())

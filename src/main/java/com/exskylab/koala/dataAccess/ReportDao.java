@@ -105,9 +105,8 @@ public interface ReportDao extends JpaRepository<Report, UUID> {
             select r from Report r
             left join r.job job
             left join r.reporter reporter
-            left join r.reportedUser reported
-            where reporter.id in :partyIds
-              and (reported.id in :partyIds or job.id = :jobId)
+            where job.id = :jobId
+              and reporter.id in :partyIds
             order by r.createdAt desc
             """)
     List<Report> findAllBetweenAssignmentParties(@Param("jobId") UUID jobId,

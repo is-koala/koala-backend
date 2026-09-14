@@ -169,7 +169,7 @@ public class AdminController {
     }
 
     @Operation(summary = "Ödeme denemesi detayı",
-            description = "Tek bir ödeme denemesi: bağlı atama/ilan/taraflar (id, ad, e-posta), durum, tutar dökümü, "
+            description = "Tek bir ödeme denemesi: bağlı atama/ilan/taraflar (SafeUser; e-posta yok), durum, tutar dökümü, "
                     + "sağlayıcı referansları, doğrulama sayacı, oluşturulma/güncellenme anları ve iade kayıtları. "
                     + "Kart verisi ya da ödeme token'ı dönmez. Uç payment.read ile korunur.")
     @ApiResponses({

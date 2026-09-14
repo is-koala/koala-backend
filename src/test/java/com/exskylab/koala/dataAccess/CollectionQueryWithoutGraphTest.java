@@ -95,6 +95,8 @@ class CollectionQueryWithoutGraphTest {
             "ReportDao.findAllByReporterId",
             "ReportDao.tallyByReportedUser",
             "SettlementTaskDao.findDueIds",
+            // Staff payout detail renders the task row only; payment/jobAssignment proxies are never touched (#255).
+            "SettlementTaskDao.findAllByPaymentIdOrderByCreatedAtAsc",
             "SitemapManifestDao.readShard",
             "StaffMemberDao.search",
             "StaffRoleDao.findAllByCodeIn",

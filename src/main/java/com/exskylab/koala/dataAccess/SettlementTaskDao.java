@@ -20,6 +20,8 @@ public interface SettlementTaskDao extends JpaRepository<SettlementTask, UUID> {
 
     Optional<SettlementTask> findByPaymentIdAndOperation(UUID paymentId, SettlementOperation operation);
 
+    List<SettlementTask> findAllByPaymentIdOrderByCreatedAtAsc(UUID paymentId);
+
     @Query("""
             select t.id from SettlementTask t
             where t.status = :status and t.nextAttemptAt <= :dueBefore
@@ -31,6 +33,4 @@ public interface SettlementTaskDao extends JpaRepository<SettlementTask, UUID> {
 
     @EntityGraph(attributePaths = {"payment", "jobAssignment"})
     Optional<SettlementTask> findWithDetailsById(UUID id);
-
-    List<SettlementTask> findAllByPaymentIdOrderByCreatedAtAsc(UUID paymentId);
 }
