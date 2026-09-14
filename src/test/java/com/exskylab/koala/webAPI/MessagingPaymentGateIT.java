@@ -127,11 +127,11 @@ class MessagingPaymentGateIT extends AbstractIntegrationTest {
         jdbc.update("delete from messages where conversation_id in (select id from conversations where job_id = ?)",
                 jobId);
         jdbc.update("delete from conversations where job_id = ?", jobId);
-        jdbc.update("delete from cancellations where job_assignment_id in (?, ?)",
-                firstAssignmentId, secondAssignmentId);
+        jdbc.update("delete from cancellations where job_assignment_id in "
+                + "(select id from job_assignments where job_id = ?)", jobId);
         jdbc.update("delete from refunds where payment_id in (?, ?)", firstPaymentId, secondPaymentId);
         jdbc.update("delete from payments where id in (?, ?)", firstPaymentId, secondPaymentId);
-        jdbc.update("delete from job_assignments where id in (?, ?)", firstAssignmentId, secondAssignmentId);
+        jdbc.update("delete from job_assignments where job_id = ?", jobId);
         jdbc.update("delete from jobs where id = ?", jobId);
         jdbc.update("delete from job_categories where id = ?", categoryId);
         jdbc.update("delete from company_contacts where company_id = ?", companyId);
@@ -157,6 +157,56 @@ class MessagingPaymentGateIT extends AbstractIntegrationTest {
 
         assertTrue(crewId().isEmpty(), "Ödeme öncesi grup kurulmamalı");
         assertEquals(0, countConversations(), "Ödeme öncesi hiçbir konuşma açılmamalı");
+    }
+
+    @Test
+    void acceptingTheOfferOverHttpNoLongerBuildsTheCrew() throws Exception {
+        jdbc.update("update job_assignments set status = 'PENDING_CONFIRMATION', payment_status = null where id = ?",
+                firstAssignmentId);
+
+        respond(firstAssignmentId, firstWorkerId, true)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CONFIRMED"))
+                .andExpect(jsonPath("$.data.messagingAvailable").value(false))
+                .andExpect(jsonPath("$.data.messagingAvailableReason").value("PAYMENT_REQUIRED"));
+
+        assertEquals("PENDING_COLLECTION", paymentStatusOf(firstAssignmentId));
+        assertTrue(crewId().isEmpty(), "Kabul tek başına grup kurmamalı; grup ödeme ile kurulur");
+        assertEquals(0, countConversations());
+        openConversation(firstWorkerId, null)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("MESSAGING_PAYMENT_REQUIRED"));
+
+        settle(firstToken);
+
+        assertEquals(Set.of(employerId, officerId, firstWorkerId), participantsOf(crewId().orElseThrow()),
+                "Kabulden sonra gelen ödeme grubu kurmalı");
+    }
+
+    @Test
+    void decliningTheOfferOverHttpClosesTheDirectChatLeftOverForThatWorker() throws Exception {
+        UUID legacy = insertLegacyDirectConversation(firstWorkerId);
+        jdbc.update("update job_assignments set status = 'PENDING_CONFIRMATION', payment_status = null where id = ?",
+                firstAssignmentId);
+        settle(secondToken);
+        UUID crew = crewId().orElseThrow();
+
+        respond(firstAssignmentId, firstWorkerId, false)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("REJECTED"))
+                .andExpect(jsonPath("$.data.messagingAvailable").value(false))
+                .andExpect(jsonPath("$.data.messagingAvailableReason").value("CLOSED"));
+
+        assertFalse(participantsOf(crew).contains(firstWorkerId), "Reddeden işçi grupta olmamalı");
+        mockMvc.perform(get("/conversations").with(user(principal(firstWorkerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[?(@.id == '" + legacy + "')].closed").value(true));
+        send(employerId, legacy, "ret sonrası")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("MESSAGING_WINDOW_CLOSED"));
+        openConversation(firstWorkerId, null)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("MESSAGING_WINDOW_CLOSED"));
     }
 
     @Test
@@ -322,14 +372,75 @@ class MessagingPaymentGateIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void aRefundedWorkerLeftInTheCrewByAFailedListenerStillCannotWriteThere() throws Exception {
+        settle(firstToken);
+        settle(secondToken);
+        UUID crew = crewId().orElseThrow();
+        mockMvc.perform(post("/job-assignments/{id}/cancel", firstAssignmentId)
+                        .with(user(principal(employerId)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"iş iptal\"}"))
+                .andExpect(status().isCreated());
+        assertEquals("REFUNDED", paymentStatusOf(firstAssignmentId));
+        jdbc.update("insert into conversation_participants (id, created_at, is_deleted, conversation_id, user_id) "
+                + "values (?, now(), false, ?, ?)", UUID.randomUUID(), crew, firstWorkerId);
+
+        send(firstWorkerId, crew, "hâlâ üyeyim ama")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("MESSAGING_WINDOW_CLOSED"));
+        mockMvc.perform(get("/conversations/{id}/messages", crew).with(user(principal(firstWorkerId))))
+                .andExpect(status().isOk());
+        send(secondWorkerId, crew, "ödenen işçi yazar").andExpect(status().isCreated());
+        send(officerId, crew, "yetkili yazar").andExpect(status().isCreated());
+    }
+
+    @Test
+    void anUnpaidWorkerSittingInTheCrewIsRefusedWithPaymentRequired() throws Exception {
+        settle(firstToken);
+        UUID crew = crewId().orElseThrow();
+        jdbc.update("insert into conversation_participants (id, created_at, is_deleted, conversation_id, user_id) "
+                + "values (?, now(), false, ?, ?)", UUID.randomUUID(), crew, secondWorkerId);
+
+        send(secondWorkerId, crew, "ödemeden ekibe")
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("MESSAGING_PAYMENT_REQUIRED"));
+    }
+
+    @Test
+    void theLatestAssignmentOfThePairDecidesWhenAnOlderRejectedOfferExists() throws Exception {
+        UUID rejectedEarlier = UUID.randomUUID();
+        jdbc.update("insert into job_assignments (id, created_at, is_deleted, job_id, worker_id, status, "
+                        + "payment_status, work_hours, total_charged) "
+                        + "values (?, now() - interval '2 days', false, ?, ?, 'REJECTED', null, 0, 1075.00)",
+                rejectedEarlier, jobId, firstWorkerId);
+        settle(firstToken);
+
+        openConversation(firstWorkerId, null).andExpect(status().isOk());
+        mockMvc.perform(get("/job-assignments/{id}", firstAssignmentId).with(user(principal(firstWorkerId))))
+                .andExpect(jsonPath("$.data.messagingAvailableReason").value("AVAILABLE"));
+    }
+
+    @Test
+    void theLatestAssignmentOfThePairDecidesWhenANewerRejectedOfferExists() throws Exception {
+        settle(firstToken);
+        openConversation(firstWorkerId, null).andExpect(status().isOk());
+        UUID direct = directId(firstWorkerId).orElseThrow();
+        UUID rejectedLater = UUID.randomUUID();
+        jdbc.update("insert into job_assignments (id, created_at, is_deleted, job_id, worker_id, status, "
+                        + "payment_status, work_hours, total_charged) "
+                        + "values (?, now() + interval '1 minute', false, ?, ?, 'REJECTED', null, 0, 1075.00)",
+                rejectedLater, jobId, firstWorkerId);
+
+        send(firstWorkerId, direct, "yeni teklifi reddettikten sonra")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("MESSAGING_WINDOW_CLOSED"));
+        mockMvc.perform(get("/conversations").with(user(principal(firstWorkerId))))
+                .andExpect(jsonPath("$.data.content[?(@.id == '" + direct + "')].closed").value(true));
+    }
+
+    @Test
     void aDirectConversationLeftOverFromBeforeThePaymentGateIsReadOnly() throws Exception {
-        UUID legacy = UUID.randomUUID();
-        jdbc.update("insert into conversations (id, created_at, is_deleted, job_id, employer_id, worker_id, kind) "
-                + "values (?, now(), false, ?, ?, ?, 'DIRECT')", legacy, jobId, employerId, firstWorkerId);
-        for (UUID member : List.of(employerId, firstWorkerId)) {
-            jdbc.update("insert into conversation_participants (id, created_at, is_deleted, conversation_id, user_id) "
-                    + "values (?, now(), false, ?, ?)", UUID.randomUUID(), legacy, member);
-        }
+        UUID legacy = insertLegacyDirectConversation(firstWorkerId);
 
         mockMvc.perform(get("/conversations").with(user(principal(firstWorkerId))))
                 .andExpect(status().isOk())
@@ -351,6 +462,24 @@ class MessagingPaymentGateIT extends AbstractIntegrationTest {
             request = request.param("workerId", workerId.toString());
         }
         return mockMvc.perform(request);
+    }
+
+    private ResultActions respond(UUID assignmentId, UUID actorId, boolean accepted) throws Exception {
+        return mockMvc.perform(post("/job-assignments/{id}/respond", assignmentId)
+                .with(user(principal(actorId)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("accepted", accepted))));
+    }
+
+    private UUID insertLegacyDirectConversation(UUID workerId) {
+        UUID legacy = UUID.randomUUID();
+        jdbc.update("insert into conversations (id, created_at, is_deleted, job_id, employer_id, worker_id, kind) "
+                + "values (?, now(), false, ?, ?, ?, 'DIRECT')", legacy, jobId, employerId, workerId);
+        for (UUID member : List.of(employerId, workerId)) {
+            jdbc.update("insert into conversation_participants (id, created_at, is_deleted, conversation_id, user_id) "
+                    + "values (?, now(), false, ?, ?)", UUID.randomUUID(), legacy, member);
+        }
+        return legacy;
     }
 
     private ResultActions send(UUID actorId, UUID conversationId, String body) throws Exception {

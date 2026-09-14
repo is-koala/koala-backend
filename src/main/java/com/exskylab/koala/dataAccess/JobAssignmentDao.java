@@ -109,7 +109,7 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
 
     long countByJobIdAndStatusIn(UUID jobId, java.util.Collection<AssignmentStatus> statuses);
 
-    Optional<JobAssignment> findFirstByJobIdAndWorkerIdOrderByAssignmentDateTimeDesc(UUID jobId, UUID workerId);
+    List<JobAssignment> findAllByJobIdAndWorkerId(UUID jobId, UUID workerId);
 
     List<JobAssignment> findAllByJobIdInAndWorkerIdIn(java.util.Collection<UUID> jobIds,
                                                       java.util.Collection<UUID> workerIds);

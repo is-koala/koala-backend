@@ -43,6 +43,7 @@ class MessagingAuthorizationTest {
     private SecurityService securityService;
     private MessagingProperties properties;
     private com.exskylab.koala.core.mappers.MessagingMapper messagingMapper;
+    private CompanyContactService companyContactService;
     private MessagingManager manager;
 
     private final User employer = user();
@@ -63,8 +64,9 @@ class MessagingAuthorizationTest {
         UserService userService = mock(UserService.class);
 
         messagingMapper = mock(com.exskylab.koala.core.mappers.MessagingMapper.class);
+        companyContactService = mock(CompanyContactService.class);
         manager = new MessagingManager(conversationDao, messageDao, userBlockDao, jobService,
-                jobAssignmentService, userService, securityService, mock(CompanyContactService.class),
+                jobAssignmentService, userService, securityService, companyContactService,
                 new PageableSanitizer(), realtimePublisher, messagingMapper,
                 new MessagingAvailability(properties),
                 mock(com.exskylab.koala.core.mappers.UserMapper.class));
@@ -267,7 +269,7 @@ class MessagingAuthorizationTest {
     }
 
     @Test
-    void theConversationListResolvesEveryDirectChatsAssignmentWithOneBatchQuery() {
+    void theConversationListResolvesEveryDirectChatsLatestAssignmentWithOneBatchQuery() {
         Job otherJob = new Job();
         otherJob.setId(UUID.randomUUID());
         otherJob.setCreator(employer);
@@ -293,12 +295,12 @@ class MessagingAuthorizationTest {
         when(conversationDao.findAllForParticipant(eq(employer.getId()), any()))
                 .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(paid, unpaid, cancelled, crew)));
         when(messageDao.countUnreadByConversationIds(any(), any())).thenReturn(List.of());
-        when(jobAssignmentService.findAllByJobsAndWorkers(any(), any()))
+        when(jobAssignmentService.findLatestByJobsAndWorkers(any(), any()))
                 .thenReturn(List.of(paidAssignment, cancelledAssignment));
 
         manager.getMyConversations(org.springframework.data.domain.PageRequest.of(0, 20));
 
-        verify(jobAssignmentService, times(1)).findAllByJobsAndWorkers(
+        verify(jobAssignmentService, times(1)).findLatestByJobsAndWorkers(
                 java.util.Set.of(job.getId(), otherJob.getId()), java.util.Set.of(worker.getId(), otherWorker.getId()));
         verify(jobAssignmentService, never()).findLatestByJobAndWorker(any(), any());
         org.mockito.ArgumentCaptor<Boolean> closed = org.mockito.ArgumentCaptor.forClass(Boolean.class);
@@ -336,6 +338,96 @@ class MessagingAuthorizationTest {
         assignment.setPaymentStatus(paymentStatus);
         assignment.setAssignmentDateTime(Instant.now());
         return assignment;
+    }
+
+    private Conversation crewWith(User... members) {
+        Conversation crew = new Conversation();
+        crew.setId(UUID.randomUUID());
+        crew.setJob(job);
+        crew.setEmployer(employer);
+        crew.setKind(ConversationKind.GROUP);
+        crew.addParticipant(employer);
+        for (User member : members) {
+            crew.addParticipant(member);
+        }
+        when(conversationDao.findWithParticipantsById(crew.getId())).thenReturn(Optional.of(crew));
+        return crew;
+    }
+
+    @Test
+    void aRefundedWorkerStillListedInTheCrewCannotWriteThereAnyMore() {
+        Conversation crew = crewWith(worker);
+        when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());
+        assignment(AssignmentStatus.CANCELLED, PaymentStatus.REFUNDED);
+
+        ConflictException closed = assertThrows(ConflictException.class,
+                () -> manager.sendMessage(crew.getId(), "iadeden sonra ekibe"));
+
+        assertEquals("MESSAGING_WINDOW_CLOSED", errorCodeOf(closed));
+        verify(messageDao, never()).save(any());
+    }
+
+    @Test
+    void anUnpaidWorkerWhoSomehowSitsInTheCrewIsRefusedWithPaymentRequired() {
+        Conversation crew = crewWith(worker);
+        when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());
+        assignment(AssignmentStatus.CONFIRMED, PaymentStatus.PENDING_COLLECTION);
+
+        ForbiddenException refused = assertThrows(ForbiddenException.class,
+                () -> manager.sendMessage(crew.getId(), "odenmeden ekibe"));
+
+        assertEquals("MESSAGING_PAYMENT_REQUIRED", errorCodeOf(refused));
+    }
+
+    @Test
+    void aPaidWorkerWritesInTheCrewAfterASingleAssignmentLookup() {
+        Conversation crew = crewWith(worker);
+        when(securityService.getAuthenticatedUserId()).thenReturn(worker.getId());
+        assignment(AssignmentStatus.IN_PROGRESS, PaymentStatus.HELD_IN_ESCROW);
+
+        assertDoesNotThrow(() -> manager.sendMessage(crew.getId(), "ekip merhaba"));
+
+        verify(jobAssignmentService, times(1)).findLatestByJobAndWorker(job.getId(), worker.getId());
+        verifyNoInteractions(companyContactService);
+    }
+
+    @Test
+    void theEmployerWritesInTheCrewWithoutAnyAssignmentLookup() {
+        Conversation crew = crewWith(worker);
+        when(securityService.getAuthenticatedUserId()).thenReturn(employer.getId());
+
+        assertDoesNotThrow(() -> manager.sendMessage(crew.getId(), "ekibe duyuru"));
+
+        verify(jobAssignmentService, never()).findLatestByJobAndWorker(any(), any());
+    }
+
+    @Test
+    void aCompanyOfficerWritesInTheCrewWithoutAnAssignment() {
+        User officer = user();
+        Company company = new Company();
+        company.setId(UUID.randomUUID());
+        job.setCompany(company);
+        Conversation crew = crewWith(worker, officer);
+        when(securityService.getAuthenticatedUserId()).thenReturn(officer.getId());
+        when(jobAssignmentService.findLatestByJobAndWorker(job.getId(), officer.getId()))
+                .thenReturn(Optional.empty());
+        when(companyContactService.isUserAContactOfCompany(company.getId(), officer.getId())).thenReturn(true);
+
+        assertDoesNotThrow(() -> manager.sendMessage(crew.getId(), "yetkiliden"));
+    }
+
+    @Test
+    void aFormerOfficerWithoutAnAssignmentCannotWriteInTheCrew() {
+        User formerOfficer = user();
+        Company company = new Company();
+        company.setId(UUID.randomUUID());
+        job.setCompany(company);
+        Conversation crew = crewWith(worker, formerOfficer);
+        when(securityService.getAuthenticatedUserId()).thenReturn(formerOfficer.getId());
+        when(companyContactService.isUserAContactOfCompany(company.getId(), formerOfficer.getId()))
+                .thenReturn(false);
+
+        assertThrows(ForbiddenException.class, () -> manager.sendMessage(crew.getId(), "eski yetkiliden"));
     }
 
     @Test

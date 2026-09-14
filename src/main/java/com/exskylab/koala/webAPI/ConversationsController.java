@@ -105,8 +105,9 @@ public class ConversationsController {
 
     @Operation(summary = "Mesaj gönder",
             description = "Engelleme iki yönlü kontrol edilir: taraflardan biri diğerini engellediyse mesaj gönderilemez. "
-                    + "İkili sohbette işçinin ataması ödenmemişse 403 MESSAGING_PAYMENT_REQUIRED; atama kapandıysa "
-                    + "ya da iş bitimi penceresi dolduysa 409 MESSAGING_WINDOW_CLOSED. Mesaj gerçek zamanlı olarak "
+                    + "İkili sohbette işçinin, grupta işveren tarafında olmayan gönderenin ataması ödenmemişse "
+                    + "403 MESSAGING_PAYMENT_REQUIRED; atama kapandıysa ya da iş bitimi penceresi dolduysa "
+                    + "409 MESSAGING_WINDOW_CLOSED. Mesaj gerçek zamanlı olarak "
                     + "konuşma topic ve katılımcıların kişisel kuyruğuna yayınlanır.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Mesaj gönderildi"),

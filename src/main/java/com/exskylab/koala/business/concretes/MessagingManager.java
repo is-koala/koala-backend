@@ -31,7 +31,6 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -199,6 +198,7 @@ public class MessagingManager implements MessagingService {
 
         if (conversation.isGroup()) {
             assertMessagingWindowOpen(conversation.getJob());
+            assertCrewMemberMayMessage(conversation, senderId);
         } else {
             assertDirectMessagingOpen(conversation.getJob(),
                     conversation.getWorker() == null ? null : conversation.getWorker().getId());
@@ -256,30 +256,23 @@ public class MessagingManager implements MessagingService {
                 .filter(conversation -> !conversation.isGroup() && conversation.getWorker() != null)
                 .toList();
 
-        Map<UUID, Map<UUID, JobAssignment>> latestByJobThenWorker = direct.isEmpty() ? Map.of()
-                : jobAssignmentService.findAllByJobsAndWorkers(
+        Map<Map.Entry<UUID, UUID>, JobAssignment> latestByJobAndWorker = direct.isEmpty() ? Map.of()
+                : jobAssignmentService.findLatestByJobsAndWorkers(
                         direct.stream().map(conversation -> conversation.getJob().getId()).collect(Collectors.toSet()),
                         direct.stream().map(conversation -> conversation.getWorker().getId()).collect(Collectors.toSet()))
                 .stream()
-                .collect(Collectors.groupingBy(assignment -> assignment.getJob().getId(),
-                        Collectors.toMap(assignment -> assignment.getWorker().getId(), Function.identity(),
-                                (first, second) -> latestOf(first, second))));
+                .collect(Collectors.toMap(
+                        assignment -> Map.entry(assignment.getJob().getId(), assignment.getWorker().getId()),
+                        Function.identity()));
 
         return conversations.stream().collect(Collectors.toMap(Conversation::getId, conversation -> {
             if (conversation.isGroup() || conversation.getWorker() == null) {
                 return messagingAvailability.isWindowClosed(conversation.getJob());
             }
-            JobAssignment assignment = latestByJobThenWorker
-                    .getOrDefault(conversation.getJob().getId(), Map.of())
-                    .get(conversation.getWorker().getId());
+            JobAssignment assignment = latestByJobAndWorker.get(
+                    Map.entry(conversation.getJob().getId(), conversation.getWorker().getId()));
             return !messagingAvailability.isAvailable(assignment);
         }));
-    }
-
-    private static JobAssignment latestOf(JobAssignment first, JobAssignment second) {
-        Comparator<JobAssignment> byDate = Comparator.comparing(JobAssignment::getAssignmentDateTime,
-                Comparator.nullsFirst(Comparator.naturalOrder()));
-        return byDate.compare(first, second) >= 0 ? first : second;
     }
 
     @Override
@@ -342,8 +335,28 @@ public class MessagingManager implements MessagingService {
     }
 
     private void assertDirectMessagingOpen(Job job, UUID workerId) {
-        Optional<JobAssignment> assignment = workerId == null ? Optional.empty()
+        refuseUnlessAvailable(job, workerId, latestAssignmentOf(job, workerId));
+    }
+
+    private void assertCrewMemberMayMessage(Conversation crew, UUID senderId) {
+        if (crew.getEmployer().getId().equals(senderId)) {
+            return;
+        }
+        Job job = crew.getJob();
+        Optional<JobAssignment> assignment = latestAssignmentOf(job, senderId);
+        if (assignment.isEmpty() && job.getCompany() != null
+                && companyContactService.isUserAContactOfCompany(job.getCompany().getId(), senderId)) {
+            return;
+        }
+        refuseUnlessAvailable(job, senderId, assignment);
+    }
+
+    private Optional<JobAssignment> latestAssignmentOf(Job job, UUID workerId) {
+        return workerId == null ? Optional.empty()
                 : jobAssignmentService.findLatestByJobAndWorker(job.getId(), workerId);
+    }
+
+    private void refuseUnlessAvailable(Job job, UUID workerId, Optional<JobAssignment> assignment) {
         switch (messagingAvailability.reasonOf(assignment.orElse(null))) {
             case PAYMENT_REQUIRED -> {
                 log.info("Messaging for job {} and worker {} refused: payment status {}", job.getId(), workerId,

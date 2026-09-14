@@ -41,6 +41,7 @@ class CrewConversationRulesTest {
     private UserBlockDao userBlockDao;
     private SecurityService securityService;
     private CompanyContactService companyContactService;
+    private JobAssignmentService jobAssignmentService;
     private MessagingProperties properties;
     private MessagingAvailability availability;
     private MessagingManager manager;
@@ -65,8 +66,9 @@ class CrewConversationRulesTest {
         JobService jobService = mock(JobService.class);
         UserService userService = mock(UserService.class);
 
+        jobAssignmentService = mock(JobAssignmentService.class);
         manager = new MessagingManager(conversationDao, messageDao, userBlockDao, jobService,
-                mock(JobAssignmentService.class), userService, securityService,
+                jobAssignmentService, userService, securityService,
                 companyContactService, new PageableSanitizer(), mock(RealtimePublisher.class),
                 mock(MessagingMapper.class), availability, mock(UserMapper.class));
 
@@ -97,6 +99,16 @@ class CrewConversationRulesTest {
         User user = new User();
         user.setId(UUID.randomUUID());
         return user;
+    }
+
+    private void isPaid(User worker) {
+        com.exskylab.koala.entities.JobAssignment assignment = new com.exskylab.koala.entities.JobAssignment();
+        assignment.setJob(job);
+        assignment.setWorker(worker);
+        assignment.setStatus(com.exskylab.koala.entities.AssignmentStatus.IN_PROGRESS);
+        assignment.setPaymentStatus(com.exskylab.koala.entities.PaymentStatus.HELD_IN_ESCROW);
+        when(jobAssignmentService.findLatestByJobAndWorker(job.getId(), worker.getId()))
+                .thenReturn(Optional.of(assignment));
     }
 
     private CompanyContact contactOf(User user) {
@@ -154,6 +166,7 @@ class CrewConversationRulesTest {
 
         when(conversationDao.findWithParticipantsById(crew.getId())).thenReturn(Optional.of(crew));
         when(securityService.getAuthenticatedUserId()).thenReturn(firstWorker.getId());
+        isPaid(firstWorker);
 
         assertDoesNotThrow(() -> manager.sendMessage(crew.getId(), "merhaba ekip"));
         verifyNoInteractions(userBlockDao);
