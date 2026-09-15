@@ -134,7 +134,7 @@ public class SettlementManager implements SettlementService {
             settlementTaskDao.save(task);
 
             if (task.getOperation() == SettlementOperation.APPROVE) {
-                markPayoutProcessing(task);
+                markPayoutFromApproval(task);
             } else if (task.getOperation() == SettlementOperation.REFUND) {
                 markRefundCompleted(task);
             }
@@ -189,17 +189,42 @@ public class SettlementManager implements SettlementService {
         }
     }
 
-    private void markPayoutProcessing(SettlementTask task) {
+    /**
+     * Iyzico marketplace işçinin IBAN'ına kendisi yatar; Koala'nın banka
+     * ekstresi yoktur. APPROVE yanıtı tek elimizdeki gerçekleşme kanıtı, o
+     * yüzden PROCESSING kuyruğuna personel ekstre satırı yazdırmak için
+     * bırakılmıyor — kuyruk yalnız sağlayıcı referansı gelmeyen nadir satır
+     * için duruyor.
+     */
+    private void markPayoutFromApproval(SettlementTask task) {
         if (task.getJobAssignment() == null) {
             return;
         }
 
         payoutDao.findByJobAssignmentId(task.getJobAssignment().getId()).ifPresent(payout -> {
-            payout.setStatus(PayoutStatus.PROCESSING);
-            payout.setProviderReference(task.getProviderReference());
-            payout.setProcessingAt(Instant.now());
+            Instant now = Instant.now();
+            String reference = firstNonBlank(task.getProviderReference(), task.getProviderTransactionId());
+            payout.setProviderReference(reference);
+            payout.setProcessingAt(now);
+            if (reference == null) {
+                payout.setStatus(PayoutStatus.PROCESSING);
+            } else {
+                payout.setStatus(PayoutStatus.COMPLETED);
+                payout.setSettlementReference(reference);
+                payout.setCompletedAt(now);
+                payout.setFailureReason(null);
+            }
             payoutDao.save(payout);
         });
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value.trim();
+            }
+        }
+        return null;
     }
 
     private void markRefundCompleted(SettlementTask task) {
