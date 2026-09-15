@@ -10,7 +10,7 @@
     </parent>
     <groupId>com.exskylab</groupId>
     <artifactId>koala</artifactId>
-    <version>0.9.29</version>
+    <version>0.9.30</version>
     <name>koala</name>
     <description>koala</description>
     <url/>
