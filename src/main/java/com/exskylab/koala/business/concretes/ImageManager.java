@@ -8,6 +8,7 @@ import com.exskylab.koala.core.constants.ImageMessages;
 import com.exskylab.koala.core.dtos.images.response.UploadImageResponseDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ValidationException;
+import com.exskylab.koala.core.helpers.ExifOrientation;
 import com.exskylab.koala.core.helpers.StorageRollbackCleanup;
 import com.exskylab.koala.core.mappers.ImageMapper;
 import com.exskylab.koala.core.utilities.storage.StorageService;
@@ -22,6 +23,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.UUID;
@@ -113,18 +115,21 @@ public class ImageManager implements ImageService {
 
 
     private byte[] removeMetadata(MultipartFile image) throws IOException {
-        BufferedImage originalImage = ImageIO.read(image.getInputStream());
+        byte[] originalBytes = image.getBytes();
+        BufferedImage originalImage = ImageIO.read(new ByteArrayInputStream(originalBytes));
 
         if (originalImage == null){
             throw new IOException("Image file is empty.");
         }
+
+        BufferedImage upright = ExifOrientation.applyToPixels(originalImage, ExifOrientation.read(originalBytes));
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 
         String formatName = getFileExtension(image.getOriginalFilename()).substring(1);
 
 
-        ImageIO.write(originalImage, formatName, outputStream);
+        ImageIO.write(upright, formatName, outputStream);
 
         return outputStream.toByteArray();
     }
