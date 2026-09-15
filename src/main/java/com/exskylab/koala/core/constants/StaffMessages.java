@@ -38,6 +38,7 @@ public class StaffMessages {
     public static final String MEMBER_ROLE_GRANTED = "{staff.member.role.granted}";
     public static final String MEMBER_ROLE_REVOKED = "{staff.member.role.revoked}";
     public static final String MEMBER_PASSWORD_RESET = "{staff.member.password.reset}";
+    public static final String MEMBER_PASSWORD_RESET_SELF = "{staff.member.password.reset.self}";
     public static final String EMAIL_REQUIRED = "{staff.email.required}";
     public static final String EMAIL_INVALID = "{staff.email.invalid}";
     public static final String PASSWORD_REQUIRED = "{staff.password.required}";

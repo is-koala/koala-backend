@@ -105,14 +105,15 @@ public class StaffAccountManager implements StaffAccountService {
 
         if (isLocked(member, now)) {
             passwordEncoder.matches(rawPassword, ABSENT_ACCOUNT_HASH);
-            log.warn("Staff login refused, account locked: {} lock={}",
-                    LogMasks.email(member.getEmail()), member.getLockedUntil());
+            log.warn("Staff login refused, account locked: {} remaining={} attempts={}",
+                    LogMasks.email(member.getEmail()),
+                    Duration.between(now, member.getLockedUntil()),
+                    staffAuthProperties.getMaxFailedAttempts());
             throw new UnauthorizedException(StaffMessages.LOGIN_FAILED);
         }
 
         if (!passwordEncoder.matches(rawPassword, member.getPasswordHash())) {
             registerFailure(member, now);
-            log.warn("Staff login refused, wrong password: {}", LogMasks.email(member.getEmail()));
             throw new UnauthorizedException(StaffMessages.LOGIN_FAILED);
         }
 
@@ -178,10 +179,16 @@ public class StaffAccountManager implements StaffAccountService {
         if (attempts >= staffAuthProperties.getMaxFailedAttempts()) {
             member.setFailedLoginAttempts(0);
             member.setLockedUntil(now.plus(staffAuthProperties.getLockDuration()));
-            log.warn("Staff account locked: {} attempts={} lock={}",
-                    LogMasks.email(member.getEmail()), attempts, member.getLockedUntil());
+            log.warn("Staff account locked: {} remaining={} attempts={}",
+                    LogMasks.email(member.getEmail()),
+                    Duration.between(now, member.getLockedUntil()),
+                    attempts);
         } else {
             member.setFailedLoginAttempts(attempts);
+            log.warn("Staff login refused, wrong password: {} attempt={}/{}",
+                    LogMasks.email(member.getEmail()),
+                    attempts,
+                    staffAuthProperties.getMaxFailedAttempts());
         }
 
         staffMemberDao.save(member);
@@ -347,7 +354,12 @@ public class StaffAccountManager implements StaffAccountService {
     @Override
     @Transactional
     public void resetPassword(StaffPrincipal actor, UUID staffId, String rawPassword) {
+        if (actor != null && actor.isRegistered() && actor.staffId().equals(staffId)) {
+            throw new ConflictException(StaffMessages.MEMBER_PASSWORD_RESET_SELF);
+        }
+
         StaffMember member = memberById(staffId);
+        String before = credentialTrailOf(member);
 
         member.setPasswordHash(passwordEncoder.encode(rawPassword));
         member.setMustChangePassword(true);
@@ -356,6 +368,7 @@ public class StaffAccountManager implements StaffAccountService {
         member.setTokenVersion(member.getTokenVersion() + 1);
         staffMemberDao.save(member);
 
+        StaffAuditContext.capture(before, credentialTrailOf(member));
         log.info("Staff password assigned by an administrator: target={} actor={}",
                 LogMasks.email(member.getEmail()), actor.staffId());
     }
@@ -475,6 +488,13 @@ public class StaffAccountManager implements StaffAccountService {
         List<String> codes = new ArrayList<>(roleCodesOf(member.getId()));
         java.util.Collections.sort(codes);
         return "active=" + member.isActive() + "; roles=[" + String.join(", ", codes) + "]";
+    }
+
+    private static String credentialTrailOf(StaffMember member) {
+        return "mustChangePassword=" + member.isMustChangePassword()
+                + "; failedLoginAttempts=" + member.getFailedLoginAttempts()
+                + "; lockedUntil=" + member.getLockedUntil()
+                + "; tokenVersion=" + member.getTokenVersion();
     }
 
     private StaffMember memberById(UUID staffId) {

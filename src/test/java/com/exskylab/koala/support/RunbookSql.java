@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public final class RunbookSql {
 
     public static final Path PAYMENTS = Path.of("docs/runbooks/payments.md");
+    public static final Path STAFF_RECOVERY = Path.of("docs/runbooks/staff-recovery.md");
 
     private static final Pattern SQL_BLOCK = Pattern.compile("```sql\\n(.*?)```", Pattern.DOTALL);
 
