@@ -65,6 +65,10 @@ public abstract class AbstractStaffIntegrationTest extends AbstractIntegrationTe
                 + "(select id from staff_members where email like ?)", emailPattern);
         staffJdbc.update("update reports set reviewed_by_staff_id = null where reviewed_by_staff_id in "
                 + "(select id from staff_members where email like ?)", emailPattern);
+        staffJdbc.update("delete from staff_notes where author_staff_id in "
+                + "(select id from staff_members where email like ?)", emailPattern);
+        staffJdbc.update("delete from staff_flags where set_by_staff_id in "
+                + "(select id from staff_members where email like ?)", emailPattern);
         staffJdbc.update("delete from staff_member_roles where staff_member_id in "
                 + "(select id from staff_members where email like ?)", emailPattern);
         staffJdbc.update("delete from staff_members where email like ?", emailPattern);

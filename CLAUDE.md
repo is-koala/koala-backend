@@ -3574,6 +3574,8 @@ taşıması ve dış ön koşulların tek kaynağı `docs/runbooks/iys.md` dosya
 
 **Beşincisi `job.read` (#255).** `GET /admin/jobs` ve `GET /admin/jobs/{jobId}`; `PERSONAL_DATA`, non-mutating, seed'de `SUPPORT_AGENT` — yani `SUPPORT_AGENT`'ın etkili izinleri artık `user.read` + `job.read`, onu kapsayan trust dalı ve `COMPANY_APPROVER` da ikisini alır. Gerekçe §2s6'da; rol grafiğini sayan testler (`StaffAuthorizationIT`, `StaffIdentityIT`, `StaffRoleAdministrationIT`) buna göre yazılı.
 
+**Sonra üç tane daha: `note.read`, `note.write` (`PERSONAL_DATA`; `SUPPORT_AGENT`) ve `flag.manage` (`NORMAL`, mutating; `TRUST_LEAD`) — #302, §2bd.** Aynı üç test buna göre güncellendi; `SUPPORT_AGENT` bugün `user.read` + `job.read` + `note.read` + `note.write`.
+
 **Personel tabloları `BaseEntity`'yi genişletmez.** `BaseEntity` `created_by_id`/`updated_by_id` üzerinden `users`'a yabancı anahtar kurar; ADR-0010 iki yönde de bağ kurulmamasını şart koşuyor.
 
 **Para taşıyan metotlara anotasyon konmaz.** `PayoutService`/`PayoutManager` metotlarını otomatik tamamlama zamanlayıcısı boş bir `SecurityContext` ile çağırıyor; anotasyon konsaydı zamanlayıcı sessizce dururdu. Personel tarafı `StaffPayoutManager` facade'ından geçer: aktörü parametre olarak alır, izni denetler, sonra korumasız iç metodu çağırır. Aktör `null` ise istek köprü aşamasındaki marketplace `ROLE_ADMIN`'dendir.
@@ -4722,6 +4724,83 @@ not olarak issue'da.
 **İstemci tarafı:** mobil/web her isteğe (en azından `login`/`complete-registration`/`refresh-token`) üç
 `X-Koala-*` başlığını eklemeli; oturum satırına dokununca detay sayfası, "Bu cihaz" rozeti (`current`),
 adlandırma; admin "Cihazlar & oturumlar" sekmesi (#108). Ayrı issue'lar.
+
+---
+
+## 2bd. Personel notları ve işaretleri — `StaffNote` / `StaffFlag` (#302)
+
+Panel denetimi (14.09.2026): personelin bir kullanıcı, şirket, atama, uyuşmazlık, şikayet ya da ilan hakkında not
+bırakacağı ve "riskli / VIP" gibi işaret koyacağı yer yoktu; bilgi panel dışında (mesaj, ajanda) kalıyordu. Yeni
+aggregate `StaffNoteManager` → `StaffNoteDao` + `StaffFlagDao` (`AggregateBoundaryTest.OWNED_BY`); yazarı/koyanı
+`StaffAccountService.getReference` ile alır (§2ae), hedef kaynağa **hiç uzanmaz** — aşağıda.
+
+| Uç | İzin | Denetim eylemi | DTO |
+|---|---|---|---|
+| `GET /admin/notes?resourceType&resourceId` | `note.read` | — (`PERSONAL_DATA`, her okuma yazılır) | `PageDto<StaffNoteDto>` |
+| `POST /admin/notes?resourceType&resourceId` | `note.write` | `staff.note.create` | `StaffNoteBodyDto {body}` → `StaffNoteDto` (201) |
+| `PATCH /admin/notes/{noteId}` | `note.write` | `staff.note.edit` | `StaffNoteBodyDto` → `StaffNoteDto` |
+| `DELETE /admin/notes/{noteId}` | `note.write` | `staff.note.delete` | `Result` |
+| `GET /admin/flags?resourceType&resourceId` / `&resourceIds=a,b,c` | `flag.manage` | — (süzgeçli okuma, §2av kural 5) | `List<StaffFlagDto>` |
+| `PUT /admin/flags?resourceType&resourceId` | `flag.manage` | `staff.flag.set` | `SetStaffFlagDto {kind, label?}` → `StaffFlagDto` |
+| `DELETE /admin/flags?resourceType&resourceId&kind` | `flag.manage` | `staff.flag.clear` | `Result` |
+
+`StaffNoteDto {id, resourceType, resourceId, authorStaffId, authorDisplayName, body, createdAt, editedAt}`,
+`StaffFlagDto {id, resourceType, resourceId, kind, label, setByStaffId, setByDisplayName, setAt, clearedAt}`.
+`resourceType` `StaffResourceType` (`USER|COMPANY|JOB_ASSIGNMENT|DISPUTE|REPORT|JOB`), `kind` `StaffFlagKind`
+(`RISK|VIP|WATCH|OTHER`) — ikisi de `entities` altında (§1). Görünen adlar issue sözleşmesine eklendi: panel
+`authorStaffId`'yi ada çevirmek için `staff.read` (yalnız `OWNER`) istemek zorunda kalmasın diye; grafik `author` /
+`setBy` (`@EntityGraph`), sayfa başına tek sorgu. Şema `2026/09/15-05-staff-notes-and-flags.xml`: `staff_notes`,
+`staff_flags` (`staff_members`'a FK, `users`'a bağ yok — §2au), `uk_staff_flags_active_resource_kind` kısmi benzersiz
+indeks (`cleared_at is null`): aynı kaynakta her türden **en fazla bir etkin** işaret; `PUT` etkin işareti yerinde
+günceller (etiket, koyan, `setAt`), yeni satır açmaz. Kaldırma `clearedAt` damgalar, satır silinmez; liste yalnız
+etkinleri döndürür, `DELETE` etkin işaret yoksa 404 `STAFF_FLAG_NOT_FOUND`. Not silme **kalıcı** (personel tabloları
+`BaseEntity` değil); gövde denetim detayında kalır (aşağıda).
+
+**Üç izin, tohum: `note.read` + `note.write` → `SUPPORT_AGENT`, `flag.manage` → `TRUST_LEAD`** (changeset 15-05-03;
+`StaffRoleGraphSeedTest.supportAgentsWriteNotesAndOnlyTheTrustLeadManagesFlags`). Trust dalı ve `COMPANY_APPROVER`
+kapsama yoluyla not izinlerini alır, işaret yönetimi yalnız güven liderinde ve `OWNER`'da; finans dalı hiçbirini almaz
+(görev ayrılığı). `note.read`/`note.write` **`PERSONAL_DATA`**: gövde serbest metin ve personelin yazdığı şey kişisel
+veri olabilir — her liste okuması denetim satırı yazar (§2av kural 3). `flag.manage` `NORMAL` mutating; okuma ucu
+yazma izniyle korunuyor (`AdminPermissionMappingIT` bunu kabul ediyor, tersini etmiyor), ayrı bir `flag.read` **yok**:
+issue üç izin adlandırıyor ve rozet yalnız işareti koyabilen personelin işine yarıyor. Rozet okuması `resourceIds`
+taşıdığı için süzgeçli sayılır ve her sayfa yüklemesi bir denetim satırı bırakır — `/admin/users?query=` ile aynı
+bedel, kabul edildi.
+
+**Düzenleme ve silme: yalnız yazar ya da `staff.manage` — issue'nun `staff.admin` dediği izin bu; depoda o adla
+izin yok, en yakın ve en dar olan `staff.manage` (yalnız `OWNER`).** Yazar olmayan personel `Concealment.notFound`
+ile olmayan notla **aynı 404 zarfını** alır (`STAFF_NOTE_NOT_FOUND`, gerekçe yalnız `log.warn`'da; §2d2).
+`StaffNotesAndFlagsIT` PATCH ve DELETE için iki gövdeyi `timeStamp`/`requestId` düşerek birebir karşılaştırıyor.
+403 + `NOTE_NOT_AUTHOR` seçilmedi: `note.write` taşıyıp `note.read` taşımayan bir personel (bugün tohumda yok ama
+DAG'dan kurulabilir) id deneyerek notun varlığını öğrenirdi. İzinsiz personel (finans dalı) var olan ile olmayan
+kayda **aynı 403**'ü alır — zincir fail-closed (`assertRefusedIdentically`).
+
+**Hedef kaynağın varlığı denetlenmez, bilinçli.** `resourceId` altı aggregate'ten birine işaret ediyor; doğrulamak
+`StaffNoteManager`'ı `UserService`/`CompanyService`/`JobAssignmentService`/`DisputeService`/`ReportService`/`JobService`'e
+bağlamak demekti — altı bağımlılık, hiçbiri notun kendisi için gerekmiyor, ve bunlardan bazıları zaten `StaffAccountService`
+üzerinden personel tarafına dönüyor (§2ae döngü riski). Panel notu her zaman var olan bir kaynağın sayfasından yazıyor;
+uydurma bir id yalnız kimsenin okumayacağı bir not üretir. Bedeli: kaynak sonradan silinse/anonimleşse not yaşamaya
+devam eder — KVKK anonimleştirmesi bu tabloya **bugün dokunmuyor**, gövdede kişi adı geçiyorsa `PostgresAccountAnonymizer`'a
+`resource_type='USER' and resource_id=?` süpürmesi eklenmeli (Faz 9B, `identity_reveals` ile aynı liste, §8).
+
+**Denetim satırı `@RequiresPermission` ile kendiliğinden yazılıyor (§2av); önce/sonra `StaffAuditContext.capture`.**
+`AuditScope.resourceIdOf` yolun ilk değişkenini okuduğu için `POST /admin/notes` ve işaret uçlarında `resourceId`
+boş kalır (hedef sorgu parametresinde) — bu yüzden dört yazma da anlık görüntüyü `after`/`before`'a yazar:
+not için `USER/{resourceId} note={id} body=…`, işaret için `USER/{resourceId} kind=RISK label=… cleared=false|true`.
+Yani silinen notun gövdesi ve hangi kaynağa ait olduğu 6 ay detayda durur (`requestBody` de JSON gövdeyi taşır);
+`StaffNotesAndFlagsIT.writingAndDeletingNotesAndFlagsLeavesAnAuditRowWithBeforeAndAfterValues` beş satırı sırayla
+ölçüyor. #307 (`subjectId`) indiğinde hedef kimliği kendi sütununa da düşecek; bu dilim `AuditScope`'a dokunmadı.
+
+**Gövde log'a girmez.** `LogPrivacyTest` yasaklı listesine `getBody()`/`getLabel()` ve `body`/`noteBody`/`trimmedLabel`
+değişken adları eklendi; manager log satırları yalnız id, tür ve personel id'si yazar. Not gövdesi `user.read_pii`
+istemeden okunur — kural OpenAPI etiket açıklamasında: yalnız işin gerektirdiği bilgi yazılır, TCKN/IBAN/parola nota
+konmaz.
+
+**N+1 ölçülü.** `theNoteListAndTheBadgeReadAreBuiltWithoutAQueryPerRow`: not listesi `size=1` = `size=3` statement,
+rozet okuması 1 kaynak = 3 kaynak statement, lazy fetch sıfır. Toplu okuma `resourceIds` ≤ 200 (`StaffFlagLookup`,
+`STAFF_FLAG_BATCH_TOO_LARGE` 400; `resourceId` ve `resourceIds` birlikte verilebilir, ikisi de yoksa
+`STAFF_FLAG_RESOURCE_REQUIRED`). Sıralama yalnız `createdAt` (`PageableSanitizer`, bilinmeyen alan 400).
+Kapsam dışı: not düzenleme geçmişi (yalnız `editedAt`), kaldırılmış işaretlerin listesi, hedef kaynağın DTO'larına
+rozet gömme (panel `resourceIds` ile ayrıca çeker). Panel tarafı is-koala/koala-admin#109.
 
 ---
 

@@ -30,6 +30,8 @@ class StaffRoleGraphSeedTest {
             Path.of("src/main/resources/db/changelog/2026/09/06-21-account-deletion-staff-permission.xml");
     private static final Path IDENTITY_REVIEW_PERMISSION_CHANGELOG =
             Path.of("src/main/resources/db/changelog/2026/09/11-04-identity-document-review.xml");
+    private static final Path NOTES_AND_FLAGS_PERMISSION_CHANGELOG =
+            Path.of("src/main/resources/db/changelog/2026/09/15-05-staff-notes-and-flags.xml");
 
     private static final Pattern PAIR = Pattern.compile("\\('([A-Za-z_.]+)',\\s*'([A-Za-z_.]+)'\\)");
 
@@ -134,6 +136,21 @@ class StaffRoleGraphSeedTest {
                 StaffPermission.fromCode("identity.review").orElseThrow());
         assertTrue(changelog.contains("role.code = 'TRUST_LEAD'"));
         assertTrue(changelog.contains("'identity.review'"));
+    }
+
+    @Test
+    void supportAgentsWriteNotesAndOnlyTheTrustLeadManagesFlags() throws IOException {
+        String changelog = Files.readString(NOTES_AND_FLAGS_PERMISSION_CHANGELOG);
+        List<String[]> grants = pairs(changelog.substring(
+                changelog.indexOf("INSERT INTO staff_role_permissions"),
+                changelog.indexOf(") AS grant_row")));
+
+        assertEquals(StaffPermission.NOTE_READ, StaffPermission.fromCode("note.read").orElseThrow());
+        assertEquals(StaffPermission.NOTE_WRITE, StaffPermission.fromCode("note.write").orElseThrow());
+        assertEquals(StaffPermission.FLAG_MANAGE, StaffPermission.fromCode("flag.manage").orElseThrow());
+        assertEquals(List.of("SUPPORT_AGENT|note.read", "SUPPORT_AGENT|note.write", "TRUST_LEAD|flag.manage"),
+                grants.stream().map(grant -> grant[0] + "|" + grant[1]).toList(),
+                "not izinleri destek görevlisine, işaret yönetimi yalnız güven liderine tohumlanır");
     }
 
     @Test

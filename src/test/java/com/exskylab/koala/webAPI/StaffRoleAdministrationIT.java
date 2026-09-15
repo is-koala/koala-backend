@@ -84,7 +84,7 @@ class StaffRoleAdministrationIT extends AbstractStaffIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data[?(@.code == 'SUPPORT_AGENT')].permissions[*]",
-                        containsInAnyOrder("user.read", "job.read")))
+                        containsInAnyOrder("user.read", "job.read", "note.read", "note.write")))
                 .andExpect(jsonPath("$.data[?(@.code == 'TRUST_LEAD')].includes[*].code",
                         hasItem("MODERATOR")))
                 .andExpect(jsonPath("$.data[?(@.code == 'OWNER')].id").exists());
@@ -97,14 +97,15 @@ class StaffRoleAdministrationIT extends AbstractStaffIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.code").value("TRUST_LEAD"))
                 .andExpect(jsonPath("$.data.permissions", containsInAnyOrder(
-                        "user.read_pii", "user.deletion.manage", "identity.review")))
+                        "user.read_pii", "user.deletion.manage", "identity.review", "flag.manage")))
                 .andExpect(jsonPath("$.data.includes[*].code",
                         containsInAnyOrder("DISPUTE_HANDLER", "MODERATOR")))
                 .andExpect(jsonPath("$.data.effectiveRoles[*].code", containsInAnyOrder(
                         "DISPUTE_HANDLER", "MODERATOR", "SUPPORT_AGENT")))
                 .andExpect(jsonPath("$.data.effectivePermissions", containsInAnyOrder(
                         "content.moderate", "dispute.resolve", "user.deletion.manage",
-                        "user.read", "job.read", "user.read_pii", "identity.review")));
+                        "user.read", "job.read", "user.read_pii", "identity.review",
+                        "note.read", "note.write", "flag.manage")));
     }
 
     @Test
