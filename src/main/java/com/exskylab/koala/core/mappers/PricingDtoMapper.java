@@ -4,25 +4,25 @@ import com.exskylab.koala.core.dtos.payment.response.PricingBreakdownDto;
 import com.exskylab.koala.entities.Job;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.Payment;
+import org.mapstruct.Context;
+import org.mapstruct.Named;
 import org.springframework.stereotype.Component;
 
 @Component
 public class PricingDtoMapper {
 
     public PricingBreakdownDto toPricing(Job job) {
-        if (job == null || job.getPricingVersion() == null) {
-            return null;
-        }
-        return PricingBreakdownDto.from(job.getPricingVersion(), job.getCurrency(), job.getWorkerPayout(),
-                job.getCommissionRate(), job.getCommissionAmount(), job.getTotalCharged());
+        return toPricing(job, JobMapper.ViewerFacts.EMPLOYER);
     }
 
-    public PricingBreakdownDto toPricing(Job job, JobMapper.ViewerFacts viewer) {
+    @Named("jobPricingForViewer")
+    public PricingBreakdownDto toPricing(Job job, @Context JobMapper.ViewerFacts viewer) {
         if (job == null || job.getPricingVersion() == null) {
             return null;
         }
         return viewer.employerView()
-                ? toPricing(job)
+                ? PricingBreakdownDto.from(job.getPricingVersion(), job.getCurrency(), job.getWorkerPayout(),
+                        job.getCommissionRate(), job.getCommissionAmount(), job.getTotalCharged())
                 : PricingBreakdownDto.workerView(job.getPricingVersion(), job.getCurrency(), job.getWorkerPayout());
     }
 

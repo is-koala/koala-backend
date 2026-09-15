@@ -340,7 +340,9 @@ public class JobManager implements JobService {
         Set<String> sortableFields = located ? LOCATED_SEARCH_SORTABLE_FIELDS : SORTABLE_FIELDS;
         Map<UUID, Double> distances = new HashMap<>();
 
-        PageDto<JobSummaryDto> page = listJobs(requested, sortableFields, viewerId, false, pageable -> {
+        PageDto<JobSummaryDto> page = listJobs(requested, sortableFields, viewerId,
+                job -> isOwner(job, viewerId) ? JobMapper.ViewerFacts.EMPLOYER : JobMapper.ViewerFacts.PUBLIC,
+                pageable -> {
             Page<JobDao.JobSearchHit> hits = jobDao.searchIds(
                     JobStatus.OPEN,
                     jobAvailability.currentTime(),
@@ -383,7 +385,7 @@ public class JobManager implements JobService {
     @Transactional(readOnly = true)
     public PageDto<JobSummaryDto> getJobsOfCurrentUser(Pageable requested) {
         UUID viewerId = securityService.getAuthenticatedUserId();
-        return listJobs(requested, SORTABLE_FIELDS, viewerId, false,
+        return listJobs(requested, SORTABLE_FIELDS, viewerId, job -> JobMapper.ViewerFacts.EMPLOYER,
                 pageable -> jobDao.findAllByCreatorId(viewerId, pageable));
     }
 
@@ -398,7 +400,7 @@ public class JobManager implements JobService {
             throw new ForbiddenException(JobMessages.USER_IS_NOT_A_CONTACT_OF_COMPANY);
         }
 
-        return listJobs(requested, SORTABLE_FIELDS, viewerId, true,
+        return listJobs(requested, SORTABLE_FIELDS, viewerId, job -> JobMapper.ViewerFacts.EMPLOYER,
                 pageable -> jobDao.findAllByCompanyId(companyId, pageable));
     }
 
@@ -544,7 +546,8 @@ public class JobManager implements JobService {
     }
 
     private PageDto<JobSummaryDto> listJobs(Pageable requested, Set<String> sortableFields, UUID viewerId,
-                                            boolean companyOfficial, Function<Pageable, Page<Job>> query) {
+                                            Function<Job, JobMapper.ViewerFacts> viewOf,
+                                            Function<Pageable, Page<Job>> query) {
         pageableSanitizer.rejectUnknownSort(requested, sortableFields);
         Pageable pageable = pageableSanitizer.sanitize(requested, sortableFields, DEFAULT_SORT);
 
@@ -553,9 +556,7 @@ public class JobManager implements JobService {
                 assignedJobIds(jobs.getContent().stream().map(Job::getId).toList(), viewerId);
 
         return enrich(PageDto.of(jobs, job -> {
-            JobSummaryDto summary = jobMapper.toJobSummaryDto(job,
-                    companyOfficial || isOwner(job, viewerId) ? JobMapper.ViewerFacts.EMPLOYER
-                            : JobMapper.ViewerFacts.PUBLIC);
+            JobSummaryDto summary = jobMapper.toJobSummaryDto(job, viewOf.apply(job));
             addressVisibility.protect(job, summary, viewerId, assignedJobIds.contains(job.getId()));
             return summary;
         }));

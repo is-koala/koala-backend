@@ -4360,22 +4360,26 @@ herkese açık detayda `pricing` `null`'a düşer ve sayfa "Kazanç bilgisi payl
 (`toPricing`'in `workerPayout`'u tek başına kabul etmesi), backend sözleşmesi her iki istemciyle geriye uyumlu.
 Mapper kalıbı `JobAssignmentMapper.ViewerFacts`'in aynısı: `JobMapper.ViewerFacts(employerView)` (`PUBLIC`/`EMPLOYER`
 sabitleri) `@Context` parametresi olarak `toJobSummaryDto(job, viewer)` / `toJobDetailDto(job, viewer)`'a girer,
-`pricing` `expression = "java(pricingDtoMapper.toPricing(job, viewer))"` ile eşlenir ve `PricingDtoMapper.toPricing(Job,
-ViewerFacts)` işçi görünümünde `PricingBreakdownDto.workerView(...)` üretir. `@Context` seçildi ki mevcut `source =
-"address.city.name"` satırları çok kaynaklı imzaya taşınmasın. **Tek kaynaklı `toJobSummaryDto(Job)` default metodu
+`pricing` `source = "job", qualifiedByName = "jobPricingForViewer"` ile `PricingDtoMapper.toPricing(Job, @Context
+ViewerFacts)`'e eşlenir (bildirimsel; üretilen alan adına bağlı `expression` yok) ve o metot işçi görünümünde
+`PricingBreakdownDto.workerView(...)` üretir; tek argümanlı `toPricing(Job)` (`IndividualJobDto`/`CompanyJobDto`) ona
+`EMPLOYER` ile delege eder, null guard tek yerde. `@Context` seçildi ki mevcut `source = "address.city.name"` satırları
+çok kaynaklı imzaya taşınmasın. **Tek kaynaklı `toJobSummaryDto(Job)` default metodu
 `PUBLIC` görünümdür:** MapStruct iç içe eşlemede (`MyAssignmentDto.job`, `MyApplicationDto.job`, `WorkItemDto.job`) ve
 `toJobSummaryDtoList` (`/users/me/saved-jobs`) bu metodu kullanır, yani o yüzeylerde ilan özeti her zaman işçi şeklindedir —
 işveren tam dökümü atamanın kendi `MyAssignmentDto.pricing`'inden okur, hiçbir istemci iç içe `job.pricing`'den fee okumuyor.
 Görüntüleyen kararı `JobManager`'da: detayda `detailViewerFactsOf` (sahip → ek sorgu yok; değilse ve ilan şirket ilanıysa
-`companyContactService.isUserAContactOfCompany`, tek sorgu), listelerde `listJobs(..., companyOfficial, ...)` — `isOwner(job,
-viewerId)` `job.creator.id`'yi proxy'den okur (ek sorgu yok, `JobAddressVisibility.precision` ile aynı), `getJobsOfCompany`
-yetkiyi zaten doğruladığı için `companyOfficial=true` geçer, `getJobsOfCurrentUser` sahiplik kuralıyla zaten tam gelir.
+`companyContactService.isUserAContactOfCompany`, tek sorgu), listelerde çağıran `listJobs`'a çözülmüş görünümü
+`Function<Job, ViewerFacts>` ile verir: arama `isOwner(job, viewerId)` (`job.creator.id` proxy'den, ek sorgu yok,
+`JobAddressVisibility.precision` ile aynı), `getJobsOfCurrentUser` ve `getJobsOfCompany` ön-kapılı olduğu için sabit
+`EMPLOYER` — satır başına hiçbir şey okunmaz.
 **Bilinçli sınır:** herkese açık aramada (`GET /jobs`) şirket yetkilisi kendi açmadığı şirket ilanını işçi görünümünde
 görür — sayfa başına `getCompanyIdsOfContact` sorgusu eklemek yerine "listede ek sorgu yok" kabul kriteri seçildi; yetkilinin
 yönetim yüzeyi `/companies/{id}/jobs` ve detay tam döküm verir. Personel uçları (`AdminJobDto`, `AdminJobDetailDto`) ve
 `POST /pricing/quote` değişmedi; `IndividualJobDto`/`CompanyJobDto` (ilan oluşturma yanıtı, yalnız işverene gider) tam
 döküm. `PricingBreakdownDto`'nun üç fee alanı OpenAPI'de `["string","null"]`. Testler: `JobPricingVisibilityIT` (anonim/
-işçi/sahip/yetkili detay ve liste, şirket ilanında işçi, `size=1`/`size=2` statement eşitliği üç görüntüleyenle),
+işçi/sahip/yetkili detay ve liste, şirket ilanında işçi, `size=1`/`size=2` statement eşitliği aramada üç görüntüleyenle
+ve `/users/me/jobs` ile `/companies/{id}/jobs`'ta),
 `MapperCharacterizationTest` (iki görünüm, iç içe ve kayıtlı ilan özeti `PUBLIC`, snapshot'sız ilan), `OpenApiDocumentIT`,
 `CompanyJobListingRulesTest`. İstemci tarafı: web ilan detayı `toPricing` gevşetmesi ayrı issue.
 

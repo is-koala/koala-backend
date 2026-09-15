@@ -41,7 +41,7 @@ public interface JobMapper {
     @Mapping(target = "hiredCount", ignore = true)
     @Mapping(target = "addressPrecision", constant = "APPROXIMATE")
     @Mapping(target = "distanceKm", ignore = true)
-    @Mapping(target = "pricing", expression = "java(pricingDtoMapper.toPricing(job, viewer))")
+    @Mapping(target = "pricing", source = "job", qualifiedByName = "jobPricingForViewer")
     JobSummaryDto toJobSummaryDto(Job job, @Context ViewerFacts viewer);
 
     default JobSummaryDto toJobSummaryDto(Job job) {
@@ -52,7 +52,7 @@ public interface JobMapper {
     @Mapping(target = "applicationCount", ignore = true)
     @Mapping(target = "acceptingApplications", ignore = true)
     @Mapping(target = "addressPrecision", ignore = true)
-    @Mapping(target = "pricing", expression = "java(pricingDtoMapper.toPricing(job, viewer))")
+    @Mapping(target = "pricing", source = "job", qualifiedByName = "jobPricingForViewer")
     JobDetailDto toJobDetailDto(Job job, @Context ViewerFacts viewer);
 
     List<JobSummaryDto> toJobSummaryDtoList(List<Job> jobs);

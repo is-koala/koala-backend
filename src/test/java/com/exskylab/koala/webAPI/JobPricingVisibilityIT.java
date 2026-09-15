@@ -156,29 +156,56 @@ class JobPricingVisibilityIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void theViewerSidedPricingDoesNotAddAQueryPerRow() throws Exception {
+    void theViewerSidedPricingDoesNotAddAQueryPerRowInTheSearch() throws Exception {
+        for (UUID viewerId : new UUID[] {null, workerId, ownerId}) {
+            assertNoQueryPerRow(size -> search(viewerId, size),
+                    "ilan araması görüntüleyene göre fiyat kısarken satır sayısıyla büyüyen sorgu atıyor (N+1)");
+        }
+    }
+
+    @Test
+    void theOwnersListingIsBuiltWithoutAQueryPerRow() throws Exception {
+        assertNoQueryPerRow(size -> mockMvc.perform(get("/users/me/jobs").param("size", String.valueOf(size))
+                        .with(user(principal(ownerId)))),
+                "ilanlarım listesi işveren görünümünde satır sayısıyla büyüyen sorgu atıyor (N+1)");
+    }
+
+    @Test
+    void theCompanyListingIsBuiltWithoutAQueryPerRow() throws Exception {
+        makeCompanyJobs();
+
+        assertNoQueryPerRow(size -> mockMvc.perform(get("/companies/{companyId}/jobs", companyId)
+                        .param("size", String.valueOf(size)).with(user(principal(officialId)))),
+                "şirket ilan listesi işveren görünümünde satır sayısıyla büyüyen sorgu atıyor (N+1)");
+    }
+
+    private void assertNoQueryPerRow(PagedRequest request, String message) throws Exception {
         Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
         boolean wasEnabled = statistics.isStatisticsEnabled();
         statistics.setStatisticsEnabled(true);
         try {
-            for (UUID viewerId : new UUID[] {null, workerId, ownerId}) {
-                statistics.clear();
-                search(viewerId, 1).andExpect(status().isOk())
-                        .andExpect(jsonPath("$.data.content", hasSize(1)));
-                long statementsForOneRow = statistics.getPrepareStatementCount();
+            statistics.clear();
+            request.perform(1).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content", hasSize(1)));
+            long statementsForOneRow = statistics.getPrepareStatementCount();
 
-                statistics.clear();
-                search(viewerId, 2).andExpect(status().isOk())
-                        .andExpect(jsonPath("$.data.content", hasSize(2)));
+            statistics.clear();
+            request.perform(2).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content", hasSize(2)))
+                    .andExpect(jsonPath("$.data.content[0].pricing.workerPayout").value("1000.00"))
+                    .andExpect(jsonPath("$.data.content[1].pricing.workerPayout").value("1000.00"));
 
-                assertEquals(statementsForOneRow, statistics.getPrepareStatementCount(),
-                        "ilan araması görüntüleyene göre fiyat kısarken satır sayısıyla büyüyen sorgu atıyor (N+1)");
-                assertEquals(0, statistics.getEntityFetchCount(),
-                        "ilan araması fiyat görünümü için satır başına lazy entity yüklüyor");
-            }
+            assertEquals(statementsForOneRow, statistics.getPrepareStatementCount(), message);
+            assertEquals(0, statistics.getEntityFetchCount(),
+                    "ilan listesi fiyat görünümü için satır başına lazy entity yüklüyor");
         } finally {
             statistics.setStatisticsEnabled(wasEnabled);
         }
+    }
+
+    @FunctionalInterface
+    private interface PagedRequest {
+        ResultActions perform(int size) throws Exception;
     }
 
     private ResultActions search(UUID viewerId, int size) throws Exception {
