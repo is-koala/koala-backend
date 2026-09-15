@@ -369,4 +369,37 @@ class ReportModerationIT extends AbstractStaffIntegrationTest {
             jdbcTemplate.update("delete from job_assignments where id = ?", assignmentId);
         }
     }
+
+    @Test
+    void aReportWhoseReporterDeletedTheirAccountStaysInTheQueueAndTheDetailWithANullReporter() {
+        UUID departedId = UUID.randomUUID();
+        insertUser(departedId, "Giden", "Sikayetci");
+        UUID reportById = UUID.randomUUID();
+        jdbcTemplate.update("""
+                insert into reports (id, created_at, reporter_id, reported_user_id, reason, status, description)
+                values (?, now(), ?, ?, 'SPAM', 'OPEN', 'Giden kullanicinin sikayeti')
+                """, reportById, departedId, reportedUserId);
+        jdbcTemplate.update("update users set is_deleted = true, deleted_at = now() where id = ?", departedId);
+        try {
+            AdminReportDto row = rowFor(reportById);
+            assertNull(row.reporter(), "Hesabini silen sikayetci null olarak gelmeli; satir kuyruktan dusmemeli.");
+            assertEquals(reportedUserId, row.reportedUser().getId());
+
+            AdminReportDetailDto detail = reportService.getForModeration(reportById);
+            assertNull(detail.report().reporter());
+            assertEquals(reportById, detail.report().id());
+
+            UUID staffId = createStaffMember("decision-" + UUID.randomUUID() + "@iskoala.com",
+                    "Moderator", "MODERATOR");
+            StaffPrincipal moderator = new StaffPrincipal(staffId, "moderator@iskoala.com",
+                    "Moderator", Set.of("MODERATOR"), Set.of(), false);
+            AdminReportDto decided = reportService.review(moderator, reportById, ReportStatus.DISMISSED,
+                    "Sikayetci artik yok.");
+            assertEquals(ReportStatus.DISMISSED, decided.status());
+            assertNull(decided.reporter());
+        } finally {
+            jdbcTemplate.update("delete from reports where id = ?", reportById);
+            jdbcTemplate.update("delete from users where id = ?", departedId);
+        }
+    }
 }

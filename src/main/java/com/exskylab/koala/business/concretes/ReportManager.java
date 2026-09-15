@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -161,7 +162,8 @@ public class ReportManager implements ReportService {
         long history = saved.getReportedUser() == null ? 0L
                 : reportDao.countByReportedUserId(saved.getReportedUser().getId());
 
-        return reportMapper.toAdminReportDto(saved, history, assignmentIds(List.of(saved)).get(saved.getId()));
+        return reportMapper.toAdminReportDto(saved, reportersOf(List.of(saved)).get(saved.getReporter().getId()),
+                history, assignmentIds(List.of(saved)).get(saved.getId()));
     }
 
     @Override
@@ -185,10 +187,11 @@ public class ReportManager implements ReportService {
                 StaffSearchQuery.normalize(query), createdAt.from(), createdAt.to(),
                 pageableSanitizer.sanitize(requested, SORTABLE, DEFAULT_SORT));
 
+        Map<UUID, User> reporters = reportersOf(page.getContent());
         Map<UUID, Long> history = historyCounts(page.getContent());
         Map<UUID, UUID> assignments = assignmentIds(page.getContent());
 
-        return page.map(report -> reportMapper.toAdminReportDto(report,
+        return page.map(report -> reportMapper.toAdminReportDto(report, reporters.get(report.getReporter().getId()),
                 report.getReportedUser() == null ? 0L
                         : history.getOrDefault(report.getReportedUser().getId(), 0L),
                 assignments.get(report.getId())));
@@ -215,8 +218,17 @@ public class ReportManager implements ReportService {
         log.debug("Retrieving report {} for moderation", reportId);
 
         return new AdminReportDetailDto(
-                reportMapper.toAdminReportDto(report, history, assignmentIds(List.of(report)).get(report.getId())),
+                reportMapper.toAdminReportDto(report, reportersOf(List.of(report)).get(report.getReporter().getId()),
+                        history, assignmentIds(List.of(report)).get(report.getId())),
                 reportMapper.toReportContentDto(report));
+    }
+
+    private Map<UUID, User> reportersOf(List<Report> reports) {
+        Set<UUID> reporterIds = reports.stream()
+                .map(report -> report.getReporter().getId())
+                .collect(Collectors.toSet());
+        return userService.getAllByIdIn(reporterIds).stream()
+                .collect(Collectors.toMap(User::getId, Function.identity()));
     }
 
     private Map<UUID, UUID> assignmentIds(List<Report> reports) {

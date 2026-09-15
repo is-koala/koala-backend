@@ -49,8 +49,6 @@ class EagerFetchCoverageIT extends AbstractIntegrationTest {
                     "IdentityReviewDto yalnızca userId taşıyor"),
             entry("IdentityVerificationDao.search", "user",
                     "IdentityReviewDto yalnızca userId taşıyor"),
-            entry("IdentityRevealDao.findAllByWorker_Id", "viewer",
-                    "AdminIdentityRevealDto görüntüleyeni id ve ad soyadla çizer, fotoğrafını çizmez"),
             entry("JobAssignmentDao.findAllByJobIdAndStatusIn", "worker",
                     "ulaşım planı değişikliği bildirimi; işçi yalnızca alıcı, fotoğrafı hiçbir yanıtta çizilmiyor"));
 

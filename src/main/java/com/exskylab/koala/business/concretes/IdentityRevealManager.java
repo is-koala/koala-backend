@@ -6,6 +6,7 @@ import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.constants.IdentityRevealMessages;
+import com.exskylab.koala.core.dtos.identity.response.AdminIdentityRevealDto;
 import com.exskylab.koala.core.constants.JobAssignmentMessages;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.exceptions.TooManyRequestsException;
@@ -14,6 +15,7 @@ import com.exskylab.koala.core.helpers.Concealment;
 import com.exskylab.koala.core.helpers.LogMasks;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.helpers.RateLimiter;
+import com.exskylab.koala.core.mappers.IdentityRevealMapper;
 import com.exskylab.koala.core.properties.RateLimitProperties;
 import com.exskylab.koala.dataAccess.IdentityRevealDao;
 import com.exskylab.koala.entities.AssignmentStatus;
@@ -31,8 +33,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -51,6 +56,7 @@ public class IdentityRevealManager implements IdentityRevealService {
     private final RateLimiter rateLimiter;
     private final RateLimitProperties rateLimitProperties;
     private final PageableSanitizer pageableSanitizer;
+    private final IdentityRevealMapper identityRevealMapper;
     private final Clock clock;
 
     public IdentityRevealManager(IdentityRevealDao identityRevealDao,
@@ -62,6 +68,7 @@ public class IdentityRevealManager implements IdentityRevealService {
                                  RateLimiter rateLimiter,
                                  RateLimitProperties rateLimitProperties,
                                  PageableSanitizer pageableSanitizer,
+                                 IdentityRevealMapper identityRevealMapper,
                                  Clock clock) {
         this.identityRevealDao = identityRevealDao;
         this.jobAssignmentService = jobAssignmentService;
@@ -72,6 +79,7 @@ public class IdentityRevealManager implements IdentityRevealService {
         this.rateLimiter = rateLimiter;
         this.rateLimitProperties = rateLimitProperties;
         this.pageableSanitizer = pageableSanitizer;
+        this.identityRevealMapper = identityRevealMapper;
         this.clock = clock;
     }
 
@@ -127,10 +135,16 @@ public class IdentityRevealManager implements IdentityRevealService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<IdentityReveal> listForStaff(UUID workerId, Pageable pageable) {
+    public Page<AdminIdentityRevealDto> listForStaff(UUID workerId, Pageable pageable) {
         pageableSanitizer.rejectUnknownSort(pageable, SORTABLE);
         userService.getById(workerId);
-        return identityRevealDao.findAllByWorker_Id(workerId,
+        Page<IdentityReveal> page = identityRevealDao.findAllByWorker_Id(workerId,
                 pageableSanitizer.sanitize(pageable, SORTABLE, Sort.by(Sort.Direction.DESC, "revealedAt")));
+        Map<UUID, User> viewers = userService.getAllByIdIn(page.getContent().stream()
+                        .map(reveal -> reveal.getViewer().getId())
+                        .collect(Collectors.toSet())).stream()
+                .collect(Collectors.toMap(User::getId, Function.identity()));
+        return page.map(reveal -> identityRevealMapper.toAdminIdentityRevealDto(reveal,
+                viewers.get(reveal.getViewer().getId())));
     }
 }

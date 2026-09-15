@@ -91,7 +91,8 @@ class AdminAssignmentMappingTest {
 
     @Test
     void theAdminSummaryCarriesBothPartiesOfTheAssignment() {
-        AdminAssignmentDto dto = jobAssignmentMapper.toAdminAssignmentDto(assignment());
+        JobAssignment assignment = assignment();
+        AdminAssignmentDto dto = jobAssignmentMapper.toAdminAssignmentDto(assignment, assignment.getWorker());
 
         assertEquals(assignmentId, dto.id());
         assertEquals(jobId, dto.jobId());
@@ -103,7 +104,8 @@ class AdminAssignmentMappingTest {
 
     @Test
     void theAdminSummaryCarriesThePaymentStateAndThePriceBreakdown() {
-        AdminAssignmentDto dto = jobAssignmentMapper.toAdminAssignmentDto(assignment());
+        JobAssignment assignment = assignment();
+        AdminAssignmentDto dto = jobAssignmentMapper.toAdminAssignmentDto(assignment, assignment.getWorker());
 
         assertEquals(AssignmentStatus.COMPLETED, dto.status());
         assertEquals(PaymentStatus.HELD_IN_ESCROW, dto.paymentStatus());
@@ -119,6 +121,17 @@ class AdminAssignmentMappingTest {
         JobAssignment assignment = assignment();
         assignment.getJob().setCompany(null);
 
-        assertNull(jobAssignmentMapper.toAdminAssignmentDto(assignment).companyName());
+        assertNull(jobAssignmentMapper.toAdminAssignmentDto(assignment, assignment.getWorker()).companyName());
+    }
+
+    @Test
+    void aWorkerWhoDeletedTheirAccountLeavesTheRowWithANullWorkerAndItsJob() {
+        JobAssignment assignment = assignment();
+
+        AdminAssignmentDto dto = jobAssignmentMapper.toAdminAssignmentDto(assignment, null);
+
+        assertNull(dto.worker());
+        assertEquals(jobId, dto.jobId());
+        assertEquals(employerId, dto.employer().getId());
     }
 }

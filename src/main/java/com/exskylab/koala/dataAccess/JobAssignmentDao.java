@@ -105,8 +105,6 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
                       like unaccent(lower(concat('%', cast(:query as string), '%'))))
             """)
     @EntityGraph(attributePaths = {
-            "worker",
-            "worker.profilePicture",
             "job",
             "job.creator",
             "job.creator.profilePicture",

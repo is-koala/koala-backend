@@ -13,6 +13,7 @@ import com.exskylab.koala.core.utilities.payment.iyzico.dtos.PaymentSessionRespo
 import com.exskylab.koala.entities.Cancellation;
 import com.exskylab.koala.entities.JobApplication;
 import com.exskylab.koala.entities.JobAssignment;
+import com.exskylab.koala.entities.User;
 import com.exskylab.koala.entities.Payout;
 import com.exskylab.koala.entities.Review;
 import org.mapstruct.InjectionStrategy;
@@ -68,11 +69,18 @@ public interface JobAssignmentMapper {
 
     AssignmentPayoutDto toAssignmentPayoutDto(Payout payout);
 
-    @Mapping(target = "jobId", source = "job.id")
-    @Mapping(target = "jobTitle", source = "job.title")
-    @Mapping(target = "companyId", source = "job.company.id")
-    @Mapping(target = "companyName", source = "job.company.name")
-    @Mapping(target = "employer", source = "job.creator")
+    @Mapping(target = "id", source = "jobAssignment.id")
+    @Mapping(target = "jobId", source = "jobAssignment.job.id")
+    @Mapping(target = "jobTitle", source = "jobAssignment.job.title")
+    @Mapping(target = "companyId", source = "jobAssignment.job.company.id")
+    @Mapping(target = "companyName", source = "jobAssignment.job.company.name")
+    @Mapping(target = "worker", source = "worker")
+    @Mapping(target = "employer", source = "jobAssignment.job.creator")
+    @Mapping(target = "status", source = "jobAssignment.status")
+    @Mapping(target = "paymentStatus", source = "jobAssignment.paymentStatus")
+    @Mapping(target = "assignmentDateTime", source = "jobAssignment.assignmentDateTime")
+    @Mapping(target = "actualCompletionDateTime", source = "jobAssignment.actualCompletionDateTime")
+    @Mapping(target = "workHours", source = "jobAssignment.workHours")
     @Mapping(target = "pricing", source = "jobAssignment")
-    AdminAssignmentDto toAdminAssignmentDto(JobAssignment jobAssignment);
+    AdminAssignmentDto toAdminAssignmentDto(JobAssignment jobAssignment, User worker);
 }

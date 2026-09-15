@@ -89,7 +89,8 @@ public class ReportsController {
             description = "Süzgeçlerin hepsi isteğe bağlıdır; status verilmezse tüm durumlar döner. "
                     + "targetType şikayetin hedefine göre daraltır, reportedUserId aynı kullanıcı hakkındaki "
                     + "şikayetleri gruplar. Satırlar şikayet edeni, kararı vereni ve şikayet edilenin "
-                    + "kuyruğun tamamı üzerinden hesaplanmış toplam şikayet sayısını taşır. "
+                    + "kuyruğun tamamı üzerinden hesaplanmış toplam şikayet sayısını taşır. Şikayet eden hesabını "
+                    + "silmişse satır kuyrukta kalır, reporter null döner. "
                     + "query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) şikayet edenin ve edilenin ad-soyadı ile "
                     + "e-postasında ve şikayete konu ilanın başlığında büyük-küçük harf ve Türkçe karakter duyarsız arar; "
                     + "diğer süzgeçlerle kesişir; 100 karakteri aşarsa 400. reporterId şikayet edene, reportedUserId "
@@ -124,7 +125,8 @@ public class ReportsController {
             description = "Tek bir şikayetin tüm bağlamı: şikayet eden, şikayet edilen, kararı veren, "
                     + "şikayet edilenin toplam şikayet sayısı ve hedefin okunabilir içeriği "
                     + "(ilan başlığı, mesaj metni, görsel URL'i). İçerik kullanıcı tarafından yazılmıştır ve "
-                    + "yalnızca bu uçta döner; kuyruk satırları içerik taşımaz.")
+                    + "yalnızca bu uçta döner; kuyruk satırları içerik taşımaz. Şikayet eden hesabını silmişse "
+                    + "detay 404 değil, reporter null ile döner.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Şikayet getirildi"),
             @ApiResponse(responseCode = "404", description = "Şikayet bulunamadı",

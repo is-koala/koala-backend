@@ -709,6 +709,65 @@ class AdminListSearchIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
+    void aDeletedWorkersAssignmentStaysOnTheStaffListWithItsJobAndANullWorker() throws Exception {
+        UUID departedId = UUID.randomUUID();
+        UUID departedJobId = UUID.randomUUID();
+        UUID departedAssignmentId = UUID.randomUUID();
+        insertUser(departedId, "departed-" + departedId + "@example.com", "Giden", "İşçi", false);
+        insertJob(departedJobId, employerId, "Vardiya " + departedJobId);
+        insertAssignment(departedAssignmentId, departedJobId, departedId);
+        try {
+            jdbc.update("update users set is_deleted = true, deleted_at = now() where id = ?", departedId);
+
+            filtered("/admin/job-assignments", financeToken, "jobId", departedJobId.toString())
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content", hasSize(1)))
+                    .andExpect(jsonPath("$.data.content[0].id").value(departedAssignmentId.toString()))
+                    .andExpect(jsonPath("$.data.content[0].jobId").value(departedJobId.toString()))
+                    .andExpect(jsonPath("$.data.content[0].jobTitle").value("Vardiya " + departedJobId))
+                    .andExpect(jsonPath("$.data.content[0].employer.id").value(employerId.toString()))
+                    .andExpect(jsonPath("$.data.content[0].worker").value(nullValue()));
+        } finally {
+            jdbc.update("delete from job_assignments where id = ?", departedAssignmentId);
+            jdbc.update("delete from jobs where id = ?", departedJobId);
+            jdbc.update("delete from users where id = ?", departedId);
+        }
+    }
+
+    @Test
+    void theAssignmentListResolvesWorkersWithOneBatchQueryAndNeverOpensTheWorkerProxy() throws Exception {
+        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        boolean wasEnabled = statistics.isStatisticsEnabled();
+        statistics.setStatisticsEnabled(true);
+        try {
+            statistics.clear();
+            filtered("/admin/job-assignments", financeToken, "size", "1", "sort", "createdAt,desc")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content", hasSize(1)))
+                    .andExpect(jsonPath("$.data.content[0].worker.id").isNotEmpty());
+            long statementsForOneRow = statistics.getPrepareStatementCount();
+            long lazyFetchesForOneRow = statistics.getEntityFetchCount();
+
+            statistics.clear();
+            filtered("/admin/job-assignments", financeToken, "size", "2", "sort", "createdAt,desc")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content", hasSize(2)))
+                    .andExpect(jsonPath("$.data.content[*].worker.id",
+                            containsInAnyOrder(workerId.toString(), bystanderId.toString())));
+            long statementsForTwoRows = statistics.getPrepareStatementCount();
+
+            assertEquals(0L, lazyFetchesForOneRow,
+                    "atama listesi worker proxy'sini açmamalı; çalışanlar tek toplu sorguyla gelir");
+            assertEquals(0L, statistics.getEntityFetchCount(),
+                    "atama listesi worker proxy'sini açmamalı; çalışanlar tek toplu sorguyla gelir");
+            assertEquals(statementsForOneRow, statementsForTwoRows,
+                    "atama listesi satır sayısıyla büyüyen sorgu atıyor (N+1)");
+        } finally {
+            statistics.setStatisticsEnabled(wasEnabled);
+        }
+    }
+
+    @Test
     void theCreatedAtBoundsAreInclusiveToTheMillisecond() throws Exception {
         Instant createdAt = Instant.parse("2026-09-10T12:00:00.250Z");
         jdbc.update("update job_assignments set created_at = ? where id = ?",

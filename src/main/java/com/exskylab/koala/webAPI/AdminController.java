@@ -34,7 +34,6 @@ import com.exskylab.koala.core.dtos.bankAccount.response.IbanPendingDto;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.entities.BankAccountVerificationStatus;
 import com.exskylab.koala.core.mappers.BankAccountMapper;
-import com.exskylab.koala.core.mappers.IdentityRevealMapper;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.company.request.ApproveCompanyDto;
 import com.exskylab.koala.core.dtos.company.request.RejectCompanyDto;
@@ -93,7 +92,6 @@ public class AdminController {
     private final AdminDetailService adminDetailService;
     private final JobService jobService;
     private final IdentityRevealService identityRevealService;
-    private final IdentityRevealMapper identityRevealMapper;
 
     public AdminController(CompanyService companyService, UserService userService, UserMapper userMapper,
                            GalleryService galleryService, RoleGrantMapper roleGrantMapper,
@@ -101,8 +99,7 @@ public class AdminController {
                            BankAccountService bankAccountService, BankAccountMapper bankAccountMapper,
                            IdentityDocumentReviewService identityDocumentReviewService,
                            SignedFileResponses signedFileResponses, AdminDetailService adminDetailService,
-                           JobService jobService, IdentityRevealService identityRevealService,
-                           IdentityRevealMapper identityRevealMapper) {
+                           JobService jobService, IdentityRevealService identityRevealService) {
         this.companyService = companyService;
         this.userService = userService;
         this.userMapper = userMapper;
@@ -116,7 +113,6 @@ public class AdminController {
         this.adminDetailService = adminDetailService;
         this.jobService = jobService;
         this.identityRevealService = identityRevealService;
-        this.identityRevealMapper = identityRevealMapper;
     }
 
     @Operation(summary = "Atama kuyruğu",
@@ -127,7 +123,8 @@ public class AdminController {
                     + "query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) atama id'si, "
                     + "ilan başlığı, işveren ve çalışanın ad-soyadı ile e-postasında büyük-küçük harf ve Türkçe karakter "
                     + "duyarsız arar; 100 karakteri aşarsa 400. workerId, employerId ve jobId süzgeçleri birbirleriyle, "
-                    + "status, tarih aralığı ve query ile kesişir; kullanıcı ve ilan detayları bu süzgeçlerle buraya bağlanır.")
+                    + "status, tarih aralığı ve query ile kesişir; kullanıcı ve ilan detayları bu süzgeçlerle buraya bağlanır. "
+                    + "Çalışan hesabını silmişse satır listede kalır, worker null döner.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Atamalar listelendi"),
             @ApiResponse(responseCode = "400", description = "query 100 karakteri aşıyor, tarih dilimsiz ya da bilinmeyen sıralama alanı",
@@ -518,8 +515,9 @@ public class AdminController {
             description = "İşverenlerin GET /job-assignments/{id}/worker-identity ile bu kullanıcının kimlik bilgilerini "
                     + "görüntüleme kayıtları, yeniden eskiye. Her satır görüntüleyenin id'si ve ad soyadı, atama ve ilan "
                     + "kimliği, ilan başlığı, an ve maskeli IP taşır; TC kimlik numarası dönmez. Yalnız revealedAt ile "
-                    + "sıralanabilir, bilinmeyen sıralama alanı 400. Uç user.read_pii ile korunur (PERSONAL_DATA); her "
-                    + "okuma denetim satırı yazar.")
+                    + "sıralanabilir, bilinmeyen sıralama alanı 400. Görüntüleyen hesabını silmişse satır kalır, viewerId "
+                    + "durur ve viewerFullName null döner. Uç user.read_pii ile korunur (PERSONAL_DATA); her okuma denetim "
+                    + "satırı yazar.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Görüntüleme kayıtları listelendi"),
             @ApiResponse(responseCode = "400", description = "Bilinmeyen sıralama alanı",
@@ -534,8 +532,7 @@ public class AdminController {
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
         var page = identityRevealService.listForStaff(userId, pageable);
-        return ResponseEntity.ok(new SuccessDataResult<>(
-                PageDto.of(page, identityRevealMapper.toAdminIdentityRevealDtoList(page.getContent())),
+        return ResponseEntity.ok(new SuccessDataResult<>(PageDto.of(page, page.getContent()),
                 IdentityRevealMessages.LISTED, HttpStatus.OK));
     }
 

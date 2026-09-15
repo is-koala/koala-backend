@@ -5,6 +5,7 @@ import com.exskylab.koala.core.dtos.report.response.ReportContentDto;
 import com.exskylab.koala.core.dtos.report.response.ReportDto;
 import com.exskylab.koala.core.helpers.MediaUrlResolver;
 import com.exskylab.koala.entities.Report;
+import com.exskylab.koala.entities.User;
 import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -25,7 +26,7 @@ public interface ReportMapper {
     List<ReportDto> toReportDtoList(List<Report> reports);
 
     @Mapping(target = "id", source = "report.id")
-    @Mapping(target = "reporter", source = "report.reporter")
+    @Mapping(target = "reporter", source = "reporter")
     @Mapping(target = "reportedUser", source = "report.reportedUser")
     @Mapping(target = "reportedUserId", source = "report.reportedUser.id")
     @Mapping(target = "jobId", source = "report.job.id")
@@ -41,7 +42,7 @@ public interface ReportMapper {
     @Mapping(target = "reviewedAt", source = "report.reviewedAt")
     @Mapping(target = "createdAt", source = "report.createdAt")
     @Mapping(target = "reportedUserReportCount", source = "reportedUserReportCount")
-    AdminReportDto toAdminReportDto(Report report, long reportedUserReportCount, UUID jobAssignmentId);
+    AdminReportDto toAdminReportDto(Report report, User reporter, long reportedUserReportCount, UUID jobAssignmentId);
 
     @Mapping(target = "jobTitle", source = "job.title")
     @Mapping(target = "messageBody", source = "message.body")

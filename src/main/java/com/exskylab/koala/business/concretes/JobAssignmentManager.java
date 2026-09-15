@@ -75,7 +75,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.BinaryOperator;
+import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -709,10 +711,15 @@ public class JobAssignmentManager implements JobAssignmentService {
         List<AssignmentStatus> filter = statuses == null || statuses.isEmpty()
                 ? List.of(AssignmentStatus.values())
                 : List.copyOf(statuses);
-        return jobAssignmentDao.findAllForStaff(filter, StaffSearchQuery.normalize(query), workerId, employerId,
-                        jobId, createdAt.from(), createdAt.to(),
-                        pageableSanitizer.sanitize(requested, ADMIN_LIST_SORTABLE, ADMIN_LIST_SORT))
-                .map(jobAssignmentMapper::toAdminAssignmentDto);
+        Page<JobAssignment> page = jobAssignmentDao.findAllForStaff(filter, StaffSearchQuery.normalize(query),
+                workerId, employerId, jobId, createdAt.from(), createdAt.to(),
+                pageableSanitizer.sanitize(requested, ADMIN_LIST_SORTABLE, ADMIN_LIST_SORT));
+        Map<UUID, User> workers = userService.getAllByIdIn(page.getContent().stream()
+                        .map(assignment -> assignment.getWorker().getId())
+                        .collect(Collectors.toSet())).stream()
+                .collect(Collectors.toMap(User::getId, Function.identity()));
+        return page.map(assignment -> jobAssignmentMapper.toAdminAssignmentDto(assignment,
+                workers.get(assignment.getWorker().getId())));
     }
 
     @Override

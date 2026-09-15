@@ -343,6 +343,24 @@ class WorkerIdentityRevealIT extends AbstractStaffIntegrationTest {
                 .andExpect(status().isBadRequest());
     }
 
+    @Test
+    void aRevealByAnEmployerWhoLaterDeletedTheirAccountStaysInTheStaffTrailWithoutAName() throws Exception {
+        reveal(confirmedAssignmentId, employerId).andExpect(status().isOk());
+        reveal(companyAssignmentId, companyAdminId).andExpect(status().isOk());
+        jdbc.update("update users set is_deleted = true, deleted_at = now() where id = ?", employerId);
+
+        mockMvc.perform(get("/admin/users/{userId}/identity-reveals", workerId)
+                        .header("Authorization", "Bearer " + staffToken("TRUST_LEAD")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content", hasSize(2)))
+                .andExpect(jsonPath("$.data.content[0].viewerId").value(companyAdminId.toString()))
+                .andExpect(jsonPath("$.data.content[0].viewerFullName").value("Yetkili Kişi"))
+                .andExpect(jsonPath("$.data.content[1].viewerId").value(employerId.toString()))
+                .andExpect(jsonPath("$.data.content[1].viewerFullName").value(nullValue()))
+                .andExpect(jsonPath("$.data.content[1].jobAssignmentId").value(confirmedAssignmentId.toString()))
+                .andExpect(jsonPath("$.data.content[1].jobId").value(jobId.toString()));
+    }
+
     private ResultActions reveal(UUID assignmentId, UUID actorId) throws Exception {
         return mockMvc.perform(get("/job-assignments/{assignmentId}/worker-identity", assignmentId)
                 .with(user(principal(actorId))));
