@@ -84,7 +84,7 @@ public class Notification extends BaseEntity{
     @Column(name = "template_name")
     private String templateName;
 
-    @Column(name = "template_parameters")
+    @Column(name = "template_parameters", columnDefinition = "TEXT")
     private String templateParameters;
 
     @Enumerated(EnumType.STRING)

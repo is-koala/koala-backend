@@ -100,4 +100,5 @@
     <include file="db/changelog/2026/09/15-02-session-detail-and-device-name.xml"/>
     <include file="db/changelog/2026/09/15-04-identity-reveals.xml"/>
     <include file="db/changelog/2026/09/15-05-staff-notes-and-flags.xml"/>
+    <include file="db/changelog/2026/09/15-06-notification-template-parameters-text.xml"/>
 </databaseChangeLog>
