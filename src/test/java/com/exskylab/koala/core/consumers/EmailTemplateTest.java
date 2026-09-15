@@ -103,7 +103,13 @@ class EmailTemplateTest {
                 Map.entry("topic", "KVKK"),
                 Map.entry("name", "Ada Yılmaz"),
                 Map.entry("message", "Verilerimin silinmesini istiyorum."),
-                Map.entry("trackingUrl", "https://api.iskoala.com/notification-tracking/x.png")));
+                Map.entry("trackingUrl", "https://api.iskoala.com/notification-tracking/x.png"),
+                Map.entry("jobTitle", "Barista aranıyor"),
+                Map.entry("actionUrl", "https://iskoala.com/panel/is/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                Map.entry("when", "20 Eylül 2026, 09:30"),
+                Map.entry("where", "Kadıköy, İstanbul"),
+                Map.entry("who", "Ayşe Yılmaz"),
+                Map.entry("amount", "1.250,00 ₺")));
 
         List<String> broken = new ArrayList<>();
 

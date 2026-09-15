@@ -5,9 +5,11 @@ import com.exskylab.koala.core.constants.ActivityMessages;
 import com.exskylab.koala.core.dtos.notification.request.SendEmailDto;
 import com.exskylab.koala.core.dtos.notification.request.SendPushToUserDto;
 import com.exskylab.koala.core.helpers.MessageResolver;
+import com.exskylab.koala.entities.Address;
 import com.exskylab.koala.entities.ApplicationStatus;
 import com.exskylab.koala.entities.AssignmentStatus;
 import com.exskylab.koala.entities.Cancellation;
+import com.exskylab.koala.entities.City;
 import com.exskylab.koala.entities.Company;
 import com.exskylab.koala.entities.CompanyApprovalStatus;
 import com.exskylab.koala.entities.CompanyContact;
@@ -18,6 +20,7 @@ import com.exskylab.koala.entities.JobApplication;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.Conversation;
 import com.exskylab.koala.entities.ConversationKind;
+import com.exskylab.koala.entities.District;
 import com.exskylab.koala.entities.Message;
 import com.exskylab.koala.entities.NotificationCategory;
 import com.exskylab.koala.entities.NotificationTargetType;
@@ -27,6 +30,8 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -255,16 +260,102 @@ class ActivityNotificationRulesTest {
     }
 
     @Test
+    void activityEmailCarriesWhenWhereWhoAmountAndADurableDeepLink() {
+        JobAssignment assignment = completedWorkEmailFixture();
+
+        manager.assignmentCompleted(assignment);
+
+        Map<String, Object> params = capturedEmail().getTemplateParameters();
+        assertEquals("20 Eylül 2026, 09:30", params.get("when"));
+        assertEquals("Kadıköy, İstanbul", params.get("where"));
+        assertEquals("Ayşe Yılmaz", params.get("who"));
+        assertEquals("1.250,00 ₺", params.get("amount"));
+        assertEquals("http://localhost:3000/panel/is/" + assignment.getId(), params.get("actionUrl"));
+        assertFalse(params.get("actionUrl").toString().equals("http://localhost:3000"));
+        assertEquals("Barista aranıyor", params.get("jobTitle"));
+        assertEquals("metin:" + ActivityMessages.WORK_COMPLETED, params.get("message"));
+    }
+
+    @Test
+    void activityPushAndFeedKeepTheOneLinerWhenTheEmailAddsJobFacts() {
+        JobAssignment assignment = completedWorkEmailFixture();
+
+        manager.assignmentCompleted(assignment);
+
+        SendPushToUserDto push = captured();
+        assertEquals("metin:" + ActivityMessages.WORK_COMPLETED, push.getBody());
+        assertFalse(push.getBody().contains("Kadıköy"));
+        assertFalse(push.getBody().contains("1.250"));
+
+        verify(notificationService).sendInApp(argThat(dto -> {
+            assertEquals("metin:" + ActivityMessages.WORK_COMPLETED, dto.getBody());
+            assertFalse(dto.getBody().contains("Kadıköy"));
+            return true;
+        }));
+    }
+
+    @Test
     void activityEmailActionUsesTheWebBaseUrl() {
-        manager = new ActivityNotificationManager(notificationService, mock(MessageResolver.class),
+        MessageResolver resolver = mock(MessageResolver.class);
+        when(resolver.resolve(any())).thenAnswer(call -> "metin:" + call.getArgument(0));
+        manager = new ActivityNotificationManager(notificationService, resolver,
                 new com.exskylab.koala.core.properties.AppProperties(
                         "https://api.iskoala.com", "https://iskoala.com"));
 
-        manager.assignmentCompleted(assignment());
+        JobAssignment assignment = assignment();
 
+        manager.assignmentCompleted(assignment);
+
+        String actionUrl = capturedEmail().getTemplateParameters().get("actionUrl").toString();
+        assertEquals("https://iskoala.com/panel/is/" + assignment.getId(), actionUrl);
+        assertFalse(actionUrl.equals("https://iskoala.com"));
+        assertFalse(actionUrl.equals("https://iskoala.com/"));
+    }
+
+    @Test
+    void identityVerifiedEmailOpensTheProfileNotTheSiteRoot() {
+        manager.identityVerified(worker);
+
+        String actionUrl = capturedEmail().getTemplateParameters().get("actionUrl").toString();
+        assertEquals("http://localhost:3000/panel/profil", actionUrl);
+        assertFalse(actionUrl.equals("http://localhost:3000"));
+    }
+
+    @Test
+    void assignmentAnsweredEmailOpensTheEmployerAssignmentPage() {
+        JobAssignment assignment = assignment();
+        assignment.setStatus(AssignmentStatus.CONFIRMED);
+
+        manager.assignmentAnswered(assignment);
+
+        String actionUrl = capturedEmail().getTemplateParameters().get("actionUrl").toString();
+        assertEquals("http://localhost:3000/isveren/atama/" + assignment.getId(), actionUrl);
+        assertFalse(actionUrl.equals("http://localhost:3000"));
+    }
+
+    private JobAssignment completedWorkEmailFixture() {
+        employer.setLastName("Yılmaz");
+        City city = new City();
+        city.setName("İstanbul");
+        District district = new District();
+        district.setName("Kadıköy");
+        Address address = new Address();
+        address.setCity(city);
+        address.setDistrict(district);
+        job.setAddress(address);
+        job.setStartDateTime(LocalDateTime.of(2026, 9, 20, 9, 30));
+        job.setCurrency("TRY");
+
+        JobAssignment assignment = assignment();
+        assignment.setWorkerPayout(new BigDecimal("1250.00"));
+        assignment.setCurrency("TRY");
+        return assignment;
+    }
+
+    private SendEmailDto capturedEmail() {
         ArgumentCaptor<SendEmailDto> captor = ArgumentCaptor.forClass(SendEmailDto.class);
         verify(notificationService).sendEmail(captor.capture(), any(), anyBoolean());
-        assertEquals("https://iskoala.com", captor.getValue().getTemplateParameters().get("actionUrl"));
+        return captor.getValue();
     }
 
     @Test

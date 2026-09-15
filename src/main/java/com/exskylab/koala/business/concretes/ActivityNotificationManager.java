@@ -6,9 +6,11 @@ import com.exskylab.koala.core.constants.ActivityMessages;
 import com.exskylab.koala.core.dtos.notification.request.SendEmailDto;
 import com.exskylab.koala.core.dtos.notification.request.SendInAppDto;
 import com.exskylab.koala.core.dtos.notification.request.SendPushToUserDto;
-import com.exskylab.koala.core.properties.AppProperties;
+import com.exskylab.koala.core.helpers.ActivityEmailModel;
 import com.exskylab.koala.core.helpers.DisplayNames;
 import com.exskylab.koala.core.helpers.MessageResolver;
+import com.exskylab.koala.core.properties.AppProperties;
+import com.exskylab.koala.entities.Address;
 import com.exskylab.koala.entities.ApplicationStatus;
 import com.exskylab.koala.entities.AssignmentStatus;
 import com.exskylab.koala.entities.Cancellation;
@@ -19,6 +21,7 @@ import com.exskylab.koala.entities.CompanyContactRole;
 import com.exskylab.koala.entities.ConversationParticipant;
 import com.exskylab.koala.entities.DispatchPriority;
 import com.exskylab.koala.entities.Dispute;
+import com.exskylab.koala.entities.Job;
 import com.exskylab.koala.entities.JobApplication;
 import com.exskylab.koala.entities.JobAssignment;
 import com.exskylab.koala.entities.Message;
@@ -29,10 +32,11 @@ import com.exskylab.koala.entities.User;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 @Slf4j
@@ -57,21 +61,24 @@ public class ActivityNotificationManager implements ActivityNotificationService 
 
         notify(application.getUser(), application.getJob().getTitle(), key,
                 NotificationCategory.APPLICATION_UPDATES,
-                NotificationTargetType.JOB_APPLICATION, application.getId());
+                NotificationTargetType.JOB_APPLICATION, application.getId(),
+                EmailFacts.ofApplication(application, application.getUser(), application.getJob().getCreator()));
     }
 
     @Override
     public void applicationWithdrawn(JobApplication application) {
         notify(application.getJob().getCreator(), application.getJob().getTitle(),
                 ActivityMessages.APPLICATION_WITHDRAWN, NotificationCategory.APPLICATION_UPDATES,
-                NotificationTargetType.JOB_APPLICATION, application.getId());
+                NotificationTargetType.JOB_APPLICATION, application.getId(),
+                EmailFacts.ofApplication(application, application.getJob().getCreator(), application.getUser()));
     }
 
     @Override
     public void assignmentOffered(JobAssignment assignment) {
         notify(assignment.getWorker(), assignment.getJob().getTitle(),
                 ActivityMessages.ASSIGNMENT_OFFERED, NotificationCategory.APPLICATION_UPDATES,
-                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
+                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId(),
+                EmailFacts.ofAssignment(assignment, assignment.getWorker(), employerOf(assignment)));
     }
 
     @Override
@@ -80,23 +87,27 @@ public class ActivityNotificationManager implements ActivityNotificationService 
                 ? ActivityMessages.ASSIGNMENT_ACCEPTED
                 : ActivityMessages.ASSIGNMENT_REJECTED;
 
-        notify(employerOf(assignment), assignment.getJob().getTitle(), key,
+        User employer = employerOf(assignment);
+        notify(employer, assignment.getJob().getTitle(), key,
                 NotificationCategory.APPLICATION_UPDATES,
-                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
+                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId(),
+                EmailFacts.ofAssignment(assignment, employer, assignment.getWorker()));
     }
 
     @Override
     public void assignmentCompleted(JobAssignment assignment) {
         notify(assignment.getWorker(), assignment.getJob().getTitle(),
                 ActivityMessages.WORK_COMPLETED, NotificationCategory.APPLICATION_UPDATES,
-                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
+                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId(),
+                EmailFacts.ofAssignment(assignment, assignment.getWorker(), employerOf(assignment)));
     }
 
     @Override
     public void payoutReleased(JobAssignment assignment) {
         notify(assignment.getWorker(), assignment.getJob().getTitle(),
                 ActivityMessages.PAYOUT_RELEASED, NotificationCategory.APPLICATION_UPDATES,
-                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
+                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId(),
+                EmailFacts.ofAssignment(assignment, assignment.getWorker(), employerOf(assignment)));
     }
 
     @Override
@@ -109,7 +120,8 @@ public class ActivityNotificationManager implements ActivityNotificationService 
 
         notify(counterpart, assignment.getJob().getTitle(),
                 ActivityMessages.DISPUTE_OPENED, NotificationCategory.APPLICATION_UPDATES,
-                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
+                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId(),
+                EmailFacts.ofAssignment(assignment, counterpart, dispute.getOpenedBy()));
     }
 
     @Override
@@ -120,10 +132,12 @@ public class ActivityNotificationManager implements ActivityNotificationService 
 
         notify(assignment.getWorker(), assignment.getJob().getTitle(),
                 ActivityMessages.DISPUTE_RESOLVED, NotificationCategory.APPLICATION_UPDATES,
-                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
+                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId(),
+                EmailFacts.ofAssignment(assignment, assignment.getWorker(), employer));
         notify(employer, assignment.getJob().getTitle(),
                 ActivityMessages.DISPUTE_RESOLVED, NotificationCategory.APPLICATION_UPDATES,
-                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
+                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId(),
+                EmailFacts.ofAssignment(assignment, employer, assignment.getWorker()));
     }
 
     @Override
@@ -138,7 +152,8 @@ public class ActivityNotificationManager implements ActivityNotificationService 
 
         notify(counterpart, assignment.getJob().getTitle(),
                 ActivityMessages.ASSIGNMENT_CANCELLED, NotificationCategory.APPLICATION_UPDATES,
-                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
+                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId(),
+                EmailFacts.ofAssignment(assignment, counterpart, cancelledBy));
     }
 
     @Override
@@ -150,17 +165,22 @@ public class ActivityNotificationManager implements ActivityNotificationService 
 
         notify(assignment.getWorker(), jobTitle,
                 ActivityMessages.ASSIGNMENT_EXPIRED_WORKER, NotificationCategory.APPLICATION_UPDATES,
-                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
+                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId(),
+                EmailFacts.ofAssignment(assignment, assignment.getWorker(), employer));
         notify(employer, jobTitle,
                 ActivityMessages.ASSIGNMENT_EXPIRED_EMPLOYER, NotificationCategory.APPLICATION_UPDATES,
-                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
+                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId(),
+                EmailFacts.ofAssignment(assignment, employer, assignment.getWorker()));
     }
 
     @Override
     public void reviewReceived(Review review) {
-        notify(review.getSubject(), review.getJobAssignment().getJob().getTitle(),
+        User author = review.isAnonymous() ? null : review.getAuthor();
+        JobAssignment assignment = review.getJobAssignment();
+        notify(review.getSubject(), assignment.getJob().getTitle(),
                 ActivityMessages.REVIEW_RECEIVED, NotificationCategory.APPLICATION_UPDATES,
-                NotificationTargetType.JOB_ASSIGNMENT, review.getJobAssignment().getId());
+                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId(),
+                EmailFacts.ofAssignment(assignment, review.getSubject(), author));
     }
 
     @Override
@@ -187,9 +207,10 @@ public class ActivityNotificationManager implements ActivityNotificationService 
                 .map(CompanyContact::getUser)
                 .toList();
         notificationService.preparePushRecipients(admins.stream().map(User::getId).toList());
+        EmailFacts facts = EmailFacts.ofCompany(company);
         admins.forEach(admin -> notify(admin, company.getName(), key,
                 NotificationCategory.COMPANY_UPDATES,
-                NotificationTargetType.COMPANY, company.getId()));
+                NotificationTargetType.COMPANY, company.getId(), facts));
     }
 
     @Override
@@ -241,11 +262,16 @@ public class ActivityNotificationManager implements ActivityNotificationService 
     }
 
     private void notify(User recipient, String jobTitle, String bodyKey, NotificationCategory category) {
-        notify(recipient, jobTitle, bodyKey, category, null, null);
+        notify(recipient, jobTitle, bodyKey, category, null, null, EmailFacts.none());
     }
 
     private void notify(User recipient, String jobTitle, String bodyKey, NotificationCategory category,
                         NotificationTargetType targetType, UUID targetId) {
+        notify(recipient, jobTitle, bodyKey, category, targetType, targetId, EmailFacts.none());
+    }
+
+    private void notify(User recipient, String jobTitle, String bodyKey, NotificationCategory category,
+                        NotificationTargetType targetType, UUID targetId, EmailFacts facts) {
         if (recipient == null) {
             return;
         }
@@ -253,7 +279,7 @@ public class ActivityNotificationManager implements ActivityNotificationService 
         String message = messageResolver.resolve(bodyKey);
 
         inAppAndPush(recipient, jobTitle, message, category, bodyKey, targetType, targetId);
-        email(recipient, jobTitle, message, category, bodyKey);
+        email(recipient, jobTitle, message, category, bodyKey, targetType, targetId, facts);
     }
 
     private void notifyInAppAndPush(User recipient, String jobTitle, String bodyKey,
@@ -307,7 +333,8 @@ public class ActivityNotificationManager implements ActivityNotificationService 
     }
 
     private void email(User recipient, String jobTitle, String message,
-                       NotificationCategory category, String bodyKey) {
+                       NotificationCategory category, String bodyKey,
+                       NotificationTargetType targetType, UUID targetId, EmailFacts facts) {
         if (recipient.getEmail() == null || recipient.getEmail().isBlank()) {
             return;
         }
@@ -320,17 +347,100 @@ public class ActivityNotificationManager implements ActivityNotificationService 
             dto.setSubject(message);
             dto.setTemplateName("activity-notice-template");
 
-            Map<String, Object> parameters = new HashMap<>();
-            parameters.put("firstName", recipient.getFirstName());
-            parameters.put("message", message);
-            parameters.put("jobTitle", jobTitle);
-            parameters.put("actionUrl", appProperties.webBaseUrl());
-            dto.setTemplateParameters(parameters);
+            Job job = facts.job();
+            String emailMessage = ActivityEmailModel.body(
+                    bodyKey, message, messageResolver.resolve(ActivityMessages.EMAIL_FALLBACK));
+            String actionUrl = ActivityEmailModel.actionUrl(
+                    appProperties.webBaseUrl(), targetType, targetId, facts.jobId(), facts.workerView());
+            dto.setTemplateParameters(ActivityEmailModel.parameters(
+                    recipient,
+                    jobTitle,
+                    emailMessage,
+                    actionUrl,
+                    ActivityEmailModel.formatWhen(job == null ? null : job.getStartDateTime(), facts.when()),
+                    ActivityEmailModel.formatWhere(facts.place()),
+                    ActivityEmailModel.formatWho(facts.counterpart()),
+                    ActivityEmailModel.formatAmount(facts.amount(), facts.currency())));
 
             notificationService.sendEmail(dto, DispatchPriority.NORMAL, true);
         } catch (Exception exception) {
             log.warn("Activity email {} could not be delivered to {}: {}",
                     bodyKey, recipient.getId(), exception.getMessage());
+        }
+    }
+
+    private record EmailFacts(
+            Job job,
+            Address place,
+            Instant when,
+            User counterpart,
+            BigDecimal amount,
+            String currency,
+            UUID jobId,
+            boolean workerView) {
+
+        static EmailFacts none() {
+            return new EmailFacts(null, null, null, null, null, null, null, false);
+        }
+
+        static EmailFacts ofAssignment(JobAssignment assignment, User recipient, User counterpart) {
+            if (assignment == null) {
+                return none();
+            }
+            Job job = assignment.getJob();
+            Address place = job == null ? null : job.getAddress();
+            UUID jobId = job == null ? null : job.getId();
+            return new EmailFacts(
+                    job,
+                    place,
+                    null,
+                    counterpart,
+                    ActivityEmailModel.amountOf(assignment),
+                    ActivityEmailModel.currencyOf(assignment),
+                    jobId,
+                    workerIs(assignment, recipient));
+        }
+
+        static EmailFacts ofApplication(JobApplication application, User recipient, User counterpart) {
+            if (application == null) {
+                return none();
+            }
+            Job job = application.getJob();
+            Address place = job == null ? null : job.getAddress();
+            UUID jobId = job == null ? null : job.getId();
+            BigDecimal amount = null;
+            String currency = null;
+            if (job != null) {
+                amount = job.getWorkerPayout() != null ? job.getWorkerPayout() : job.getSalary();
+                currency = job.getCurrency();
+            }
+            boolean workerView = recipient != null
+                    && application.getUser() != null
+                    && recipient.getId() != null
+                    && recipient.getId().equals(application.getUser().getId());
+            return new EmailFacts(job, place, null, counterpart, amount, currency, jobId, workerView);
+        }
+
+        static EmailFacts ofCompany(Company company) {
+            if (company == null) {
+                return none();
+            }
+            return new EmailFacts(
+                    null,
+                    company.getAddress(),
+                    company.getApprovalDecidedAt(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    false);
+        }
+
+        private static boolean workerIs(JobAssignment assignment, User recipient) {
+            return recipient != null
+                    && assignment.getWorker() != null
+                    && recipient.getId() != null
+                    && recipient.getId().equals(assignment.getWorker().getId());
         }
     }
 }

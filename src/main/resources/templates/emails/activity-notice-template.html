@@ -8,7 +8,11 @@
 <div th:fragment="content">
     <h1 style='font-family: "DM Sans", sans-serif; font-size: 28px; font-weight: 600; color: #282828; margin: 0 0 20px 0;'>Merhaba <span th:text="${firstName}">[İsim]</span>!</h1>
     <p style='font-family: "DM Sans", sans-serif; font-size: 20px; font-weight: 400; color: #4D4D4D; line-height: 1.5; margin: 0 0 12px 0;' th:text="${message}">[Bildirim]</p>
-    <p style='font-family: "DM Sans", sans-serif; font-size: 16px; color: #4D4D4D; line-height: 1.5; margin: 0 0 28px 0;' th:if="${jobTitle != null}">İlan: <span th:text="${jobTitle}" style="font-weight: 600;">[İlan]</span></p>
+    <p style='font-family: "DM Sans", sans-serif; font-size: 16px; color: #4D4D4D; line-height: 1.5; margin: 0 0 8px 0;' th:if="${jobTitle != null}">İş: <span th:text="${jobTitle}" style="font-weight: 600;">[İlan]</span></p>
+    <p style='font-family: "DM Sans", sans-serif; font-size: 16px; color: #4D4D4D; line-height: 1.5; margin: 0 0 8px 0;' th:if="${when != null}">Ne zaman: <span th:text="${when}">[Tarih]</span></p>
+    <p style='font-family: "DM Sans", sans-serif; font-size: 16px; color: #4D4D4D; line-height: 1.5; margin: 0 0 8px 0;' th:if="${where != null}">Nerede: <span th:text="${where}">[Yer]</span></p>
+    <p style='font-family: "DM Sans", sans-serif; font-size: 16px; color: #4D4D4D; line-height: 1.5; margin: 0 0 8px 0;' th:if="${who != null}">Kim: <span th:text="${who}">[Kişi]</span></p>
+    <p style='font-family: "DM Sans", sans-serif; font-size: 16px; color: #4D4D4D; line-height: 1.5; margin: 0 0 28px 0;' th:if="${amount != null}">Tutar: <span th:text="${amount}">[Tutar]</span></p>
     <a th:href="${actionUrl}" href="#" target="_blank" style='display: inline-block; background-color: #F15757; color: white; font-family: "Manrope", sans-serif; font-weight: 700; font-size: 16px; padding: 12px 40px; border-radius: 8px; text-decoration: none;'>Uygulamada aç</a>
 </div>
 </body>
