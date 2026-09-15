@@ -6,7 +6,7 @@ import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.schedulers.TransportReminderScheduler;
 import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.entities.Role;
-import com.exskylab.koala.support.AbstractIntegrationTest;
+import com.exskylab.koala.support.AbstractStaffIntegrationTest;
 import com.exskylab.koala.support.OverlappingWrites;
 import jakarta.persistence.EntityManagerFactory;
 import org.hibernate.SessionFactory;
@@ -55,7 +55,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @AutoConfigureMockMvc
-class TransportPlanIT extends AbstractIntegrationTest {
+class TransportPlanIT extends AbstractStaffIntegrationTest {
 
     private static final ZoneId ISTANBUL = ZoneId.of("Europe/Istanbul");
     private static final String PLATE = "34 ABC 12";
@@ -151,6 +151,7 @@ class TransportPlanIT extends AbstractIntegrationTest {
         jdbc.update("delete from authorities where user_id in (?, ?, ?, ?)",
                 employerId, workerId, secondWorkerId, outsiderId);
         jdbc.update("delete from users where id in (?, ?, ?, ?)", employerId, workerId, secondWorkerId, outsiderId);
+        deleteStaffMembersLike("transport-staff-%@iskoala.com");
     }
 
     @Test
@@ -174,6 +175,70 @@ class TransportPlanIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.shuttles[0].plate").value(PLATE))
                 .andExpect(jsonPath("$.data.shuttles[0].driverName").value("Ahmet Şoför"))
                 .andExpect(jsonPath("$.data.shuttles[0].stops[0].scheduledAt").value(departureAt().toString()));
+    }
+
+    @Test
+    void aSupportAgentReadsThePlanWithPlatesWithoutBeingTheEmployer() throws Exception {
+        putPlan(employerId, jobId, planJson(null, null, 2)).andExpect(status().isOk());
+        String token = staffTokenFor("transport-staff-" + UUID.randomUUID() + "@iskoala.com",
+                "Destek", "SUPPORT_AGENT");
+
+        mockMvc.perform(get("/admin/jobs/{jobId}/transport-plan", jobId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.jobId").value(jobId.toString()))
+                .andExpect(jsonPath("$.data.outboundMethod").value("SHUTTLE"))
+                .andExpect(jsonPath("$.data.shuttles[0].plate").value(PLATE))
+                .andExpect(jsonPath("$.data.shuttles[0].driverPhone").value(DRIVER_PHONE))
+                .andExpect(jsonPath("$.data.shuttles[0].stops[0].address.components.thoroughfare")
+                        .value("Barbaros Bulvarı"));
+    }
+
+    @Test
+    void aStaffMemberWithoutJobReadCannotTellThePlanFromAMissingJob() throws Exception {
+        putPlan(employerId, jobId, planJson(null, null, 2)).andExpect(status().isOk());
+        String token = staffTokenFor("transport-staff-" + UUID.randomUUID() + "@iskoala.com",
+                "Analist", "FINANCE_ANALYST");
+        UUID phantom = UUID.randomUUID();
+        assertEquals(
+                envelope(mockMvc.perform(get("/admin/jobs/{jobId}/transport-plan", jobId)
+                        .header("Authorization", "Bearer " + token)).andExpect(status().isForbidden()), jobId),
+                envelope(mockMvc.perform(get("/admin/jobs/{jobId}/transport-plan", phantom)
+                        .header("Authorization", "Bearer " + token)).andExpect(status().isForbidden()), phantom));
+    }
+
+    @Test
+    void aSupportAgentGetsJobNotFoundForAMissingJobAndPlanNotFoundWhenThereIsNoPlan() throws Exception {
+        String token = staffTokenFor("transport-staff-" + UUID.randomUUID() + "@iskoala.com",
+                "Destek", "SUPPORT_AGENT");
+
+        mockMvc.perform(get("/admin/jobs/{jobId}/transport-plan", UUID.randomUUID())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("JOB_NOT_FOUND"));
+
+        mockMvc.perform(get("/admin/jobs/{jobId}/transport-plan", jobId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("TRANSPORT_PLAN_NOT_FOUND"));
+    }
+
+    @Test
+    void theAssignmentDetailForStaffCarriesSeatsAndPlates() throws Exception {
+        UUID shuttleId = writePlanAndReadShuttleId(2);
+        UUID stopId = stopIdOf(shuttleId);
+        selectSeat(workerId, assignmentId, shuttleId, stopId).andExpect(status().isOk());
+        String token = staffTokenFor("transport-staff-" + UUID.randomUUID() + "@iskoala.com",
+                "Analist", "FINANCE_ANALYST");
+
+        mockMvc.perform(get("/admin/job-assignments/{id}", assignmentId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.transport.seats", hasSize(1)))
+                .andExpect(jsonPath("$.data.transport.seats[0].shuttleId").value(shuttleId.toString()))
+                .andExpect(jsonPath("$.data.transport.seats[0].stopId").value(stopId.toString()))
+                .andExpect(jsonPath("$.data.transport.seats[0].createdAt").exists())
+                .andExpect(jsonPath("$.data.transport.shuttles[0].plate").value(PLATE));
     }
 
     @Test

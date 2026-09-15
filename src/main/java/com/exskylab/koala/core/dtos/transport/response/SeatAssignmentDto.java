@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Getter
@@ -23,4 +24,8 @@ public class SeatAssignmentDto {
     private UUID shuttleId;
 
     private UUID stopId;
+
+    @Schema(types = {"string", "null"}, format = "date-time",
+            description = "Koltuğun seçildiği an. Personel zaman çizelgesi bu alanı kullanır.")
+    private Instant createdAt;
 }

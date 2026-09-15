@@ -19,6 +19,7 @@ import com.exskylab.koala.business.abstracts.ReviewService;
 import com.exskylab.koala.business.abstracts.SessionService;
 import com.exskylab.koala.business.abstracts.StaffAccountService;
 import com.exskylab.koala.business.abstracts.TimesheetService;
+import com.exskylab.koala.business.abstracts.TransportService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.dtos.bankAccount.response.AdminBankAccountDto;
 import com.exskylab.koala.core.dtos.company.response.CompanyReviewDto;
@@ -27,6 +28,7 @@ import com.exskylab.koala.core.dtos.legal.response.AccountDeletionDto;
 import com.exskylab.koala.core.dtos.legal.response.DeletionBlockerDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.AdminAssignmentDetailDto;
 import com.exskylab.koala.core.dtos.payment.response.AdminPaymentDto;
+import com.exskylab.koala.core.dtos.transport.response.AssignmentTransportDto;
 import com.exskylab.koala.core.dtos.payment.response.AdminRefundDto;
 import com.exskylab.koala.core.dtos.user.response.AdminUserCountsDto;
 import com.exskylab.koala.core.dtos.user.response.AdminUserDetailDto;
@@ -94,6 +96,7 @@ public class AdminDetailManager implements AdminDetailService {
     private final LegalService legalService;
     private final CompanyService companyService;
     private final JobService jobService;
+    private final TransportService transportService;
     private final StaffAccountService staffAccountService;
     private final BankAccountService bankAccountService;
     private final SessionService sessionService;
@@ -111,6 +114,7 @@ public class AdminDetailManager implements AdminDetailService {
                               CompanyContactService companyContactService, BadgeService badgeService,
                               IdentityDocumentReviewService identityDocumentReviewService,
                               LegalService legalService, CompanyService companyService, JobService jobService,
+                              TransportService transportService,
                               StaffAccountService staffAccountService, BankAccountService bankAccountService,
                               SessionService sessionService, AdminDetailMapper adminDetailMapper,
                               CompanyMapper companyMapper, LegalMapper legalMapper,
@@ -131,6 +135,7 @@ public class AdminDetailManager implements AdminDetailService {
         this.legalService = legalService;
         this.companyService = companyService;
         this.jobService = jobService;
+        this.transportService = transportService;
         this.staffAccountService = staffAccountService;
         this.bankAccountService = bankAccountService;
         this.sessionService = sessionService;
@@ -257,6 +262,9 @@ public class AdminDetailManager implements AdminDetailService {
     @Transactional(readOnly = true)
     public AdminAssignmentDetailDto getAssignmentDetail(UUID assignmentId) {
         JobAssignment assignment = jobAssignmentService.getDetailedById(assignmentId);
+        AssignmentTransportDto transport = transportService.viewsForAssignments(
+                        List.of(assignment), assignment.getJob().getCreator().getId())
+                .get(assignment.getId());
 
         return adminDetailMapper.toAdminAssignmentDetailDto(assignment,
                 timesheetService.getSessionsForStaff(assignmentId),
@@ -265,7 +273,8 @@ public class AdminDetailManager implements AdminDetailService {
                 paymentService.getAttemptsForStaff(assignmentId),
                 payoutService.findForAssignment(assignmentId).orElse(null),
                 disputeService.findAllForAssignment(assignmentId),
-                reportService.findAllBetweenAssignmentParties(assignment.getJob().getId(), partiesOf(assignment)));
+                reportService.findAllBetweenAssignmentParties(assignment.getJob().getId(), partiesOf(assignment)),
+                transport);
     }
 
     @Override
