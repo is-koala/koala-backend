@@ -1,12 +1,18 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.core.helpers.DeviceHints;
 import com.exskylab.koala.core.helpers.DeviceIdentity;
+import com.exskylab.koala.core.helpers.DeviceNaming;
 import com.exskylab.koala.core.helpers.ClientPlatform;
+import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
+import com.exskylab.koala.core.dtos.device.response.DeviceDto;
+import com.exskylab.koala.entities.DeviceType;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.dataAccess.DeviceDao;
 import com.exskylab.koala.entities.Device;
 import com.exskylab.koala.entities.User;
+import com.exskylab.koala.core.mappers.DeviceMapperImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -32,7 +38,7 @@ class DeviceIdentityTest {
     void setUp() {
         deviceDao = mock(DeviceDao.class);
         securityService = mock(SecurityService.class);
-        deviceManager = new DeviceManager(deviceDao, securityService, mock(PushTokenDeliveryLock.class));
+        deviceManager = new DeviceManager(deviceDao, securityService, mock(PushTokenDeliveryLock.class), new DeviceMapperImpl());
         user = new User();
         user.setId(UUID.randomUUID());
         when(securityService.isActiveUser(user.getId())).thenReturn(true);
@@ -168,5 +174,100 @@ class DeviceIdentityTest {
         assertTrue(deviceManager.findDevice(user, "Mozilla/5.0", "invalid", ClientPlatform.WEB).isEmpty());
 
         verify(deviceDao, never()).findByUserAndNameAndType(any(), any(), any());
+    }
+
+    @Test
+    void theMobileUserAgentWithoutHeadersNeverProducesQuestionMarks() {
+        when(deviceDao.findByUser_IdAndClientDeviceId(user.getId(), PHONE_A)).thenReturn(Optional.empty());
+
+        Device phone = deviceManager.findOrCreateDevice(user, "1.1.1.1", "Koala (iOS)", PHONE_A,
+                ClientPlatform.IOS);
+
+        assertFalse(phone.getName().contains("??"), phone.getName());
+        assertFalse(phone.getName().isBlank());
+        assertEquals(DeviceType.IOS, phone.getType());
+    }
+
+    @Test
+    void theDeviceHeadersNameThePhoneAfterItsMarketingNameOsAndAppVersion() {
+        when(deviceDao.findByUser_IdAndClientDeviceId(user.getId(), PHONE_A)).thenReturn(Optional.empty());
+
+        Device phone = deviceManager.findOrCreateDevice(user, "1.1.1.1", "Koala (iOS)", PHONE_A,
+                ClientPlatform.IOS, DeviceHints.of("iPhone15,3", "iOS 18.1", "1.1.0"));
+
+        assertEquals("iPhone 14 Pro Max · iOS 18.1 · Koala 1.1.0", phone.getName());
+        assertEquals(DeviceType.IOS, phone.getType());
+    }
+
+    @Test
+    void aBrowserWithoutHeadersIsNamedAfterAgentOsAndWeb() {
+        when(deviceDao.findByUser_IdAndClientDeviceId(user.getId(), PHONE_A)).thenReturn(Optional.empty());
+
+        Device browser = deviceManager.findOrCreateDevice(user, "1.1.1.1",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) "
+                        + "Chrome/128.0.0.0 Safari/537.36", PHONE_A, ClientPlatform.WEB);
+
+        assertTrue(browser.getName().startsWith("Chrome 128"), browser.getName());
+        assertTrue(browser.getName().endsWith(DeviceNaming.SEPARATOR + DeviceNaming.WEB_SUFFIX), browser.getName());
+        assertFalse(browser.getName().contains("??"), browser.getName());
+    }
+
+    @Test
+    void aBlankUserAgentWithoutHeadersIsTheUnknownDevice() {
+        when(deviceDao.findByUserAndNameAndType(any(), any(), any())).thenReturn(Optional.empty());
+
+        Device nameless = deviceManager.findOrCreateDevice(user, "1.1.1.1", "", null);
+
+        assertEquals(DeviceNaming.UNKNOWN_DEVICE, nameless.getName());
+    }
+
+    @Test
+    void theUserAgentFallbackLooksTheDeviceUpByTheSameNameItWouldStore() {
+        when(deviceDao.findByUserAndNameAndType(any(), any(), any())).thenReturn(Optional.empty());
+        DeviceHints hints = DeviceHints.of("Pixel 8", "Android 15", "1.1.0");
+
+        Device created = deviceManager.findOrCreateDevice(user, "1.1.1.1", DART_UA, null, ClientPlatform.ANDROID,
+                hints);
+        when(deviceDao.findByUserAndNameAndType(user, created.getName(), created.getType()))
+                .thenReturn(Optional.of(created));
+
+        assertTrue(deviceManager.findDevice(user, DART_UA, null, ClientPlatform.ANDROID, hints).isPresent());
+    }
+
+    @Test
+    void renamingKeepsTheGeneratedNameAndOnlyTheOwnerCanDoIt() {
+        Device mine = new Device();
+        mine.setId(UUID.randomUUID());
+        mine.setUser(user);
+        mine.setName("iPhone 14 Pro Max · iOS 18.1 · Koala 1.1.0");
+        mine.setType(DeviceType.IOS);
+        when(securityService.getAuthenticatedUserId()).thenReturn(user.getId());
+        when(deviceDao.findByIdAndUser_Id(mine.getId(), user.getId())).thenReturn(Optional.of(mine));
+
+        DeviceDto renamed = deviceManager.renameMyDevice(mine.getId(), "  Evdeki iPad ");
+
+        assertEquals("Evdeki iPad", renamed.name());
+        assertEquals("Evdeki iPad", renamed.customName());
+        assertEquals("iPhone 14 Pro Max · iOS 18.1 · Koala 1.1.0", mine.getName());
+        assertThrows(ResourceNotFoundException.class,
+                () -> deviceManager.renameMyDevice(UUID.randomUUID(), "Baskasinin"));
+    }
+
+    @Test
+    void aLaterLoginRefreshesTheGeneratedNameButKeepsTheCustomOne() {
+        Device existing = new Device();
+        existing.setId(UUID.randomUUID());
+        existing.setUser(user);
+        existing.setClientDeviceId(PHONE_A);
+        existing.setName("iPhone 14 Pro Max · iOS 18.1 · Koala 1.1.0");
+        existing.setCustomName("Evdeki iPad");
+        when(deviceDao.findByUser_IdAndClientDeviceId(user.getId(), PHONE_A)).thenReturn(Optional.of(existing));
+
+        Device after = deviceManager.findOrCreateDevice(user, "1.1.1.1", "Koala (iOS)", PHONE_A,
+                ClientPlatform.IOS, DeviceHints.of("iPhone15,3", "iOS 18.2", "1.2.0"));
+
+        assertEquals("iPhone 14 Pro Max · iOS 18.2 · Koala 1.2.0", after.getName());
+        assertEquals("Evdeki iPad", after.getCustomName());
+        assertEquals("Evdeki iPad", after.displayName());
     }
 }

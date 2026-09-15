@@ -137,7 +137,11 @@ public class AuthController {
 
     @SecurityRequirements
     @Operation(summary = "Giriş yap",
-            description = "Erişim ve yenileme token üretir. Web çağrılarında X-Client-Platform: web ve geçerli X-Device-Id zorunludur; cihaz yalnız bu kimlikle eşlenir. Eski mobil istemcilerin User-Agent geçiş davranışı korunur.")
+            description = "Erişim ve yenileme token üretir. Web çağrılarında X-Client-Platform: web ve geçerli X-Device-Id zorunludur; cihaz yalnız bu kimlikle eşlenir. Eski mobil istemcilerin User-Agent geçiş davranışı korunur. "
+                    + "İstemci X-Koala-Device-Model (ör. iPhone15,3), X-Koala-OS (ör. iOS 18.1) ve X-Koala-App-Version (ör. 1.1.0) "
+                    + "başlıklarını gönderirse cihaz adı \"iPhone 14 Pro Max · iOS 18.1 · Koala 1.1.0\" biçiminde üretilir; "
+                    + "başlık yoksa User-Agent'tan türetilir, tanınamayan istemci \"Bilinmeyen cihaz\" olarak kaydedilir. "
+                    + "Giriş anındaki IP adresi ve GeoIP konumu oturum detayında (GET /users/me/sessions/{sessionId}) görünür.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Giriş başarılı"),
             @ApiResponse(responseCode = "400", description = "İstek alanları ya da web cihaz kimliği geçersiz",

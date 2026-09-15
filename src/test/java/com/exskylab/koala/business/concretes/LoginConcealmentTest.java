@@ -11,6 +11,7 @@ import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.SessionService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.dtos.auth.request.AuthLoginDto;
+import com.exskylab.koala.core.geoip.GeoIpResolver;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.UnauthorizedException;
 import com.exskylab.koala.core.helpers.ClientContext;
@@ -30,8 +31,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -46,6 +50,7 @@ class LoginConcealmentTest {
     private UserService userService;
     private PasswordEncoder passwordEncoder;
     private LoginAttemptService loginAttemptService;
+    private DeviceService deviceService;
     private AuthManager authManager;
 
     @BeforeEach
@@ -53,15 +58,22 @@ class LoginConcealmentTest {
         userService = mock(UserService.class);
         passwordEncoder = mock(PasswordEncoder.class);
         loginAttemptService = mock(LoginAttemptService.class);
+        deviceService = mock(DeviceService.class);
 
         when(passwordEncoder.encode(anyString())).thenReturn(ABSENT_ACCOUNT_HASH);
+        when(userService.getReference(any())).thenAnswer(invocation -> {
+            User phantom = new User();
+            phantom.setId(invocation.getArgument(0));
+            return phantom;
+        });
 
         authManager = new AuthManager(
                 userService, mock(PendingRegistrationService.class), mock(NotificationService.class),
                 mock(AuthLinkService.class), mock(JwtService.class), passwordEncoder,
-                mock(DeviceService.class), mock(SessionService.class), loginAttemptService,
+                deviceService, mock(SessionService.class), loginAttemptService,
                 mock(SecurityService.class), new SessionProperties(), mock(LegalService.class),
-                mock(PasswordResetTokenService.class), mock(ApplicationEventPublisher.class));
+                mock(PasswordResetTokenService.class), mock(ApplicationEventPublisher.class),
+                GeoIpResolver.unavailable());
 
         when(userService.getByEmail(UNREGISTERED_EMAIL))
                 .thenThrow(new ResourceNotFoundException("{user.not.found.by.email}"));
@@ -102,6 +114,14 @@ class LoginConcealmentTest {
         assertEquals(UNREGISTERED_EMAIL, saved.getValue().getEmailAttempted());
         assertFalse(saved.getValue().isSuccess());
         assertNull(saved.getValue().getUser());
+    }
+
+    @Test
+    void anUnregisteredEmailStillPaysForTheDeviceLookupTheRegisteredOnePays() {
+        assertThrows(RuntimeException.class, () -> authManager.login(loginWith(UNREGISTERED_EMAIL), client()));
+        assertThrows(RuntimeException.class, () -> authManager.login(loginWith(REGISTERED_EMAIL), client()));
+
+        verify(deviceService, times(2)).findDevice(any(), eq("Koala JUnit"), eq("cihaz-1"), any(), any());
     }
 
     private User registeredUser() {

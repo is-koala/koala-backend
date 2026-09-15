@@ -52,8 +52,8 @@ class AccountAnonymizationLoginAttemptIT extends AbstractIntegrationTest {
         jdbcTemplate.update("""
                 insert into login_attempts
                     (id, created_at, user_id, email_attempted, is_success, failure_reason,
-                     ip_address, device_name, time_stamp, is_deleted)
-                values (?, now(), ?, ?, false, ?, '203.0.113.7', 'koala-web/1.0', now(), false)
+                     ip_address, location, device_name, time_stamp, is_deleted)
+                values (?, now(), ?, ?, false, ?, '203.0.113.7', 'Istanbul, TR', 'koala-web/1.0', now(), false)
                 """, id, userId, emailAttempted, failureReason);
         return id;
     }
@@ -137,9 +137,10 @@ class AccountAnonymizationLoginAttemptIT extends AbstractIntegrationTest {
 
         List<String> leftovers = jdbcTemplate.queryForList("""
                 select coalesce(failure_reason, '') || coalesce(ip_address, '') || coalesce(device_name, '')
+                       || coalesce(location, '')
                 from login_attempts where id = ?
                 """, String.class, unattributed);
         assertTrue(leftovers.get(0).isEmpty(),
-                "Gerekçe, IP ve cihaz adı da temizlenmeliydi: " + leftovers.get(0));
+                "Gerekçe, IP, konum ve cihaz adı da temizlenmeliydi: " + leftovers.get(0));
     }
 }

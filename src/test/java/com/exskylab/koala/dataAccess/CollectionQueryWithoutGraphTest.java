@@ -90,6 +90,9 @@ class CollectionQueryWithoutGraphTest {
             // Aggregate COUNT rows per company for CompanyReviewDto.jobCount (#283).
             "JobDao.countByCompanyIds",
             "JobDao.searchIds",
+            // LoginHistoryEntryDto renders only scalar columns (time, ip, location, success); user and device
+            // are lazy proxies the mapper never touches (#306).
+            "LoginAttemptDao.findAllByUser_IdAndDevice_IdOrderByTimeStampDesc",
             "MessageDao.countUnreadByConversationIds",
             // Message pages fetch no sender: with Message.sender nullable=false and User @SQLRestriction the graph
             // became an INNER join that dropped deleted senders' messages (#231 trap). The page reads only

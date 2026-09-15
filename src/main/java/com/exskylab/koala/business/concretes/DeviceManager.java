@@ -4,10 +4,14 @@ import com.exskylab.koala.business.abstracts.DeviceService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.AuthMessages;
 import com.exskylab.koala.core.constants.DeviceMessages;
+import com.exskylab.koala.core.dtos.device.response.DeviceDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.helpers.ClientPlatform;
+import com.exskylab.koala.core.helpers.DeviceHints;
 import com.exskylab.koala.core.helpers.DeviceIdentity;
+import com.exskylab.koala.core.helpers.DeviceNaming;
+import com.exskylab.koala.core.mappers.DeviceMapper;
 import com.exskylab.koala.core.privacy.PushTokenMutationLock;
 import com.exskylab.koala.dataAccess.DeviceDao;
 import com.exskylab.koala.entities.Device;
@@ -35,20 +39,27 @@ public class DeviceManager implements DeviceService {
     private final UserAgentAnalyzer userAgentAnalyzer;
     private final SecurityService securityService;
     private final PushTokenMutationLock pushTokenDeliveryLock;
+    private final DeviceMapper deviceMapper;
 
     public DeviceManager(DeviceDao deviceDao, SecurityService securityService,
-                         PushTokenMutationLock pushTokenDeliveryLock) {
+                         PushTokenMutationLock pushTokenDeliveryLock, DeviceMapper deviceMapper) {
         this.deviceDao = deviceDao;
         this.pushTokenDeliveryLock = pushTokenDeliveryLock;
+        this.deviceMapper = deviceMapper;
 
         this.userAgentAnalyzer = UserAgentAnalyzer
                 .newBuilder()
                 .withField(UserAgent.DEVICE_NAME)
                 .withField(UserAgent.DEVICE_CLASS)
                 .withField(UserAgent.OPERATING_SYSTEM_NAME_VERSION)
+                .withField(UserAgent.OPERATING_SYSTEM_NAME_VERSION_MAJOR)
                 .withField(UserAgent.AGENT_NAME_VERSION)
+                .withField(UserAgent.AGENT_NAME_VERSION_MAJOR)
                 .build();
         this.securityService = securityService;
+    }
+
+    record Identity(String name, DeviceType type) {
     }
 
     @Override
@@ -60,7 +71,7 @@ public class DeviceManager implements DeviceService {
     @Override
     @Transactional
     public Device findOrCreateDevice(User user, String ipAddress, String userAgent, String clientDeviceId,
-                                     ClientPlatform platform) {
+                                     ClientPlatform platform, DeviceHints hints) {
         pushTokenDeliveryLock.lockUser(user.getId());
         requireActiveUser(user.getId());
         String deviceId = DeviceIdentity.sanitize(clientDeviceId);
@@ -69,6 +80,8 @@ public class DeviceManager implements DeviceService {
             throw new ValidationException(AuthMessages.WEB_DEVICE_ID_REQUIRED);
         }
 
+        Identity identity = identify(userAgent, platform, hints);
+
         if (deviceId != null) {
             Optional<Device> byClientId = deviceDao.findByUser_IdAndClientDeviceId(user.getId(), deviceId);
             if (byClientId.isPresent()) {
@@ -76,20 +89,20 @@ public class DeviceManager implements DeviceService {
                 pushTokenDeliveryLock.lockTokens(device.getPushToken() == null
                         ? List.of() : List.of(device.getPushToken()));
                 device.setLastSeenAt(Instant.now());
-                device.setName(describe(userAgent));
-                device.setType(platform == ClientPlatform.WEB ? DeviceType.WEB_BROWSER : typeOf(userAgent));
+                device.setName(identity.name());
+                device.setType(identity.type());
                 return deviceDao.save(device);
             }
-            return deviceDao.save(newDevice(user, userAgent, deviceId, platform));
+            return deviceDao.save(newDevice(user, identity, deviceId));
         }
 
-        return findOrCreateByUserAgent(user, userAgent);
+        return findOrCreateByIdentity(user, identity);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Optional<Device> findDevice(User user, String userAgent, String clientDeviceId,
-                                       ClientPlatform platform) {
+                                       ClientPlatform platform, DeviceHints hints) {
         String deviceId = DeviceIdentity.sanitize(clientDeviceId);
 
         if (platform == ClientPlatform.WEB && deviceId == null) {
@@ -100,7 +113,20 @@ public class DeviceManager implements DeviceService {
             return deviceDao.findByUser_IdAndClientDeviceId(user.getId(), deviceId);
         }
 
-        return deviceDao.findByUserAndNameAndType(user, describe(userAgent), typeOf(userAgent));
+        Identity identity = identify(userAgent, platform, hints);
+        return deviceDao.findByUserAndNameAndType(user, identity.name(), identity.type());
+    }
+
+    @Override
+    @Transactional
+    public DeviceDto renameMyDevice(UUID deviceId, String name) {
+        UUID userId = securityService.getAuthenticatedUserId();
+        Device device = deviceDao.findByIdAndUser_Id(deviceId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException(DeviceMessages.DEVICE_NOT_FOUND));
+        device.setCustomName(name.strip());
+        Device saved = deviceDao.save(device);
+        log.info("Device {} renamed by its owner {}", deviceId, userId);
+        return deviceMapper.toDeviceDto(saved);
     }
 
     @Override
@@ -176,73 +202,56 @@ public class DeviceManager implements DeviceService {
         }
     }
 
-    private Device newDevice(User user, String userAgent, String clientDeviceId, ClientPlatform platform) {
+    private Device newDevice(User user, Identity identity, String clientDeviceId) {
         Device device = new Device();
         device.setUser(user);
         device.setClientDeviceId(clientDeviceId);
-        device.setName(describe(userAgent));
-        device.setType(platform == ClientPlatform.WEB ? DeviceType.WEB_BROWSER : typeOf(userAgent));
+        device.setName(identity.name());
+        device.setType(identity.type());
         device.setPushToken(null);
         device.setFirstSeenAt(Instant.now());
         device.setLastSeenAt(Instant.now());
         return device;
     }
 
-    private String describe(String userAgent) {
+    Identity identify(String userAgent, ClientPlatform platform, DeviceHints hints) {
         UserAgent agent = userAgentAnalyzer.parse(normalize(userAgent));
-        return String.format("%s (%s)", agent.getValue(UserAgent.DEVICE_NAME),
-                agent.getValue(UserAgent.OPERATING_SYSTEM_NAME_VERSION));
-    }
-
-    private DeviceType typeOf(String userAgent) {
-        UserAgent agent = userAgentAnalyzer.parse(normalize(userAgent));
-        return toDeviceType(agent.getValue(UserAgent.OPERATING_SYSTEM_NAME_VERSION),
-                agent.getValue(UserAgent.AGENT_NAME_VERSION));
+        String operatingSystem = agent.getValue(UserAgent.OPERATING_SYSTEM_NAME_VERSION);
+        String browser = agent.getValue(UserAgent.AGENT_NAME_VERSION);
+        DeviceType type = typeOf(platform, operatingSystem, browser);
+        DeviceNaming.ParsedAgent parsed = new DeviceNaming.ParsedAgent(
+                agent.getValue(UserAgent.DEVICE_NAME),
+                operatingSystem,
+                agent.getValue(UserAgent.AGENT_NAME_VERSION_MAJOR),
+                agent.getValue(UserAgent.OPERATING_SYSTEM_NAME_VERSION_MAJOR));
+        return new Identity(DeviceNaming.name(hints == null ? DeviceHints.NONE : hints, parsed, type), type);
     }
 
     private String normalize(String userAgent) {
         return userAgent == null || userAgent.isBlank() ? "unknown" : userAgent;
     }
 
-    private Device findOrCreateByUserAgent(User user, String userAgent) {
-        if (userAgent == null || userAgent.isBlank()){
-            userAgent = "unknown";
-        }
-        UserAgent agent = userAgentAnalyzer.parse(userAgent);
+    private Device findOrCreateByIdentity(User user, Identity identity) {
+        Optional<Device> existingDevice = deviceDao.findByUserAndNameAndType(user, identity.name(), identity.type());
 
-        String deviceName = agent.getValue(UserAgent.DEVICE_NAME);
-
-        String operatingSystem = agent.getValue(UserAgent.OPERATING_SYSTEM_NAME_VERSION);
-
-        String browser = agent.getValue(UserAgent.AGENT_NAME_VERSION);
-
-        DeviceType deviceType = toDeviceType(operatingSystem, browser);
-
-        String finalDeviceName = String.format("%s (%s)", deviceName, operatingSystem);
-
-
-        Optional<Device> existingDevice = deviceDao.findByUserAndNameAndType(user, finalDeviceName, deviceType);
-
-
-        if (existingDevice.isPresent()){
+        if (existingDevice.isPresent()) {
             pushTokenDeliveryLock.lockTokens(existingDevice.get().getPushToken() == null
                     ? List.of() : List.of(existingDevice.get().getPushToken()));
             existingDevice.get().setLastSeenAt(Instant.now());
             return deviceDao.save(existingDevice.get());
-        }else {
-            Device newDevice = new Device();
-            newDevice.setUser(user);
-            newDevice.setName(finalDeviceName);
-            newDevice.setType(deviceType);
-            newDevice.setPushToken(null);
-            newDevice.setFirstSeenAt(Instant.now());
-            newDevice.setLastSeenAt(Instant.now());
-
-            return deviceDao.save(newDevice);
         }
 
+        return deviceDao.save(newDevice(user, identity, null));
     }
 
+    private DeviceType typeOf(ClientPlatform platform, String operatingSystem, String agentName) {
+        return switch (platform == null ? ClientPlatform.UNKNOWN : platform) {
+            case WEB -> DeviceType.WEB_BROWSER;
+            case IOS -> DeviceType.IOS;
+            case ANDROID -> DeviceType.ANDROID;
+            case UNKNOWN -> toDeviceType(operatingSystem, agentName);
+        };
+    }
 
     private DeviceType toDeviceType(String operatingSystem, String agentName) {
 

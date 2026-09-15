@@ -45,6 +45,13 @@ public class LoginAttempt extends BaseEntity{
     @Column(name = "device_name")
     private String deviceName;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "device_id")
+    private Device device;
+
+    @Column(name = "location")
+    private String location;
+
     @Column(name = "time_stamp")
     private Instant timeStamp = Instant.now();
 

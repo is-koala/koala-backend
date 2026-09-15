@@ -39,7 +39,8 @@ class LogPrivacyTest {
             "getAddress()", "getNeighborhood()", "getThoroughfare()", "getSiteName()",
             "getBlock()", "getBuildingName()", "getBuildingNumber()", "getFloor()",
             "getUnitNumber()", "getPostalCode()", "getAdditionalDirections()",
-            "getLatitude()", "getLongitude()");
+            "getLatitude()", "getLongitude()",
+            "getIpAddress()", "getLocation()", "getRemoteAddr()");
 
     private static final Pattern FORBIDDEN_TOKEN_ACCESSOR =
             Pattern.compile("get[A-Za-z]*[Tt]oken[A-Za-z]*\\(\\)");
@@ -53,7 +54,8 @@ class LogPrivacyTest {
             "phoneNumber", "newPhoneNumber", "oldPhoneNumber", "destinationPhoneNumber",
             "iban", "accountHolderName", "tcIdentityNumber", "password", "rawPassword", "to",
             "firstName", "lastName", "fullName", "birthDate", "birthdate", "dateOfBirth",
-            "verificationCode", "otpCode", "smsCode", "resetCode", "address");
+            "verificationCode", "otpCode", "smsCode", "resetCode", "address",
+            "ipAddress", "clientIp", "remoteAddress", "remoteAddr", "location");
 
     private static final String PII_NAME_SUFFIX = "\\b(?!\\s*(?:\\(|\\.get))";
 

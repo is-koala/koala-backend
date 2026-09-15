@@ -13,6 +13,7 @@ import com.exskylab.koala.core.utilities.push.PushService;
 import com.exskylab.koala.dataAccess.DeviceDao;
 import com.exskylab.koala.entities.Device;
 import com.exskylab.koala.entities.User;
+import com.exskylab.koala.core.mappers.DeviceMapperImpl;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -542,7 +543,7 @@ class PushDeliveryClaimIT extends AbstractIntegrationTest {
                 jdbcTemplate.queryForObject(
                         "select exists(select 1 from users where id = ? and is_deleted = false)",
                         Boolean.class, authenticatedUser.getId())));
-        return new DeviceManager(deviceDao, securityService, mutationLock);
+        return new DeviceManager(deviceDao, securityService, mutationLock, new DeviceMapperImpl());
     }
 
     private User systemUser() {

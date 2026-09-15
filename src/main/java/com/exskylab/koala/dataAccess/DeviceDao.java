@@ -26,6 +26,8 @@ public interface DeviceDao extends JpaRepository<Device, UUID> {
 
     Optional<Device> findByIdAndUser_IdAndPushTokenIsNotNull(UUID id, UUID userId);
 
+    Optional<Device> findByIdAndUser_Id(UUID id, UUID userId);
+
     @Modifying
     @Query("update Device d set d.pushToken = null where d.id = :deviceId and d.pushToken = :expectedToken")
     int clearPushTokenIfMatches(@Param("deviceId") UUID deviceId,

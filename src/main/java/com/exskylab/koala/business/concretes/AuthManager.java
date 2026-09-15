@@ -14,6 +14,7 @@ import com.exskylab.koala.core.dtos.notification.request.SendEmailDto;
 import com.exskylab.koala.core.dtos.session.response.CreatedSessionDto;
 import com.exskylab.koala.core.exceptions.*;
 import com.exskylab.koala.core.events.PasswordResetCompletedEvent;
+import com.exskylab.koala.core.geoip.GeoIpResolver;
 import com.exskylab.koala.core.security.JwtService;
 import com.exskylab.koala.entities.*;
 import org.springframework.context.ApplicationEventPublisher;
@@ -24,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -46,6 +48,7 @@ public class AuthManager implements AuthService {
     private final LegalService legalService;
     private final PasswordResetTokenService passwordResetTokenService;
     private final ApplicationEventPublisher eventPublisher;
+    private final GeoIpResolver geoIpResolver;
     private final String absentAccountPasswordHash;
 
     public AuthManager(UserService userService,
@@ -61,7 +64,8 @@ public class AuthManager implements AuthService {
                        SessionProperties sessionProperties,
                        LegalService legalService,
                        PasswordResetTokenService passwordResetTokenService,
-                       ApplicationEventPublisher eventPublisher) {
+                       ApplicationEventPublisher eventPublisher,
+                       GeoIpResolver geoIpResolver) {
         this.userService = userService;
         this.pendingRegistrationService = pendingRegistrationService;
         this.notificationService = notificationService;
@@ -76,6 +80,7 @@ public class AuthManager implements AuthService {
         this.legalService = legalService;
         this.passwordResetTokenService = passwordResetTokenService;
         this.eventPublisher = eventPublisher;
+        this.geoIpResolver = geoIpResolver;
         this.absentAccountPasswordHash = passwordEncoder.encode(UUID.randomUUID().toString());
     }
 
@@ -179,20 +184,15 @@ public class AuthManager implements AuthService {
         pendingRegistrationService.deleteById(pendingRegistrationId);
 
         Device device = deviceService.findOrCreateDevice(
-                savedUser, client.ipAddress(), client.userAgent(), client.deviceId(), client.platform());
+                savedUser, client.ipAddress(), client.userAgent(), client.deviceId(), client.platform(),
+                client.deviceHints());
 
         log.info("Device created or found for user ID: {}", savedUser.getId());
 
         CreatedSessionDto createdSessionInfo = sessionService.createSession(device, client.ipAddress());
         log.info("Session created for user ID: {}, session ID: {}", savedUser.getId(), createdSessionInfo.session().getId());
 
-        LoginAttempt attempt = new LoginAttempt();
-        attempt.setUser(savedUser);
-        attempt.setEmailAttempted(savedUser.getEmail());
-        attempt.setSuccess(true);
-        attempt.setIpAddress(client.ipAddress());
-        attempt.setDeviceName(device.getName());
-        loginAttemptService.save(attempt);
+        loginAttemptService.save(successfulAttempt(savedUser, device, client));
 
         sendWelcomeEmail(savedUser);
 
@@ -226,30 +226,25 @@ public class AuthManager implements AuthService {
             loginAttempt.setSuccess(false);
             loginAttempt.setFailureReason(user == null ? "No account for email" : "Invalid email or password");
             loginAttempt.setIpAddress(client.ipAddress());
+            loginAttempt.setLocation(geoIpResolver.locate(client.ipAddress()).orElse(null));
             loginAttempt.setDeviceName(client.userAgent());
             loginAttempt.setUser(user);
+            loginAttempt.setDevice(knownDevice(user, client));
             loginAttemptService.save(loginAttempt);
 
             throw new UnauthorizedException(AuthMessages.EMAIL_OR_PASSWORD_MISMATCH);
         }
 
         Device device = deviceService.findOrCreateDevice(
-                user, client.ipAddress(), client.userAgent(), client.deviceId(), client.platform());
+                user, client.ipAddress(), client.userAgent(), client.deviceId(), client.platform(),
+                client.deviceHints());
 
         log.info("Device found or created for user ID: {}", user.getId());
 
-        // Invalidate all active sessions for the device
         sessionService.invalidateActiveSessionsForDevice(device.getId());
         log.info("Invalidated all active sessions for device ID: {}", device.getId());
 
-
-        LoginAttempt loginAttempt = new LoginAttempt();
-        loginAttempt.setUser(user);
-        loginAttempt.setEmailAttempted(user.getEmail());
-        loginAttempt.setSuccess(true);
-        loginAttempt.setIpAddress(client.ipAddress());
-        loginAttempt.setDeviceName(device.getName());
-        loginAttemptService.save(loginAttempt);
+        loginAttemptService.save(successfulAttempt(user, device, client));
 
         CreatedSessionDto createdSessionInfo = sessionService.createSession(device, client.ipAddress());
 
@@ -289,7 +284,8 @@ public class AuthManager implements AuthService {
         }
 
         Device currentDevice = deviceService.findDevice(
-                session.getDevice().getUser(), client.userAgent(), client.deviceId(), client.platform()).orElse(null);
+                session.getDevice().getUser(), client.userAgent(), client.deviceId(), client.platform(),
+                client.deviceHints()).orElse(null);
 
         if (currentDevice == null || !session.getDevice().getId().equals(currentDevice.getId())){
             session.setActive(false);
@@ -310,12 +306,33 @@ public class AuthManager implements AuthService {
 
         session.setLastAccessedAt(now);
         session.getDevice().setLastSeenAt(now);
-        session.setIpAddress(client.ipAddress());
+        if (!Objects.equals(client.ipAddress(), session.getIpAddress())) {
+            session.setIpAddress(client.ipAddress());
+            session.setLocation(geoIpResolver.locate(client.ipAddress()).orElse(null));
+        }
         sessionService.save(session);
 
         String newAccessToken = jwtService.generateAccessToken(session.getDevice().getUser(), session.getId());
         log.info("Access token refreshed successfully for session ID: {}", sessionId);
         return new TokenResponseDto(newAccessToken, refreshTokenDto.getRefreshToken(), session.getRefreshExpiresAt());
+    }
+
+    private LoginAttempt successfulAttempt(User user, Device device, ClientContext client) {
+        LoginAttempt attempt = new LoginAttempt();
+        attempt.setUser(user);
+        attempt.setEmailAttempted(user.getEmail());
+        attempt.setSuccess(true);
+        attempt.setIpAddress(client.ipAddress());
+        attempt.setLocation(geoIpResolver.locate(client.ipAddress()).orElse(null));
+        attempt.setDeviceName(device.getName());
+        attempt.setDevice(device);
+        return attempt;
+    }
+
+    private Device knownDevice(User user, ClientContext client) {
+        User subject = user == null ? userService.getReference(UUID.randomUUID()) : user;
+        return deviceService.findDevice(subject, client.userAgent(), client.deviceId(), client.platform(),
+                client.deviceHints()).orElse(null);
     }
 
     @Override
