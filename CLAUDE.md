@@ -4345,7 +4345,39 @@ Yani sözleşme değişikliği yayındaki iki istemciyle geriye uyumlu. Mapper t
 `conditionExpression = "java(!viewer.workerView())"` ile koşullu eşlenir (`AdminDetailMapper`'ın `includePii`
 ifadesiyle aynı kalıp); `PricingDtoMapper` yalnız mapper'ın `uses` listesinde, manager'a girmez. Karşı taraf kuralı
 `JobAssignmentManager.isCounterpartyOf` (yazar işçi mi ≠ görüntüleyen işçi mi). `MyAssignmentDto.job.pricing` (`JobSummaryDto`)
-bilerek dokunulmadı: ilan listelerinde herkese açık olan aynı nesne, ayrı issue.
+o turda bilerek dokunulmadı; #304 aşağıda kapattı.
+
+**İlan DTO'larında da fiyat görüntüleyene göre kısılır — ama şekil farklı: nesne kalır, fee alanları null olur (#304).**
+`JobSummaryDto.pricing` / `JobDetailDto.pricing` (ilan araması, `/users/me/jobs`, `/companies/{id}/jobs`, `GET /jobs/{id}`)
+görüntüleyen **ilan sahibi ya da şirket ilanının güncel yetkilisi** değilse (anonim dahil) yalnız `pricingVersion`,
+`currency`, `workerPayout` taşır; `serviceFeeRate`, `serviceFeeAmount`, `employerTotal` `null`. Snapshot'ı olmayan ilanda
+`pricing` yine `null`. **Neden `pricing: null` değil de daraltılmış nesne (#293'ün tersi):** yayındaki istemciler ölçüldü —
+mobil `Job.fromJson` (`lib/employee/features/home/models/job.dart`) ve iş tarafı `BJob` ilan yükündeki `pricing`'i **hiç
+okumuyor** (`PricingBreakdown.fromJson` yalnız atama ve ödeme denemesinde çağrılıyor), yani her şekil tolere ediliyor;
+web `search.ts` ise listede `dto.pricing?.workerPayout`/`currency` okuyor — `pricing: null` işçinin kazancını listeden
+silerdi, daraltılmış nesne korur. Web ilan detayı `job-detail-dto.ts`'teki `toPricing` üç tutarı birden şart koştuğu için
+herkese açık detayda `pricing` `null`'a düşer ve sayfa "Kazanç bilgisi paylaşılmadı" yazar; bu web'in kendi işi
+(`toPricing`'in `workerPayout`'u tek başına kabul etmesi), backend sözleşmesi her iki istemciyle geriye uyumlu.
+Mapper kalıbı `JobAssignmentMapper.ViewerFacts`'in aynısı: `JobMapper.ViewerFacts(employerView)` (`PUBLIC`/`EMPLOYER`
+sabitleri) `@Context` parametresi olarak `toJobSummaryDto(job, viewer)` / `toJobDetailDto(job, viewer)`'a girer,
+`pricing` `expression = "java(pricingDtoMapper.toPricing(job, viewer))"` ile eşlenir ve `PricingDtoMapper.toPricing(Job,
+ViewerFacts)` işçi görünümünde `PricingBreakdownDto.workerView(...)` üretir. `@Context` seçildi ki mevcut `source =
+"address.city.name"` satırları çok kaynaklı imzaya taşınmasın. **Tek kaynaklı `toJobSummaryDto(Job)` default metodu
+`PUBLIC` görünümdür:** MapStruct iç içe eşlemede (`MyAssignmentDto.job`, `MyApplicationDto.job`, `WorkItemDto.job`) ve
+`toJobSummaryDtoList` (`/users/me/saved-jobs`) bu metodu kullanır, yani o yüzeylerde ilan özeti her zaman işçi şeklindedir —
+işveren tam dökümü atamanın kendi `MyAssignmentDto.pricing`'inden okur, hiçbir istemci iç içe `job.pricing`'den fee okumuyor.
+Görüntüleyen kararı `JobManager`'da: detayda `detailViewerFactsOf` (sahip → ek sorgu yok; değilse ve ilan şirket ilanıysa
+`companyContactService.isUserAContactOfCompany`, tek sorgu), listelerde `listJobs(..., companyOfficial, ...)` — `isOwner(job,
+viewerId)` `job.creator.id`'yi proxy'den okur (ek sorgu yok, `JobAddressVisibility.precision` ile aynı), `getJobsOfCompany`
+yetkiyi zaten doğruladığı için `companyOfficial=true` geçer, `getJobsOfCurrentUser` sahiplik kuralıyla zaten tam gelir.
+**Bilinçli sınır:** herkese açık aramada (`GET /jobs`) şirket yetkilisi kendi açmadığı şirket ilanını işçi görünümünde
+görür — sayfa başına `getCompanyIdsOfContact` sorgusu eklemek yerine "listede ek sorgu yok" kabul kriteri seçildi; yetkilinin
+yönetim yüzeyi `/companies/{id}/jobs` ve detay tam döküm verir. Personel uçları (`AdminJobDto`, `AdminJobDetailDto`) ve
+`POST /pricing/quote` değişmedi; `IndividualJobDto`/`CompanyJobDto` (ilan oluşturma yanıtı, yalnız işverene gider) tam
+döküm. `PricingBreakdownDto`'nun üç fee alanı OpenAPI'de `["string","null"]`. Testler: `JobPricingVisibilityIT` (anonim/
+işçi/sahip/yetkili detay ve liste, şirket ilanında işçi, `size=1`/`size=2` statement eşitliği üç görüntüleyenle),
+`MapperCharacterizationTest` (iki görünüm, iç içe ve kayıtlı ilan özeti `PUBLIC`, snapshot'sız ilan), `OpenApiDocumentIT`,
+`CompanyJobListingRulesTest`. İstemci tarafı: web ilan detayı `toPricing` gevşetmesi ayrı issue.
 
 Testler: `AssignmentReadIT` (null hâl, dolu hâl, başarısız ödeme sayılmaz, respond `confirmedAt`, iki işveren rolü
 listeler / işçi ve yabancı 404 / bilinmeyen ilanla aynı gövde / bilinmeyen sıralama 400, N+1 — değerlendirme

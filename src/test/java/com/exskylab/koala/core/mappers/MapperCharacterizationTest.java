@@ -29,6 +29,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -313,7 +314,7 @@ class MapperCharacterizationTest {
         job.setInsuranceRequired(true);
         job.setExperienceRequired(false);
 
-        var dto = jobMapper.toJobDetailDto(job);
+        var dto = jobMapper.toJobDetailDto(job, JobMapper.ViewerFacts.EMPLOYER);
 
         assertEquals("Hafta sonu servis destegi", dto.getDescription());
         assertEquals("Masa hazirligi", dto.getDuties());
@@ -339,6 +340,56 @@ class MapperCharacterizationTest {
         assertEquals("Akme AS", companySummary.getCompanyName());
         assertNull(individualSummary.getCompanyId());
         assertNull(individualSummary.getCompanyName());
+    }
+
+    @Test
+    void theEmployerViewOfAJobCarriesTheFullPricingBreakdown() {
+        var summary = jobMapper.toJobSummaryDto(pricedJob(), JobMapper.ViewerFacts.EMPLOYER);
+        var detail = jobMapper.toJobDetailDto(pricedJob(), JobMapper.ViewerFacts.EMPLOYER);
+
+        for (var pricing : List.of(summary.getPricing(), detail.getPricing())) {
+            assertEquals("v1", pricing.pricingVersion());
+            assertEquals("TRY", pricing.currency());
+            assertEquals("100.00", pricing.workerPayout());
+            assertEquals("0.1000", pricing.serviceFeeRate());
+            assertEquals("10.00", pricing.serviceFeeAmount());
+            assertEquals("110.00", pricing.employerTotal());
+        }
+    }
+
+    @Test
+    void thePublicViewOfAJobKeepsOnlyTheWorkerPayout() {
+        var summary = jobMapper.toJobSummaryDto(pricedJob(), JobMapper.ViewerFacts.PUBLIC);
+        var detail = jobMapper.toJobDetailDto(pricedJob(), JobMapper.ViewerFacts.PUBLIC);
+
+        for (var pricing : List.of(summary.getPricing(), detail.getPricing())) {
+            assertEquals("v1", pricing.pricingVersion());
+            assertEquals("TRY", pricing.currency());
+            assertEquals("100.00", pricing.workerPayout());
+            assertNull(pricing.serviceFeeRate());
+            assertNull(pricing.serviceFeeAmount());
+            assertNull(pricing.employerTotal());
+        }
+    }
+
+    @Test
+    void nestedJobSummariesAndSavedJobsDefaultToTheWorkerPricingView() {
+        var assignment = jobAssignmentMapper.toMyAssignmentDto(pricedAssignment(pricedJob()), null, null, null,
+                employerFacts());
+        var saved = jobMapper.toJobSummaryDtoList(List.of(pricedJob())).get(0);
+
+        assertEquals("100.00", assignment.job().getPricing().workerPayout());
+        assertNull(assignment.job().getPricing().employerTotal(),
+                "Atamanin icindeki ilan ozeti herkese acik JobSummaryDto ile ayni sekli tasir; "
+                        + "isveren tam dokumu atamanin kendi pricing alanindan okur.");
+        assertEquals("110.00", assignment.pricing().employerTotal());
+        assertNull(saved.getPricing().employerTotal());
+    }
+
+    @Test
+    void aJobWithoutAPricingSnapshotHasNoPricingInEitherView() {
+        assertNull(jobMapper.toJobSummaryDto(individualJob(), JobMapper.ViewerFacts.PUBLIC).getPricing());
+        assertNull(jobMapper.toJobDetailDto(individualJob(), JobMapper.ViewerFacts.EMPLOYER).getPricing());
     }
 
     @Test
@@ -436,6 +487,17 @@ class MapperCharacterizationTest {
         job.setAddress(address());
         job.setTitle("Garson");
         job.setCompany(null);
+        return job;
+    }
+
+    private Job pricedJob() {
+        Job job = individualJob();
+        job.setPricingVersion("v1");
+        job.setCurrency("TRY");
+        job.setWorkerPayout(new BigDecimal("100.00"));
+        job.setCommissionRate(new BigDecimal("0.1000"));
+        job.setCommissionAmount(new BigDecimal("10.00"));
+        job.setTotalCharged(new BigDecimal("110.00"));
         return job;
     }
 

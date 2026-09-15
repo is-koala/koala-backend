@@ -41,6 +41,10 @@ public class JobDetailDto {
     private JobType type;
     private SalaryType salaryType;
     private BigDecimal salary;
+    @Schema(types = {"object", "null"},
+            description = "Fiyat anlık görüntüsü. Görüntüleyen ilan sahibi ya da şirket yetkilisiyse tam döküm; "
+                    + "herkese açık ve işçi görünümünde yalnız pricingVersion, currency ve workerPayout dolu, "
+                    + "hizmet bedeli alanları ve employerTotal null. Snapshot'ı olmayan ilanda null.")
     private PricingBreakdownDto pricing;
     private Integer minAge;
     private Integer maxAge;

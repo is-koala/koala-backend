@@ -17,6 +17,15 @@ public class PricingDtoMapper {
                 job.getCommissionRate(), job.getCommissionAmount(), job.getTotalCharged());
     }
 
+    public PricingBreakdownDto toPricing(Job job, JobMapper.ViewerFacts viewer) {
+        if (job == null || job.getPricingVersion() == null) {
+            return null;
+        }
+        return viewer.employerView()
+                ? toPricing(job)
+                : PricingBreakdownDto.workerView(job.getPricingVersion(), job.getCurrency(), job.getWorkerPayout());
+    }
+
     public PricingBreakdownDto toPricing(JobAssignment assignment) {
         if (assignment == null || assignment.getPricingVersion() == null) {
             return null;

@@ -125,6 +125,28 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void jobPricingDocumentsItsViewerSidedShapeInTurkish() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.components.schemas.JobSummaryDto.properties.pricing.type")
+                        .value(hasItems("object", "null")))
+                .andExpect(jsonPath("$.components.schemas.JobSummaryDto.properties.pricing.description")
+                        .value(containsString("şirket yetkilisi")))
+                .andExpect(jsonPath("$.components.schemas.JobDetailDto.properties.pricing.type")
+                        .value(hasItems("object", "null")))
+                .andExpect(jsonPath("$.components.schemas.JobDetailDto.properties.pricing.description")
+                        .value(containsString("workerPayout")))
+                .andExpect(jsonPath("$.components.schemas.PricingBreakdownDto.properties.employerTotal.type")
+                        .value(hasItems("string", "null")))
+                .andExpect(jsonPath("$.components.schemas.PricingBreakdownDto.properties.employerTotal.description")
+                        .value(containsString("İşverenden çekilen toplam")))
+                .andExpect(jsonPath("$.components.schemas.PricingBreakdownDto.properties.serviceFeeAmount.type")
+                        .value(hasItems("string", "null")))
+                .andExpect(jsonPath("$.components.schemas.PricingBreakdownDto.properties.workerPayout.description")
+                        .value(containsString("her görünümde dolu")));
+    }
+
+    @Test
     void assignmentTimelineAndEmployerIdentityAreDocumentedInTurkish() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())

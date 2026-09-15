@@ -318,7 +318,7 @@ public class JobManager implements JobService {
     @Transactional(readOnly = true)
     public JobDetailDto getJobDetail(UUID jobId, UUID viewerId) {
         Job job = getDetailedById(jobId);
-        JobDetailDto detail = jobMapper.toJobDetailDto(job);
+        JobDetailDto detail = jobMapper.toJobDetailDto(job, detailViewerFactsOf(job, viewerId));
         detail.setHiredCount(jobAssignmentDao.countByJobIdAndStatusIn(jobId, HIRED_STATUSES));
         detail.setApplicationCount(jobApplicationDao.countByJobId(jobId));
         detail.setAcceptingApplications(jobAvailability.acceptsApplications(job));
@@ -340,7 +340,7 @@ public class JobManager implements JobService {
         Set<String> sortableFields = located ? LOCATED_SEARCH_SORTABLE_FIELDS : SORTABLE_FIELDS;
         Map<UUID, Double> distances = new HashMap<>();
 
-        PageDto<JobSummaryDto> page = listJobs(requested, sortableFields, viewerId, pageable -> {
+        PageDto<JobSummaryDto> page = listJobs(requested, sortableFields, viewerId, false, pageable -> {
             Page<JobDao.JobSearchHit> hits = jobDao.searchIds(
                     JobStatus.OPEN,
                     jobAvailability.currentTime(),
@@ -383,7 +383,7 @@ public class JobManager implements JobService {
     @Transactional(readOnly = true)
     public PageDto<JobSummaryDto> getJobsOfCurrentUser(Pageable requested) {
         UUID viewerId = securityService.getAuthenticatedUserId();
-        return listJobs(requested, SORTABLE_FIELDS, viewerId,
+        return listJobs(requested, SORTABLE_FIELDS, viewerId, false,
                 pageable -> jobDao.findAllByCreatorId(viewerId, pageable));
     }
 
@@ -398,7 +398,7 @@ public class JobManager implements JobService {
             throw new ForbiddenException(JobMessages.USER_IS_NOT_A_CONTACT_OF_COMPANY);
         }
 
-        return listJobs(requested, SORTABLE_FIELDS, viewerId,
+        return listJobs(requested, SORTABLE_FIELDS, viewerId, true,
                 pageable -> jobDao.findAllByCompanyId(companyId, pageable));
     }
 
@@ -544,7 +544,7 @@ public class JobManager implements JobService {
     }
 
     private PageDto<JobSummaryDto> listJobs(Pageable requested, Set<String> sortableFields, UUID viewerId,
-                                            Function<Pageable, Page<Job>> query) {
+                                            boolean companyOfficial, Function<Pageable, Page<Job>> query) {
         pageableSanitizer.rejectUnknownSort(requested, sortableFields);
         Pageable pageable = pageableSanitizer.sanitize(requested, sortableFields, DEFAULT_SORT);
 
@@ -553,7 +553,9 @@ public class JobManager implements JobService {
                 assignedJobIds(jobs.getContent().stream().map(Job::getId).toList(), viewerId);
 
         return enrich(PageDto.of(jobs, job -> {
-            JobSummaryDto summary = jobMapper.toJobSummaryDto(job);
+            JobSummaryDto summary = jobMapper.toJobSummaryDto(job,
+                    companyOfficial || isOwner(job, viewerId) ? JobMapper.ViewerFacts.EMPLOYER
+                            : JobMapper.ViewerFacts.PUBLIC);
             addressVisibility.protect(job, summary, viewerId, assignedJobIds.contains(job.getId()));
             return summary;
         }));
@@ -612,6 +614,17 @@ public class JobManager implements JobService {
 
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private JobMapper.ViewerFacts detailViewerFactsOf(Job job, UUID viewerId) {
+        boolean employerView = isOwner(job, viewerId)
+                || viewerId != null && job.getCompany() != null
+                && companyContactService.isUserAContactOfCompany(job.getCompany().getId(), viewerId);
+        return employerView ? JobMapper.ViewerFacts.EMPLOYER : JobMapper.ViewerFacts.PUBLIC;
+    }
+
+    private static boolean isOwner(Job job, UUID viewerId) {
+        return viewerId != null && job.getCreator() != null && viewerId.equals(job.getCreator().getId());
     }
 
     private boolean hasAddressAccess(UUID jobId, UUID viewerId) {
