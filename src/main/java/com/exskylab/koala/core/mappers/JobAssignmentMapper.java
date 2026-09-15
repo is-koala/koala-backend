@@ -7,6 +7,7 @@ import com.exskylab.koala.core.dtos.jobAssignment.response.MyAssignmentDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.MyReviewDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.ShortJobAssignmentDto;
 import com.exskylab.koala.core.dtos.payout.response.AssignmentPayoutDto;
+import com.exskylab.koala.core.dtos.transport.response.AssignmentTransportDto;
 import com.exskylab.koala.core.helpers.MessagingAvailability;
 import com.exskylab.koala.core.utilities.payment.iyzico.dtos.PaymentSessionResponseDto;
 import com.exskylab.koala.entities.Cancellation;
@@ -54,8 +55,9 @@ public interface JobAssignmentMapper {
     @Mapping(target = "paymentSecuredAt", source = "paymentSecuredAt")
     @Mapping(target = "cancellation", source = "cancellation")
     @Mapping(target = "payout", source = "payout")
+    @Mapping(target = "transport", source = "transport")
     MyAssignmentDto toMyAssignmentDto(JobAssignment jobAssignment, Cancellation cancellation, Payout payout,
-                                      Instant paymentSecuredAt, ViewerFacts viewer);
+                                      Instant paymentSecuredAt, ViewerFacts viewer, AssignmentTransportDto transport);
 
     MyReviewDto toMyReviewDto(Review review);
 

@@ -128,7 +128,7 @@ class MapperCharacterizationTest {
         JobAssignment assignment = assignment(individualJob());
 
         var dto = assertDoesNotThrow(
-                () -> jobAssignmentMapper.toMyAssignmentDto(assignment, null, null, null, employerFacts()));
+                () -> jobAssignmentMapper.toMyAssignmentDto(assignment, null, null, null, employerFacts(), null));
 
         assertNotNull(dto);
         assertNull(dto.company());
@@ -157,9 +157,9 @@ class MapperCharacterizationTest {
         review.setCreatedAt(Instant.parse("2026-09-14T10:00:00Z"));
 
         var employerDto = jobAssignmentMapper.toMyAssignmentDto(assignment, null, null, null,
-                new JobAssignmentMapper.ViewerFacts(false, null, true));
+                new JobAssignmentMapper.ViewerFacts(false, null, true), null);
         var workerDto = jobAssignmentMapper.toMyAssignmentDto(assignment, null, null, null,
-                new JobAssignmentMapper.ViewerFacts(true, review, false));
+                new JobAssignmentMapper.ViewerFacts(true, review, false), null);
 
         assertEquals(new BigDecimal("110.00"), employerDto.totalCharged());
         assertEquals("v1", employerDto.pricing().pricingVersion());
@@ -186,7 +186,7 @@ class MapperCharacterizationTest {
 
         assignment.getJob().getCompany().setLogo(image());
 
-        var dto = jobAssignmentMapper.toMyAssignmentDto(assignment, null, null, null, employerFacts());
+        var dto = jobAssignmentMapper.toMyAssignmentDto(assignment, null, null, null, employerFacts(), null);
 
         assertNotNull(dto.company());
         assertEquals("Akme AS", dto.company().name());
@@ -295,7 +295,7 @@ class MapperCharacterizationTest {
     @Test
     void nestedApplicationAndAssignmentSummariesAlsoDefaultToApproximateCoordinates() {
         var application = jobApplicationMapper.toMyApplicationDto(application());
-        var assignment = jobAssignmentMapper.toMyAssignmentDto(assignment(individualJob()), null, null, null, workerFacts());
+        var assignment = jobAssignmentMapper.toMyAssignmentDto(assignment(individualJob()), null, null, null, workerFacts(), null);
 
         assertEquals(40.99, application.job().getLatitude());
         assertEquals(AddressPrecision.APPROXIMATE, application.job().getAddressPrecision());

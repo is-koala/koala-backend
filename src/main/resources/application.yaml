@@ -304,6 +304,15 @@ assignment:
     zone-id: ${ASSIGNMENT_UNPAID_EXPIRY_ZONE_ID:Europe/Istanbul}
     cron: ${ASSIGNMENT_UNPAID_EXPIRY_CRON:0 45 * * * *}
 
+transport:
+  reminders:
+    enabled: ${TRANSPORT_REMINDERS_ENABLED:true}
+    zone-id: ${TRANSPORT_REMINDERS_ZONE_ID:Europe/Istanbul}
+    evening-at: ${TRANSPORT_REMINDERS_EVENING_AT:19:00}
+    departure-lead-minutes: ${TRANSPORT_REMINDERS_DEPARTURE_LEAD_MINUTES:60}
+    batch-size: ${TRANSPORT_REMINDERS_BATCH_SIZE:200}
+    cron: ${TRANSPORT_REMINDERS_CRON:0 */5 * * * *}
+
 payout:
   settlement:
     overdue-monitoring-enabled: ${PAYOUT_SETTLEMENT_OVERDUE_MONITORING_ENABLED:true}

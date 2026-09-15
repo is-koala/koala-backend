@@ -42,7 +42,9 @@ class AggregateBoundaryTest {
                     Set.of("NotificationPreferenceDao", "CommercialMessageConsentDao")),
             Map.entry("NotificationDispatchManager", Set.of("NotificationDao")),
             Map.entry("UserProfileSyncManager", Set.of("UserProfileSyncOutboxDao")),
-            Map.entry("IysManager", Set.of("IysConsentTaskDao", "IysPermissionStateDao")));
+            Map.entry("IysManager", Set.of("IysConsentTaskDao", "IysPermissionStateDao")),
+            Map.entry("TransportManager",
+                    Set.of("TransportPlanDao", "ShuttleDao", "ShuttleStopDao", "SeatAssignmentDao")));
 
     private static final Map<String, Set<String>> RENAMED_AGGREGATES = Map.of(
             "TalentPoolManager", Set.of("TalentPoolEntryDao"),
@@ -91,6 +93,12 @@ class AggregateBoundaryTest {
                     "salt okuma silme kapısı; JobAlertManager JobCategoryService'e bağlı olduğu için ters yön döngü olurdu"),
             new Exemption("JobCategoryManager", "JobTemplateDao",
                     "salt okuma silme kapısı; JobTemplateManager JobService üzerinden JobCategoryService'e bağlı, ters yön döngü olurdu"),
+            new Exemption("TransportManager", "JobDao",
+                    "salt okuma ilan sahibi/yetkili kapısı; JobManager ilan detayı ve liste rozeti için TransportService'e "
+                            + "bağlı olduğu için ters yön döngü olurdu"),
+            new Exemption("TransportManager", "JobAssignmentDao",
+                    "salt okuma taraf kapısı ve bildirim alıcıları; JobAssignmentManager MyAssignmentDto.transport için "
+                            + "TransportService'e bağlı olduğu için ters yön döngü olurdu"),
             new Exemption("StaffAuthorizationManager", "StaffMemberRoleDao",
                     "salt okuma görev ayrılığı kapısı: bir kenar eklenirken o kenardan etkilenen personellerin rol "
                             + "birleşimi de doğrulanıyor; StaffAccountManager StaffAuthorizationService'e bağlı "

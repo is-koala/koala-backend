@@ -81,4 +81,7 @@ public class JobSummaryDto {
                     + "büyük daire mesafesi, km, 1 ondalık. lat/lng verilmediğinde ya da ilanın koordinatı yoksa null.",
             example = "3.4")
     private Double distanceKm;
+
+    @Schema(description = "İlanın ulaşım planında gidiş ya da dönüş için servis tanımlıysa true; liste rozeti.")
+    private boolean hasShuttle;
 }

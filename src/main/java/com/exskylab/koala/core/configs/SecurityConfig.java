@@ -158,6 +158,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/jobs/{jobId}/applications").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/jobs/{jobId}/applications").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/jobs/{jobId}/assignments").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/jobs/{jobId}/transport-plan").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/jobs/{jobId}/transport-plan").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/job-assignments/{assignmentId}/transport").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/job-assignments/{assignmentId}/transport/seat").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/sitemap/jobs/**").permitAll()
 
 

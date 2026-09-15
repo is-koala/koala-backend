@@ -83,6 +83,7 @@ public class JobManager implements JobService {
     private final PricingService pricingService;
     private final JobAvailability jobAvailability;
     private final AdminDetailMapper adminDetailMapper;
+    private final TransportService transportService;
     private final JobAddressVisibility addressVisibility = new JobAddressVisibility();
 
     public JobManager(JobDao jobDao, SecurityService securityService, JobCategoryService jobCategoryService, AddressService addressService, CompanyService companyService, JobMapper jobMapper,
@@ -91,7 +92,8 @@ public class JobManager implements JobService {
                       CompanyFollowService companyFollowService, JobApplicationDao jobApplicationDao,
                       JobAssignmentDao jobAssignmentDao, NotificationService notificationService,
                       MessageResolver messageResolver, PricingService pricingService,
-                      JobAvailability jobAvailability, AdminDetailMapper adminDetailMapper) {
+                      JobAvailability jobAvailability, AdminDetailMapper adminDetailMapper,
+                      TransportService transportService) {
         this.jobDao = jobDao;
         this.securityService = securityService;
         this.jobCategoryService = jobCategoryService;
@@ -110,6 +112,7 @@ public class JobManager implements JobService {
         this.pricingService = pricingService;
         this.jobAvailability = jobAvailability;
         this.adminDetailMapper = adminDetailMapper;
+        this.transportService = transportService;
     }
 
     @Override
@@ -318,6 +321,7 @@ public class JobManager implements JobService {
         detail.setHiredCount(jobAssignmentDao.countByJobIdAndStatusIn(jobId, AssignmentStatus.HIRED));
         detail.setApplicationCount(jobApplicationDao.countByJobId(jobId));
         detail.setAcceptingApplications(jobAvailability.acceptsApplications(job));
+        detail.setTransport(transportService.publicSummaryFor(jobId).orElse(null));
         addressVisibility.protect(job, detail, viewerId, hasAddressAccess(jobId, viewerId));
         return detail;
     }
@@ -575,9 +579,12 @@ public class JobManager implements JobService {
                 .collect(Collectors.toMap(JobAssignmentDao.HiredCount::getJobId,
                         JobAssignmentDao.HiredCount::getTotal));
 
+        Set<UUID> shuttleJobIds = transportService.jobIdsWithShuttle(ids);
+
         content.forEach(job -> {
             job.setApplicationCount(counts.getOrDefault(job.getId(), 0L));
             job.setHiredCount(hired.getOrDefault(job.getId(), 0L));
+            job.setHasShuttle(shuttleJobIds.contains(job.getId()));
         });
         return page;
     }

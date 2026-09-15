@@ -140,6 +140,20 @@ class CollectionQueryWithoutGraphTest {
             // Staff assignment detail renders review rows with author/subject ids only (proxy identifiers) (#283).
             "ReviewDao.findAllByJobAssignmentIdOrderByCreatedAtAsc",
             "SettlementTaskDao.findDueIds",
+            // Seat rows for a page of assignments: MyAssignmentDto.transport reads shuttle.id/stop.id/jobAssignment.id
+            // (proxy identifiers, no query); shuttles and stops are batch-loaded separately (#297).
+            "SeatAssignmentDao.findAllByJobAssignmentIdIn",
+            // Plan rewrite drops the seats of removed shuttles/stops; only the rows are deleted, nothing is drawn (#297).
+            "SeatAssignmentDao.findAllByShuttleIdIn",
+            "SeatAssignmentDao.findAllByStopIdIn",
+            // Aggregate COUNT rows per shuttle/stop for seatsTaken (#297).
+            "SeatAssignmentDao.countByShuttleIds",
+            "SeatAssignmentDao.countByStopIds",
+            // Reminder scheduler id lists; each seat is then loaded with its own graph (#297).
+            "SeatAssignmentDao.findEveningReminderDueIds",
+            "SeatAssignmentDao.findDepartureReminderDueIds",
+            // Job ids whose plan uses a shuttle, for the JobSummaryDto.hasShuttle badge (#297).
+            "TransportPlanDao.findJobIdsWithMethod",
             // Staff payout detail renders the task row only; payment/jobAssignment proxies are never touched (#255).
             "SettlementTaskDao.findAllByPaymentIdOrderByCreatedAtAsc",
             "SitemapManifestDao.readShard",

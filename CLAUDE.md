@@ -3381,7 +3381,7 @@ değer taşıyor ve üç soruyu birden cevaplıyor: kapatılabilir mi, varsayıl
 
 | Kind | Kategoriler | Kapatılabilir | Varsayılan | Ticari |
 |---|---|---|---|---|
-| `TRANSACTIONAL` | `ACCOUNT_SECURITY`, `APPLICATION_UPDATES`, `IDENTITY_VERIFICATION`, `COMPANY_UPDATES` | **hayır** | açık | hayır |
+| `TRANSACTIONAL` | `ACCOUNT_SECURITY`, `APPLICATION_UPDATES`, `IDENTITY_VERIFICATION`, `COMPANY_UPDATES`, `TRANSPORT` | **hayır** | açık | hayır |
 | `ALERT` | `JOB_ALERTS`, `MESSAGES` | evet | **açık** | hayır |
 | `COMMERCIAL` | `MARKETINGS`, `NEWSLETTER` | evet | **kapalı** | evet |
 
@@ -4396,6 +4396,101 @@ yönde ve herkese açık listede `jobAssignmentId` null), `ExistenceConcealmentI
 `AssignmentOperationsAuthorizationTest` (kabul damgalar, ret damgalamaz), `MapperCharacterizationTest`,
 `OpenApiDocumentIT`, `EagerFetchCoverageIT`, `EntityGraphPathsIT`, `CollectionQueryWithoutGraphTest`,
 `AggregateBoundaryTest`. İstemci tarafı is-koala/koala#177, #178, is-koala/koala-web#165, #166.
+
+## 2ta. Ulaşım planı — plan/servis/durak/koltuk, görünürlük ve bildirim (#297, epic #296)
+
+Yusuf'un 14.09.2026 kararları epic'te: servisi **işveren** kurar (şoför hesabı yok), **işçi durağını kendisi seçer**,
+işveren kapasiteyi görür ve gerekirse işçi adına seçer, taksi/yol parası **para yolunun dışında**. Bu dilim T1:
+plan, servis, durak, koltuk, ilan görünürlüğü ve servis bildirimleri. Biniş/QR (T2), dönüş + taksi parası kaydı (T3)
+ve canlı konum (T4) **yok**; `shuttles.qr_secret` yalnız T2 için üretilip saklanıyor, hiçbir yanıta çıkmıyor.
+
+**Kendi aggregate'i: `TransportManager` → `TransportPlanDao`/`ShuttleDao`/`ShuttleStopDao`/`SeatAssignmentDao`**
+(`AggregateBoundaryTest.OWNED_BY`). `transport_plans` ilanla 1:1 (`uk_transport_plans_job_active` kısmi indeks),
+`shuttles` plan altında (`direction`, `name`, `plate`, `capacity`, `driver_name`, `driver_phone`, `sort_order`,
+`qr_secret`), `shuttle_stops` servis altında (`address_id` mevcut adres akışı, `scheduled_at` **`Instant`** —
+duvar saati değil; §2h), `seat_assignments` atama × yön tekil (`uk_seat_assignments_assignment_direction_active`) ve
+iki hatırlatma damgası. Dördü de `BaseEntity` + soft delete (§8); changelog `2026/09/15-01-transport-plan.xml`.
+
+**İki muafiyet, ikisi de salt okuma ve gerekçesi bean döngüsü (§2ae).** `JobManager` ilan detayına özeti ve
+listeye `hasShuttle` rozetini koymak için `TransportService`'e bağlı; `JobAssignmentManager`
+`MyAssignmentDto.transport` için bağlı. Ters yön (`TransportManager → JobService/JobAssignmentService`) döngü
+olurdu; bu yüzden ilan sahibi/yetkili kapısı (`requireEditor`, `JobManager.requireJobEditor` ile aynı kural) `JobDao`
+ile, taraf kapısı (`AssignmentParticipants`) ve bildirim alıcıları `JobAssignmentDao` ile okunuyor. Adres yazımı
+`AddressService.createAddress` üzerinden — hizmet alanı, referans tutarlılığı ve aday token kuralı aynı kapıdan
+geçiyor (`USER_CONFIRMED_PIN` token istemez).
+
+**Uçlar.** `PUT /jobs/{jobId}/transport-plan` planı **bütünüyle** yazar ve `TransportPlanDto` (işveren görünümü)
+döner; `GET /jobs/{jobId}/transport-plan` aynı görünüm. `GET /job-assignments/{id}/transport` taraflara
+`AssignmentTransportDto`, `PUT /job-assignments/{id}/transport/seat` `{shuttleId, stopId}` ile koltuk seçer ve aynı
+DTO'yu döner. İlan sahibi/yetkili olmayan `JOB_NOT_FOUND`, taraf olmayan `JOB_ASSIGNMENT_NOT_FOUND` alır — olmayan
+kayıtla **birebir aynı zarf** (§2d2, `TransportPlanIT` iki uçta da ölçüyor). Başka ilanın servisi ve rastgele UUID aynı
+`TRANSPORT_SHUTTLE_NOT_FOUND`; servise ait olmayan durak `TRANSPORT_STOP_NOT_FOUND`. `ExistenceConcealmentRulesTest`
+"bir metotta iki 404 anahtarı" kuralını koruduğu için üç kaynak üç ayrı `require*` yardımcısında.
+
+**Yeniden yazım id ile eşleşir, koltukları korur.** `ShuttleWriteDto.id`/`ShuttleStopWriteDto.id` verilirse kayıt
+yerinde güncellenir (var olan durakta `address` boş bırakılırsa adres korunur; yeni durakta zorunlu — DTO
+`@AssertTrue`), verilmezse yeni açılır, listede yer almayan servis/durak `orphanRemoval` ile soft-delete olur ve
+**koltukları önce düşürülür** (`dropSeats`; aksi hâlde silinmiş durağı gösteren koltuk `@SQLRestriction` yüzünden
+proxy açılırken patlar). Kapasite seçilmiş koltuk sayısının altına inemez: `TRANSPORT_SHUTTLE_CAPACITY_BELOW_SEATS`
+409, kontrol `flush` sonrası sayımla. Servis yalnız yöntemi `SHUTTLE` olan yönde tanımlanabilir ve yol parası tutarı
+yalnız `CASH_ALLOWANCE` ile birlikte — ikisi de DTO'da `@AssertTrue` (§2ah), 400 + alan adı. Plan yazımı ilana
+atanmış (`CONFIRMED`/`IN_PROGRESS`) işçilere `TRANSPORT` bildirimi düşürür (ilk yazım dahil).
+
+**Koltuk seçimi yön başına tek ve kapasite kilit altında.** `ShuttleDao.findByIdForUpdate` (`PESSIMISTIC_WRITE`)
+servis satırını kilitler, sayım ondan sonra; iki eşzamanlı işçi son koltuğu ikisi birden alamaz. Aynı serviste durak
+değişimi kapasite saymaz. Yalnız `PENDING_CONFIRMATION`/`CONFIRMED`/`IN_PROGRESS` atamada
+(`TRANSPORT_ASSIGNMENT_NOT_ACTIVE` 409); işveren de aynı ucu işçi adına çağırır (parti kuralı). Servis/durak
+değişince iki hatırlatma damgası sıfırlanır — yeni saat için yeni hatırlatma.
+
+**Görünürlük üç katman, PII tek yerde kısılıyor (`shuttleDtos(..., revealed)`).**
+
+| Görünüm | Ne var | Ne yok |
+|---|---|---|
+| `JobDetailDto.transport` (herkese açık, `JobTransportDto`) | yöntemler, yol parası tutarı, servis sayısı, servis adı, durakların **ilçe/semt adı + saat** | plaka, şoför, tam adres, koltuk sayıları |
+| `JobSummaryDto.hasShuttle` | gidiş ya da dönüş yöntemi `SHUTTLE` ise `true` | — |
+| İşçi (`AssignmentTransportDto`) | servisler ve durakların **tam adresi**, kendi koltukları; plaka/şoför **yalnız koltuk seçtiği serviste** | diğer servislerin plaka/şoför bilgisi |
+| İşveren (`TransportPlanDto`, ve işveren tarafı liste/detaylarda `MyAssignmentDto.transport`) | hepsi + servis/durak başına `seatsTaken` | — |
+
+İşçinin durağı seçebilmesi için tam adresler ona açık; PII sayılan yalnız plaka ve şoför bilgisi. Yol parası tutarı
+herkese açık özete bilinçli konuldu: başvuru kararına girdi ve para yolu değil. `PENDING_CONFIRMATION` işçi
+görebilir ve seçebilir (adres görünürlüğüyle aynı küme, §2m); `COMPLETED` görür, seçemez; `CANCELLED`/`REJECTED`
+plaka/şoför görmez.
+
+**N+1: liste yolları sayfa başına sabit sorgu.** `hasShuttle` tek `findJobIdsWithMethod` (`JobManager.enrich`
+içinde kapak ve sayımların yanında). `MyAssignmentDto.transport` `viewsForAssignments` ile sayfa başına dört sorgu
+(planlar `shuttles` grafiğiyle, duraklar `address.city.country/district` grafiğiyle, iki `group by` sayım) + koltuklar;
+plan olmayan sayfada tek sorgu. `AssignmentReadIT`'in `size=1` = `size=2` ölçümü yeşil. Grafiksiz koleksiyon
+sorguları `CollectionQueryWithoutGraphTest` allowlist'inde gerekçesiyle; `findAllByJobIdAndStatusIn` yalnız
+`worker` çeker (`EagerFetchCoverageIT` muafiyeti: fotoğraf çizilmiyor).
+
+**Bildirimler `NotificationCategory.TRANSPORT` (`TRANSACTIONAL`, kapatılamaz) ve push `data.type=TRANSPORT`.**
+Üç olay, `event` alanıyla: `PLAN_UPDATED` (plan yazımı), `SHUTTLE_REMINDER_EVENING`, `SHUTTLE_REMINDER_DEPARTURE`;
+payload `jobId`, `jobAssignmentId`, hatırlatmalarda `shuttleId`/`stopId`/`scheduledAt`. In-app + push, e-posta yok
+(epic sözleşmesi); `ActivityNotificationManager`'a bağlanmadı çünkü o üç kanala birden gider (§2s3'teki davet
+gerekçesi). `TransportReminderScheduler` 5 dakikada bir (`transport.reminders.*`, `TRANSPORT_REMINDERS_*`):
+**akşam** hatırlatması `zone-id` diliminde `evening-at` (19:00) sonrasında, durağı **yarın** olan koltuklara —
+gün sınırları `Europe/Istanbul`'da hesaplanıp `Instant`'a çevrilir (§2h); **kalkış** hatırlatması
+`scheduled_at ∈ (now, now + departure-lead-minutes]` (60 dk). İkisi de koltuk satırındaki damgayla tekil
+(`evening_reminder_sent_at`, `departure_reminder_sent_at`), yalnız canlı atamalarda, koltuk başına ayrı
+transaction (zamanlayıcı deseni §2u). Metin `MessageResolver.format` ile **`tr`** katalogundan — zamanlayıcı
+iş parçacığında istek locale'i yok; `{0}` saat (`HH:mm`, dilimde), `{1}` durak adı (etiket yoksa ilçe), `{2}` dakika;
+plaka parantezle eklenir. `MessageResolver.format` `MessageFormat` argümanı olan ilk katalog yolu — argümanlı mesajda
+tek tırnak çiftlenmeli.
+
+**Sabitleyen testler.** `TransportPlanIT` dokuz kural: işveren yazar/okur (plaka, şoför, tam adres, saat),
+yabancı ilan ile olmayan ilan aynı zarf (PUT ve GET) ve satır açılmaz, herkese açık detayda ilçe/semt/saat var
+plaka/şoför/tam adres **gövdenin hiçbir yerinde yok** + listede `hasShuttle`, işçi koltuk seçer ve plaka yalnız
+o serviste açılır (tekil atama, kendi listesi, işveren listesi), dolu servis 409 + yabancı servis ile rastgele UUID
+aynı zarf + taraf olmayan atama gizli, işveren işçi adına seçer ve kapasite koltuk sayısının altına inemez, servissiz
+yeniden yazım koltukları düşürür ve iki işçiye bildirim gider, zamanlayıcı 19:00 öncesi/sonrası ve 61/30 dk
+sınırlarında bir kez gönderir, üç DTO kuralı 400 + alan adı. `OpenApiDocumentIT` dört ucu, enum'ları ve Türkçe
+açıklamaları sabitliyor.
+
+**Kapsam dışı ve bilinen sınırlar.** Biniş/QR, dönüş, taksi parası "verildi" kaydı, canlı konum (T2–T4). Plan silme
+ucu yok — her iki yön `NONE`/`SELF` ve boş `shuttles` ile plan fiilen kapanır. Durak saatinin ilan gününe düşüp
+düşmediği doğrulanmıyor. Hatırlatma yalnız koltuk seçmiş işçiye gider; servis yönteminde koltuk seçmemiş işçiye
+"durağını seç" hatırlatması ayrı iş. Zamanlayıcı tek örnek varsayıyor (§7, Faz 11D). İstemciler: mobil işveren
+düzenleyici + işçi durak seçimi, web düzenleyici, admin özeti — epic'te.
 
 ---
 

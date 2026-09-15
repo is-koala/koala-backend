@@ -95,7 +95,8 @@ class PaymentSessionAuthorizationTest {
                 new PaymentMetrics(meterRegistry),
                 mock(com.exskylab.koala.dataAccess.CancellationDao.class),
                 mock(com.exskylab.koala.business.abstracts.JobService.class),
-                mock(com.exskylab.koala.dataAccess.ReviewDao.class));
+                mock(com.exskylab.koala.dataAccess.ReviewDao.class),
+                mock(com.exskylab.koala.business.abstracts.TransportService.class));
     }
 
     @Test

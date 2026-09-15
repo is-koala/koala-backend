@@ -121,3 +121,25 @@ _Avoid_: Devre dışı hesap, silme talebi
 **Sahipsiz Giriş Denemesi**:
 Hiçbir hesaba bağlanamayan giriş denemesi kaydı; `login_attempts` satırında `user_id` boştur ve satır yalnızca giriş formuna yazılan adresi taşır. Adresin sahibi hiç kaydolmamış olabilir. Kodda tek ad `unattributed` (`unattributedDays`, `deleteUnattributedBefore`, `purgeExpiredUnattributed`, `idx_login_attempts_unattributed_*`), Türkçe belgede tek ad "sahipsiz". Karşıtı **Hesaba Bağlı Giriş Denemesi** (`attributed`).
 _Avoid_: Ownerless, sahipsiz kayıt, anonim giriş denemesi
+
+## Ulaşım
+
+**Ulaşım Planı**:
+İşverenin bir ilan için yazdığı gidiş/dönüş ulaşım düzeni: yön başına yöntem (`SHUTTLE`, `CASH_ALLOWANCE`, `SELF`, `NONE`), yol parası tutarı ve servisler. İlan başına en çok bir plan; kodda `TransportPlan`.
+_Avoid_: Servis planı, transfer
+
+**Servis**:
+Bir ulaşım planındaki tek bir araç: yön, ad, plaka, kapasite, şoför bilgisi ve sıralı duraklar. Plaka ve şoför bilgisi yalnız işverene ve o serviste koltuk seçmiş işçiye açıktır; kodda `Shuttle`.
+_Avoid_: Araç, otobüs, shuttle (Türkçe metinde)
+
+**Durak**:
+Bir servisin belirli bir saatte uğradığı, mevcut adres sözleşmesiyle tanımlanmış nokta; kodda `ShuttleStop`. Herkese açık ilan görünümünde yalnız ilçe/semt adı ve saat görünür.
+_Avoid_: Toplanma noktası, pickup
+
+**Koltuk**:
+Bir atamanın bir yön için seçtiği servis + durak çifti; atama başına yön başına en çok bir koltuk, kapasite dolunca seçilemez. İşçi kendisi seçer, işveren işçi adına seçebilir; kodda `SeatAssignment`.
+_Avoid_: Rezervasyon, yer
+
+**Yol Parası**:
+`CASH_ALLOWANCE` yönteminde işverenin işçiye elden verdiği tutar; para yolunun (emanet/komisyon) dışındadır ve yalnız bilgi olarak kaydedilir.
+_Avoid_: Ulaşım ücreti, harcırah
