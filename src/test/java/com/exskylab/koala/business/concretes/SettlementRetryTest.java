@@ -13,7 +13,6 @@ import com.exskylab.koala.entities.RefundStatus;
 import com.exskylab.koala.dataAccess.SettlementTaskDao;
 import com.exskylab.koala.entities.*;
 import org.junit.jupiter.api.BeforeEach;
-import com.exskylab.koala.business.abstracts.PayoutService;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -187,7 +186,7 @@ class SettlementRetryTest {
     }
 
     @Test
-    void aSuccessfulRunClosesTheTaskAndMovesThePayoutToProcessing() {
+    void aSuccessfulRunClosesTheTaskAndSettlesThePayoutFromTheProviderApproval() {
         SettlementTask task = pendingTask(SettlementOperation.APPROVE);
         Payout payout = new Payout();
         payout.setStatus(PayoutStatus.PENDING);
@@ -199,10 +198,28 @@ class SettlementRetryTest {
 
         assertEquals(SettlementTaskStatus.SUCCEEDED, task.getStatus());
         assertNotNull(task.getCompletedAt());
-        assertEquals(PayoutStatus.PROCESSING, payout.getStatus());
-        assertNotNull(payout.getProcessingAt(),
-                "Mutabakat bekleyisini baslatan an burasi; damgalanmazsa gecikme saati created_at'e duser "
-                + "ve APPROVE gorevi outbox'ta bekleyen bir satir bir dakikalikken 3 gunluk sayilir.");
+        assertEquals(PayoutStatus.COMPLETED, payout.getStatus());
+        assertEquals("txn-1", payout.getProviderReference());
+        assertEquals("txn-1", payout.getSettlementReference());
+        assertNotNull(payout.getProcessingAt());
+        assertEquals(payout.getProcessingAt(), payout.getCompletedAt());
+        assertNull(payout.getReconciledByStaffId());
+    }
+
+    @Test
+    void anApprovalWithoutAResponseIdStillSettlesFromTheQueuedTransaction() {
+        SettlementTask task = pendingTask(SettlementOperation.APPROVE);
+        Payout payout = new Payout();
+        payout.setStatus(PayoutStatus.PENDING);
+        when(payoutDao.findByJobAssignmentId(assignment.getId())).thenReturn(Optional.of(payout));
+        when(iyzicoPaymentService.approvePaymentSettlement(eq("txn-1"), any()))
+                .thenReturn(new IyzicoApprovalResponseDto("success", null));
+
+        assertTrue(manager.runTask(task.getId()));
+
+        assertEquals(PayoutStatus.COMPLETED, payout.getStatus());
+        assertEquals("txn-1", payout.getSettlementReference());
+        assertEquals("txn-1", payout.getProviderReference());
     }
 
     @Test
