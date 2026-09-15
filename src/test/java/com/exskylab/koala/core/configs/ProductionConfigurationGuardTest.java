@@ -220,7 +220,7 @@ class ProductionConfigurationGuardTest {
                     assertFalse(warnedAbout("SERVICE_VERSION"), warnings().toString());
                     assertTrue(appender.list.stream()
                                     .filter(event -> event.getLevel() == Level.INFO)
-                                    .anyMatch(event -> event.getFormattedMessage().contains("version=0.9.28")),
+                                    .anyMatch(event -> event.getFormattedMessage().contains("version=0.9.29")),
                             messages().toString());
                 });
     }
