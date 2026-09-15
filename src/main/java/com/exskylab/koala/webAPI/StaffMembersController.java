@@ -165,11 +165,14 @@ public class StaffMembersController {
     }
 
     @Operation(summary = "Personel parolasını sıfırla",
-            description = "Yönetici yeni parolayı atar; hesap ilk girişte parola değiştirme bayrağı alır ve "
-                    + "açık token'ları geçersiz olur. E-posta akışı yoktur.")
+            description = "Yönetici yeni parolayı atar, kilidi açar ve hesabı ilk girişte parola değiştirme "
+                    + "bayrağına alır; açık token'lar geçersiz olur. E-posta akışı yoktur. Görev ayrılığı "
+                    + "gereği aktör kendi hesabına uygulayamaz — son OWNER için docs/runbooks/staff-recovery.md.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Parola atandı"),
             @ApiResponse(responseCode = "404", description = "Personel bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "Aktör kendi parolasını bu uçtan sıfırlayamaz",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @RequiresPermission(value = StaffPermission.STAFF_MANAGE, action = "staff.member.password.reset")

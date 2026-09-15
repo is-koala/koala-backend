@@ -19,6 +19,7 @@ import java.util.UUID;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.hasSize;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -210,6 +211,106 @@ class StaffAdministrationIT extends AbstractStaffIntegrationTest {
 
         mockMvc.perform(get("/admin/job-categories").header("Authorization", "Bearer " + targetToken))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void anOwnerCannotResetTheirOwnPasswordThroughTheAdministrationEndpoint() throws Exception {
+        UUID actorId = owner();
+        String token = staffAccessToken(actorId);
+        int version = jdbcTemplate.queryForObject(
+                "select token_version from staff_members where id = ?", Integer.class, actorId);
+
+        mockMvc.perform(post("/admin/staff/" + actorId + "/password")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("password", "Kendime-Atayamam-2026"))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("STAFF_MEMBER_PASSWORD_RESET_SELF"));
+
+        assertEquals(version, jdbcTemplate.queryForObject(
+                "select token_version from staff_members where id = ?", Integer.class, actorId));
+        assertEquals(Boolean.FALSE, jdbcTemplate.queryForObject(
+                "select must_change_password from staff_members where id = ?", Boolean.class, actorId));
+    }
+
+    @Test
+    void anOwnerUnlocksAnotherLockedStaffMemberAndAssignsAOneTimePassword() throws Exception {
+        String ownerToken = ownerToken();
+        String address = email();
+        UUID target = createStaffMember(address, "Kilitli Destek", "CATALOG_EDITOR");
+        String oldToken = staffAccessToken(target);
+
+        for (int n = 0; n < 5; n++) {
+            mockMvc.perform(post("/admin/auth/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of(
+                                    "email", address, "password", "yanlis-" + n))))
+                    .andExpect(status().isUnauthorized());
+        }
+        assertNotNull(jdbcTemplate.queryForObject(
+                "select locked_until from staff_members where id = ?", java.sql.Timestamp.class, target));
+
+        mockMvc.perform(post("/admin/staff/" + target + "/password")
+                        .header("Authorization", "Bearer " + ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("password", "Yonetici-Kurtardi-2026"))))
+                .andExpect(status().isOk());
+
+        Map<String, Object> recovered = jdbcTemplate.queryForMap("""
+                select must_change_password, failed_login_attempts, locked_until, token_version
+                from staff_members where id = ?
+                """, target);
+        assertEquals(Boolean.TRUE, recovered.get("must_change_password"));
+        assertEquals(0, ((Number) recovered.get("failed_login_attempts")).intValue());
+        assertEquals(null, recovered.get("locked_until"));
+        assertEquals(1, ((Number) recovered.get("token_version")).intValue());
+
+        mockMvc.perform(get("/admin/job-categories").header("Authorization", "Bearer " + oldToken))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(post("/admin/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "email", address, "password", "Yonetici-Kurtardi-2026"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.mustChangePassword").value(true));
+    }
+
+    @Test
+    void resettingAPasswordIsWrittenToTheAuditTrail() throws Exception {
+        String ownerToken = ownerToken();
+        UUID target = createStaffMember(email(), "Denetlenen", "CATALOG_EDITOR");
+        jdbcTemplate.update("""
+                update staff_members
+                   set failed_login_attempts = 4,
+                       locked_until = now() + interval '10 minutes'
+                 where id = ?
+                """, target);
+
+        mockMvc.perform(post("/admin/staff/" + target + "/password")
+                        .header("Authorization", "Bearer " + ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("password", "Denetim-Atadi-2026"))))
+                .andExpect(status().isOk());
+
+        Map<String, Object> row = jdbcTemplate.queryForMap("""
+                select e.resource_id, e.action, d.before_value, d.after_value
+                from admin_audit_entries e join admin_audit_entry_details d on d.audit_entry_id = e.id
+                where e.action = 'staff.member.password.reset'
+                """);
+        assertEquals(target.toString(), row.get("resource_id"));
+        String before = (String) row.get("before_value");
+        String after = (String) row.get("after_value");
+        assertTrue(before.contains("mustChangePassword=false"));
+        assertTrue(before.contains("failedLoginAttempts=4"));
+        assertTrue(before.contains("lockedUntil="));
+        assertTrue(before.contains("tokenVersion=0"));
+        assertTrue(after.contains("mustChangePassword=true"));
+        assertTrue(after.contains("failedLoginAttempts=0"));
+        assertTrue(after.contains("lockedUntil=null"));
+        assertTrue(after.contains("tokenVersion=1"));
+        assertTrue(!before.contains("$2a$") && !after.contains("$2a$"),
+                "Denetim satırı parola özetini taşıyamaz");
     }
 
     @Test

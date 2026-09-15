@@ -1,8 +1,13 @@
 package com.exskylab.koala.webAPI;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import com.exskylab.koala.business.concretes.StaffAccountManager;
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
@@ -13,12 +18,15 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -137,6 +145,60 @@ class StaffLoginIT extends AbstractStaffIntegrationTest {
                 "Beşinci başarısız denemeden sonra hesap kilitlenmeliydi");
 
         attempt(address, STAFF_PASSWORD).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void aCorrectPasswordWhileLockedDoesNotExtendTheLock() throws Exception {
+        String address = email();
+        UUID staffId = createStaffMember(address, "Kilit Süresi", "OWNER");
+
+        for (int n = 0; n < 5; n++) {
+            attempt(address, "yanlis-" + n).andExpect(status().isUnauthorized());
+        }
+
+        Instant lockedUntil = jdbcTemplate.queryForObject(
+                "select locked_until from staff_members where id = ?", Instant.class, staffId);
+        assertNotNull(lockedUntil, "Kilit damgası durmalı");
+
+        attempt(address, STAFF_PASSWORD).andExpect(status().isUnauthorized());
+        attempt(address, "hala-yanlis").andExpect(status().isUnauthorized());
+
+        assertEquals(lockedUntil, jdbcTemplate.queryForObject(
+                "select locked_until from staff_members where id = ?", Instant.class, staffId),
+                "Kilitliyken doğru ya da yanlış parola kilit süresini uzatmamalı");
+        assertEquals(0, jdbcTemplate.queryForObject(
+                "select failed_login_attempts from staff_members where id = ?", Integer.class, staffId));
+    }
+
+    @Test
+    void theWrongPasswordLogStatesTheAttemptNumberAndTheLockLogStatesRemainingDuration() throws Exception {
+        String address = email();
+        createStaffMember(address, "Loglanan", "OWNER");
+
+        Logger logger = (Logger) LoggerFactory.getLogger(StaffAccountManager.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            attempt(address, "yanlis-1").andExpect(status().isUnauthorized());
+            attempt(address, "yanlis-2").andExpect(status().isUnauthorized());
+            for (int n = 2; n < 5; n++) {
+                attempt(address, "yanlis-" + n).andExpect(status().isUnauthorized());
+            }
+            attempt(address, STAFF_PASSWORD).andExpect(status().isUnauthorized());
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+
+        List<String> lines = appender.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
+        assertTrue(lines.stream().anyMatch(line -> line.contains("wrong password") && line.contains("attempt=1")),
+                "Yanlış parola satırı kaçıncı deneme olduğunu söylemeli: " + lines);
+        assertTrue(lines.stream().anyMatch(line -> line.contains("wrong password") && line.contains("attempt=2")),
+                "İkinci yanlış parola deneme sayısını söylemeli: " + lines);
+        assertTrue(lines.stream().anyMatch(line -> line.contains("account locked")
+                        && line.contains("remaining=") && line.contains("attempts=")),
+                "Kilit satırı kalan süreyi ve deneme sayısını söylemeli: " + lines);
     }
 
     @Test

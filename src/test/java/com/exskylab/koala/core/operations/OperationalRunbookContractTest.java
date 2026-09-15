@@ -316,4 +316,22 @@ class OperationalRunbookContractTest {
         assertTrue(alerts.contains("email\\\\.queue|sms\\\\.queue|push\\\\.queue"));
         assertEquals(12, inventory.lines().filter(line -> line.startsWith("| GOOGLE_KEY_")).count());
     }
+
+    @Test
+    void staffRecoveryRunbookDocumentsUnlockResetHashGenerationAndFirstLoginPasswordChange() throws Exception {
+        String runbook = Files.readString(Path.of("docs/runbooks/staff-recovery.md"));
+
+        assertAll(
+                () -> assertTrue(runbook.contains("must_change_password"), runbook),
+                () -> assertTrue(runbook.contains("token_version"), runbook),
+                () -> assertTrue(runbook.contains("failed_login_attempts"), runbook),
+                () -> assertTrue(runbook.contains("locked_until"), runbook),
+                () -> assertTrue(runbook.contains("$2a$"), runbook),
+                () -> assertTrue(runbook.contains("$2y$"), runbook),
+                () -> assertTrue(runbook.contains("BCryptPasswordEncoder"), runbook),
+                () -> assertTrue(runbook.contains("/admin/auth/password"), runbook),
+                () -> assertTrue(runbook.contains("/admin/staff/"), runbook),
+                () -> assertTrue(runbook.contains("bootstrap") && runbook.contains("boş"),
+                        "Runbook, tablo doluyken bootstrap'in işe yaramadığını söylemeli."));
+    }
 }
