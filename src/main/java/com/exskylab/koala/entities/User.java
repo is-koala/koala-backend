@@ -6,6 +6,7 @@ import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.SQLRestriction;
 import lombok.*;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
@@ -91,6 +92,13 @@ public class User extends BaseEntity {
 
     @Column(name = "identity_verified")
     private boolean identityVerified;
+
+    @Column(name = "identity_verified_at")
+    private Instant identityVerifiedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "identity_verification_method", length = 16)
+    private IdentityVerificationMethod identityVerificationMethod;
 
     @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JoinColumn(name = "cv_id", referencedColumnName = "id")

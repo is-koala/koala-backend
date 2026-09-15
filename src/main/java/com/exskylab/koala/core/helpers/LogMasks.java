@@ -65,6 +65,25 @@ public final class LogMasks {
         return identityNumber == null || identityNumber.isBlank() ? null : "***********";
     }
 
+    public static String ip(String ipAddress) {
+        if (ipAddress == null || ipAddress.isBlank()) {
+            return REDACTED;
+        }
+        String address = ipAddress.trim();
+        if (address.contains(":")) {
+            String[] groups = address.split(":");
+            if (groups.length < 3) {
+                return REDACTED;
+            }
+            return groups[0] + ":" + groups[1] + ":" + REDACTED;
+        }
+        String[] octets = address.split("\\.");
+        if (octets.length != 4) {
+            return REDACTED;
+        }
+        return octets[0] + "." + octets[1] + "." + REDACTED;
+    }
+
     public static String coordinates(BigDecimal latitude, BigDecimal longitude) {
         if (latitude == null || longitude == null) {
             return REDACTED;

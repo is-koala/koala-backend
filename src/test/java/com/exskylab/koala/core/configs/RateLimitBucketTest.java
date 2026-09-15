@@ -61,6 +61,14 @@ class RateLimitBucketTest {
     }
 
     @Test
+    void theWorkerIdentityReadIsBudgetedPerEmployerInTheManagerNotPerIpInTheFilter() throws Exception {
+        assertEquals(30, properties.getIdentityReveal().getMaxAttempts());
+        assertEquals(java.time.Duration.ofHours(1), properties.getIdentityReveal().getWindow());
+        assertEquals(50, passing("GET", "/job-assignments/" + UUID.randomUUID() + "/worker-identity",
+                "10.0.0.13", 50));
+    }
+
+    @Test
     void publicJobReadsShareALooseButFiniteAllowance() throws Exception {
         properties.getPublic().setMaxAttempts(2);
 

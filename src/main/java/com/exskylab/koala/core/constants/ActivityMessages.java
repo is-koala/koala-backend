@@ -17,6 +17,7 @@ public class ActivityMessages {
     public static final String REVIEW_RECEIVED = "{activity.review.received}";
     public static final String IDENTITY_VERIFIED_TITLE = "{activity.identity.verified.title}";
     public static final String IDENTITY_VERIFIED = "{activity.identity.verified}";
+    public static final String IDENTITY_REVEALED = "{activity.identity.revealed}";
     public static final String COMPANY_INVITATION_RECEIVED = "{activity.company.invitation.received}";
     public static final String COMPANY_APPROVED = "{activity.company.approved}";
     public static final String COMPANY_REJECTED = "{activity.company.rejected}";

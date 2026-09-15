@@ -170,6 +170,19 @@ public class ActivityNotificationManager implements ActivityNotificationService 
     }
 
     @Override
+    public void identityRevealed(JobAssignment assignment) {
+        User worker = assignment.getWorker();
+        if (worker == null) {
+            return;
+        }
+        String message = messageResolver.resolve(ActivityMessages.IDENTITY_REVEALED);
+        inApp(worker, assignment.getJob().getTitle(), message, NotificationCategory.ACCOUNT_SECURITY,
+                ActivityMessages.IDENTITY_REVEALED, NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
+        push(worker, assignment.getJob().getTitle(), message, NotificationCategory.ACCOUNT_SECURITY,
+                ActivityMessages.IDENTITY_REVEALED);
+    }
+
+    @Override
     public void companyApprovalDecided(Company company) {
         String key = company.getApprovalStatus() == CompanyApprovalStatus.APPROVED
                 ? ActivityMessages.COMPANY_APPROVED

@@ -220,6 +220,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/job-assignments/{assignmentId}/check-in").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/job-assignments/{assignmentId}/check-out").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/job-assignments/{assignmentId}/work-sessions").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/job-assignments/{assignmentId}/worker-identity").hasAnyRole("USER", "ADMIN")
 
                         //dispute administration endpoints
 

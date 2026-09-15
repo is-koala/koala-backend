@@ -31,7 +31,11 @@ import com.exskylab.koala.core.dtos.bankAccount.response.IbanPendingDto;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.entities.BankAccountVerificationStatus;
 import com.exskylab.koala.core.mappers.BankAccountMapper;
+import com.exskylab.koala.business.abstracts.IdentityRevealService;
+import com.exskylab.koala.core.constants.IdentityRevealMessages;
 import com.exskylab.koala.core.dtos.common.PageDto;
+import com.exskylab.koala.core.dtos.identity.response.AdminIdentityRevealDto;
+import com.exskylab.koala.core.mappers.IdentityRevealMapper;
 import com.exskylab.koala.core.dtos.company.request.ApproveCompanyDto;
 import com.exskylab.koala.core.dtos.company.request.RejectCompanyDto;
 import com.exskylab.koala.core.dtos.company.response.CompanyReviewDto;
@@ -88,6 +92,8 @@ public class AdminController {
     private final SignedFileResponses signedFileResponses;
     private final AdminDetailService adminDetailService;
     private final JobService jobService;
+    private final IdentityRevealService identityRevealService;
+    private final IdentityRevealMapper identityRevealMapper;
 
     public AdminController(CompanyService companyService, UserService userService, UserMapper userMapper,
                            GalleryService galleryService, RoleGrantMapper roleGrantMapper,
@@ -95,7 +101,8 @@ public class AdminController {
                            BankAccountService bankAccountService, BankAccountMapper bankAccountMapper,
                            IdentityDocumentReviewService identityDocumentReviewService,
                            SignedFileResponses signedFileResponses, AdminDetailService adminDetailService,
-                           JobService jobService) {
+                           JobService jobService, IdentityRevealService identityRevealService,
+                           IdentityRevealMapper identityRevealMapper) {
         this.companyService = companyService;
         this.userService = userService;
         this.userMapper = userMapper;
@@ -108,6 +115,8 @@ public class AdminController {
         this.signedFileResponses = signedFileResponses;
         this.adminDetailService = adminDetailService;
         this.jobService = jobService;
+        this.identityRevealService = identityRevealService;
+        this.identityRevealMapper = identityRevealMapper;
     }
 
     @Operation(summary = "Atama kuyruğu",
@@ -503,6 +512,31 @@ public class AdminController {
         return ResponseEntity.ok(new SuccessDataResult<>(
                 adminDetailService.getBankAccountsOfUser(userId),
                 AdminMessages.USER_BANK_ACCOUNTS_LISTED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "Kullanıcının kimlik bilgilerini kim görüntüledi (personel)",
+            description = "İşverenlerin GET /job-assignments/{id}/worker-identity ile bu kullanıcının kimlik bilgilerini "
+                    + "görüntüleme kayıtları, yeniden eskiye. Her satır görüntüleyenin id'si ve ad soyadı, atama ve ilan "
+                    + "kimliği, ilan başlığı, an ve maskeli IP taşır; TC kimlik numarası dönmez. Yalnız revealedAt ile "
+                    + "sıralanabilir, bilinmeyen sıralama alanı 400. Uç user.read_pii ile korunur (PERSONAL_DATA); her "
+                    + "okuma denetim satırı yazar.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Görüntüleme kayıtları listelendi"),
+            @ApiResponse(responseCode = "400", description = "Bilinmeyen sıralama alanı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "Kullanıcı bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(StaffPermission.USER_READ_PII)
+    @GetMapping("/users/{userId}/identity-reveals")
+    public ResponseEntity<SuccessDataResult<PageDto<AdminIdentityRevealDto>>> userIdentityReveals(
+            @PathVariable UUID userId,
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
+
+        var page = identityRevealService.listForStaff(userId, pageable);
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                PageDto.of(page, identityRevealMapper.toAdminIdentityRevealDtoList(page.getContent())),
+                IdentityRevealMessages.LISTED, HttpStatus.OK));
     }
 
     @Operation(summary = "Kullanıcının rollerini listele",

@@ -2,11 +2,14 @@ package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.business.abstracts.CancellationService;
 import com.exskylab.koala.business.abstracts.DisputeService;
+import com.exskylab.koala.business.abstracts.IdentityRevealService;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.PayoutService;
 import com.exskylab.koala.business.abstracts.TimesheetService;
 import com.exskylab.koala.core.mappers.CancellationMapper;
 import com.exskylab.koala.core.mappers.DisputeMapper;
+import com.exskylab.koala.core.mappers.IdentityRevealMapper;
+import com.exskylab.koala.core.helpers.ClientIpResolver;
 import com.exskylab.koala.core.mappers.TimesheetMapper;
 import com.exskylab.koala.entities.Cancellation;
 import org.junit.jupiter.api.Test;
@@ -36,7 +39,8 @@ class CancellationControllerTransactionBoundaryTest {
         JobAssignmentOperationsController controller = new JobAssignmentOperationsController(
                 cancellationService, mock(DisputeService.class), mock(TimesheetService.class),
                 mock(JobAssignmentService.class), mapper,
-                mock(DisputeMapper.class), mock(TimesheetMapper.class));
+                mock(DisputeMapper.class), mock(TimesheetMapper.class), mock(IdentityRevealService.class),
+                mock(IdentityRevealMapper.class), mock(ClientIpResolver.class));
         MockMvc mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
 
         mockMvc.perform(post("/job-assignments/{assignmentId}/cancel", assignmentId)

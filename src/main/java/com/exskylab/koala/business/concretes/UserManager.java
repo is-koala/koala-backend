@@ -376,6 +376,8 @@ public class UserManager implements UserService {
         }
 
         currentUser.setIdentityVerified(true);
+        currentUser.setIdentityVerifiedAt(Instant.now());
+        currentUser.setIdentityVerificationMethod(IdentityVerificationMethod.CHIP);
         currentUser.setTcDocumentNumber(usersMeIdentityVerificationRequestDto.getTcDocumentNumber());
         stampVerifiedIdentity(currentUser, usersMeIdentityVerificationRequestDto, evidence);
         if (evidence != null) {

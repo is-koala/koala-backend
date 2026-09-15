@@ -53,6 +53,15 @@ class LogMasksTest {
     }
 
     @Test
+    void anIpKeepsOnlyItsNetworkPrefix() {
+        assertEquals("85.105.***", LogMasks.ip("85.105.23.199"));
+        assertEquals("2a02:4e0:***", LogMasks.ip("2a02:4e0:2d:1a::1"));
+        assertEquals("***", LogMasks.ip("unknown"));
+        assertEquals("***", LogMasks.ip("  "));
+        assertEquals("***", LogMasks.ip(null));
+    }
+
+    @Test
     void aCoordinateIsCoarsenedToAboutAKilometre() {
         assertEquals("40.98,29.03", LogMasks.coordinates(new BigDecimal("40.982512"), new BigDecimal("29.025411")));
         assertEquals("41.00,29.00", LogMasks.coordinates(new BigDecimal("40.995"), new BigDecimal("28.995")));
