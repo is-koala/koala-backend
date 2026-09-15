@@ -8,6 +8,7 @@ import com.exskylab.koala.core.dtos.job.response.IndividualJobDto;
 import com.exskylab.koala.entities.Job;
 import com.exskylab.koala.core.helpers.JobAddressVisibility;
 import com.exskylab.koala.core.helpers.MediaUrlResolver;
+import org.mapstruct.Context;
 import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -40,15 +41,26 @@ public interface JobMapper {
     @Mapping(target = "hiredCount", ignore = true)
     @Mapping(target = "addressPrecision", constant = "APPROXIMATE")
     @Mapping(target = "distanceKm", ignore = true)
-    @Mapping(target = "pricing", source = "job")
-    JobSummaryDto toJobSummaryDto(Job job);
+    @Mapping(target = "pricing", source = "job", qualifiedByName = "jobPricingForViewer")
+    JobSummaryDto toJobSummaryDto(Job job, @Context ViewerFacts viewer);
+
+    default JobSummaryDto toJobSummaryDto(Job job) {
+        return toJobSummaryDto(job, ViewerFacts.PUBLIC);
+    }
 
     @Mapping(target = "hiredCount", ignore = true)
     @Mapping(target = "applicationCount", ignore = true)
     @Mapping(target = "acceptingApplications", ignore = true)
     @Mapping(target = "addressPrecision", ignore = true)
-    @Mapping(target = "pricing", source = "job")
-    JobDetailDto toJobDetailDto(Job job);
+    @Mapping(target = "pricing", source = "job", qualifiedByName = "jobPricingForViewer")
+    JobDetailDto toJobDetailDto(Job job, @Context ViewerFacts viewer);
 
     List<JobSummaryDto> toJobSummaryDtoList(List<Job> jobs);
+
+    record ViewerFacts(boolean employerView) {
+
+        public static final ViewerFacts PUBLIC = new ViewerFacts(false);
+
+        public static final ViewerFacts EMPLOYER = new ViewerFacts(true);
+    }
 }
