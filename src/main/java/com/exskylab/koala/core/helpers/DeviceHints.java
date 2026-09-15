@@ -44,6 +44,7 @@ public record DeviceHints(String model, String os, String appVersion) {
         if (printable.isEmpty()) {
             return null;
         }
-        return printable.length() > max ? printable.substring(0, max) : printable;
+        int codePoints = printable.codePointCount(0, printable.length());
+        return codePoints > max ? printable.substring(0, printable.offsetByCodePoints(0, max)) : printable;
     }
 }

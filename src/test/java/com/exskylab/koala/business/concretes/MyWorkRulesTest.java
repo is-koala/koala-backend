@@ -67,7 +67,7 @@ class MyWorkRulesTest {
         session.setDevice(device);
         session.setActive(true);
 
-        when(sessionDao.findById(session.getId())).thenReturn(Optional.of(session));
+        when(sessionDao.findByIdAndIsActive(session.getId(), true)).thenReturn(Optional.of(session));
         return session;
     }
 

@@ -9,24 +9,18 @@ public record ClientContext(String ipAddress, String userAgent, String deviceId,
                             DeviceHints deviceHints) {
 
     public ClientContext {
+        platform = platform == null ? ClientPlatform.UNKNOWN : platform;
         deviceHints = deviceHints == null ? DeviceHints.NONE : deviceHints;
     }
 
-    public ClientContext(String ipAddress, String userAgent, String deviceId) {
-        this(ipAddress, userAgent, deviceId, ClientPlatform.UNKNOWN, DeviceHints.NONE);
-    }
-
-    public ClientContext(String ipAddress, String userAgent, String deviceId, ClientPlatform platform) {
-        this(ipAddress, userAgent, deviceId, platform, DeviceHints.NONE);
-    }
-
     public static ClientContext from(HttpServletRequest request, ClientIpResolver clientIpResolver) {
-        return new ClientContext(
-                clientIpResolver.resolve(request),
-                request.getHeader("User-Agent"),
-                DeviceIdentity.fromRequest(request),
-                ClientPlatform.from(request.getHeader(ClientPlatform.HEADER)),
-                DeviceHints.from(request));
+        DeviceIdentityRequest identity = DeviceIdentityRequest.from(request);
+        return new ClientContext(clientIpResolver.resolve(request), identity.userAgent(), identity.deviceId(),
+                identity.platform(), identity.hints());
+    }
+
+    public DeviceIdentityRequest deviceIdentity() {
+        return new DeviceIdentityRequest(userAgent, deviceId, platform, deviceHints);
     }
 
     public void requireWebDeviceId() {

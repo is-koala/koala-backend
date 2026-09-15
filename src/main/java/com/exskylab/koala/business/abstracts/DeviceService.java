@@ -1,10 +1,9 @@
 package com.exskylab.koala.business.abstracts;
 
 import com.exskylab.koala.core.dtos.device.response.DeviceDto;
+import com.exskylab.koala.core.helpers.DeviceIdentityRequest;
 import com.exskylab.koala.entities.Device;
 import com.exskylab.koala.entities.User;
-import com.exskylab.koala.core.helpers.ClientPlatform;
-import com.exskylab.koala.core.helpers.DeviceHints;
 
 import java.util.List;
 import java.util.Optional;
@@ -14,30 +13,9 @@ public interface DeviceService {
 
     List<Device> getDevicesByUserIdAndPushTokenNotNull(UUID id);
 
-    Device findOrCreateDevice(User user, String ipAddress, String userAgent, String clientDeviceId,
-                              ClientPlatform platform, DeviceHints hints);
+    Device findOrCreateDevice(User user, DeviceIdentityRequest identity);
 
-    Optional<Device> findDevice(User user, String userAgent, String clientDeviceId, ClientPlatform platform,
-                                DeviceHints hints);
-
-    default Device findOrCreateDevice(User user, String ipAddress, String userAgent, String clientDeviceId,
-                                      ClientPlatform platform) {
-        return findOrCreateDevice(user, ipAddress, userAgent, clientDeviceId, platform, DeviceHints.NONE);
-    }
-
-    default Device findOrCreateDevice(User user, String ipAddress, String userAgent, String clientDeviceId) {
-        return findOrCreateDevice(user, ipAddress, userAgent, clientDeviceId, ClientPlatform.UNKNOWN,
-                DeviceHints.NONE);
-    }
-
-    default Optional<Device> findDevice(User user, String userAgent, String clientDeviceId,
-                                        ClientPlatform platform) {
-        return findDevice(user, userAgent, clientDeviceId, platform, DeviceHints.NONE);
-    }
-
-    default Optional<Device> findDevice(User user, String userAgent, String clientDeviceId) {
-        return findDevice(user, userAgent, clientDeviceId, ClientPlatform.UNKNOWN, DeviceHints.NONE);
-    }
+    Optional<Device> findDevice(User user, DeviceIdentityRequest identity);
 
     void savePushToken(String userAgent, String clientDeviceId, String pushToken);
 

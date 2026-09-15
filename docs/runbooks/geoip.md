@@ -48,8 +48,10 @@ GeoLite2, MaxMind'ın ücretsiz veritabanıdır ve **GeoLite2 End User License A
 
 MaxMind GeoLite2'yi haftada iki kez (Salı/Cuma) yeniler; eski dosya çalışmaya devam eder, yalnız isabet düşer.
 Aşağıdaki cron VPS'te root olarak haftada bir çalışır; dosya **atomik** değiştirilir (`mv` aynı dosya sistemi
-içinde), uygulama yeniden başlatılmaz — `DatabaseReader` dosyayı açılışta belleğe yüklediği için yeni dosya bir
-sonraki deploy/restart'ta devreye girer. Anında devreye almak istenirse servis restart edilir.
+içinde) ve uygulama **yeniden başlatılmaz**: `MaxMindGeoIpResolver` her aramadan önce dosyanın `mtime`'ına bakar,
+değişmişse okuyucuyu bir kez yeniden açar ve eskisini kapatır (`GeoIP database reloaded from …` INFO satırı).
+Yarım yazılmış/bozuk bir dosya açılamazsa eski okuyucu kalır, tek bir WARN yazılır ve dosya bir daha değişene
+kadar yeniden denenmez — bu yüzden `mv` ile atomik değiştirmek şart, `cp` ile üstüne yazmak değil.
 
 ```cron
 # /etc/cron.d/koala-geoip — Pazartesi 04:15
@@ -88,4 +90,5 @@ testte sahte çözümleyici bağlanabilir (`SessionDetailIT`).
 | Açılışta `GeoIP database path is not configured` | env boş | `GEOIP_DATABASE_PATH` ver |
 | `GeoIP database not found at …` | volume bağlı değil ya da yol yanlış | Dokploy volume eşlemesini ve dosya adını kontrol et |
 | `could not be opened (InvalidDatabaseException)` | bozuk/yarım indirilmiş dosya | güncelleme scriptini yeniden koş |
+| `changed but could not be reopened` | güncelleme sırasında yarım yazılmış dosya (cp ile üstüne yazma) | scripti `mv` ile atomik çalıştır; eski okuyucu o ana kadar çalışmaya devam eder |
 | Konum hep `null` | istemci IP'si özel ağdan geliyor (`10.*`, `192.168.*`, `127.*`) ya da `APP_TRUSTED_PROXIES` eksik ve gerçek IP yerine proxy IP'si okunuyor | `ClientIpResolver` ayarı, CLAUDE.md §2j |

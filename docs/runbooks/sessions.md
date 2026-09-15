@@ -15,7 +15,7 @@ issue'da eklenecek. O gelene kadar bu yordam tek yol.
 |---|---|---|
 | `devices` | kullanıcı + istemci kimliği (`client_device_id`, mobil/web `X-Device-Id`) ya da UA-imzası başına bir satır; `name` otomatik ad, `custom_name` kullanıcının verdiği ad | soft-delete edilince `SessionAuthFilter` cihazı bulamaz, o cihazın her oturumu ilk istekte 401 alır; aynı `X-Device-Id` ile bir sonraki giriş **yeni** satır açar |
 | `sessions` | cihaz başına giriş; `refresh_token_hash` yenileme anahtarı, `is_active` erişim kapısı | `is_active=false` erişim token'ını, `refresh_token_hash=null` yenilemeyi keser |
-| `login_attempts` | giriş denemeleri (`device_id` ile cihaza bağlı, `location` GeoIP) | dokunulmaz; saklama politikası zaten var (CLAUDE.md §2aw) |
+| `login_attempts` | giriş denemeleri (`device_id` ile cihaza bağlı, `location` GeoIP) | dokunulmaz; saklama politikası zaten var (CLAUDE.md §2aw). `device_id`/`location` #306 ile geldi; öncesindeki satırlar `NULL` taşır ve kullanıcının giriş geçmişinde **görünmez** (backfill yok — eski satırda cihaz eşlemesi yapılamaz) |
 
 `sessions.is_active=false` yeterlidir: `SessionAuthFilter` ve `/auth/refresh` yalnız aktif oturumu kabul eder.
 `refresh_token_hash=null` ek savunmadır — satır yanlışlıkla tekrar aktif edilse bile eski refresh token çalışmaz.

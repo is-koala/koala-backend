@@ -23,14 +23,17 @@ public final class DeviceNaming {
     }
 
     public static String name(DeviceHints hints, ParsedAgent agent, DeviceType type) {
-        List<String> parts = hints.describesDevice()
-                ? fromHints(hints)
-                : type == DeviceType.WEB_BROWSER ? fromBrowser(agent) : fromAgent(agent);
+        List<String> parts = hints.describesDevice() ? fromHints(hints) : fromAgent(agent);
+        if (type == DeviceType.WEB_BROWSER) {
+            parts = withWebSuffix(hints.describesDevice() ? parts : known(agent.agentNameVersionMajor(),
+                    agent.osNameVersionMajor()));
+        }
         String joined = String.join(SEPARATOR, parts);
         if (joined.isBlank()) {
             return UNKNOWN_DEVICE;
         }
-        return joined.length() > MAX_LENGTH ? joined.substring(0, MAX_LENGTH).strip() : joined;
+        int codePoints = joined.codePointCount(0, joined.length());
+        return codePoints > MAX_LENGTH ? joined.substring(0, joined.offsetByCodePoints(0, MAX_LENGTH)).strip() : joined;
     }
 
     private static List<String> fromHints(DeviceHints hints) {
@@ -38,8 +41,7 @@ public final class DeviceNaming {
                 hints.appVersion() == null ? null : APP_PREFIX + hints.appVersion());
     }
 
-    private static List<String> fromBrowser(ParsedAgent agent) {
-        List<String> parts = known(agent.agentNameVersionMajor(), agent.osNameVersionMajor());
+    private static List<String> withWebSuffix(List<String> parts) {
         if (parts.isEmpty()) {
             return parts;
         }

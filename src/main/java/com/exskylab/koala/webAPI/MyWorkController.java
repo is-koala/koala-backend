@@ -141,8 +141,9 @@ public class MyWorkController {
             description = "Cihaz adı ve tipi, oluşturulma ve son erişim zamanı, oturumun güncel IP adresi ve "
                     + "GeoIP konumu (şehir, ülke kodu; GeoIP veritabanı yoksa null), bu cihazdan yapılan "
                     + "başarılı giriş sayısı (logins) ve bu cihazdan yapılan son 20 giriş denemesi "
-                    + "(loginHistory: zaman, IP, konum, başarılı mı). IP kullanıcının kendi verisidir, "
-                    + "maskelenmez. Başkasının ya da kapatılmış bir oturumun kimliği 404 döner.")
+                    + "(loginHistory: zaman, IP, konum, başarılı mı). Geçmiş yalnız bu sürümden sonraki girişleri "
+                    + "kapsar; daha eski denemeler cihaza bağlı olmadığı için görünmez. IP kullanıcının kendi "
+                    + "verisidir, maskelenmez. Başkasının ya da kapatılmış bir oturumun kimliği 404 döner.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Oturum detayı"),
             @ApiResponse(responseCode = "404", description = "Oturum bulunamadı",
@@ -155,7 +156,7 @@ public class MyWorkController {
     }
 
     @Operation(summary = "Bir oturumu kapat",
-            description = "Başkasının oturumunu kapatmaya çalışmak 404 döner.")
+            description = "Başkasının ya da zaten kapatılmış bir oturumu kapatmaya çalışmak 404 döner.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Oturum kapatıldı"),
             @ApiResponse(responseCode = "404", description = "Oturum bulunamadı",

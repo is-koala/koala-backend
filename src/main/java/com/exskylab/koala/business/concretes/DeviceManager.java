@@ -8,8 +8,8 @@ import com.exskylab.koala.core.dtos.device.response.DeviceDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.helpers.ClientPlatform;
-import com.exskylab.koala.core.helpers.DeviceHints;
 import com.exskylab.koala.core.helpers.DeviceIdentity;
+import com.exskylab.koala.core.helpers.DeviceIdentityRequest;
 import com.exskylab.koala.core.helpers.DeviceNaming;
 import com.exskylab.koala.core.mappers.DeviceMapper;
 import com.exskylab.koala.core.privacy.PushTokenMutationLock;
@@ -70,17 +70,16 @@ public class DeviceManager implements DeviceService {
 
     @Override
     @Transactional
-    public Device findOrCreateDevice(User user, String ipAddress, String userAgent, String clientDeviceId,
-                                     ClientPlatform platform, DeviceHints hints) {
+    public Device findOrCreateDevice(User user, DeviceIdentityRequest request) {
         pushTokenDeliveryLock.lockUser(user.getId());
         requireActiveUser(user.getId());
-        String deviceId = DeviceIdentity.sanitize(clientDeviceId);
+        String deviceId = DeviceIdentity.sanitize(request.deviceId());
 
-        if (platform == ClientPlatform.WEB && deviceId == null) {
+        if (request.platform() == ClientPlatform.WEB && deviceId == null) {
             throw new ValidationException(AuthMessages.WEB_DEVICE_ID_REQUIRED);
         }
 
-        Identity identity = identify(userAgent, platform, hints);
+        Identity identity = identify(request);
 
         if (deviceId != null) {
             Optional<Device> byClientId = deviceDao.findByUser_IdAndClientDeviceId(user.getId(), deviceId);
@@ -101,11 +100,10 @@ public class DeviceManager implements DeviceService {
 
     @Override
     @Transactional(readOnly = true)
-    public Optional<Device> findDevice(User user, String userAgent, String clientDeviceId,
-                                       ClientPlatform platform, DeviceHints hints) {
-        String deviceId = DeviceIdentity.sanitize(clientDeviceId);
+    public Optional<Device> findDevice(User user, DeviceIdentityRequest request) {
+        String deviceId = DeviceIdentity.sanitize(request.deviceId());
 
-        if (platform == ClientPlatform.WEB && deviceId == null) {
+        if (request.platform() == ClientPlatform.WEB && deviceId == null) {
             return Optional.empty();
         }
 
@@ -113,7 +111,7 @@ public class DeviceManager implements DeviceService {
             return deviceDao.findByUser_IdAndClientDeviceId(user.getId(), deviceId);
         }
 
-        Identity identity = identify(userAgent, platform, hints);
+        Identity identity = identify(request);
         return deviceDao.findByUserAndNameAndType(user, identity.name(), identity.type());
     }
 
@@ -137,7 +135,7 @@ public class DeviceManager implements DeviceService {
         pushTokenDeliveryLock.lockUser(user.getId());
         requireActiveUser(user.getId());
 
-        Device device = findDevice(user, userAgent, clientDeviceId)
+        Device device = findDevice(user, DeviceIdentityRequest.legacy(userAgent, clientDeviceId))
                 .orElseThrow(() -> new ResourceNotFoundException(DeviceMessages.DEVICE_NOT_FOUND));
 
         pushTokenDeliveryLock.lockTokens(Stream.of(device.getPushToken(), pushToken)
@@ -158,7 +156,7 @@ public class DeviceManager implements DeviceService {
         pushTokenDeliveryLock.lockMutations();
         pushTokenDeliveryLock.lockUser(user.getId());
 
-        findDevice(user, userAgent, clientDeviceId).ifPresent(device -> {
+        findDevice(user, DeviceIdentityRequest.legacy(userAgent, clientDeviceId)).ifPresent(device -> {
             pushTokenDeliveryLock.lockTokens(device.getPushToken() == null
                     ? List.of() : List.of(device.getPushToken()));
             device.setPushToken(null);
@@ -214,17 +212,17 @@ public class DeviceManager implements DeviceService {
         return device;
     }
 
-    Identity identify(String userAgent, ClientPlatform platform, DeviceHints hints) {
-        UserAgent agent = userAgentAnalyzer.parse(normalize(userAgent));
+    Identity identify(DeviceIdentityRequest request) {
+        UserAgent agent = userAgentAnalyzer.parse(normalize(request.userAgent()));
         String operatingSystem = agent.getValue(UserAgent.OPERATING_SYSTEM_NAME_VERSION);
         String browser = agent.getValue(UserAgent.AGENT_NAME_VERSION);
-        DeviceType type = typeOf(platform, operatingSystem, browser);
+        DeviceType type = typeOf(request.platform(), operatingSystem, browser);
         DeviceNaming.ParsedAgent parsed = new DeviceNaming.ParsedAgent(
                 agent.getValue(UserAgent.DEVICE_NAME),
                 operatingSystem,
                 agent.getValue(UserAgent.AGENT_NAME_VERSION_MAJOR),
                 agent.getValue(UserAgent.OPERATING_SYSTEM_NAME_VERSION_MAJOR));
-        return new Identity(DeviceNaming.name(hints == null ? DeviceHints.NONE : hints, parsed, type), type);
+        return new Identity(DeviceNaming.name(request.hints(), parsed, type), type);
     }
 
     private String normalize(String userAgent) {
@@ -245,12 +243,7 @@ public class DeviceManager implements DeviceService {
     }
 
     private DeviceType typeOf(ClientPlatform platform, String operatingSystem, String agentName) {
-        return switch (platform == null ? ClientPlatform.UNKNOWN : platform) {
-            case WEB -> DeviceType.WEB_BROWSER;
-            case IOS -> DeviceType.IOS;
-            case ANDROID -> DeviceType.ANDROID;
-            case UNKNOWN -> toDeviceType(operatingSystem, agentName);
-        };
+        return platform == ClientPlatform.WEB ? DeviceType.WEB_BROWSER : toDeviceType(operatingSystem, agentName);
     }
 
     private DeviceType toDeviceType(String operatingSystem, String agentName) {

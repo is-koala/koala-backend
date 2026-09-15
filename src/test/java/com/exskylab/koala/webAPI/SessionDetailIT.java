@@ -42,9 +42,10 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -172,7 +173,7 @@ class SessionDetailIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.loginHistory[1].location").value("Istanbul, TR"))
                 .andExpect(jsonPath("$.data.loginHistory[1].at").exists());
 
-        assertFalse(first.sessionId().equals(second.sessionId()));
+        assertNotEquals(first.sessionId(), second.sessionId());
     }
 
     @Test
@@ -188,6 +189,37 @@ class SessionDetailIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.location").value(nullValue()))
                 .andExpect(jsonPath("$.data.loginHistory[0].location").value(nullValue()))
                 .andExpect(jsonPath("$.data.logins").value(1));
+    }
+
+    @Test
+    void aClientWithoutADeviceIdIsMatchedByItsUserAgentEvenWhenTheAccountDoesNotExist() throws Exception {
+        String email = newUser("ua-only");
+        Client curl = Client.bareCurl("curl/8.4.0");
+        Login login = login(email, PASSWORD, curl);
+
+        attemptLogin(email, "yanlis-parola", curl).andExpect(status().isUnauthorized());
+        String nobody = "sd-nobody-" + UUID.randomUUID().toString().substring(0, 8) + "@koala.test";
+        attemptLogin(nobody, "yanlis-parola", curl).andExpect(status().isUnauthorized());
+        Login again = login(email, PASSWORD, curl);
+        settle();
+
+        assertEquals(again.sessionId().toString(), jdbc.queryForObject(
+                "select id from sessions where device_id = (select device_id from sessions where id = ?) "
+                        + "and is_active = true", String.class, login.sessionId()),
+                "X-Device-Id olmayan istemci aynı cihaz satırına dönmeli");
+        assertEquals(1, jdbc.queryForObject(
+                "select count(*) from devices where user_id = (select id from users where email = ?) "
+                        + "and is_deleted = false", Integer.class, email).intValue());
+        assertEquals(1, jdbc.queryForObject(
+                "select count(*) from login_attempts where user_id is null and device_id is null "
+                        + "and email_attempted = ?", Integer.class, nobody).intValue(),
+                "hesabı olmayan adresin denemesi cihaza bağlanmamalı");
+
+        mockMvc.perform(with(get("/users/me/sessions/{id}", again.sessionId()), curl, again.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.logins").value(2))
+                .andExpect(jsonPath("$.data.loginHistory", hasSize(3)))
+                .andExpect(jsonPath("$.data.loginHistory[1].success").value(false));
     }
 
     @Test
@@ -362,7 +394,7 @@ class SessionDetailIT extends AbstractIntegrationTest {
         Map<String, Object> device = jdbc.queryForMap(
                 "select is_deleted, push_token from devices where id = ?", phoneDevice);
         assertEquals(Boolean.TRUE, device.get("is_deleted"));
-        assertTrue(device.get("push_token") == null);
+        assertNull(device.get("push_token"));
         assertEquals(1, jdbc.queryForObject(runbookVerify(), Integer.class, userId).intValue(),
                 "yalnız dizüstü oturumu açık kalmalı");
 

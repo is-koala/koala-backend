@@ -14,6 +14,7 @@ import com.exskylab.koala.entities.Device;
 import com.exskylab.koala.entities.User;
 import com.exskylab.koala.core.mappers.DeviceMapperImpl;
 import org.junit.jupiter.api.BeforeEach;
+import com.exskylab.koala.core.helpers.DeviceIdentityRequest;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
@@ -57,7 +58,7 @@ class DeviceIdentityTest {
         when(securityService.isActiveUser(user.getId())).thenReturn(false);
 
         assertThrows(com.exskylab.koala.core.exceptions.ResourceNotFoundException.class,
-                () -> deviceManager.findOrCreateDevice(user, "1.1.1.1", DART_UA, PHONE_A));
+                () -> deviceManager.findOrCreateDevice(user, identity(DART_UA, PHONE_A)));
 
         verify(deviceDao, never()).save(any());
         verify(securityService).isActiveUser(user.getId());
@@ -68,8 +69,8 @@ class DeviceIdentityTest {
         when(deviceDao.findByUser_IdAndClientDeviceId(user.getId(), PHONE_A)).thenReturn(Optional.empty());
         when(deviceDao.findByUser_IdAndClientDeviceId(user.getId(), PHONE_B)).thenReturn(Optional.empty());
 
-        Device first = deviceManager.findOrCreateDevice(user, "1.1.1.1", DART_UA, PHONE_A);
-        Device second = deviceManager.findOrCreateDevice(user, "1.1.1.1", DART_UA, PHONE_B);
+        Device first = deviceManager.findOrCreateDevice(user, identity(DART_UA, PHONE_A));
+        Device second = deviceManager.findOrCreateDevice(user, identity(DART_UA, PHONE_B));
 
         assertNotEquals(first.getClientDeviceId(), second.getClientDeviceId());
         verify(deviceDao, times(2)).save(any());
@@ -83,7 +84,7 @@ class DeviceIdentityTest {
         existing.setClientDeviceId(PHONE_A);
         when(deviceDao.findByUser_IdAndClientDeviceId(user.getId(), PHONE_A)).thenReturn(Optional.of(existing));
 
-        Device afterUpgrade = deviceManager.findOrCreateDevice(user, "1.1.1.1", "Dart/9.9 (dart:io)", PHONE_A);
+        Device afterUpgrade = deviceManager.findOrCreateDevice(user, identity("Dart/9.9 (dart:io)", PHONE_A));
 
         assertEquals(existing.getId(), afterUpgrade.getId(),
                 "Istemci sürümü degisince ayni cihaz kalmaliydi.");
@@ -93,8 +94,8 @@ class DeviceIdentityTest {
     void aRequestWithoutTheHeaderStillFallsBackToUserAgentMatching() {
         when(deviceDao.findByUserAndNameAndType(any(), any(), any())).thenReturn(Optional.empty());
 
-        assertDoesNotThrow(() -> deviceManager.findOrCreateDevice(user, "1.1.1.1",
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", null));
+        assertDoesNotThrow(() -> deviceManager.findOrCreateDevice(user,
+                identity("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", null)));
 
         verify(deviceDao, never()).findByUser_IdAndClientDeviceId(any(), any());
     }
@@ -103,8 +104,7 @@ class DeviceIdentityTest {
     void anAndroidClientWithoutADeviceIdRetainsTheLegacyUserAgentFallback() {
         when(deviceDao.findByUserAndNameAndType(any(), any(), any())).thenReturn(Optional.empty());
 
-        assertDoesNotThrow(() -> deviceManager.findOrCreateDevice(
-                user, "1.1.1.1", DART_UA, null, ClientPlatform.ANDROID));
+        assertDoesNotThrow(() -> deviceManager.findOrCreateDevice(user, identity(DART_UA, null, ClientPlatform.ANDROID)));
 
         verify(deviceDao, never()).findByUser_IdAndClientDeviceId(any(), any());
     }
@@ -115,7 +115,7 @@ class DeviceIdentityTest {
         existing.setClientDeviceId(PHONE_A);
         when(deviceDao.findByUser_IdAndClientDeviceId(user.getId(), PHONE_A)).thenReturn(Optional.of(existing));
 
-        assertTrue(deviceManager.findDevice(user, DART_UA, PHONE_A).isPresent());
+        assertTrue(deviceManager.findDevice(user, identity(DART_UA, PHONE_A)).isPresent());
         verify(deviceDao, never()).findByUserAndNameAndType(any(), any(), any());
     }
 
@@ -123,7 +123,7 @@ class DeviceIdentityTest {
     void aMissingDeviceIsReportedAsEmptyNotAnException() {
         when(deviceDao.findByUser_IdAndClientDeviceId(user.getId(), PHONE_A)).thenReturn(Optional.empty());
 
-        assertTrue(deviceManager.findDevice(user, DART_UA, PHONE_A).isEmpty());
+        assertTrue(deviceManager.findDevice(user, identity(DART_UA, PHONE_A)).isEmpty());
     }
 
     @Test
@@ -139,8 +139,7 @@ class DeviceIdentityTest {
     void webDevicesAreMatchedByClientIdAndAlwaysClassifiedAsBrowsers() {
         when(deviceDao.findByUser_IdAndClientDeviceId(user.getId(), PHONE_A)).thenReturn(Optional.empty());
 
-        Device browser = deviceManager.findOrCreateDevice(user, "1.1.1.1", "opaque-bff-label", PHONE_A,
-                ClientPlatform.WEB);
+        Device browser = deviceManager.findOrCreateDevice(user, identity("opaque-bff-label", PHONE_A, ClientPlatform.WEB));
 
         assertEquals(com.exskylab.koala.entities.DeviceType.WEB_BROWSER, browser.getType());
         assertEquals(PHONE_A, browser.getClientDeviceId());
@@ -151,10 +150,8 @@ class DeviceIdentityTest {
         when(deviceDao.findByUser_IdAndClientDeviceId(user.getId(), PHONE_A)).thenReturn(Optional.empty());
         when(deviceDao.findByUser_IdAndClientDeviceId(user.getId(), PHONE_B)).thenReturn(Optional.empty());
 
-        Device first = deviceManager.findOrCreateDevice(
-                user, "1.1.1.1", "Chrome", PHONE_A, ClientPlatform.WEB);
-        Device second = deviceManager.findOrCreateDevice(
-                user, "1.1.1.1", "Safari", PHONE_B, ClientPlatform.WEB);
+        Device first = deviceManager.findOrCreateDevice(user, identity("Chrome", PHONE_A, ClientPlatform.WEB));
+        Device second = deviceManager.findOrCreateDevice(user, identity("Safari", PHONE_B, ClientPlatform.WEB));
 
         assertNotEquals(first.getId(), second.getId());
         assertEquals(com.exskylab.koala.entities.DeviceType.WEB_BROWSER, first.getType());
@@ -163,15 +160,15 @@ class DeviceIdentityTest {
 
     @Test
     void aWebLoginCannotFallBackToTheUserAgent() {
-        assertThrows(ValidationException.class, () -> deviceManager.findOrCreateDevice(
-                user, "1.1.1.1", "Mozilla/5.0", null, ClientPlatform.WEB));
+        assertThrows(ValidationException.class, () -> deviceManager.findOrCreateDevice(user,
+                identity("Mozilla/5.0", null, ClientPlatform.WEB)));
 
         verify(deviceDao, never()).findByUserAndNameAndType(any(), any(), any());
     }
 
     @Test
     void aWebSessionLookupWithAnInvalidDeviceIdNeverFallsBack() {
-        assertTrue(deviceManager.findDevice(user, "Mozilla/5.0", "invalid", ClientPlatform.WEB).isEmpty());
+        assertTrue(deviceManager.findDevice(user, identity("Mozilla/5.0", "invalid", ClientPlatform.WEB)).isEmpty());
 
         verify(deviceDao, never()).findByUserAndNameAndType(any(), any(), any());
     }
@@ -180,8 +177,7 @@ class DeviceIdentityTest {
     void theMobileUserAgentWithoutHeadersNeverProducesQuestionMarks() {
         when(deviceDao.findByUser_IdAndClientDeviceId(user.getId(), PHONE_A)).thenReturn(Optional.empty());
 
-        Device phone = deviceManager.findOrCreateDevice(user, "1.1.1.1", "Koala (iOS)", PHONE_A,
-                ClientPlatform.IOS);
+        Device phone = deviceManager.findOrCreateDevice(user, identity("Koala (iOS)", PHONE_A, ClientPlatform.IOS));
 
         assertFalse(phone.getName().contains("??"), phone.getName());
         assertFalse(phone.getName().isBlank());
@@ -192,8 +188,8 @@ class DeviceIdentityTest {
     void theDeviceHeadersNameThePhoneAfterItsMarketingNameOsAndAppVersion() {
         when(deviceDao.findByUser_IdAndClientDeviceId(user.getId(), PHONE_A)).thenReturn(Optional.empty());
 
-        Device phone = deviceManager.findOrCreateDevice(user, "1.1.1.1", "Koala (iOS)", PHONE_A,
-                ClientPlatform.IOS, DeviceHints.of("iPhone15,3", "iOS 18.1", "1.1.0"));
+        Device phone = deviceManager.findOrCreateDevice(user,
+                new DeviceIdentityRequest("Koala (iOS)", PHONE_A, ClientPlatform.IOS, DeviceHints.of("iPhone15,3", "iOS 18.1", "1.1.0")));
 
         assertEquals("iPhone 14 Pro Max · iOS 18.1 · Koala 1.1.0", phone.getName());
         assertEquals(DeviceType.IOS, phone.getType());
@@ -203,9 +199,9 @@ class DeviceIdentityTest {
     void aBrowserWithoutHeadersIsNamedAfterAgentOsAndWeb() {
         when(deviceDao.findByUser_IdAndClientDeviceId(user.getId(), PHONE_A)).thenReturn(Optional.empty());
 
-        Device browser = deviceManager.findOrCreateDevice(user, "1.1.1.1",
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) "
-                        + "Chrome/128.0.0.0 Safari/537.36", PHONE_A, ClientPlatform.WEB);
+        Device browser = deviceManager.findOrCreateDevice(user,
+                identity("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) "
+                        + "Chrome/128.0.0.0 Safari/537.36", PHONE_A, ClientPlatform.WEB));
 
         assertTrue(browser.getName().startsWith("Chrome 128"), browser.getName());
         assertTrue(browser.getName().endsWith(DeviceNaming.SEPARATOR + DeviceNaming.WEB_SUFFIX), browser.getName());
@@ -216,7 +212,7 @@ class DeviceIdentityTest {
     void aBlankUserAgentWithoutHeadersIsTheUnknownDevice() {
         when(deviceDao.findByUserAndNameAndType(any(), any(), any())).thenReturn(Optional.empty());
 
-        Device nameless = deviceManager.findOrCreateDevice(user, "1.1.1.1", "", null);
+        Device nameless = deviceManager.findOrCreateDevice(user, identity("", null));
 
         assertEquals(DeviceNaming.UNKNOWN_DEVICE, nameless.getName());
     }
@@ -226,12 +222,13 @@ class DeviceIdentityTest {
         when(deviceDao.findByUserAndNameAndType(any(), any(), any())).thenReturn(Optional.empty());
         DeviceHints hints = DeviceHints.of("Pixel 8", "Android 15", "1.1.0");
 
-        Device created = deviceManager.findOrCreateDevice(user, "1.1.1.1", DART_UA, null, ClientPlatform.ANDROID,
-                hints);
+        Device created = deviceManager.findOrCreateDevice(user,
+                new DeviceIdentityRequest(DART_UA, null, ClientPlatform.ANDROID, hints));
         when(deviceDao.findByUserAndNameAndType(user, created.getName(), created.getType()))
                 .thenReturn(Optional.of(created));
 
-        assertTrue(deviceManager.findDevice(user, DART_UA, null, ClientPlatform.ANDROID, hints).isPresent());
+        assertTrue(deviceManager.findDevice(user,
+                new DeviceIdentityRequest(DART_UA, null, ClientPlatform.ANDROID, hints)).isPresent());
     }
 
     @Test
@@ -263,11 +260,19 @@ class DeviceIdentityTest {
         existing.setCustomName("Evdeki iPad");
         when(deviceDao.findByUser_IdAndClientDeviceId(user.getId(), PHONE_A)).thenReturn(Optional.of(existing));
 
-        Device after = deviceManager.findOrCreateDevice(user, "1.1.1.1", "Koala (iOS)", PHONE_A,
-                ClientPlatform.IOS, DeviceHints.of("iPhone15,3", "iOS 18.2", "1.2.0"));
+        Device after = deviceManager.findOrCreateDevice(user,
+                new DeviceIdentityRequest("Koala (iOS)", PHONE_A, ClientPlatform.IOS, DeviceHints.of("iPhone15,3", "iOS 18.2", "1.2.0")));
 
         assertEquals("iPhone 14 Pro Max · iOS 18.2 · Koala 1.2.0", after.getName());
         assertEquals("Evdeki iPad", after.getCustomName());
         assertEquals("Evdeki iPad", after.displayName());
+    }
+
+    private static DeviceIdentityRequest identity(String userAgent, String deviceId) {
+        return DeviceIdentityRequest.legacy(userAgent, deviceId);
+    }
+
+    private static DeviceIdentityRequest identity(String userAgent, String deviceId, ClientPlatform platform) {
+        return new DeviceIdentityRequest(userAgent, deviceId, platform, DeviceHints.NONE);
     }
 }

@@ -139,6 +139,16 @@ public class SessionManager implements SessionService {
         log.info("Invalidated {} active sessions for user with id: {}", activeSessions.size(), userId);
     }
 
+    private Session myActiveSession(UUID sessionId, UUID userId) {
+        Session session = sessionDao.findByIdAndIsActive(sessionId, true)
+                .orElseThrow(() -> new ResourceNotFoundException(MyWorkMessages.SESSION_NOT_FOUND));
+        if (!session.getDevice().getUser().getId().equals(userId)) {
+            throw Concealment.notFound(MyWorkMessages.SESSION_NOT_FOUND, userId, sessionId,
+                    "session belongs to another user");
+        }
+        return session;
+    }
+
     private String generateSecureRandomToken() {
         byte[] randomBytes = new byte[32];
         SECURE_RANDOM.nextBytes(randomBytes);
@@ -156,13 +166,7 @@ public class SessionManager implements SessionService {
     public SessionDetailDto getMySessionDetail(UUID sessionId) {
         UUID userId = securityService.getAuthenticatedUserId();
         UUID currentSessionId = securityService.getAuthenticatedPrincipal().sessionId();
-
-        Session session = sessionDao.findByIdAndIsActive(sessionId, true)
-                .orElseThrow(() -> new ResourceNotFoundException(MyWorkMessages.SESSION_NOT_FOUND));
-        if (!session.getDevice().getUser().getId().equals(userId)) {
-            throw Concealment.notFound(MyWorkMessages.SESSION_NOT_FOUND, userId, sessionId,
-                    "session belongs to another user");
-        }
+        Session session = myActiveSession(sessionId, userId);
 
         UUID deviceId = session.getDevice().getId();
         return sessionMapper.toSessionDetailDto(session, session.getId().equals(currentSessionId),
@@ -173,12 +177,7 @@ public class SessionManager implements SessionService {
     @Override
     @Transactional
     public void revokeSession(UUID sessionId) {
-        Session session = sessionDao.findById(sessionId)
-                .orElseThrow(() -> new ResourceNotFoundException(MyWorkMessages.SESSION_NOT_FOUND));
-
-        if (!session.getDevice().getUser().getId().equals(securityService.getAuthenticatedUserId())) {
-            throw new ResourceNotFoundException(MyWorkMessages.SESSION_NOT_FOUND);
-        }
+        Session session = myActiveSession(sessionId, securityService.getAuthenticatedUserId());
 
         session.setActive(false);
         sessionDao.save(session);

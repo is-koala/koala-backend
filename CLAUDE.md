@@ -4494,6 +4494,7 @@ kez çalıştırır ve `DeviceNaming.name(hints, parsedAgent, type)` çağırır
 |---|---|---|
 | `X-Koala-Device-Model` / `X-Koala-OS` / `X-Koala-App-Version` başlıkları (`core/helpers/DeviceHints`) | model→pazarlama adı · OS · `Koala ` + sürüm | `iPhone 14 Pro Max · iOS 18.1 · Koala 1.1.0` |
 | başlık yok, tip `WEB_BROWSER` | tarayıcı (major) · OS (major) · `web` | `Chrome 128 · Mac OS X 10 · web` |
+| başlık var, tip `WEB_BROWSER` | başlık adı · `web` | `MacBookPro18,3 · macOS 15.1 · Koala 2.0.0 · web` |
 | başlık yok, diğer | YAUAA cihaz adı · OS | `Apple iPhone · iOS 17.4` |
 | hiçbir parça okunamıyor | `Bilinmeyen cihaz` | curl, `hacker` |
 
@@ -4501,8 +4502,9 @@ kez çalıştırır ve `DeviceNaming.name(hints, parsedAgent, type)` çağırır
 kalan parçalar ` · ` ile birleşir; boş kalırsa sabit etiket. `Koala (iOS)` başlıksız `Apple iPhone · iOS` olur
 (`?? (iOS ??)` değil), `curl/8.4.0` `Curl · Cloud`, `hacker` ve boş UA `Bilinmeyen cihaz` (ölçüldü). Model→pazarlama adı tablosu `core/helpers/AppleDeviceNames` — küçük ve statik (iPhone 11–16e, güncel
 iPad'ler); bilinmeyen model **ham** kalır (`Pixel 8`, `SM-S928B`). Başlıklar saldırgan girdisidir: kontrol ve
-biçim karakterleri silinir, model/OS 64, sürüm 32 karakterde kesilir, ad 120'de (`devices.name` 255).
-`X-Client-Platform` artık tipi de belirler (`IOS`/`ANDROID`/`WEB` → doğrudan; `UNKNOWN` → UA sezgisi).
+biçim karakterleri silinir, model/OS 64, sürüm 32 kod noktasında kesilir (surrogate çifti bölünmez), ad
+120'de (`devices.name` 255). Tip kuralı değişmedi: `X-Client-Platform: web` → `WEB_BROWSER`, gerisi UA sezgisi
+(`Koala (iOS)` → `IOS`); IOS/ANDROID başlığının tipi ezmesi bilerek eklenmedi, kapsam dışı.
 
 **Kullanıcı adı `custom_name`'e yazılır, otomatik ad yerinde durur.** `PATCH /users/me/devices/{deviceId}`
 `{name}` (`@NotBlank @Size(max=60)`, kırpılır) `Device.customName`'i yazar; `name` her girişte yeniden üretilmeye
@@ -4514,6 +4516,13 @@ ile düşerdi. Başkasının cihazı `findByIdAndUser_Id` ile aynı sorguda elen
 dal, gizlenecek ayrım yok (§2d2). Temizleme (custom_name'i sıfırlama) bilerek yok; gerekirse boş dize kabul
 eden ayrı bir karar.
 
+**Cihaz kimliği tek nesneyle taşınır: `core/helpers/DeviceIdentityRequest`** (UA, `X-Device-Id`, platform,
+başlık ipuçları). `DeviceService.findOrCreateDevice(user, identity)` / `findDevice(user, identity)` başka aşırı
+yükleme taşımaz; `ClientContext.deviceIdentity()` HTTP yolundan, `DeviceIdentityRequest.from(request)` filtreden,
+`DeviceIdentityRequest.legacy(ua, deviceId)` push-token uçlarından kurar. Eski `findOrCreateDevice(user, ip, ua,
+id, platform)` merdiveni ve `ClientContext`'in 3/4 argümanlı kurucuları silindi (IP cihaz eşlemesinde hiç
+kullanılmıyordu).
+
 **UA-yolu kimliği başlıkları da içerir.** X-Device-Id göndermeyen istemcide cihaz `name + type` ile aranır ve
 `name` başlıklardan türediği için **uygulama sürümü değişince yeni cihaz satırı açılır** — bugünkü davranışla
 aynı sınıf: tarayıcı UA'sı da sürüm taşır ve her tarayıcı güncellemesi zaten yeni satır açıyordu. İki gerçek
@@ -4524,11 +4533,14 @@ sütunu bu yüzden açılmadı.
 `lastAccessedAt`, `refreshExpiresAt`, `ipAddress` (**maskelenmez** — kullanıcının kendi verisi, §2i'nin log
 kuralı yanıt gövdesine uygulanmaz), `location`, `current`, `logins` (bu cihazdan **başarılı** giriş sayısı) ve
 `loginHistory[]` (son 20 deneme: `at`, `ipAddress`, `location`, `success`). Kaynak `login_attempts`; tabloya
-`device_id` (FK, `login_attempts` → `devices`) ve `location` sütunları eklendi (`2026/09/15-01`). Başarılı
+`device_id` (FK, `login_attempts` → `devices`) ve `location` sütunları eklendi (`2026/09/15-02`). Başarılı
 giriş `Device`'ı, başarısız giriş **tanınan** cihazı bağlar: parola yanlışsa `deviceService.findDevice` ile
 mevcut satır aranır, bulunursa `device_id` yazılır, bulunmazsa (hesap yok / ilk cihaz) boş kalır. Yani "bu
 cihazdan 3 başarısız deneme" sorusu cevaplanabiliyor; hesabı olmayan adresin denemesi eskisi gibi sahipsiz.
-**Arama hesap yokken de koşuyor** (`userService.getReference(rastgele id)` ile aynı sorgu, boş döner): §2d2'nin
+**Arama hesap yokken de koşuyor** (`userService.getReference(rastgele id)` ile aynı sorgu, boş döner; UA-yolunda
+detached proxy `findByUserAndNameAndType`'a parametre olarak giriyor, `SessionDetailIT
+.aClientWithoutADeviceIdIsMatchedByItsUserAgentEvenWhenTheAccountDoesNotExist` gerçek Postgres'te 401 alıyor,
+500 değil): §2d2'nin
 "süre de yanıtın parçası" kuralı — yalnız kayıtlı adreste fazladan bir sorgu atmak #42'nin kapattığı sayım
 kanalını zamanlama üzerinden geri açardı;
 `LoginConcealmentTest.anUnregisteredEmailStillPaysForTheDeviceLookupTheRegisteredOnePays` sabitliyor.
@@ -4537,12 +4549,15 @@ sayım. N+1 yok: `LoginHistoryEntryDto` yalnız skaler kolon okur, `user`/`devic
 (`CollectionQueryWithoutGraphTest` allowlist'inde); `SessionDetailIT.theDetailDoesNotGrowWithTheLoginHistory`
 1 ve 4 girişli geçmişte statement sayısını eşitliyor, lazy fetch sıfır. Aynı turda
 `SessionDao.findAllByDevice_User_IdAndIsActive` `@EntityGraph("device")` kazandı — liste cihazı satır başına
-yüklüyordu.
+yüklüyordu. **Geçmiş yalnız bu sürümden sonraki girişleri kapsar:** migration öncesi satırlarda `device_id`
+`NULL` ve backfill yok (eski satırda cihaz eşlemesi yapılamaz); OpenAPI açıklaması ve `sessions.md` bunu yazıyor.
 
-**Detay yalnız aktif ve kendi oturum için.** `findByIdAndIsActive(id, true)` + sahip kontrolü; başkasının
-oturumu `Concealment.notFound(MY_SESSION_NOT_FOUND)` ile var olmayan oturumla **aynı zarfı** alır
-(`someoneElsesSessionLooksExactlyLikeAMissingOne` gövdeyi birebir karşılaştırıyor). Kapatılmış oturumun detayı
-da 404 — liste zaten yalnız aktifleri gösteriyor, kapalı oturumun geçmişi kullanıcı yüzeyinde değil.
+**Detay ve kapatma aynı kapıdan: `SessionManager.myActiveSession(id, userId)`.** `findByIdAndIsActive(id, true)`
++ sahip kontrolü; başkasının oturumu `Concealment.notFound(MY_SESSION_NOT_FOUND)` ile var olmayan oturumla
+**aynı zarfı** alır (`someoneElsesSessionLooksExactlyLikeAMissingOne` gövdeyi birebir karşılaştırıyor).
+`revokeSession` de bu yardımcıdan geçiyor — eskiden `findById` ile kapalı oturumu da buluyor ve sahiplik
+reddini `Concealment` dışında atıyordu; artık **zaten kapatılmış oturumu kapatmak da 404** (liste yalnız
+aktifleri gösteriyor, kapalı oturumun geçmişi kullanıcı yüzeyinde değil).
 
 **GeoIP: MaxMind GeoLite2-City, süreç içi `.mmdb`, opsiyonel.** `core/geoip/GeoIpResolver` (Spring bean)
 `locate(ip) → Optional<String>`; `GeoIpConfig` `geoip.database-path` (`GEOIP_DATABASE_PATH`) boşsa ya da
@@ -4550,7 +4565,10 @@ dosya yoksa/okunamıyorsa **tek `WARN` yazıp `GeoIpResolver.unavailable()` bağ
 `null` kalır (`GeoIpConfigTest` üç hâli, her IT dosyasız açılışı sabitliyor). Dosya varsa
 `MaxMindGeoIpResolver`: `DatabaseReader` + `CHMCache`, biçim `Şehir, ÜLKEKODU` (`Istanbul, TR`), şehir yoksa
 ülke kodu. Özel/loopback/link-local adresler ve `unknown` gibi IP olmayan dizeler aranmaz; arama hatası
-`DEBUG` ve `empty` — **IP hiçbir log satırına girmez**: `LogPrivacyTest` yasaklı listesine `getIpAddress()`,
+`DEBUG` ve `empty`. **Haftalık güncelleme restart istemez:** okuyucu her aramadan önce dosyanın `mtime`'ına
+bakar, değişmişse `synchronized` bloğunda bir kez yeniden açıp eskisini kapatır; açılamayan (yarım yazılmış)
+dosyada eski okuyucu kalır, o `mtime` bir daha denenmez (`MaxMindGeoIpResolverTest` iki hâli sahte
+`DatabaseReader` kaynağıyla ölçüyor). — **IP hiçbir log satırına girmez**: `LogPrivacyTest` yasaklı listesine `getIpAddress()`,
 `getLocation()`, `getRemoteAddr()` ve `ipAddress`/`clientIp`/`remoteAddress`/`location` değişken adları
 eklendi. Bilinen istisna: `RateLimitFilter`'ın aşım `WARN`'ı `clientIpResolver.resolve(request)` ile IP
 yazıyor — bu PR'dan önce vardı, taramanın tanımadığı yazım, ayrı issue. Konum üç yerde yazılır:

@@ -15,6 +15,9 @@ import com.exskylab.koala.core.geoip.GeoIpResolver;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.UnauthorizedException;
 import com.exskylab.koala.core.helpers.ClientContext;
+import com.exskylab.koala.core.helpers.ClientPlatform;
+import com.exskylab.koala.core.helpers.DeviceHints;
+import com.exskylab.koala.core.helpers.DeviceIdentityRequest;
 import com.exskylab.koala.core.properties.SessionProperties;
 import com.exskylab.koala.core.security.JwtService;
 import com.exskylab.koala.entities.LoginAttempt;
@@ -30,6 +33,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -121,7 +125,11 @@ class LoginConcealmentTest {
         assertThrows(RuntimeException.class, () -> authManager.login(loginWith(UNREGISTERED_EMAIL), client()));
         assertThrows(RuntimeException.class, () -> authManager.login(loginWith(REGISTERED_EMAIL), client()));
 
-        verify(deviceService, times(2)).findDevice(any(), eq("Koala JUnit"), eq("cihaz-1"), any(), any());
+        ArgumentCaptor<User> subjects = ArgumentCaptor.forClass(User.class);
+        verify(deviceService, times(2)).findDevice(subjects.capture(),
+                eq(DeviceIdentityRequest.legacy("Koala JUnit", "cihaz-1")));
+        assertTrue(subjects.getAllValues().stream().allMatch(subject -> subject != null && subject.getId() != null),
+                "hesap yokken de cihaz aramasi gercek bir kimlikle kosmali");
     }
 
     private User registeredUser() {
@@ -137,6 +145,6 @@ class LoginConcealmentTest {
     }
 
     private ClientContext client() {
-        return new ClientContext("203.0.113.7", "Koala JUnit", "cihaz-1");
+        return new ClientContext("203.0.113.7", "Koala JUnit", "cihaz-1", ClientPlatform.UNKNOWN, DeviceHints.NONE);
     }
 }

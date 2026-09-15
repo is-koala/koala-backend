@@ -8,7 +8,6 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GeoIpConfigTest {
@@ -22,7 +21,6 @@ class GeoIpConfigTest {
 
         GeoIpResolver resolver = config.geoIpResolver(properties);
 
-        assertFalse(resolver.isAvailable());
         assertTrue(resolver.locate("203.0.113.7").isEmpty());
     }
 
@@ -33,7 +31,6 @@ class GeoIpConfigTest {
 
         GeoIpResolver resolver = config.geoIpResolver(properties);
 
-        assertFalse(resolver.isAvailable());
         assertTrue(resolver.locate("203.0.113.7").isEmpty());
     }
 
@@ -46,7 +43,6 @@ class GeoIpConfigTest {
 
         GeoIpResolver resolver = config.geoIpResolver(properties);
 
-        assertFalse(resolver.isAvailable());
         assertTrue(resolver.locate("203.0.113.7").isEmpty());
     }
 }

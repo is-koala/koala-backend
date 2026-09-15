@@ -183,9 +183,7 @@ public class AuthManager implements AuthService {
 
         pendingRegistrationService.deleteById(pendingRegistrationId);
 
-        Device device = deviceService.findOrCreateDevice(
-                savedUser, client.ipAddress(), client.userAgent(), client.deviceId(), client.platform(),
-                client.deviceHints());
+        Device device = deviceService.findOrCreateDevice(savedUser, client.deviceIdentity());
 
         log.info("Device created or found for user ID: {}", savedUser.getId());
 
@@ -235,9 +233,7 @@ public class AuthManager implements AuthService {
             throw new UnauthorizedException(AuthMessages.EMAIL_OR_PASSWORD_MISMATCH);
         }
 
-        Device device = deviceService.findOrCreateDevice(
-                user, client.ipAddress(), client.userAgent(), client.deviceId(), client.platform(),
-                client.deviceHints());
+        Device device = deviceService.findOrCreateDevice(user, client.deviceIdentity());
 
         log.info("Device found or created for user ID: {}", user.getId());
 
@@ -283,9 +279,8 @@ public class AuthManager implements AuthService {
             throw new UnauthorizedException(AuthMessages.REFRESH_TOKEN_EXPIRED);
         }
 
-        Device currentDevice = deviceService.findDevice(
-                session.getDevice().getUser(), client.userAgent(), client.deviceId(), client.platform(),
-                client.deviceHints()).orElse(null);
+        Device currentDevice = deviceService.findDevice(session.getDevice().getUser(), client.deviceIdentity())
+                .orElse(null);
 
         if (currentDevice == null || !session.getDevice().getId().equals(currentDevice.getId())){
             session.setActive(false);
@@ -331,8 +326,7 @@ public class AuthManager implements AuthService {
 
     private Device knownDevice(User user, ClientContext client) {
         User subject = user == null ? userService.getReference(UUID.randomUUID()) : user;
-        return deviceService.findDevice(subject, client.userAgent(), client.deviceId(), client.platform(),
-                client.deviceHints()).orElse(null);
+        return deviceService.findDevice(subject, client.deviceIdentity()).orElse(null);
     }
 
     @Override

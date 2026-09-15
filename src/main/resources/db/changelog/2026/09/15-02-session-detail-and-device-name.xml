@@ -5,7 +5,7 @@
         xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
 
-    <changeSet id="2026-09-15-01-01-device-custom-name" author="koala">
+    <changeSet id="2026-09-15-02-01-device-custom-name" author="koala">
         <addColumn tableName="devices">
             <column name="custom_name" type="VARCHAR(60)"/>
         </addColumn>
@@ -14,7 +14,7 @@
         </rollback>
     </changeSet>
 
-    <changeSet id="2026-09-15-01-02-login-attempt-device-and-location" author="koala">
+    <changeSet id="2026-09-15-02-02-login-attempt-device-and-location" author="koala">
         <addColumn tableName="login_attempts">
             <column name="device_id" type="UUID"/>
             <column name="location" type="VARCHAR(255)"/>
