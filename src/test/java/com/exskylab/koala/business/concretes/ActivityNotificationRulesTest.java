@@ -20,6 +20,7 @@ import com.exskylab.koala.entities.Conversation;
 import com.exskylab.koala.entities.ConversationKind;
 import com.exskylab.koala.entities.Message;
 import com.exskylab.koala.entities.NotificationCategory;
+import com.exskylab.koala.entities.NotificationTargetType;
 import com.exskylab.koala.entities.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -214,6 +215,35 @@ class ActivityNotificationRulesTest {
         manager.identityVerified(worker);
 
         assertEquals(NotificationCategory.IDENTITY_VERIFICATION, captured().getCategory());
+    }
+
+    @Test
+    void anIdentityRevealReachesTheWorkerInAppAndByPushButNotByEmail() {
+        JobAssignment assignment = assignment();
+
+        manager.identityRevealed(assignment);
+
+        verify(notificationService).sendInApp(argThat(dto -> dto.getRecipient() == worker
+                && dto.getCategory() == NotificationCategory.ACCOUNT_SECURITY
+                && dto.getTargetType() == NotificationTargetType.JOB_ASSIGNMENT
+                && assignment.getId().equals(dto.getTargetId())
+                && "metin:{activity.identity.revealed}".equals(dto.getBody())));
+        SendPushToUserDto push = captured();
+        assertEquals(worker, push.getRecipient());
+        assertEquals(NotificationCategory.ACCOUNT_SECURITY, push.getCategory());
+        assertEquals("metin:{activity.identity.revealed}", push.getBody());
+        verify(notificationService, never()).sendEmail(any(), any(), anyBoolean());
+    }
+
+    @Test
+    void anIdentityRevealWithoutAWorkerIsSilentlyDropped() {
+        JobAssignment assignment = assignment();
+        assignment.setWorker(null);
+
+        manager.identityRevealed(assignment);
+
+        verify(notificationService, never()).sendInApp(any());
+        verify(notificationService, never()).sendPushToUser(any(), any(), anyBoolean());
     }
 
     @Test

@@ -273,6 +273,7 @@ yoktu**; şimdi hepsinde var.
 | `GET /job-assignments/{id}/work-sessions` | taraf değil | `job.assignment.not.found` |
 | `POST /job-assignments/{id}/complete` | işvereni değil | `job.assignment.not.found` |
 | `POST /job-assignments/{id}/reviews` | taraf değil | `job.assignment.not.found` |
+| `GET /job-assignments/{id}/worker-identity` | işvereni değil **ya da** işçi henüz kabul etmemiş (`PENDING_CONFIRMATION`/`REJECTED`/`CANCELLED`) | `job.assignment.not.found` |
 
 Kullanılmayan hâle gelen dokuz anahtar üç katalogdan da düşürüldü (`education.not.owner`,
 `experience.not.owner`, `job.template.not.owner`, `cancellation.not.a.participant`, `timesheet.not.the.worker`,
@@ -569,7 +570,7 @@ Gerekçe: (b) elle SQL yazmayı ortadan kaldırmıyor, yalnızca kopyalanacak bi
 
 ### Kişisel veri
 
-**PII maskelenir.** `core/helpers/LogMasks`: e-posta yerel kısmı maskeli (`y***@gmail.com`, alan adı kalır ki başarısız giriş takip edilebilsin), telefonun son dört hanesi, IBAN'ın baş ve sonu, TCKN hiç. Kimlik gerektiğinde kullanıcı **id**'si yazılır.
+**PII maskelenir.** `core/helpers/LogMasks`: e-posta yerel kısmı maskeli (`y***@gmail.com`, alan adı kalır ki başarısız giriş takip edilebilsin), telefonun son dört hanesi, IBAN'ın baş ve sonu, TCKN hiç, IP'nin yalnız ağ öneki (`85.105.***`, IPv6'da ilk iki grup; #312). Kimlik gerektiğinde kullanıcı **id**'si yazılır.
 
 **`LogPrivacyTest` bunu yapısal olarak koruyor.** Kaynak kodu tarayıp hiçbir log çağrısının maskelenmemiş e-posta, telefon, IBAN, TCKN veya parola taşımadığını doğrular. Yazıldığında `NotificationManager` içinde gözden kaçmış bir SMS logunu yakaladı.
 
@@ -624,6 +625,8 @@ Aşıldığında 429 ve `TOO_MANY_REQUESTS` döner.
 **Anahtar STOMP oturumudur, IP değil** — issue'nun istediği sınır "bağlantı başına". `SUBSCRIBE` bütçesi yetki kontrolünden **önce** tükeniyor, yani bir bot veritabanına hiç dokunmadan durduruluyor.
 
 **İki bütçenin aşım davranışı farklı, ve fark bilinçli.** `SUBSCRIBE` aşımı `TooManyRequestsException` fırlatır; bu §2ai'deki yola girip `REALTIME_TOO_MANY_FRAMES` koduyla o aboneliğe ret karesi olarak döner, bağlantı ayakta kalır. `SEND` aşımında ise kare **sessizce düşürülür** (`preSend` null döndürür): karenin cevaplanabileceği bir abonelik id'si yok, `ERROR` göndermek soketi kapatırdı ve bu tam da bu issue'nun kapatmaya çalıştığı davranış olurdu. Bugün tek `@MessageMapping` yazıyor göstergesi; tuşa basıldıkça olay üreten bir istemcinin dakikada 60'ı aşması olağan, ve bunun bedeli bütün gerçek zamanlı oturumu kaybetmek olamaz. Yazıyor göstergesi zaten en iyi çaba — §2z'nin "gerçek zamanlı katman iyileştirme, tek kaynak değil" kuralının aynısı.
+
+**Üçüncü bir manager-içi bütçe: `identity-reveal` (30 / 1 saat, anahtar önek + işveren kullanıcı id'si).** `GET /job-assignments/{id}/worker-identity` bir okuma ucu ve filtre okumaları sınırlamıyor; issue sınırı **işveren başına** istiyor ve filtre o noktada principal'ı görmüyor (yukarıdaki kural). Sayaç `IdentityRevealManager` içinden, yetki ve durum kontrollerinden **sonra** ve kayıt yazılmadan **önce** düşülüyor — yabancının 404'ü bütçe harcamaz, 429 alan çağrı kayda geçmez. Aşımda `TooManyRequestsException` → `IDENTITY_REVEAL_TOO_MANY_REQUESTS`. Ayarı `rate-limit.identity-reveal.*`; ayrıntı §2bb.
 
 Sayaç bellekte (`ConcurrentHashMap`), yani **tek örnek varsayımıyla çalışıyor**. Birden fazla örnek çalıştırıldığında sınır örnek başına uygulanır; o noktada Redis'e taşınmalı.
 
@@ -1039,6 +1042,8 @@ giriş kapatılmamıştı — tek gerçek kaynak sunucunun 400'üydü. `expiresA
 **Hesap silme düz `DELETE` değil.** `AccountDeletionRequest` talebi kuyruğa alır ve **açık yükümlülük varken reddeder**: escrow'da bekleyen para ya da devam eden iş varsa silinemez. Fatura ve ödeme kayıtlarının saklanma yükümlülüğü olduğu için asıl işlem anonimleştirme olacak — o adım henüz yazılmadı, talep kaydı ve engelleme mantığı hazır.
 
 **Bu maddelerin hukuki ayrıntısı avukatla netleştirilmeli.** Buradaki iş veri modelinin doğru şeyi tutması; metinlerin içeriği ve İYS entegrasyonu ayrı.
+
+**Sürüm notu (#312): işçi tarafı KVKK aydınlatma metni "işe alındığınızda işvereniniz sigorta bildirimi için kimlik bilgilerinizi (ad soyad, TC kimlik numarası, doğum tarihi) görüntüleyebilir" cümlesini taşımalı.** Backend'de `GET /job-assignments/{id}/worker-identity` bu açıklamaya dayanıyor (§2bb); metin güncellendiğinde `AgreementVersion`'a yeni sürüm eklenir, eskisi `retiredAt` ile emekliye ayrılır ve istemciler yeni sürümü onaylatır. Metnin kendisi bu depoda değil — istemci issue'larına ve avukata ait; burada yalnız bağımlılık yazılı.
 
 ## 2o. Mesajlaşma ve değerlendirme
 
@@ -3163,7 +3168,7 @@ GROUP BY tc_identity_number HAVING count(*) > 1;
 
 **Ödemedeki kontrol savunma amaçlı, ikinci sırada.** Asıl kapı ilan açma anında — hata kullanıcıya en erken ve en ucuz noktada söylenmeli. İşveren ilanı yayınlayıp başvuruları toplayıp birini seçtikten *sonra* "kimliğini doğrulamamışsın" demek en kötü zamanlama, üstelik karşı tarafta işe alındığını sanan bir işçi bırakıyor. Ödemedeki kontrol yalnızca `null` bir TCKN'nin hiçbir koşulda Iyzico'ya gitmemesini garantiliyor; şirket ilanları VKN kullandığı için o yola dokunmuyor.
 
-**TCKN yanıtta maskelendi.** `UserMeResponseDto.tcIdentityNumber` → `maskedTcIdentityNumber`, dolu olduğunda `***********`, boşken `null`. §2i'nin "TCKN hiç" kuralı yanıt gövdesine de uygulandı; istemci zaten yalnızca "dolu mu" bilgisini kullanıyor, tam değere ihtiyacı yok.
+**TCKN yanıtta maskelendi.** `UserMeResponseDto.tcIdentityNumber` → `maskedTcIdentityNumber`, dolu olduğunda `***********`, boşken `null`. §2i'nin "TCKN hiç" kuralı yanıt gövdesine de uygulandı; istemci zaten yalnızca "dolu mu" bilgisini kullanıyor, tam değere ihtiyacı yok. **Tek istisna §2bb (#312):** işveren, işe aldığı işçinin TCKN'sini sigorta bildirimi için `GET /job-assignments/{id}/worker-identity` ucundan **yalnız orada** okur — kayıtlı, bildirimli, bütçeli; başka hiçbir yanıt DTO'su (personel kimlik incelemesi `IdentityReviewDto` hariç) TCKN taşımaz.
 
 ## 2aq2. Passive Authentication — kanıt sunucuda doğrulanıyor
 
@@ -4394,6 +4399,89 @@ yönde ve herkese açık listede `jobAssignmentId` null), `ExistenceConcealmentI
 
 ---
 
+## 2bb. İşçi kimliğinin işverene açılması — sigorta bildirimi (#312)
+
+**Karar (Yusuf, 15.09.2026): kimlik doğrulamanın amacı SGK işe giriş bildirimi; işveren işe aldığı işçinin TCKN'sini
+görebilmeli.** §2aq "TCKN hiçbir yanıtta dönmez" diyordu ve o kural **yalnız bu uçta** geriliyor:
+`GET /job-assignments/{assignmentId}/worker-identity` → `WorkerIdentityDto {fullName, tcIdentityNumber, birthDate,
+verifiedAt, verificationMethod}`. Liste ve atama DTO'ları TCKN taşımaya devam etmiyor; `UserMeResponseDto` maskeli
+kalıyor. Yüzey tek: `IdentityRevealManager` kendi aggregate'i (`IdentityRevealDao`), atamayı
+`JobAssignmentService.getDetailedById`, işçiyi atamadan, izleyeni `UserService.getReference` ile alır (§2ae).
+
+**Sınır: yalnız işe alınmış atama.** Hukuki dayanak iş ilişkisiyle doğar; başvuru aşamasında (`PENDING_CONFIRMATION`)
+ve terminal olmayan hiçbir durumda açılmaz — kabul kümesi `CONFIRMED | IN_PROGRESS | COMPLETED`. `REJECTED`/`CANCELLED`
+de kapalı: ilişki kurulmadı ya da bitti, bildirim yükümlülüğü yok. "Başvuranlara da açılsın" istenirse kapsam genişletilir,
+küme `AssignmentStatus.HIRED`'da **tek yerde** — `JobManager.hiredCount` de aynı sabiti sayıyor (`PaymentAttemptStatus.ACTIVE`
+kalıbı, §2k); ikisi ayrı sabitken iki "işe alınmış" tanımı sessizce ayrışabilirdi.
+
+**Sıra: yetki → durum → doğrulama → bütçe → kayıt (§2d2, §2ar3).** İşçi, yabancı ve **işvereni olsa bile henüz kabul
+edilmemiş atama** aynı `JOB_ASSIGNMENT_NOT_FOUND` 404 zarfını alır (`Concealment.notFound`, gerekçe yalnız `log.warn`'da);
+`WorkerIdentityRevealIT` üç dalı da rastgele UUID'nin zarfıyla birebir karşılaştırıyor. Yetkili işverende işçinin
+`identityVerified` değilse **409 `WORKER_IDENTITY_NOT_VERIFIED`** (`worker.identity.not.verified`) — burada gizleme yok,
+işveren atamanın tarafı. Doğrulanmamış işçide ne kayıt ne bildirim yazılır.
+
+**`verifiedAt` ve `verificationMethod` `users` üzerinde iki yeni sütun (`identity_verified_at`,
+`identity_verification_method`; `15-04-identity-reveals.xml`).** İki damgalama yolu var ve ikisi de artık yazıyor:
+`IdentityVerificationManager.approve` → `DOCUMENT` + inceleme satırının `verifiedAt`'i, `UserManager.
+verificateIdentityofAuthenticatedUser` (çip, PA açıkken) → `CHIP` + `Instant.now()`. Çip yolu bugüne kadar hiçbir
+zaman damgası bırakmıyordu; `IdentityVerification` satırından türetmek çip yolunu kör bırakırdı, iki kaynaktan
+türetmek (digest → CHIP, inceleme satırı → DOCUMENT) ise okuma anında iki aggregate'e uzanmak demekti. Tek kaynak
+`User`. Migration onaylı inceleme satırı olan kullanıcılara `DOCUMENT` + `MAX(verified_at)`, `identity_evidence_digest`
+taşıyanlara `CHIP` yazar; **eski KPS yoluyla doğrulanmış kullanıcıda ikisi de `null` kalır** — uydurulmadı, DTO null
+döner ve OpenAPI açıklaması bunu söylüyor. `fullName` `DisplayNames.of(firstName, lastName)` (push başlığı ve `MessageDto.senderName` ile aynı yardımcı):
+doğrulamadan sonra `IDENTITY_VERIFIED_CANNOT_CHANGE_*` ile kilitli, yani kimlikteki ad (§2aq). Eski kayıtlarda ikisi de
+null dönen DTO yolu ve migration'ın CHIP/DOCUMENT eşlemesi (`IdentityVerificationStampMigrationIT`: onaylı satırların
+en yenisi, soft-delete edilmiş satır sayılmaz, digest'li kullanıcı CHIP, ikisi de olan DOCUMENT, eski/doğrulanmamış null;
+backfill yeniden koşunca elle yazılmış damgayı ezmez) IT'de sabit.
+
+**Her çağrı `identity_reveals`'a yazılır: kim (`viewer_id`), kim hakkında (`worker_id`), hangi atama, ne zaman
+(`revealed_at`, `Clock`), IP.** Tablo `BaseEntity` değil — `AdminAuditEntry` gibi değişmez bir iz, soft delete
+anlamsız (§8'in denetim tabloları kararı); sütunlar `updatable = false`. **IP maskeli saklanıyor** (`LogMasks.ip`,
+`85.105.***`): issue "IP maskesiz değil" diyor, ve tam IP'nin buradaki tek işi "aynı ağdan mı" sorusu — `ConsentRecord`'un
+ham IP'si hukuki ispat içindir, bu satırınki değil. Log satırı aynı maskeyi yazar; TCKN, ad ve doğum tarihi ne loga ne
+kayda girer (`theIdentityNumberNeverReachesTheLog` kök logger'a `ListAppender` takıp 11 haneli sayı arıyor; UUID'ler
+`{uuid}`'ye indirgeniyor çünkü hex'te 11 ardışık rakam çıkabiliyor — ilk koşuda tam bu yanlış pozitifle düştü).
+
+**Bildirim: işçiye in-app + push, e-posta yok, `ACCOUNT_SECURITY` (işlemsel, kapatılamaz).** Metin
+`activity.identity.revealed` ("İşvereniniz sigorta bildirimi için kimlik bilgilerinizi görüntüledi."), hedef
+`JOB_ASSIGNMENT`. `ActivityNotificationManager.notify` iki parçaya bölündü: `notifyInAppAndPush` (akış + push) ve üstüne e-posta;
+`identityRevealed` yalnız ilk parçayı çağırıyor — issue iki kanal istiyor, e-posta bilinçli yok ve `ActivityNotificationRulesTest`
+`sendEmail`'in hiç çağrılmadığını sabitliyor. Push satırı IT'de de ölçülüyor (`theWorkerIsPushedOncePerDayAndThePushCarriesNoIdentityNumber`:
+`devices` satırı tohumlu, `channel='PUSH'` + `ACCOUNT_SECURITY`, gövdede ve payload'da TCKN yok, 24 saatte tek satır). **Sessiz pencere 24 saat, anahtarı (izleyen, atama) çifti:** aynı işveren
+aynı atamada 24 saat içinde tekrar okursa kayıt yine yazılır, bildirim yazılmaz (`existsByViewer_IdAndJobAssignment_
+IdAndRevealedAtAfter`). Farklı işveren (şirket ilanında başka yetkili) ya da aynı işçinin başka ataması yeniden bildirir —
+işçi kimin ne için baktığını bilmeli. 25 saat önceki kayıt pencereyi açar; IT üç hâli de ölçüyor.
+
+**Hız sınırı işveren başına saatte 30, manager içinde (§2j).** Filtre okumaları sınırlamıyor ve principal'ı görmüyor;
+`RateLimiter.tryAcquire("identity-reveal:" + actorId, …)` yetki/durum/doğrulama kontrollerinden sonra, kayıttan önce.
+429 alan çağrı kayda geçmez (`WorkerIdentityRevealRateLimitIT`, `rate-limit.identity-reveal.max-attempts=2` ile).
+`RateLimitBucketTest` ucun filtrede sınırlanmadığını ve varsayılanın 30 / 1h olduğunu sabitliyor.
+
+**Personel: `GET /admin/users/{userId}/identity-reveals` (`user.read_pii`, `PERSONAL_DATA`, sayfalı, `revealedAt` desc).**
+`AdminIdentityRevealDto {id, viewerId, viewerFullName, jobAssignmentId, jobId, jobTitle, revealedAt, ipAddress}` — TCKN
+burada da yok. Yetkisiz personel var olan ile olmayan kullanıcıya aynı 403'ü, yetkili olmayan kullanıcıya
+`USER_NOT_FOUND_BY_ID` alır; her okuma `user.read_pii` denetim satırı yazar (§2av). Grafik `viewer`, `jobAssignment`,
+`jobAssignment.job`; `viewer.profilePicture` `EagerFetchCoverageIT` muafiyetinde (DTO fotoğraf çizmiyor). Sıralama
+yalnız `revealedAt` (`PageableSanitizer`).
+
+**Kapsam dışı ve istemcilere kalan.** Mobil işveren kabuğu ve web işveren atama sayfası "Kimlik bilgilerini göster
+(sigorta için)" düğmesi — varsayılan maskeli, dokununca gösterim + "görüntülemeniz kayda geçer" notu; admin kullanıcı
+sayfasında görüntüleme geçmişi; KVKK metni sürümü (§2n). `RATE_LIMIT_IDENTITY_REVEAL_MAX_ATTEMPTS` / `_WINDOW` `.env.example`'da diğer kovaların
+yanında; yaml varsayılanı 30 / 1h.
+
+**Testler.** `WorkerIdentityRevealIT` on beş kural: sahip 200 (beş alan), şirket yetkilisi 200, işçi 404, yabancı 404,
+**başka şirketin yetkilisi 404**, `PENDING_CONFIRMATION` işverene 404 ve kayıt yok, **`REJECTED` ve `CANCELLED` işverene 404
+ve kayıt yok** (üçü de bilinmeyen id'nin zarfıyla bayt bayt aynı), doğrulanmamış işçi 409 + kayıt/bildirim yok, **eski
+kayıtta `verifiedAt`/`verificationMethod` null**, iki okuma iki kayıt tek bildirim + maskeli IP + `ACCOUNT_SECURITY`,
+**push satırı tek ve TCKN'siz**, 25 saatlik eski kayıt yeniden bildirir, farklı işveren yeniden bildirir, logda TCKN yok,
+personel listesi (`TRUST_LEAD` 200 + alanlar + TCKN yok, bilinmeyen kullanıcı 404, `SUPPORT_AGENT` 403, bilinmeyen sort 400,
+denetim satırı `user.read_pii`). `WorkerIdentityRevealRateLimitIT`: üçüncü çağrı 429, kayıt iki, başka işverenin bütçesi
+ayrı. `IdentityVerificationStampMigrationIT` (probe veritabanı, `MessageReportIdempotencyMigrationIT` kalıbı) backfill'i
+iki kuralla. `ActivityNotificationRulesTest`: `identityRevealed` akış + push, e-posta yok, işçisiz atama sessiz.
+`LogMasksTest.anIpKeepsOnlyItsNetworkPrefix`, `RateLimitBucketTest`.
+
+---
+
 ## 3. Testler
 
 `src/test/resources/application.properties` testlerin ayağa kalkması için gereken minimum değerleri sağlar. Buradan bir satır silmeden önce neye yaradığını bil:
@@ -4759,6 +4847,7 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 - `PendingRegistration` — **bilerek hard delete.** Kaydını hiç tamamlamamış birinin e-postasını süresiz saklamak koruma değil, gereksiz veri tutma. Kayıt akışı zaten sil-ve-yeniden-oluştur mantığıyla çalışıyor.
 - `CompanyContact` ve `JobCategory` — `BaseEntity` alt sınıfı değiller, denetim kolonları yok. `CompanyContact` bir üyelik kaydı ve silinmesi geçmiş kaybı demek; ileride `BaseEntity`'ye taşınmalı.
 - `AdminAuditEntry` ve `AdminAuditEntryDetail` — **bilerek hard delete.** Saklama işinin işi zaten fiziksel silmek; soft delete edilen bir denetim satırı süresini hiç doldurmazdı (§2av).
+- `identity_reveals` — **`BaseEntity` değil, soft delete yok, bugün hiçbir yol silmiyor (§2bb).** Bu satır işverenin işçinin TCKN'sini ne zaman gördüğünün iziyle KVKK ve SGK denetiminin dayanağı; saklama politikası **iş ilişkisinin bitiminden itibaren 10 yıl** (5510 sayılı Kanun'un işveren belgelerinde öngördüğü on yıllık saklama/zamanaşımı ufku — `admin_audit_entries`'in `FINANCIAL` satırlarıyla aynı süre, §2av). Süresi dolan satırı fiziksel silecek zamanlayıcı **henüz yazılmadı** (Faz 9B); yazıldığında `AdminAuditRetentionScheduler` kalıbında olmalı. Hesap anonimleştirmesi (`PostgresAccountAnonymizer`) bu tabloya **bugün dokunmuyor**; bağlandığında satır silinmemeli, yalnız `ip_address` boşaltılmalı — iz işverenin de yükümlülüğüdür, işçinin silme talebiyle kaybolamaz.
 - `sitemap_manifests` ve `sitemap_manifest_entries` — **bilerek hard delete.** Bunlar denetlenen domain kaydı
   değil, TTL'li türetilmiş cache'tir; manifestteki `created_at` yayın/version zamanıdır. Expiry temizliği
   manifesti fiziksel siler, entry'ler cascade olur. Soft delete bounded-storage garantisini bozardı (§2l).

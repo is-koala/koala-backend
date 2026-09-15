@@ -23,6 +23,7 @@ import com.exskylab.koala.core.helpers.StaffSearchQuery;
 import com.exskylab.koala.dataAccess.IdentityVerificationDao;
 import com.exskylab.koala.entities.IdentityReviewStatus;
 import com.exskylab.koala.entities.IdentityVerification;
+import com.exskylab.koala.entities.IdentityVerificationMethod;
 import com.exskylab.koala.entities.User;
 import com.exskylab.koala.entities.VerificationDocument;
 import lombok.extern.slf4j.Slf4j;
@@ -116,11 +117,14 @@ public class IdentityVerificationManager implements IdentityDocumentReviewServic
             throw new ConflictException(UserMessages.TC_IDENTITY_NUMBER_ALREADY_IN_USE);
         }
 
+        Instant now = Instant.now();
         review.setVerified(true);
-        review.setVerifiedAt(Instant.now());
+        review.setVerifiedAt(now);
         review.setReviewedByStaffId(actor == null ? null : actor.staffId());
 
         subject.setIdentityVerified(true);
+        subject.setIdentityVerifiedAt(now);
+        subject.setIdentityVerificationMethod(IdentityVerificationMethod.DOCUMENT);
         subject.setFirstName(capitalizeFirstLetter(review.getFirstName()));
         subject.setLastName(capitalizeFirstLetter(review.getLastName()));
         subject.setBirthDate(review.getBirthDate());

@@ -10,24 +10,30 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import com.exskylab.koala.business.abstracts.CancellationService;
 import com.exskylab.koala.business.abstracts.DisputeService;
+import com.exskylab.koala.business.abstracts.IdentityRevealService;
 import com.exskylab.koala.business.abstracts.TimesheetService;
 import com.exskylab.koala.core.constants.CancellationMessages;
 import com.exskylab.koala.core.constants.DisputeMessages;
+import com.exskylab.koala.core.constants.IdentityRevealMessages;
 import com.exskylab.koala.core.constants.TimesheetMessages;
 import com.exskylab.koala.core.dtos.cancellation.request.CancelAssignmentDto;
 import com.exskylab.koala.core.dtos.cancellation.response.CancellationDto;
 import com.exskylab.koala.core.dtos.cancellation.response.CancellationPreviewDto;
 import com.exskylab.koala.core.dtos.dispute.request.OpenDisputeDto;
 import com.exskylab.koala.core.dtos.dispute.response.DisputeDto;
+import com.exskylab.koala.core.dtos.identity.response.WorkerIdentityDto;
 import com.exskylab.koala.core.dtos.timesheet.request.CheckPointDto;
 import com.exskylab.koala.core.dtos.timesheet.response.WorkSessionDto;
+import com.exskylab.koala.core.helpers.ClientIpResolver;
 import com.exskylab.koala.core.mappers.CancellationMapper;
 import com.exskylab.koala.core.mappers.DisputeMapper;
+import com.exskylab.koala.core.mappers.IdentityRevealMapper;
 import com.exskylab.koala.core.mappers.TimesheetMapper;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.core.constants.JobAssignmentMessages;
 import com.exskylab.koala.core.dtos.jobAssignment.response.MyAssignmentDto;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -48,6 +54,9 @@ public class JobAssignmentOperationsController {
     private final CancellationMapper cancellationMapper;
     private final DisputeMapper disputeMapper;
     private final TimesheetMapper timesheetMapper;
+    private final IdentityRevealService identityRevealService;
+    private final IdentityRevealMapper identityRevealMapper;
+    private final ClientIpResolver clientIpResolver;
 
     public JobAssignmentOperationsController(CancellationService cancellationService,
                                              DisputeService disputeService,
@@ -55,7 +64,10 @@ public class JobAssignmentOperationsController {
                                              JobAssignmentService jobAssignmentService,
                                              CancellationMapper cancellationMapper,
                                              DisputeMapper disputeMapper,
-                                             TimesheetMapper timesheetMapper) {
+                                             TimesheetMapper timesheetMapper,
+                                             IdentityRevealService identityRevealService,
+                                             IdentityRevealMapper identityRevealMapper,
+                                             ClientIpResolver clientIpResolver) {
         this.cancellationService = cancellationService;
         this.disputeService = disputeService;
         this.timesheetService = timesheetService;
@@ -63,6 +75,9 @@ public class JobAssignmentOperationsController {
         this.cancellationMapper = cancellationMapper;
         this.disputeMapper = disputeMapper;
         this.timesheetMapper = timesheetMapper;
+        this.identityRevealService = identityRevealService;
+        this.identityRevealMapper = identityRevealMapper;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @Operation(summary = "Atamayı iptal et",
@@ -198,6 +213,34 @@ public class JobAssignmentOperationsController {
         return ResponseEntity.ok(new SuccessDataResult<>(
                 timesheetMapper.toWorkSessionDtoList(timesheetService.getSessions(assignmentId)),
                 TimesheetMessages.LISTED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "İşçinin kimlik bilgileri (sigorta bildirimi için)",
+            description = "İşe alınmış işçinin SGK işe giriş bildirimi için gereken kimlik bilgilerini döner: kimlikten "
+                    + "gelen ad soyad, TC kimlik numarası, doğum tarihi, doğrulama zamanı ve yöntemi (CHIP: TCKK çipi, "
+                    + "DOCUMENT: personel onaylı TCKK fotoğrafları; eski kayıtlarda ikisi de null olabilir). Yalnız ilan "
+                    + "sahibi ya da şirket yetkilisi okuyabilir ve yalnız işçinin kabul ettiği atamada "
+                    + "(CONFIRMED, IN_PROGRESS, COMPLETED); başvuru aşamasındaki (PENDING_CONFIRMATION) atama, işçi ve "
+                    + "yabancı için yanıt var olmayan atamayla aynıdır. Her çağrı kim/hangi atama/ne zaman/maskeli IP "
+                    + "ile kayda geçer ve işçiye hesap güvenliği kategorisinde in-app + push bildirim gider; aynı "
+                    + "işveren aynı atamada 24 saat içinde tekrar okursa kayıt yazılır, bildirim tekrarlanmaz. TC kimlik "
+                    + "numarası başka hiçbir yanıtta yer almaz. İşveren başına saatte en çok 30 okuma.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Kimlik bilgileri döndü, görüntüleme kayda geçti"),
+            @ApiResponse(responseCode = "404", description = "Atama bulunamadı, işvereni değilsiniz ya da işçi henüz işe alınmadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "İşçinin kimliği doğrulanmamış (WORKER_IDENTITY_NOT_VERIFIED)",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "429", description = "Saatlik kimlik görüntüleme sınırı aşıldı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @GetMapping("/{assignmentId}/worker-identity")
+    public ResponseEntity<SuccessDataResult<WorkerIdentityDto>> workerIdentity(@PathVariable UUID assignmentId,
+                                                                               HttpServletRequest request) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                identityRevealMapper.toWorkerIdentityDto(
+                        identityRevealService.revealWorkerIdentity(assignmentId, clientIpResolver.resolve(request))),
+                IdentityRevealMessages.REVEALED, HttpStatus.OK));
     }
 
     @Operation(summary = "İşi tamamlanmış işaretle",

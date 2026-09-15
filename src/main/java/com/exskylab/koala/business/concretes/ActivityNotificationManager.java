@@ -170,6 +170,13 @@ public class ActivityNotificationManager implements ActivityNotificationService 
     }
 
     @Override
+    public void identityRevealed(JobAssignment assignment) {
+        notifyInAppAndPush(assignment.getWorker(), assignment.getJob().getTitle(),
+                ActivityMessages.IDENTITY_REVEALED, NotificationCategory.ACCOUNT_SECURITY,
+                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
+    }
+
+    @Override
     public void companyApprovalDecided(Company company) {
         String key = company.getApprovalStatus() == CompanyApprovalStatus.APPROVED
                 ? ActivityMessages.COMPANY_APPROVED
@@ -245,9 +252,24 @@ public class ActivityNotificationManager implements ActivityNotificationService 
 
         String message = messageResolver.resolve(bodyKey);
 
+        inAppAndPush(recipient, jobTitle, message, category, bodyKey, targetType, targetId);
+        email(recipient, jobTitle, message, category, bodyKey);
+    }
+
+    private void notifyInAppAndPush(User recipient, String jobTitle, String bodyKey,
+                                    NotificationCategory category, NotificationTargetType targetType,
+                                    UUID targetId) {
+        if (recipient == null) {
+            return;
+        }
+
+        inAppAndPush(recipient, jobTitle, messageResolver.resolve(bodyKey), category, bodyKey, targetType, targetId);
+    }
+
+    private void inAppAndPush(User recipient, String jobTitle, String message, NotificationCategory category,
+                              String bodyKey, NotificationTargetType targetType, UUID targetId) {
         inApp(recipient, jobTitle, message, category, bodyKey, targetType, targetId);
         push(recipient, jobTitle, message, category, bodyKey);
-        email(recipient, jobTitle, message, category, bodyKey);
     }
 
     private void inApp(User recipient, String jobTitle, String message, NotificationCategory category,

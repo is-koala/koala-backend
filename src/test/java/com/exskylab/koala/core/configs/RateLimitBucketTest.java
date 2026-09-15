@@ -12,6 +12,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
+import java.time.Duration;
 import java.util.UUID;
 import java.util.Arrays;
 
@@ -58,6 +59,14 @@ class RateLimitBucketTest {
     @Test
     void readsAreNotLimited() throws Exception {
         assertEquals(200, passing("GET", "/users/me/notifications", "10.0.0.1", 200));
+    }
+
+    @Test
+    void theWorkerIdentityReadIsBudgetedPerEmployerInTheManagerNotPerIpInTheFilter() throws Exception {
+        assertEquals(30, properties.getIdentityReveal().getMaxAttempts());
+        assertEquals(Duration.ofHours(1), properties.getIdentityReveal().getWindow());
+        assertEquals(50, passing("GET", "/job-assignments/" + UUID.randomUUID() + "/worker-identity",
+                "10.0.0.13", 50));
     }
 
     @Test

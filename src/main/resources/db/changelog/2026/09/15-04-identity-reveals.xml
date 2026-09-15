@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-15-04-01-identity-verification-stamp" author="koala">
+        <addColumn tableName="users">
+            <column name="identity_verified_at" type="TIMESTAMPTZ"/>
+            <column name="identity_verification_method" type="VARCHAR(16)"/>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="2026-09-15-04-02-backfill-identity-verification-stamp" author="koala">
+        <sql>
+            UPDATE users u
+               SET identity_verified_at = approved.verified_at,
+                   identity_verification_method = 'DOCUMENT'
+              FROM (SELECT v.user_id, MAX(v.verified_at) AS verified_at
+                      FROM user_verifications v
+                     WHERE v.verification_type = 'IDENTITY'
+                       AND v.is_verified = true
+                       AND v.is_deleted = false
+                     GROUP BY v.user_id) approved
+             WHERE u.id = approved.user_id
+               AND u.identity_verified = true
+               AND u.identity_verified_at IS NULL
+        </sql>
+        <sql>
+            UPDATE users
+               SET identity_verification_method = 'CHIP'
+             WHERE identity_verified = true
+               AND identity_evidence_digest IS NOT NULL
+               AND identity_verification_method IS NULL
+        </sql>
+        <rollback>
+            <sql>
+                UPDATE users SET identity_verified_at = NULL, identity_verification_method = NULL
+            </sql>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-15-04-03-identity-reveals" author="koala">
+        <createTable tableName="identity_reveals">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="viewer_id" type="UUID">
+                <constraints nullable="false"
+                             foreignKeyName="fk_identity_reveals_viewer" references="users(id)"/>
+            </column>
+            <column name="worker_id" type="UUID">
+                <constraints nullable="false"
+                             foreignKeyName="fk_identity_reveals_worker" references="users(id)"/>
+            </column>
+            <column name="job_assignment_id" type="UUID">
+                <constraints nullable="false"
+                             foreignKeyName="fk_identity_reveals_assignment" references="job_assignments(id)"/>
+            </column>
+            <column name="revealed_at" type="TIMESTAMPTZ">
+                <constraints nullable="false"/>
+            </column>
+            <column name="ip_address" type="VARCHAR(64)"/>
+        </createTable>
+
+        <sql>
+            CREATE INDEX idx_identity_reveals_worker_revealed_at
+                ON identity_reveals (worker_id, revealed_at DESC);
+        </sql>
+        <sql>
+            CREATE INDEX idx_identity_reveals_viewer_assignment_revealed_at
+                ON identity_reveals (viewer_id, job_assignment_id, revealed_at DESC);
+        </sql>
+
+        <rollback>
+            <sql>DROP INDEX IF EXISTS idx_identity_reveals_viewer_assignment_revealed_at;</sql>
+            <sql>DROP INDEX IF EXISTS idx_identity_reveals_worker_revealed_at;</sql>
+            <dropTable tableName="identity_reveals"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

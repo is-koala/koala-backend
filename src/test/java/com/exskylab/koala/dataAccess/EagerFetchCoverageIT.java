@@ -48,7 +48,9 @@ class EagerFetchCoverageIT extends AbstractIntegrationTest {
             entry("IdentityVerificationDao.findById", "user",
                     "IdentityReviewDto yalnızca userId taşıyor"),
             entry("IdentityVerificationDao.search", "user",
-                    "IdentityReviewDto yalnızca userId taşıyor"));
+                    "IdentityReviewDto yalnızca userId taşıyor"),
+            entry("IdentityRevealDao.findAllByWorker_Id", "viewer",
+                    "AdminIdentityRevealDto görüntüleyeni id ve ad soyadla çizer, fotoğrafını çizmez"));
 
     private static Map.Entry<String, String> entry(String method, String path, String reason) {
         return Map.entry(method + "#" + path, reason);

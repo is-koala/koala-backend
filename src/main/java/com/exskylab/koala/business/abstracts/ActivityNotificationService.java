@@ -35,6 +35,8 @@ public interface ActivityNotificationService {
 
     void identityVerified(User user);
 
+    void identityRevealed(JobAssignment assignment);
+
     void companyApprovalDecided(Company company);
 
     void messageSent(Message message);
