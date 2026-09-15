@@ -56,13 +56,14 @@ public class StaffFlagsController {
     @Operation(summary = "Etkin işaretleri oku",
             description = "Tek kaynak için resourceId, liste rozetleri için resourceIds (virgülle ayrılmış, en fazla "
                     + "200) verilir; ikisi birlikte de verilebilir. Yanıt düz bir listedir, her satır resourceId "
-                    + "taşır; panel satırları kaynağa göre gruplar. Tek sorgu ile okunur.")
+                    + "taşır; panel satırları kaynağa göre gruplar. Tek sorgu ile okunur. Okuma note.read ile "
+                    + "korunur: not okuyabilen her personel rozeti de görür; koymak ve kaldırmak flag.manage ister.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "İşaretler listelendi"),
             @ApiResponse(responseCode = "400", description = "Kaynak verilmemiş ya da 200'den fazla kaynak istenmiş",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
-    @RequiresPermission(StaffPermission.FLAG_MANAGE)
+    @RequiresPermission(StaffPermission.NOTE_READ)
     @GetMapping
     public ResponseEntity<SuccessDataResult<List<StaffFlagDto>>> flags(
             @RequestParam StaffResourceType resourceType,

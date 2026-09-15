@@ -16,6 +16,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -26,6 +28,8 @@ import java.util.UUID;
 @AllArgsConstructor
 @NoArgsConstructor
 @Table(name = "staff_notes")
+@SQLDelete(sql = "UPDATE staff_notes SET is_deleted = true, deleted_at = now() WHERE id = ?")
+@SQLRestriction("is_deleted = false")
 public class StaffNote {
 
     public static final int BODY_MAX_LENGTH = 2000;
@@ -55,4 +59,10 @@ public class StaffNote {
 
     @Column(name = "edited_at")
     private Instant editedAt;
+
+    @Column(name = "is_deleted", nullable = false)
+    private boolean deleted = false;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
 }

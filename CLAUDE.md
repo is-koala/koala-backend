@@ -4740,7 +4740,7 @@ aggregate `StaffNoteManager` → `StaffNoteDao` + `StaffFlagDao` (`AggregateBoun
 | `POST /admin/notes?resourceType&resourceId` | `note.write` | `staff.note.create` | `StaffNoteBodyDto {body}` → `StaffNoteDto` (201) |
 | `PATCH /admin/notes/{noteId}` | `note.write` | `staff.note.edit` | `StaffNoteBodyDto` → `StaffNoteDto` |
 | `DELETE /admin/notes/{noteId}` | `note.write` | `staff.note.delete` | `Result` |
-| `GET /admin/flags?resourceType&resourceId` / `&resourceIds=a,b,c` | `flag.manage` | — (süzgeçli okuma, §2av kural 5) | `List<StaffFlagDto>` |
+| `GET /admin/flags?resourceType&resourceId` / `&resourceIds=a,b,c` | **`note.read`** | — (`PERSONAL_DATA`, her okuma yazılır) | `List<StaffFlagDto>` |
 | `PUT /admin/flags?resourceType&resourceId` | `flag.manage` | `staff.flag.set` | `SetStaffFlagDto {kind, label?}` → `StaffFlagDto` |
 | `DELETE /admin/flags?resourceType&resourceId&kind` | `flag.manage` | `staff.flag.clear` | `Result` |
 
@@ -4751,25 +4751,44 @@ aggregate `StaffNoteManager` → `StaffNoteDao` + `StaffFlagDao` (`AggregateBoun
 `authorStaffId`'yi ada çevirmek için `staff.read` (yalnız `OWNER`) istemek zorunda kalmasın diye; grafik `author` /
 `setBy` (`@EntityGraph`), sayfa başına tek sorgu. Şema `2026/09/15-05-staff-notes-and-flags.xml`: `staff_notes`,
 `staff_flags` (`staff_members`'a FK, `users`'a bağ yok — §2au), `uk_staff_flags_active_resource_kind` kısmi benzersiz
-indeks (`cleared_at is null`): aynı kaynakta her türden **en fazla bir etkin** işaret; `PUT` etkin işareti yerinde
-günceller (etiket, koyan, `setAt`), yeni satır açmaz. Kaldırma `clearedAt` damgalar, satır silinmez; liste yalnız
-etkinleri döndürür, `DELETE` etkin işaret yoksa 404 `STAFF_FLAG_NOT_FOUND`. Not silme **kalıcı** (personel tabloları
-`BaseEntity` değil); gövde denetim detayında kalır (aşağıda).
+indeks (`cleared_at is null`): aynı kaynakta her türden **en fazla bir etkin** işaret. **`PUT` tek bir native
+`insert … on conflict (resource_type, resource_id, kind) where cleared_at is null do update`** (`StaffFlagDao.upsertActive`):
+etkin işaret varsa etiketi, koyanı ve `setAt`'i yerinde günceller, yoksa açar — ve iki eşzamanlı `PUT` ikisi de 200
+alır, tek etkin satır kalır. İlk hâli oku-sonra-yaz idi ve iki istek aynı anda insert'e gidince kaybeden kısmi
+indekste `DataIntegrityViolationException` → **500** alıyordu; Postgres'te ihlalden sonra transaction iptal olduğu için
+"yakala, yeniden oku, güncelle" aynı transaction'da mümkün değil, tek deyimli upsert bunu veritabanına bırakıyor
+(`twoLeadsRacingToSetTheSameFlagBothSucceedAndLeaveOneActiveRow`, `pg_sleep` tetikleyicisiyle). Sorgu
+`@Modifying(clearAutomatically = true)`: önce okunan satır persistence context'te kalsaydı yeniden okuma bayat
+`label`'ı döndürürdü. Kaldırma `clearedAt` damgalar; liste yalnız etkinleri döndürür, `DELETE` etkin işaret yoksa 404
+`STAFF_FLAG_NOT_FOUND`.
+
+**İki tablo da soft delete taşıyor (`is_deleted`, `deleted_at`; `@SQLDelete` + `@SQLRestriction`) — §8'in kuralı, ve
+`SoftDeleteBehaviourIT.everyAuditedTableGotTheSoftDeleteColumns` `created_at` taşıyan her tabloda bunu arıyor.**
+`DELETE /admin/notes/{id}` satırı işaretler, silmez: gövde tabloda ve denetim detayında kalır, liste
+`@SQLRestriction` ile düşürür, ikinci `DELETE` 404. `staff_flags`'ta `created_at` yok (`set_at` var) ve test onu
+görmüyordu; kolonlar tutarlılık için yine eklendi ama **hiçbir yol işareti silmiyor** — kaldırma `clearedAt`'tir.
+Bunun bir sonucu: kısmi indeks `is_deleted`'a bakmıyor, yani elle soft-delete edilmiş ama `cleared_at` boş bir
+satır aynı türden yeni işareti engellerdi; bugün böyle bir satır üretilemiyor. Personel tabloları `BaseEntity`
+değil (§2au), kolonlar entity'de doğrudan eşlendi.
 
 **Üç izin, tohum: `note.read` + `note.write` → `SUPPORT_AGENT`, `flag.manage` → `TRUST_LEAD`** (changeset 15-05-03;
 `StaffRoleGraphSeedTest.supportAgentsWriteNotesAndOnlyTheTrustLeadManagesFlags`). Trust dalı ve `COMPANY_APPROVER`
-kapsama yoluyla not izinlerini alır, işaret yönetimi yalnız güven liderinde ve `OWNER`'da; finans dalı hiçbirini almaz
-(görev ayrılığı). `note.read`/`note.write` **`PERSONAL_DATA`**: gövde serbest metin ve personelin yazdığı şey kişisel
-veri olabilir — her liste okuması denetim satırı yazar (§2av kural 3). `flag.manage` `NORMAL` mutating; okuma ucu
-yazma izniyle korunuyor (`AdminPermissionMappingIT` bunu kabul ediyor, tersini etmiyor), ayrı bir `flag.read` **yok**:
-issue üç izin adlandırıyor ve rozet yalnız işareti koyabilen personelin işine yarıyor. Rozet okuması `resourceIds`
-taşıdığı için süzgeçli sayılır ve her sayfa yüklemesi bir denetim satırı bırakır — `/admin/users?query=` ile aynı
-bedel, kabul edildi.
+kapsama yoluyla not izinlerini alır, işaret **koyma/kaldırma** yalnız güven liderinde ve `OWNER`'da; finans dalı
+hiçbirini almaz (görev ayrılığı). **Rozet okuması (`GET /admin/flags`) `note.read` ile korunuyor, `flag.manage` ile
+değil:** işaret listelerde rozet olarak görünsün diye var ve listeleri en çok `SUPPORT_AGENT`/`COMPANY_APPROVER`
+gezer; okuma `flag.manage`'e bağlansaydı işareti koyabilen üç kişi dışında kimse rozeti görmez, issue'nun amacı boşa
+düşerdi. Ayrı bir `flag.read` **açılmadı** — issue üç izin adlandırıyor ve "not okuyabilen işareti de görür" tek
+kararla çözülüyor. `note.read`/`note.write` **`PERSONAL_DATA`**: gövde serbest metin ve personelin yazdığı şey kişisel
+veri olabilir — her not ve rozet okuması denetim satırı yazar (§2av kural 3; `/admin/users?query=` ile aynı bedel,
+kabul edildi). `flag.manage` `NORMAL` mutating.
 
 **Düzenleme ve silme: yalnız yazar ya da `staff.manage` — issue'nun `staff.admin` dediği izin bu; depoda o adla
 izin yok, en yakın ve en dar olan `staff.manage` (yalnız `OWNER`).** Yazar olmayan personel `Concealment.notFound`
 ile olmayan notla **aynı 404 zarfını** alır (`STAFF_NOTE_NOT_FOUND`, gerekçe yalnız `log.warn`'da; §2d2).
-`StaffNotesAndFlagsIT` PATCH ve DELETE için iki gövdeyi `timeStamp`/`requestId` düşerek birebir karşılaştırıyor.
+`StaffNotesAndFlagsIT` PATCH ve DELETE için iki gövdeyi `timeStamp`/`requestId` düşerek birebir karşılaştırıyor; kuralı
+`OWNER` ile değil, yalnız `staff.manage` + `note.read/write` taşıyan geçici bir rolle (`NOTES_TEST_STAFF_MANAGER`,
+`StaffRoleAdministrationIT`'nin `testRole` kalıbı) ölçüyor — `OWNER` her izni taşıdığı için `staff.manage`'i izole
+etmezdi; `TRUST_LEAD` (not yazar, `staff.manage` yok) 404 alıyor.
 403 + `NOTE_NOT_AUTHOR` seçilmedi: `note.write` taşıyıp `note.read` taşımayan bir personel (bugün tohumda yok ama
 DAG'dan kurulabilir) id deneyerek notun varlığını öğrenirdi. İzinsiz personel (finans dalı) var olan ile olmayan
 kayda **aynı 403**'ü alır — zincir fail-closed (`assertRefusedIdentically`).
@@ -4786,9 +4805,9 @@ devam eder — KVKK anonimleştirmesi bu tabloya **bugün dokunmuyor**, gövdede
 `AuditScope.resourceIdOf` yolun ilk değişkenini okuduğu için `POST /admin/notes` ve işaret uçlarında `resourceId`
 boş kalır (hedef sorgu parametresinde) — bu yüzden dört yazma da anlık görüntüyü `after`/`before`'a yazar:
 not için `USER/{resourceId} note={id} body=…`, işaret için `USER/{resourceId} kind=RISK label=… cleared=false|true`.
-Yani silinen notun gövdesi ve hangi kaynağa ait olduğu 6 ay detayda durur (`requestBody` de JSON gövdeyi taşır);
-`StaffNotesAndFlagsIT.writingAndDeletingNotesAndFlagsLeavesAnAuditRowWithBeforeAndAfterValues` beş satırı sırayla
-ölçüyor. #307 (`subjectId`) indiğinde hedef kimliği kendi sütununa da düşecek; bu dilim `AuditScope`'a dokunmadı.
+Yani silinen notun gövdesi ve hangi kaynağa ait olduğu (soft-delete edilmiş satırın yanında) 6 ay detayda durur
+(`requestBody` de JSON gövdeyi taşır); `StaffNotesAndFlagsIT.writingAndDeletingNotesAndFlagsLeavesAnAuditRowWithBeforeAndAfterValues`
+altı satırı sırayla ölçüyor (ikinci `PUT`'un `before`'u ilk etiketi taşır). #307 (`subjectId`) indiğinde hedef kimliği kendi sütununa da düşecek; bu dilim `AuditScope`'a dokunmadı.
 
 **Gövde log'a girmez.** `LogPrivacyTest` yasaklı listesine `getBody()`/`getLabel()` ve `body`/`noteBody`/`trimmedLabel`
 değişken adları eklendi; manager log satırları yalnız id, tür ve personel id'si yazar. Not gövdesi `user.read_pii`
@@ -4796,7 +4815,9 @@ istemeden okunur — kural OpenAPI etiket açıklamasında: yalnız işin gerekt
 konmaz.
 
 **N+1 ölçülü.** `theNoteListAndTheBadgeReadAreBuiltWithoutAQueryPerRow`: not listesi `size=1` = `size=3` statement,
-rozet okuması 1 kaynak = 3 kaynak statement, lazy fetch sıfır. Toplu okuma `resourceIds` ≤ 200 (`StaffFlagLookup`,
+rozet okuması 1 kaynak = 3 kaynak statement, lazy fetch sıfır. Not listesi ve rozet okuması `SUPPORT_AGENT` ile,
+izinsiz personel (finans dalı) var olan ile olmayan kayda aynı 403'ü, `SUPPORT_AGENT` işaret yazma/kaldırmada aynı
+403'ü alıyor (`assertRefusedIdentically`, durum parametreli). Toplu okuma `resourceIds` ≤ 200 (`StaffFlagLookup`,
 `STAFF_FLAG_BATCH_TOO_LARGE` 400; `resourceId` ve `resourceIds` birlikte verilebilir, ikisi de yoksa
 `STAFF_FLAG_RESOURCE_REQUIRED`). Sıralama yalnız `createdAt` (`PageableSanitizer`, bilinmeyen alan 400).
 Kapsam dışı: not düzenleme geçmişi (yalnız `editedAt`), kaldırılmış işaretlerin listesi, hedef kaynağın DTO'larına
@@ -5170,6 +5191,10 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 - `PendingRegistration` — **bilerek hard delete.** Kaydını hiç tamamlamamış birinin e-postasını süresiz saklamak koruma değil, gereksiz veri tutma. Kayıt akışı zaten sil-ve-yeniden-oluştur mantığıyla çalışıyor.
 - `CompanyContact` ve `JobCategory` — `BaseEntity` alt sınıfı değiller, denetim kolonları yok. `CompanyContact` bir üyelik kaydı ve silinmesi geçmiş kaybı demek; ileride `BaseEntity`'ye taşınmalı.
 - `AdminAuditEntry` ve `AdminAuditEntryDetail` — **bilerek hard delete.** Saklama işinin işi zaten fiziksel silmek; soft delete edilen bir denetim satırı süresini hiç doldurmazdı (§2av).
+- `staff_notes` ve `staff_flags` — **`BaseEntity` değil ama soft delete taşıyor (§2bd):** `is_deleted`/`deleted_at`
+  entity'de doğrudan eşlenmiş, `@SQLDelete` + `@SQLRestriction` var. Not silme (`DELETE /admin/notes/{id}`) satırı
+  işaretler; işaret hiç silinmez, `cleared_at` ile kapanır. `staff_members`/`staff_roles` de aynı kolonları taşır ama
+  entity'leri eşlemiyor — o tablolar bugün hiçbir yoldan silinmiyor (devre dışı bırakma `is_active`).
 - `identity_reveals` — **`BaseEntity` değil, soft delete yok, bugün hiçbir yol silmiyor (§2bb).** Bu satır işverenin işçinin TCKN'sini ne zaman gördüğünün iziyle KVKK ve SGK denetiminin dayanağı; saklama politikası **iş ilişkisinin bitiminden itibaren 10 yıl** (5510 sayılı Kanun'un işveren belgelerinde öngördüğü on yıllık saklama/zamanaşımı ufku — `admin_audit_entries`'in `FINANCIAL` satırlarıyla aynı süre, §2av). Süresi dolan satırı fiziksel silecek zamanlayıcı **henüz yazılmadı** (Faz 9B); yazıldığında `AdminAuditRetentionScheduler` kalıbında olmalı. Hesap anonimleştirmesi (`PostgresAccountAnonymizer`) bu tabloya **bugün dokunmuyor**; bağlandığında satır silinmemeli, yalnız `ip_address` boşaltılmalı — iz işverenin de yükümlülüğüdür, işçinin silme talebiyle kaybolamaz.
 - `sitemap_manifests` ve `sitemap_manifest_entries` — **bilerek hard delete.** Bunlar denetlenen domain kaydı
   değil, TTL'li türetilmiş cache'tir; manifestteki `created_at` yayın/version zamanıdır. Expiry temizliği

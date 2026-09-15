@@ -113,21 +113,16 @@ public class StaffNoteManager implements StaffNoteService {
     public StaffFlag setFlag(StaffPrincipal actor, StaffResourceType resourceType, UUID resourceId,
                              StaffFlagKind kind, String label) {
         String trimmedLabel = label == null || label.isBlank() ? null : label.trim();
-        StaffFlag flag = staffFlagDao
+        String before = staffFlagDao
                 .findByResourceTypeAndResourceIdAndKindAndClearedAtIsNull(resourceType, resourceId, kind)
-                .orElseGet(() -> {
-                    StaffFlag created = new StaffFlag();
-                    created.setResourceType(resourceType);
-                    created.setResourceId(resourceId);
-                    created.setKind(kind);
-                    return created;
-                });
-        String before = flag.getId() == null ? null : snapshotOf(flag);
+                .map(StaffNoteManager::snapshotOf)
+                .orElse(null);
 
-        flag.setLabel(trimmedLabel);
-        flag.setSetBy(staffAccountService.getReference(actor.staffId()));
-        flag.setSetAt(Instant.now());
-        StaffFlag saved = staffFlagDao.save(flag);
+        staffFlagDao.upsertActive(UUID.randomUUID(), resourceType.name(), resourceId, kind.name(), trimmedLabel,
+                staffAccountService.getReference(actor.staffId()).getId(), Instant.now());
+        StaffFlag saved = staffFlagDao
+                .findByResourceTypeAndResourceIdAndKindAndClearedAtIsNull(resourceType, resourceId, kind)
+                .orElseThrow(() -> new ResourceNotFoundException(StaffMessages.FLAG_NOT_FOUND));
 
         StaffAuditContext.capture(before, snapshotOf(saved));
         log.info("Staff flag {} {} set on {} {} by staff {}", saved.getId(), kind, resourceType, resourceId,
@@ -171,6 +166,6 @@ public class StaffNoteManager implements StaffNoteService {
 
     private static String snapshotOf(StaffFlag flag) {
         return flag.getResourceType() + "/" + flag.getResourceId() + " kind=" + flag.getKind()
-                + " label=" + flag.getLabel() + " cleared=" + (flag.getClearedAt() != null);
+                + " label=" + flag.getLabel() + " active=" + flag.isActive();
     }
 }

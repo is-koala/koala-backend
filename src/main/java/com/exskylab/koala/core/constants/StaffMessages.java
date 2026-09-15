@@ -52,8 +52,6 @@ public class StaffMessages {
     public static final String NOTE_NOT_FOUND = "{staff.note.not.found}";
     public static final String NOTE_BODY_REQUIRED = "{staff.note.body.required}";
     public static final String NOTE_BODY_TOO_LONG = "{staff.note.body.too.long}";
-    public static final String NOTE_RESOURCE_TYPE_REQUIRED = "{staff.note.resource.type.required}";
-    public static final String NOTE_RESOURCE_ID_REQUIRED = "{staff.note.resource.id.required}";
     public static final String FLAGS_LISTED = "{staff.flags.listed}";
     public static final String FLAG_SET = "{staff.flag.set}";
     public static final String FLAG_CLEARED = "{staff.flag.cleared}";

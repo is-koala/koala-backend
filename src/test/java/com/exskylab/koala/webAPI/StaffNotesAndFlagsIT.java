@@ -1,6 +1,11 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.business.abstracts.StaffNoteService;
+import com.exskylab.koala.core.security.StaffPrincipal;
+import com.exskylab.koala.entities.StaffFlagKind;
+import com.exskylab.koala.entities.StaffResourceType;
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
+import com.exskylab.koala.support.OverlappingWrites;
 import jakarta.persistence.EntityManagerFactory;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
@@ -12,11 +17,17 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.ResultMatcher;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -39,6 +50,7 @@ class StaffNotesAndFlagsIT extends AbstractStaffIntegrationTest {
 
     private static final String EMAIL_PATTERN = "notes-%@iskoala.com";
     private static final String NOTE_BODY = "Müşteri telefonda kaba konuştu, ikinci uyarı verildi.";
+    private static final String STAFF_MANAGER_ROLE = "NOTES_TEST_STAFF_MANAGER";
 
     @Autowired
     private MockMvc mockMvc;
@@ -49,6 +61,15 @@ class StaffNotesAndFlagsIT extends AbstractStaffIntegrationTest {
     @Autowired
     private EntityManagerFactory entityManagerFactory;
 
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @Autowired
+    private StaffNoteService staffNoteService;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+
     private final UUID subjectId = UUID.randomUUID();
 
     @AfterEach
@@ -56,10 +77,25 @@ class StaffNotesAndFlagsIT extends AbstractStaffIntegrationTest {
         jdbcTemplate.update("delete from admin_audit_entries where actor_staff_id in "
                 + "(select id from staff_members where email like ?)", EMAIL_PATTERN);
         deleteStaffMembersLike(EMAIL_PATTERN);
+        jdbcTemplate.update("delete from staff_role_permissions where staff_role_id in "
+                + "(select id from staff_roles where code = ?)", STAFF_MANAGER_ROLE);
+        jdbcTemplate.update("delete from staff_roles where code = ?", STAFF_MANAGER_ROLE);
+        narrowTheFlagInsertWindow();
     }
 
     private UUID staff(String displayName, String... roles) {
         return createStaffMember("notes-" + UUID.randomUUID() + "@iskoala.com", displayName, roles);
+    }
+
+    private UUID staffManagerWithNoteWrite(String displayName) {
+        UUID roleId = UUID.randomUUID();
+        jdbcTemplate.update("insert into staff_roles (id, code, name, created_at) values (?, ?, ?, now())",
+                roleId, STAFF_MANAGER_ROLE, STAFF_MANAGER_ROLE);
+        for (String permission : List.of("staff.manage", "note.read", "note.write")) {
+            jdbcTemplate.update("insert into staff_role_permissions (id, staff_role_id, permission_code, created_at) "
+                    + "values (?, ?, ?, now())", UUID.randomUUID(), roleId, permission);
+        }
+        return staff(displayName, STAFF_MANAGER_ROLE);
     }
 
     private ResultActions perform(MockHttpServletRequestBuilder request, UUID staffId) throws Exception {
@@ -71,32 +107,63 @@ class StaffNotesAndFlagsIT extends AbstractStaffIntegrationTest {
                 .param("resourceType", "USER")
                 .param("resourceId", resourceId.toString())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"body\":" + json(body) + "}"), staffId);
+                .content(json(Map.of("body", body))), staffId);
     }
 
     private UUID createdNoteId(UUID staffId, UUID resourceId, String body) throws Exception {
         String response = createNote(staffId, resourceId, body)
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
-        return UUID.fromString(response.replaceAll(".*\"data\":\\{\"id\":\"([^\"]+)\".*", "$1"));
+        return UUID.fromString(objectMapper.readTree(response).path("data").path("id").asString());
+    }
+
+    private ResultActions editNote(UUID staffId, UUID noteId, String body) throws Exception {
+        return perform(patch("/admin/notes/" + noteId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(Map.of("body", body))), staffId);
     }
 
     private ResultActions setFlag(UUID staffId, UUID resourceId, String kind, String label) throws Exception {
+        Map<String, Object> payload = label == null ? Map.of("kind", kind) : Map.of("kind", kind, "label", label);
         return perform(put("/admin/flags")
                 .param("resourceType", "USER")
                 .param("resourceId", resourceId.toString())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"kind\":\"" + kind + "\",\"label\":" + json(label) + "}"), staffId);
+                .content(json(payload)), staffId);
     }
 
-    private static String json(String value) {
-        return value == null ? "null" : "\"" + value.replace("\"", "\\\"") + "\"";
+    private ResultActions clearFlag(UUID staffId, UUID resourceId, String kind) throws Exception {
+        return perform(delete("/admin/flags").param("resourceType", "USER")
+                .param("resourceId", resourceId.toString()).param("kind", kind), staffId);
+    }
+
+    private ResultActions readFlags(UUID staffId, String resourceIds) throws Exception {
+        return perform(get("/admin/flags").param("resourceType", "USER").param("resourceIds", resourceIds), staffId);
+    }
+
+    private ResultActions readNotes(UUID staffId, UUID resourceId) throws Exception {
+        return perform(get("/admin/notes").param("resourceType", "USER").param("resourceId", resourceId.toString()),
+                staffId);
+    }
+
+    private String json(Map<String, ?> payload) {
+        return objectMapper.writeValueAsString(payload);
     }
 
     private static String normalise(String body, UUID id) {
         return body.replace(id.toString(), "{id}")
                 .replaceAll("\"timeStamp\":\"[^\"]*\"", "\"timeStamp\":\"-\"")
                 .replaceAll("\"requestId\":\"[^\"]*\"", "\"requestId\":\"-\"");
+    }
+
+    private void assertRefusedIdentically(UUID staffId, Function<UUID, MockHttpServletRequestBuilder> request,
+                                          UUID existing, ResultMatcher expectedStatus) throws Exception {
+        String real = normalise(perform(request.apply(existing), staffId)
+                .andExpect(expectedStatus).andReturn().getResponse().getContentAsString(), existing);
+        UUID random = UUID.randomUUID();
+        String missing = normalise(perform(request.apply(random), staffId)
+                .andExpect(expectedStatus).andReturn().getResponse().getContentAsString(), random);
+        assertEquals(real, missing, "personel var olan ile olmayan kaydı yanıttan ayırt edebiliyor");
     }
 
     private List<Map<String, Object>> auditRowsOf(UUID staffId) {
@@ -127,8 +194,7 @@ class StaffNotesAndFlagsIT extends AbstractStaffIntegrationTest {
         createNote(colleague, subjectId, "İkinci not").andExpect(status().isCreated());
         createNote(colleague, UUID.randomUUID(), "Başka kullanıcının notu").andExpect(status().isCreated());
 
-        perform(get("/admin/notes").param("resourceType", "USER").param("resourceId", subjectId.toString()),
-                colleague)
+        readNotes(colleague, subjectId)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content", hasSize(2)))
                 .andExpect(jsonPath("$.data.content[0].body").value("İkinci not"))
@@ -158,64 +224,56 @@ class StaffNotesAndFlagsIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
-    void onlyTheAuthorOrStaffManageEditsANoteAndOthersCannotTellItExists() throws Exception {
+    void onlyTheAuthorOrAStaffManageHolderEditsANoteAndOthersCannotTellItExists() throws Exception {
         UUID author = staff("Destek Ayşe", "SUPPORT_AGENT");
         UUID colleague = staff("Destek Mehmet", "SUPPORT_AGENT");
-        UUID owner = staff("Sahip", "OWNER");
+        UUID trustLead = staff("Güven Lideri", "TRUST_LEAD");
+        UUID staffManager = staffManagerWithNoteWrite("Personel Yöneticisi");
         UUID noteId = createdNoteId(author, subjectId, NOTE_BODY);
 
-        String real = normalise(perform(patch("/admin/notes/" + noteId)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"body\":\"Değişti\"}"), colleague)
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.errorCode").value("STAFF_NOTE_NOT_FOUND"))
-                .andReturn().getResponse().getContentAsString(), noteId);
-        UUID random = UUID.randomUUID();
-        String missing = normalise(perform(patch("/admin/notes/" + random)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"body\":\"Değişti\"}"), colleague)
-                .andExpect(status().isNotFound())
-                .andReturn().getResponse().getContentAsString(), random);
-        assertEquals(real, missing, "yazar olmayan personel başkasının notunun varlığını yanıttan çıkarabiliyor");
+        assertRefusedIdentically(colleague, id -> patch("/admin/notes/" + id)
+                .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("body", "Değişti"))),
+                noteId, status().isNotFound());
+        editNote(colleague, noteId, "Değişti")
+                .andExpect(jsonPath("$.errorCode").value("STAFF_NOTE_NOT_FOUND"));
+        editNote(trustLead, noteId, "Lider düzeltti").andExpect(status().isNotFound());
 
-        perform(patch("/admin/notes/" + noteId)
-                .contentType(MediaType.APPLICATION_JSON).content("{\"body\":\"Yazar düzeltti\"}"), author)
+        editNote(author, noteId, "Yazar düzeltti")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.body").value("Yazar düzeltti"))
                 .andExpect(jsonPath("$.data.editedAt").exists())
                 .andExpect(jsonPath("$.data.authorStaffId").value(author.toString()));
 
-        perform(patch("/admin/notes/" + noteId)
-                .contentType(MediaType.APPLICATION_JSON).content("{\"body\":\"Sahip düzeltti\"}"), owner)
+        editNote(staffManager, noteId, "Yönetici düzeltti")
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.body").value("Sahip düzeltti"))
+                .andExpect(jsonPath("$.data.body").value("Yönetici düzeltti"))
                 .andExpect(jsonPath("$.data.authorStaffId").value(author.toString()));
     }
 
     @Test
-    void onlyTheAuthorOrStaffManageDeletesANote() throws Exception {
+    void onlyTheAuthorOrAStaffManageHolderDeletesANoteAndTheRowStaysSoftDeleted() throws Exception {
         UUID author = staff("Destek Ayşe", "SUPPORT_AGENT");
         UUID colleague = staff("Destek Mehmet", "SUPPORT_AGENT");
-        UUID owner = staff("Sahip", "OWNER");
+        UUID trustLead = staff("Güven Lideri", "TRUST_LEAD");
+        UUID staffManager = staffManagerWithNoteWrite("Personel Yöneticisi");
         UUID mine = createdNoteId(author, subjectId, NOTE_BODY);
         UUID theirs = createdNoteId(colleague, subjectId, "Meslektaşın notu");
 
-        String real = normalise(perform(delete("/admin/notes/" + theirs), author)
-                .andExpect(status().isNotFound())
-                .andReturn().getResponse().getContentAsString(), theirs);
-        UUID random = UUID.randomUUID();
-        String missing = normalise(perform(delete("/admin/notes/" + random), author)
-                .andExpect(status().isNotFound())
-                .andReturn().getResponse().getContentAsString(), random);
-        assertEquals(real, missing, "yazar olmayan personel başkasının notunun varlığını yanıttan çıkarabiliyor");
+        assertRefusedIdentically(author, id -> delete("/admin/notes/" + id), theirs, status().isNotFound());
+        perform(delete("/admin/notes/" + theirs), trustLead).andExpect(status().isNotFound());
 
         perform(delete("/admin/notes/" + mine), author).andExpect(status().isOk());
-        perform(delete("/admin/notes/" + theirs), owner).andExpect(status().isOk());
+        perform(delete("/admin/notes/" + theirs), staffManager).andExpect(status().isOk());
 
-        perform(get("/admin/notes").param("resourceType", "USER").param("resourceId", subjectId.toString()),
-                author)
+        readNotes(author, subjectId)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content", hasSize(0)));
-        assertEquals(0, jdbcTemplate.queryForObject(
-                "select count(*) from staff_notes where resource_id = ?", Integer.class, subjectId));
+        perform(delete("/admin/notes/" + mine), author).andExpect(status().isNotFound());
+        assertEquals(2, jdbcTemplate.queryForObject(
+                "select count(*) from staff_notes where resource_id = ? and is_deleted = true and deleted_at is not null",
+                Integer.class, subjectId));
+        assertEquals(NOTE_BODY, jdbcTemplate.queryForObject(
+                "select body from staff_notes where id = ?", String.class, mine));
     }
 
     @Test
@@ -233,29 +291,25 @@ class StaffNotesAndFlagsIT extends AbstractStaffIntegrationTest {
         setFlag(otherLead, subjectId, "RISK", "Belge doğrulandı, izlemede")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.label").value("Belge doğrulandı, izlemede"))
-                .andExpect(jsonPath("$.data.setByStaffId").value(otherLead.toString()));
+                .andExpect(jsonPath("$.data.setByStaffId").value(otherLead.toString()))
+                .andExpect(jsonPath("$.data.setByDisplayName").value("İkinci Lider"));
         setFlag(lead, subjectId, "VIP", null).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.label", nullValue()));
 
         assertEquals(2, jdbcTemplate.queryForObject(
                 "select count(*) from staff_flags where resource_id = ?", Integer.class, subjectId));
 
-        perform(get("/admin/flags").param("resourceType", "USER").param("resourceId", subjectId.toString()),
-                lead)
+        readFlags(lead, subjectId.toString())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data", hasSize(2)))
                 .andExpect(jsonPath("$.data[*].kind", containsInAnyOrder("RISK", "VIP")));
 
-        perform(delete("/admin/flags").param("resourceType", "USER").param("resourceId", subjectId.toString())
-                .param("kind", "RISK"), lead)
-                .andExpect(status().isOk());
-        perform(delete("/admin/flags").param("resourceType", "USER").param("resourceId", subjectId.toString())
-                .param("kind", "RISK"), lead)
+        clearFlag(lead, subjectId, "RISK").andExpect(status().isOk());
+        clearFlag(lead, subjectId, "RISK")
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("STAFF_FLAG_NOT_FOUND"));
 
-        perform(get("/admin/flags").param("resourceType", "USER").param("resourceId", subjectId.toString()),
-                lead)
+        readFlags(lead, subjectId.toString())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data", hasSize(1)))
                 .andExpect(jsonPath("$.data[0].kind").value("VIP"));
@@ -269,8 +323,61 @@ class StaffNotesAndFlagsIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
+    void twoLeadsRacingToSetTheSameFlagBothSucceedAndLeaveOneActiveRow() throws Exception {
+        UUID lead = staff("Güven Lideri", "TRUST_LEAD");
+        UUID otherLead = staff("İkinci Lider", "TRUST_LEAD");
+        widenTheFlagInsertWindow();
+        try {
+            OverlappingWrites overlap = new OverlappingWrites();
+            List<String> outcomes = overlap.outcomesOf(
+                    () -> setThroughTheService(lead, "İlk lider", overlap),
+                    () -> setThroughTheService(otherLead, "İkinci lider", overlap));
+
+            assertEquals(List.of("SUCCESS", "SUCCESS"), outcomes, "iki eşzamanlı PUT de başarmalı: " + outcomes);
+            assertEquals(1, jdbcTemplate.queryForObject(
+                    "select count(*) from staff_flags where resource_id = ? and kind = 'RISK' and cleared_at is null",
+                    Integer.class, subjectId));
+            readFlags(lead, subjectId.toString())
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data", hasSize(1)));
+        } finally {
+            narrowTheFlagInsertWindow();
+        }
+    }
+
+    private String setThroughTheService(UUID staffId, String label, OverlappingWrites overlap) {
+        StaffPrincipal actor = new StaffPrincipal(staffId, "notes-" + staffId + "@iskoala.com", label,
+                Set.of("TRUST_LEAD"), Set.of(), false);
+        TransactionTemplate transactions = new TransactionTemplate(transactionManager);
+        transactions.execute(status -> {
+            overlap.meet();
+            return staffNoteService.setFlag(actor, StaffResourceType.USER, subjectId, StaffFlagKind.RISK, label);
+        });
+        return "SUCCESS";
+    }
+
+    private void widenTheFlagInsertWindow() {
+        jdbcTemplate.execute("""
+                create or replace function delay_staff_flag_insert() returns trigger as $$
+                begin
+                    perform pg_sleep(0.5);
+                    return new;
+                end;
+                $$ language plpgsql
+                """);
+        jdbcTemplate.execute("create trigger delay_staff_flag_insert before insert on staff_flags "
+                + "for each row execute function delay_staff_flag_insert()");
+    }
+
+    private void narrowTheFlagInsertWindow() {
+        jdbcTemplate.execute("drop trigger if exists delay_staff_flag_insert on staff_flags");
+        jdbcTemplate.execute("drop function if exists delay_staff_flag_insert()");
+    }
+
+    @Test
     void theBadgeReadReturnsFlagsForManyResourcesAndCapsTheBatchAtTwoHundred() throws Exception {
         UUID lead = staff("Güven Lideri", "TRUST_LEAD");
+        UUID agent = staff("Destek Ayşe", "SUPPORT_AGENT");
         UUID flagged = UUID.randomUUID();
         UUID alsoFlagged = UUID.randomUUID();
         UUID clean = UUID.randomUUID();
@@ -278,30 +385,26 @@ class StaffNotesAndFlagsIT extends AbstractStaffIntegrationTest {
         setFlag(lead, flagged, "WATCH", null).andExpect(status().isOk());
         setFlag(lead, alsoFlagged, "VIP", null).andExpect(status().isOk());
         setFlag(lead, clean, "OTHER", "Kapandı").andExpect(status().isOk());
-        perform(delete("/admin/flags").param("resourceType", "USER").param("resourceId", clean.toString())
-                .param("kind", "OTHER"), lead).andExpect(status().isOk());
+        clearFlag(lead, clean, "OTHER").andExpect(status().isOk());
 
-        perform(get("/admin/flags").param("resourceType", "USER")
-                .param("resourceIds", flagged + "," + alsoFlagged + "," + clean), lead)
+        readFlags(agent, flagged + "," + alsoFlagged + "," + clean)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data", hasSize(3)))
                 .andExpect(jsonPath("$.data[*].resourceId", containsInAnyOrder(
                         flagged.toString(), flagged.toString(), alsoFlagged.toString())));
 
         perform(get("/admin/flags").param("resourceType", "COMPANY").param("resourceIds", flagged.toString()),
-                lead)
+                agent)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data", hasSize(0)));
 
         String twoHundred = IntStream.range(0, 200).mapToObj(i -> UUID.randomUUID().toString())
                 .collect(Collectors.joining(","));
-        perform(get("/admin/flags").param("resourceType", "USER").param("resourceIds", twoHundred), lead)
-                .andExpect(status().isOk());
-        perform(get("/admin/flags").param("resourceType", "USER")
-                .param("resourceIds", twoHundred + "," + UUID.randomUUID()), lead)
+        readFlags(agent, twoHundred).andExpect(status().isOk());
+        readFlags(agent, twoHundred + "," + UUID.randomUUID())
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("STAFF_FLAG_BATCH_TOO_LARGE"));
-        perform(get("/admin/flags").param("resourceType", "USER"), lead)
+        perform(get("/admin/flags").param("resourceType", "USER"), agent)
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("STAFF_FLAG_RESOURCE_REQUIRED"));
     }
@@ -314,26 +417,21 @@ class StaffNotesAndFlagsIT extends AbstractStaffIntegrationTest {
         UUID noteId = createdNoteId(agent, subjectId, NOTE_BODY);
         setFlag(lead, subjectId, "RISK", null).andExpect(status().isOk());
 
-        assertRefusedIdentically(agent, id -> get("/admin/flags").param("resourceType", "USER")
-                .param("resourceId", id.toString()), subjectId);
+        readFlags(agent, subjectId.toString()).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(1)));
         assertRefusedIdentically(agent, id -> put("/admin/flags").param("resourceType", "USER")
                 .param("resourceId", id.toString()).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"kind\":\"VIP\"}"), subjectId);
+                .content(json(Map.of("kind", "VIP"))), subjectId, status().isForbidden());
+        assertRefusedIdentically(agent, id -> delete("/admin/flags").param("resourceType", "USER")
+                .param("resourceId", id.toString()).param("kind", "RISK"), subjectId, status().isForbidden());
+        assertRefusedIdentically(analyst, id -> get("/admin/flags").param("resourceType", "USER")
+                .param("resourceId", id.toString()), subjectId, status().isForbidden());
         assertRefusedIdentically(analyst, id -> get("/admin/notes").param("resourceType", "USER")
-                .param("resourceId", id.toString()), subjectId);
+                .param("resourceId", id.toString()), subjectId, status().isForbidden());
         assertRefusedIdentically(analyst, id -> patch("/admin/notes/" + id)
-                .contentType(MediaType.APPLICATION_JSON).content("{\"body\":\"x\"}"), noteId);
-        assertRefusedIdentically(analyst, id -> delete("/admin/notes/" + id), noteId);
-    }
-
-    private void assertRefusedIdentically(UUID staffId, java.util.function.Function<UUID,
-            MockHttpServletRequestBuilder> request, UUID existing) throws Exception {
-        String real = normalise(perform(request.apply(existing), staffId)
-                .andExpect(status().isForbidden()).andReturn().getResponse().getContentAsString(), existing);
-        UUID random = UUID.randomUUID();
-        String missing = normalise(perform(request.apply(random), staffId)
-                .andExpect(status().isForbidden()).andReturn().getResponse().getContentAsString(), random);
-        assertEquals(real, missing, "izinsiz personel var olan ile olmayan kaydı yanıttan ayırt edebiliyor");
+                .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("body", "x"))),
+                noteId, status().isForbidden());
+        assertRefusedIdentically(analyst, id -> delete("/admin/notes/" + id), noteId, status().isForbidden());
     }
 
     @Test
@@ -371,13 +469,11 @@ class StaffNotesAndFlagsIT extends AbstractStaffIntegrationTest {
             assertEquals(0, statistics.getEntityFetchCount(), "not listesi satır başına lazy entity yüklüyor");
 
             statistics.clear();
-            perform(get("/admin/flags").param("resourceType", "USER").param("resourceIds", subjectId.toString()),
-                    lead).andExpect(status().isOk());
+            readFlags(lead, subjectId.toString()).andExpect(status().isOk());
             long statementsForOneResource = statistics.getPrepareStatementCount();
 
             statistics.clear();
-            perform(get("/admin/flags").param("resourceType", "USER")
-                    .param("resourceIds", subjectId + "," + second + "," + third), lead)
+            readFlags(lead, subjectId + "," + second + "," + third)
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data", hasSize(3)));
             assertEquals(statementsForOneResource, statistics.getPrepareStatementCount(),
@@ -393,13 +489,11 @@ class StaffNotesAndFlagsIT extends AbstractStaffIntegrationTest {
         UUID agent = staff("Destek Ayşe", "SUPPORT_AGENT");
         UUID lead = staff("Güven Lideri", "TRUST_LEAD");
         UUID noteId = createdNoteId(agent, subjectId, NOTE_BODY);
-        perform(patch("/admin/notes/" + noteId)
-                .contentType(MediaType.APPLICATION_JSON).content("{\"body\":\"Düzeltildi\"}"), agent)
-                .andExpect(status().isOk());
+        editNote(agent, noteId, "Düzeltildi").andExpect(status().isOk());
         perform(delete("/admin/notes/" + noteId), agent).andExpect(status().isOk());
         setFlag(lead, subjectId, "RISK", "Şüpheli").andExpect(status().isOk());
-        perform(delete("/admin/flags").param("resourceType", "USER").param("resourceId", subjectId.toString())
-                .param("kind", "RISK"), lead).andExpect(status().isOk());
+        setFlag(lead, subjectId, "RISK", "Hâlâ şüpheli").andExpect(status().isOk());
+        clearFlag(lead, subjectId, "RISK").andExpect(status().isOk());
 
         List<Map<String, Object>> noteRows = auditRowsOf(agent);
         assertEquals(List.of("staff.note.create", "staff.note.edit", "staff.note.delete"),
@@ -416,12 +510,15 @@ class StaffNotesAndFlagsIT extends AbstractStaffIntegrationTest {
         assertNull(noteRows.get(2).get("after_value"));
 
         List<Map<String, Object>> flagRows = auditRowsOf(lead);
-        assertEquals(List.of("staff.flag.set", "staff.flag.clear"),
+        assertEquals(List.of("staff.flag.set", "staff.flag.set", "staff.flag.clear"),
                 flagRows.stream().map(row -> row.get("action")).toList());
         assertTrue(flagRows.stream().allMatch(row -> "flag.manage".equals(row.get("permission"))
                 && "flags".equals(row.get("resource_type"))));
+        assertNull(flagRows.get(0).get("before_value"));
         assertTrue(String.valueOf(flagRows.get(0).get("after_value")).contains("kind=RISK label=Şüpheli"));
-        assertTrue(String.valueOf(flagRows.get(1).get("before_value")).contains("cleared=false"));
-        assertTrue(String.valueOf(flagRows.get(1).get("after_value")).contains("cleared=true"));
+        assertTrue(String.valueOf(flagRows.get(1).get("before_value")).contains("label=Şüpheli"));
+        assertTrue(String.valueOf(flagRows.get(1).get("after_value")).contains("label=Hâlâ şüpheli"));
+        assertTrue(String.valueOf(flagRows.get(2).get("before_value")).contains("active=true"));
+        assertTrue(String.valueOf(flagRows.get(2).get("after_value")).contains("active=false"));
     }
 }

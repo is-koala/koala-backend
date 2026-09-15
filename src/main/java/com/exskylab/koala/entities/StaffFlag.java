@@ -15,6 +15,8 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -25,6 +27,8 @@ import java.util.UUID;
 @AllArgsConstructor
 @NoArgsConstructor
 @Table(name = "staff_flags")
+@SQLDelete(sql = "UPDATE staff_flags SET is_deleted = true, deleted_at = now() WHERE id = ?")
+@SQLRestriction("is_deleted = false")
 public class StaffFlag {
 
     public static final int LABEL_MAX_LENGTH = 120;
@@ -57,6 +61,12 @@ public class StaffFlag {
 
     @Column(name = "cleared_at")
     private Instant clearedAt;
+
+    @Column(name = "is_deleted", nullable = false)
+    private boolean deleted = false;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
 
     public boolean isActive() {
         return clearedAt == null;
