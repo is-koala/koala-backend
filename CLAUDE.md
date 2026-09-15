@@ -2663,6 +2663,68 @@ Test yazıldığında bir de **eksik uç** buldu: `MessagingService.getMyBlocks(
 
 **Bilinçli olarak dokunulmayan:** `JobAlertManager.matchingAlerts` tüm aktif alarmları okuyup bellekte filtreliyor. Bu bir N+1 değil (tek sorgu) ama alarm sayısı büyüdüğünde sorgunun kendisi ağırlaşır; SQL'e taşınması Faz 11 sonrası bir iş.
 
+### Silinmiş ilişki join tuzağı — `SoftDeletedJoinVisibilityTest` (#309)
+
+**Kusur sınıfı: doğru bir grafik, soft delete tarafından sessizce INNER join'e çevriliyor.** Her entity
+`@SQLRestriction("is_deleted = false")` taşıyor (§8) ve Hibernate 7 bu kısıtı fetch join'in **ON** cümlesine yazıyor;
+ilişki `optional = false` / `@JoinColumn(nullable = false)` ise join **INNER** üretiliyor ve ilişkili satır soft-delete
+edildiğinde **ana kayıt listeden düşüyor** — sayaçlar, göstergeler ve runbook sorguları onu saymaya devam ederken. Üç kez
+bağımsız olarak, elle bulundu: hakediş kuyruğu `PROCESSING` satırı kaybetti (§2y3, #231), mesaj sayfası silinmiş
+gönderenin mesajını kaybetti (§2o, #281), `/admin/payments` silinmiş işçinin `SUCCEEDED` ödemelerini kaybetti (§2s7,
+#301). Dördüncü kez elle bulunmasın diye tarama var.
+
+**Tarama üç koşulu birden arıyor; üçü de tutmadıkça yol işaretlenmiyor.** Her DAO'daki her `@EntityGraph` yolu ve
+`join fetch` (sol olmayan) segment segment yürünüyor; bir hop **zorunluysa** (`optional=false` ya da
+`nullable=false`), hedef **soft-delete'liyse** ve hedefi **gerçekten silen bir yol varsa** o yol "silinince satırı
+düşürür" sayılıyor. Üçüncü koşul kanıttan türüyor, kanaatten değil: `src/main` altındaki `*Dao.delete*(` çağrıları
+(alanın bildirilen tipi üzerinden DAO → entity), `PostgresAccountAnonymizer`'ın `update <tablo> … is_deleted = true`
+cümleleri (`@Table` adı üzerinden) ve `orphanRemoval = true` ilişkilerinin hedefleri. Bugün hiçbir şeyin silmediği
+entity'ler — `Job`, `JobAssignment`, `Payment`, `Payout`, `Dispute`, `Report`, `Conversation`, `Message`, `Review` —
+işaretlenmiyor; biri bir gün silme yolu kazanırsa ona uzanan **her** fetch yolu aynı testte kırmızıya döner
+(`theDeletionEvidenceFindsTheKnownDeletePaths` bugünkü kümeyi iki yönlü sabitliyor). Koleksiyon hop'undan sonraki
+zorunlu hop yalnız koleksiyon elemanını budar, kökü değil (Hibernate iç içe join üretir); yürüyüş orada duruyor.
+`theScanRecognisesTheThreeDocumentedTraps` üç bilinen vakayı (`Payout.worker`, `Message.sender`,
+`Payment.jobAssignment.worker`) tanıdığını ve nullable `Job.creator`'ı işaretlemediğini ölçüyor.
+
+**Personel uçlarında kural: liste ve okuma zorunlu soft-delete'li ilişkiyi fetch etmez; ilişkili satırlar sayfa
+başına tek toplu sorguyla gelir.** Personel metodu = adı `staff`/`search`/`moderation` içeren DAO metodu **ya da**
+`STAFF_READ_METHODS`'ta controller zinciriyle yazılı metot (`CancellationDao.findWithCancellerByJobAssignmentId` →
+`GET /admin/job-assignments/{id}` gibi). Kalıp §2y3'ün hakediş kuyruğundakiyle aynı: grafik ilişkiyi çekmez, mapper
+proxy'den yalnız `getId()` okur (sorgusuz), kişiler `UserService.getAllByIdIn` ile gelir ve silinmiş kullanıcı
+**`null`** döner — satır ve ilan bilgisi kalır. Bu turda üç yüzey bu kalıba çekildi ve her biri "silinmiş ilişki +
+satır görünür" IT'siyle sabit: `GET /admin/job-assignments` (`findAllForStaff` grafiğinden `worker` düştü,
+`JobAssignmentMapper.toAdminAssignmentDto(assignment, worker)`,
+`AdminListSearchIT.aDeletedWorkersAssignmentStaysOnTheStaffListWithItsJobAndANullWorker`), `/admin/reports` liste,
+detay ve karar yanıtı (`ReportDao.search`/`findDetailedById` grafiğinden `reporter` düştü,
+`ReportMapper.toAdminReportDto(report, reporter, …)`, `ReportManager.reportersOf`; karar yolu da aynı haritadan
+geçtiği için silinmiş şikayetçinin dosyası artık proxy açarken 500 vermiyor,
+`ReportModerationIT.aReportWhoseReporterDeletedTheirAccountStaysInTheQueueAndTheDetailWithANullReporter`) ve
+`GET /admin/users/{id}/identity-reveals` (`findAllByWorker_Id` grafiğinden `viewer` düştü, bileşim controller'dan
+`IdentityRevealManager.listForStaff`'a indi ve `Page<AdminIdentityRevealDto>` döner, silinmiş izleyen `viewerId` ile
+kalır, `viewerFullName` `null`;
+`WorkerIdentityRevealIT.aRevealByAnEmployerWhoLaterDeletedTheirAccountStaysInTheStaffTrailWithoutAName`). Üç IT de
+grafik geri konduğunda kırmızıya döndüğü mutasyonla görüldü.
+
+**`STAFF_ALLOWLIST` yalnız iki gerekçe kabul ediyor: kaskad ya da takip issue'su.** Kaskad: ilişkili satır ana
+satırla birlikte siliniyor, yetim oluşamıyor — `bank_accounts` ve `dispute_evidence` anonimleştirmede kullanıcıyla
+birlikte soft-delete oluyor, yani `findAwaitingStaffConfirmation#user` ve `findAllByDisputeIdOrderByCreatedAtAsc#uploadedBy`
+INNER kalabilir. Takip: bu turda düzeltilmeyen personel yolları — `DisputeDao.searchForStaff`/`findByIdForStaff`/
+`findAllByJobAssignmentIdOrderByCreatedAtDesc#openedBy` (uyuşmazlık listesi, detayı ve atama detayındaki
+uyuşmazlıklar; açan kullanıcı hesabını silince satır düşer), `CancellationDao.findWithCancellerByJobAssignmentId#cancelledBy`
+ve `JobAssignmentDao.findWithDetailsForPaymentById#worker` ile `PaymentDao.findForStaffById#jobAssignment.worker` (atama
+ve ödeme tekil okumaları; §2s7'nin "tekil okuma, kural değişmedi" notu — silinmiş işçide 404),
+`CompanyContactDao.findAllByCompanyId(In)#user` (şirket detayındaki yetkililer; `company_contacts` anonimleştirmede
+silinmiyor). Her biri `"follow-up of #309"` gerekçesiyle listede; issue açıldığında gerekçe numaraya çevrilir. **Katılımcı
+uçları ayrı değerlendirmeye bırakıldı** ve `PARTICIPANT_PATHS_AWAITING_EVALUATION` her birini adıyla tutuyor
+(değerlendirme listesi, başvuru listeleri, işçinin/işverenin atama listeleri, engel listesi, takipçiler, konuşma,
+mesaj şikayeti, ödeme callback yolları, ulaşım koltuk detayı, galeri ve sahip-okuma yolları): satır karşı taraf
+silinince kalmalı mı ("Silinmiş kullanıcı" gösterimi) sorusunun cevabı uç uç verilecek; o güne kadar yeni bir
+katılımcı yolu listeye yazılmadan eklenemez ve bayat giriş kırmızıya döner.
+
+**Elenen iki alternatif §2y3'te ölçülmüştü, burada tekrar edilmedi:** açık `left join fetch` satırı tutuyor ama
+Hibernate `FetchNotFoundException` atıyor; `optional = true` join türünü değiştirmiyor. `@NotFound(IGNORE)` şemanın
+"FK sarkabilir" demesi olurdu. Tek doğru kalıp toplu ikinci sorgu.
+
 ## 2ag. Hata sözleşmesi — yedi semantik tip
 
 **34 exception sınıfı 7'ye indi.** Entity başına `XNotFoundException` açmak yerine anlam başına bir tip var: `ResourceNotFoundException` (404), `ForbiddenException` (403), `ConflictException` (409), `UnauthorizedException` (401), `ValidationException` (400), `ExternalServiceException` (502), `TooManyRequestsException` (429). Hepsi `KoalaException`'dan türer ve `HttpStatus` taşır.

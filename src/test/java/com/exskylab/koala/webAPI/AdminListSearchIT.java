@@ -709,6 +709,32 @@ class AdminListSearchIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
+    void aDeletedWorkersAssignmentStaysOnTheStaffListWithItsJobAndANullWorker() throws Exception {
+        UUID departedId = UUID.randomUUID();
+        UUID departedJobId = UUID.randomUUID();
+        UUID departedAssignmentId = UUID.randomUUID();
+        insertUser(departedId, "departed-" + departedId + "@example.com", "Giden", "İşçi", false);
+        insertJob(departedJobId, employerId, "Vardiya " + departedJobId);
+        insertAssignment(departedAssignmentId, departedJobId, departedId);
+        try {
+            jdbc.update("update users set is_deleted = true, deleted_at = now() where id = ?", departedId);
+
+            filtered("/admin/job-assignments", financeToken, "jobId", departedJobId.toString())
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content", hasSize(1)))
+                    .andExpect(jsonPath("$.data.content[0].id").value(departedAssignmentId.toString()))
+                    .andExpect(jsonPath("$.data.content[0].jobId").value(departedJobId.toString()))
+                    .andExpect(jsonPath("$.data.content[0].jobTitle").value("Vardiya " + departedJobId))
+                    .andExpect(jsonPath("$.data.content[0].employer.id").value(employerId.toString()))
+                    .andExpect(jsonPath("$.data.content[0].worker").value(nullValue()));
+        } finally {
+            jdbc.update("delete from job_assignments where id = ?", departedAssignmentId);
+            jdbc.update("delete from jobs where id = ?", departedJobId);
+            jdbc.update("delete from users where id = ?", departedId);
+        }
+    }
+
+    @Test
     void theCreatedAtBoundsAreInclusiveToTheMillisecond() throws Exception {
         Instant createdAt = Instant.parse("2026-09-10T12:00:00.250Z");
         jdbc.update("update job_assignments set created_at = ? where id = ?",

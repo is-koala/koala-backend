@@ -34,8 +34,7 @@ public interface ReportDao extends JpaRepository<Report, UUID> {
 
     long countByReporterId(UUID reporterId);
 
-    @EntityGraph(attributePaths = {"reporter", "reporter.profilePicture",
-            "reportedUser", "reportedUser.profilePicture",
+    @EntityGraph(attributePaths = {"reportedUser", "reportedUser.profilePicture",
             "reviewedBy", "reviewedBy.profilePicture", "job", "message", "image"})
     Optional<Report> findDetailedById(UUID id);
 
@@ -92,8 +91,7 @@ public interface ReportDao extends JpaRepository<Report, UUID> {
                            or unaccent(lower(job.title))
                               like unaccent(lower(concat('%', cast(:query as string), '%'))))
                     """)
-    @EntityGraph(attributePaths = {"reporter", "reporter.profilePicture",
-            "reportedUser", "reportedUser.profilePicture",
+    @EntityGraph(attributePaths = {"reportedUser", "reportedUser.profilePicture",
             "reviewedBy", "reviewedBy.profilePicture"})
     Page<Report> search(@Param("status") ReportStatus status,
                         @Param("reason") ReportReason reason,

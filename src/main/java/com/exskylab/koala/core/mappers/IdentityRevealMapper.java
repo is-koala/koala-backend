@@ -10,8 +10,6 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.Named;
 
-import java.util.List;
-
 @Mapper(componentModel = "spring", injectionStrategy = InjectionStrategy.CONSTRUCTOR)
 public interface IdentityRevealMapper {
 
@@ -20,14 +18,15 @@ public interface IdentityRevealMapper {
     @Mapping(target = "verificationMethod", source = "identityVerificationMethod")
     WorkerIdentityDto toWorkerIdentityDto(User worker);
 
-    @Mapping(target = "viewerId", source = "viewer.id")
+    @Mapping(target = "id", source = "reveal.id")
+    @Mapping(target = "viewerId", source = "reveal.viewer.id")
     @Mapping(target = "viewerFullName", source = "viewer", qualifiedByName = "fullName")
-    @Mapping(target = "jobAssignmentId", source = "jobAssignment.id")
-    @Mapping(target = "jobId", source = "jobAssignment.job.id")
-    @Mapping(target = "jobTitle", source = "jobAssignment.job.title")
-    AdminIdentityRevealDto toAdminIdentityRevealDto(IdentityReveal reveal);
-
-    List<AdminIdentityRevealDto> toAdminIdentityRevealDtoList(List<IdentityReveal> reveals);
+    @Mapping(target = "jobAssignmentId", source = "reveal.jobAssignment.id")
+    @Mapping(target = "jobId", source = "reveal.jobAssignment.job.id")
+    @Mapping(target = "jobTitle", source = "reveal.jobAssignment.job.title")
+    @Mapping(target = "revealedAt", source = "reveal.revealedAt")
+    @Mapping(target = "ipAddress", source = "reveal.ipAddress")
+    AdminIdentityRevealDto toAdminIdentityRevealDto(IdentityReveal reveal, User viewer);
 
     @Named("fullName")
     static String fullName(User user) {

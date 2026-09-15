@@ -148,6 +148,7 @@ class ReportRulesTest {
         Report report = new Report();
         report.setId(UUID.randomUUID());
         report.setStatus(ReportStatus.OPEN);
+        report.setReporter(reporter());
         when(reportDao.findByIdForUpdate(report.getId())).thenReturn(Optional.of(report));
 
         User admin = new User();
@@ -183,6 +184,7 @@ class ReportRulesTest {
         Report report = new Report();
         report.setId(UUID.randomUUID());
         report.setStatus(ReportStatus.OPEN);
+        report.setReporter(reporter());
         when(reportDao.findByIdForUpdate(report.getId())).thenReturn(Optional.of(report));
         when(securityService.getAuthenticatedUser())
                 .thenThrow(new ResourceNotFoundException("{user.not.authenticated}"));
@@ -204,6 +206,7 @@ class ReportRulesTest {
         Report report = new Report();
         report.setId(UUID.randomUUID());
         report.setStatus(ReportStatus.OPEN);
+        report.setReporter(reporter());
         when(reportDao.findByIdForUpdate(report.getId())).thenReturn(Optional.of(report));
 
         User admin = new User();
@@ -213,5 +216,11 @@ class ReportRulesTest {
         manager.review(null, report.getId(), ReportStatus.ACTIONED, "Hesap askiya alindi.");
 
         assertEquals(admin.getId(), report.getReviewedBy().getId());
+    }
+
+    private static User reporter() {
+        User reporter = new User();
+        reporter.setId(UUID.randomUUID());
+        return reporter;
     }
 }

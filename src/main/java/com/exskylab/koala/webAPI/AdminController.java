@@ -34,7 +34,6 @@ import com.exskylab.koala.core.dtos.bankAccount.response.IbanPendingDto;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.entities.BankAccountVerificationStatus;
 import com.exskylab.koala.core.mappers.BankAccountMapper;
-import com.exskylab.koala.core.mappers.IdentityRevealMapper;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.company.request.ApproveCompanyDto;
 import com.exskylab.koala.core.dtos.company.request.RejectCompanyDto;
@@ -93,7 +92,6 @@ public class AdminController {
     private final AdminDetailService adminDetailService;
     private final JobService jobService;
     private final IdentityRevealService identityRevealService;
-    private final IdentityRevealMapper identityRevealMapper;
 
     public AdminController(CompanyService companyService, UserService userService, UserMapper userMapper,
                            GalleryService galleryService, RoleGrantMapper roleGrantMapper,
@@ -101,8 +99,7 @@ public class AdminController {
                            BankAccountService bankAccountService, BankAccountMapper bankAccountMapper,
                            IdentityDocumentReviewService identityDocumentReviewService,
                            SignedFileResponses signedFileResponses, AdminDetailService adminDetailService,
-                           JobService jobService, IdentityRevealService identityRevealService,
-                           IdentityRevealMapper identityRevealMapper) {
+                           JobService jobService, IdentityRevealService identityRevealService) {
         this.companyService = companyService;
         this.userService = userService;
         this.userMapper = userMapper;
@@ -116,7 +113,6 @@ public class AdminController {
         this.adminDetailService = adminDetailService;
         this.jobService = jobService;
         this.identityRevealService = identityRevealService;
-        this.identityRevealMapper = identityRevealMapper;
     }
 
     @Operation(summary = "Atama kuyruğu",
@@ -534,8 +530,7 @@ public class AdminController {
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
 
         var page = identityRevealService.listForStaff(userId, pageable);
-        return ResponseEntity.ok(new SuccessDataResult<>(
-                PageDto.of(page, identityRevealMapper.toAdminIdentityRevealDtoList(page.getContent())),
+        return ResponseEntity.ok(new SuccessDataResult<>(PageDto.of(page, page.getContent()),
                 IdentityRevealMessages.LISTED, HttpStatus.OK));
     }
 

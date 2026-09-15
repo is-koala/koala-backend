@@ -16,6 +16,6 @@ public interface IdentityRevealDao extends JpaRepository<IdentityReveal, UUID> {
     boolean existsByViewer_IdAndJobAssignment_IdAndRevealedAtAfter(UUID viewerId, UUID jobAssignmentId,
                                                                     Instant after);
 
-    @EntityGraph(attributePaths = {"viewer", "jobAssignment", "jobAssignment.job"})
+    @EntityGraph(attributePaths = {"jobAssignment", "jobAssignment.job"})
     Page<IdentityReveal> findAllByWorker_Id(UUID workerId, Pageable pageable);
 }
