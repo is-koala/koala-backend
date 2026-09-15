@@ -177,6 +177,9 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
     List<JobAssignment> findAllByJobIdInAndWorkerIdIn(java.util.Collection<UUID> jobIds,
                                                       java.util.Collection<UUID> workerIds);
 
+    @EntityGraph(attributePaths = {"worker"})
+    List<JobAssignment> findAllByJobIdAndStatusIn(UUID jobId, java.util.Collection<AssignmentStatus> statuses);
+
     interface HiredCount {
         UUID getJobId();
 

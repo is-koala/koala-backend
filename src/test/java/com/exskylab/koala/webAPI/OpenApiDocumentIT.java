@@ -478,4 +478,41 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.components.schemas.SessionDetailDto.properties.loginHistory").exists())
                 .andExpect(jsonPath("$.components.schemas.LoginHistoryEntryDto.properties.location").exists());
     }
+
+    @Test
+    void transportPlanSeatSelectionAndVisibilityAreDocumentedInTurkish() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath("$.paths['/jobs/{jobId}/transport-plan'].put.responses.200").exists())
+                .andExpect(jsonPath("$.paths['/jobs/{jobId}/transport-plan'].put.responses.404").exists())
+                .andExpect(jsonPath("$.paths['/jobs/{jobId}/transport-plan'].put.responses.409").exists())
+                .andExpect(jsonPath("$.paths['/jobs/{jobId}/transport-plan'].put.security").exists())
+                .andExpect(jsonPath("$.paths['/jobs/{jobId}/transport-plan'].put.description")
+                        .value(containsString("koltuk")))
+                .andExpect(jsonPath("$.paths['/jobs/{jobId}/transport-plan'].get.responses.404").exists())
+                .andExpect(jsonPath("$.paths['/job-assignments/{assignmentId}/transport'].get.responses.404").exists())
+                .andExpect(jsonPath("$.paths['/job-assignments/{assignmentId}/transport/seat'].put.responses.409.description")
+                        .value(containsString("dolu")))
+                .andExpect(jsonPath("$.components.schemas.TransportPlanWriteDto.properties.outboundMethod.enum")
+                        .value(contains("SHUTTLE", "CASH_ALLOWANCE", "SELF", "NONE")))
+                .andExpect(jsonPath("$.components.schemas.TransportPlanWriteDto.properties.allowanceAmountConsistent")
+                        .doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.ShuttleWriteDto.properties.direction.enum")
+                        .value(contains("OUTBOUND", "RETURN")))
+                .andExpect(jsonPath("$.components.schemas.ShuttleStopWriteDto.properties.address.$ref")
+                        .value(containsString("AddressWriteV2")))
+                .andExpect(jsonPath("$.components.schemas.ShuttleDto.properties.plate.description")
+                        .value(containsString("koltuk")))
+                .andExpect(jsonPath("$.components.schemas.AssignmentTransportDto.properties.seats.items.$ref")
+                        .value(containsString("SeatAssignmentDto")))
+                .andExpect(jsonPath("$.components.schemas.JobTransportDto.properties.shuttles.items.$ref")
+                        .value(containsString("PublicShuttleDto")))
+                .andExpect(jsonPath("$.components.schemas.PublicStopDto.properties.districtName").exists())
+                .andExpect(jsonPath("$.components.schemas.PublicStopDto.properties.address").doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.JobDetailDto.properties.transport.description")
+                        .value(containsString("Plaka")))
+                .andExpect(jsonPath("$.components.schemas.JobSummaryDto.properties.hasShuttle.description")
+                        .value(containsString("servis")))
+                .andExpect(jsonPath("$.components.schemas.MyAssignmentDto.properties.transport.description")
+                        .value(containsString("koltuk")));
+    }
 }

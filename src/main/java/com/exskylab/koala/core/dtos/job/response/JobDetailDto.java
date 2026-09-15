@@ -11,6 +11,7 @@ import com.exskylab.koala.entities.JobType;
 import com.exskylab.koala.entities.SalaryType;
 import com.exskylab.koala.entities.AddressPrecision;
 import com.exskylab.koala.core.dtos.payment.response.PricingBreakdownDto;
+import com.exskylab.koala.core.dtos.transport.response.JobTransportDto;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -72,4 +73,8 @@ public class JobDetailDto {
     @Schema(description = "İlana yapılmış toplam başvuru sayısı, durumdan bağımsız.")
     private long applicationCount;
     private long hiredCount;
+    @Schema(types = {"object", "null"},
+            description = "Ulaşım özeti; herkese açık görünüm: yöntemler, yol parası tutarı, servis sayısı ve durakların "
+                    + "ilçe/semt adı ile saati. Plaka, şoför ve tam adres taşımaz. İlanın planı yoksa null.")
+    private JobTransportDto transport;
 }

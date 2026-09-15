@@ -10,6 +10,7 @@ import com.exskylab.koala.entities.AssignmentStatus;
 import com.exskylab.koala.entities.MessagingAvailabilityReason;
 import com.exskylab.koala.entities.PaymentStatus;
 import com.exskylab.koala.core.dtos.payment.response.PricingBreakdownDto;
+import com.exskylab.koala.core.dtos.transport.response.AssignmentTransportDto;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.math.BigDecimal;
@@ -55,5 +56,8 @@ public record MyAssignmentDto(UUID id, JobSummaryDto job, SafeUserDto worker,
                                       description = "Görüntüleyen kullanıcının bu atamaya yazdığı değerlendirme; yazmadıysa null.")
                               MyReviewDto myReview,
                               @Schema(description = "Karşı taraf bu atamayı değerlendirdi mi. Yalnız varlık bilgisidir; içerik ve yazar kimliği taşınmaz.")
-                              boolean counterpartyReviewed) {
+                              boolean counterpartyReviewed,
+                              @Schema(types = {"object", "null"},
+                                      description = "İlanın ulaşım planı ve bu atamanın koltukları. İşçi görünümünde plaka/şoför yalnız koltuk seçilen serviste; işveren görünümünde hepsinde. İlanın planı yoksa null.")
+                              AssignmentTransportDto transport) {
 }

@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-15-01-01-transport-plans" author="koala">
+        <createTable tableName="transport_plans">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="job_id" type="UUID">
+                <constraints nullable="false" foreignKeyName="fk_transport_plans_job" references="jobs(id)"/>
+            </column>
+            <column name="outbound_method" type="VARCHAR(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="return_method" type="VARCHAR(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="allowance_amount" type="DECIMAL(19,2)"/>
+            <column name="allowance_note" type="VARCHAR(500)"/>
+            <column name="notes" type="VARCHAR(1000)"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="deleted_by_id" type="UUID"/>
+        </createTable>
+        <sql>
+            CREATE UNIQUE INDEX uk_transport_plans_job_active ON transport_plans (job_id) WHERE is_deleted = false;
+        </sql>
+        <rollback>
+            <sql>DROP INDEX IF EXISTS uk_transport_plans_job_active;</sql>
+            <dropTable tableName="transport_plans"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-15-01-02-shuttles" author="koala">
+        <createTable tableName="shuttles">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="plan_id" type="UUID">
+                <constraints nullable="false" foreignKeyName="fk_shuttles_plan" references="transport_plans(id)"/>
+            </column>
+            <column name="direction" type="VARCHAR(16)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="name" type="VARCHAR(120)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="plate" type="VARCHAR(20)"/>
+            <column name="capacity" type="INTEGER">
+                <constraints nullable="false"/>
+            </column>
+            <column name="driver_name" type="VARCHAR(120)"/>
+            <column name="driver_phone" type="VARCHAR(32)"/>
+            <column name="sort_order" type="INTEGER" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="qr_secret" type="VARCHAR(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="deleted_by_id" type="UUID"/>
+        </createTable>
+        <sql>
+            CREATE INDEX idx_shuttles_plan ON shuttles (plan_id) WHERE is_deleted = false;
+        </sql>
+        <rollback>
+            <sql>DROP INDEX IF EXISTS idx_shuttles_plan;</sql>
+            <dropTable tableName="shuttles"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-15-01-03-shuttle-stops" author="koala">
+        <createTable tableName="shuttle_stops">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="shuttle_id" type="UUID">
+                <constraints nullable="false" foreignKeyName="fk_shuttle_stops_shuttle" references="shuttles(id)"/>
+            </column>
+            <column name="address_id" type="UUID">
+                <constraints nullable="false" foreignKeyName="fk_shuttle_stops_address" references="addresses(id)"/>
+            </column>
+            <column name="scheduled_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="label" type="VARCHAR(120)"/>
+            <column name="sort_order" type="INTEGER" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="deleted_by_id" type="UUID"/>
+        </createTable>
+        <sql>
+            CREATE INDEX idx_shuttle_stops_shuttle ON shuttle_stops (shuttle_id) WHERE is_deleted = false;
+        </sql>
+        <sql>
+            CREATE INDEX idx_shuttle_stops_scheduled_at ON shuttle_stops (scheduled_at) WHERE is_deleted = false;
+        </sql>
+        <rollback>
+            <sql>DROP INDEX IF EXISTS idx_shuttle_stops_scheduled_at;</sql>
+            <sql>DROP INDEX IF EXISTS idx_shuttle_stops_shuttle;</sql>
+            <dropTable tableName="shuttle_stops"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-15-01-04-seat-assignments" author="koala">
+        <createTable tableName="seat_assignments">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="job_assignment_id" type="UUID">
+                <constraints nullable="false" foreignKeyName="fk_seat_assignments_job_assignment"
+                             references="job_assignments(id)"/>
+            </column>
+            <column name="shuttle_id" type="UUID">
+                <constraints nullable="false" foreignKeyName="fk_seat_assignments_shuttle" references="shuttles(id)"/>
+            </column>
+            <column name="stop_id" type="UUID">
+                <constraints nullable="false" foreignKeyName="fk_seat_assignments_stop" references="shuttle_stops(id)"/>
+            </column>
+            <column name="direction" type="VARCHAR(16)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="evening_reminder_sent_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="departure_reminder_sent_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="deleted_by_id" type="UUID"/>
+        </createTable>
+        <sql>
+            CREATE UNIQUE INDEX uk_seat_assignments_assignment_direction_active
+                ON seat_assignments (job_assignment_id, direction) WHERE is_deleted = false;
+        </sql>
+        <sql>
+            CREATE INDEX idx_seat_assignments_shuttle ON seat_assignments (shuttle_id) WHERE is_deleted = false;
+        </sql>
+        <sql>
+            CREATE INDEX idx_seat_assignments_stop ON seat_assignments (stop_id) WHERE is_deleted = false;
+        </sql>
+        <rollback>
+            <sql>DROP INDEX IF EXISTS idx_seat_assignments_stop;</sql>
+            <sql>DROP INDEX IF EXISTS idx_seat_assignments_shuttle;</sql>
+            <sql>DROP INDEX IF EXISTS uk_seat_assignments_assignment_direction_active;</sql>
+            <dropTable tableName="seat_assignments"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

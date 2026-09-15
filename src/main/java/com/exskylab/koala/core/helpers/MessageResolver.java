@@ -24,6 +24,10 @@ public class MessageResolver {
     }
 
     public String resolve(String candidate, Locale locale) {
+        return format(candidate, locale);
+    }
+
+    public String format(String candidate, Locale locale, Object... args) {
         if (candidate == null || candidate.isBlank()) {
             return candidate;
         }
@@ -34,6 +38,6 @@ public class MessageResolver {
         }
 
         String key = matcher.group(1);
-        return messageSource.getMessage(key, null, key, locale);
+        return messageSource.getMessage(key, args, key, locale);
     }
 }

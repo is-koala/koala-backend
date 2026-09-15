@@ -45,6 +45,7 @@ import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.business.abstracts.BadgeService;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.core.helpers.JobAddressVisibility;
+import com.exskylab.koala.core.helpers.JobEditors;
 import com.exskylab.koala.entities.CancellationParty;
 import java.time.Instant;
 import com.exskylab.koala.business.abstracts.PayoutService;
@@ -56,6 +57,8 @@ import com.exskylab.koala.business.abstracts.GalleryService;
 import com.exskylab.koala.business.abstracts.SettingsService;
 import com.exskylab.koala.core.constants.SettingKeys;
 import com.exskylab.koala.business.abstracts.ActivityNotificationService;
+import com.exskylab.koala.business.abstracts.TransportService;
+import com.exskylab.koala.core.dtos.transport.response.AssignmentTransportDto;
 import com.exskylab.koala.core.events.AssignmentClosedEvent;
 import com.exskylab.koala.core.helpers.CreatedAtRange;
 import com.exskylab.koala.core.helpers.StaffSearchQuery;
@@ -125,6 +128,8 @@ public class JobAssignmentManager implements JobAssignmentService {
     private final CancellationDao cancellationDao;
     private final JobService jobService;
     private final ReviewDao reviewDao;
+    private final TransportService transportService;
+    private final JobEditors jobEditors;
     private final JobAddressVisibility addressVisibility = new JobAddressVisibility();
 
 
@@ -139,7 +144,8 @@ public class JobAssignmentManager implements JobAssignmentService {
                                SettingsService settingsService, GalleryService galleryService,
                                ActivityNotificationService activityNotificationService,
                                ApplicationEventPublisher eventPublisher, PaymentMetrics paymentMetrics,
-                               CancellationDao cancellationDao, JobService jobService, ReviewDao reviewDao) {
+                               CancellationDao cancellationDao, JobService jobService, ReviewDao reviewDao,
+                               TransportService transportService, JobEditors jobEditors) {
         this.jobAssignmentDao = jobAssignmentDao;
         this.securityService = securityService;
         this.jobAssignmentMapper = jobAssignmentMapper;
@@ -165,6 +171,8 @@ public class JobAssignmentManager implements JobAssignmentService {
         this.cancellationDao = cancellationDao;
         this.jobService = jobService;
         this.reviewDao = reviewDao;
+        this.transportService = transportService;
+        this.jobEditors = jobEditors;
     }
 
 
@@ -480,10 +488,7 @@ public class JobAssignmentManager implements JobAssignmentService {
 
         Job job = jobService.getById(jobId);
         UUID actorId = securityService.getAuthenticatedUserId();
-        boolean owner = job.getCreator() != null && job.getCreator().getId().equals(actorId);
-        boolean companyContact = job.getCompany() != null
-                && companyContactService.isUserAContactOfCompany(job.getCompany().getId(), actorId);
-        if (!owner && !companyContact) {
+        if (!jobEditors.isEditor(job, actorId)) {
             throw Concealment.notFound(JobMessages.JOB_NOT_FOUND, actorId, jobId, "not the employer of the job");
         }
 
@@ -505,7 +510,7 @@ public class JobAssignmentManager implements JobAssignmentService {
 
     private PageDto<MyAssignmentDto> toPage(Page<JobAssignment> page, UUID viewerId,
                                             Predicate<JobAssignment> activeWorker) {
-        LinkedRecords linked = linkedRecordsOf(page.getContent());
+        LinkedRecords linked = linkedRecordsOf(page.getContent(), viewerId);
         List<MyAssignmentDto> content = page.getContent().stream()
                 .map(assignment -> toMyAssignmentDto(assignment, linked, viewerId, activeWorker.test(assignment)))
                 .toList();
@@ -514,7 +519,7 @@ public class JobAssignmentManager implements JobAssignmentService {
     }
 
     private MyAssignmentDto toMyAssignmentDto(JobAssignment assignment, UUID viewerId, boolean activeWorker) {
-        MyAssignmentDto dto = toMyAssignmentDto(assignment, linkedRecordsOf(List.of(assignment)), viewerId,
+        MyAssignmentDto dto = toMyAssignmentDto(assignment, linkedRecordsOf(List.of(assignment), viewerId), viewerId,
                 activeWorker);
         galleryService.fillJobCovers(List.of(dto.job()));
         return dto;
@@ -525,7 +530,8 @@ public class JobAssignmentManager implements JobAssignmentService {
         UUID id = assignment.getId();
         MyAssignmentDto dto = jobAssignmentMapper.toMyAssignmentDto(assignment,
                 linked.cancellations().get(id), linked.payouts().get(id), linked.paymentSecuredAt().get(id),
-                viewerFactsOf(assignment, linked.reviews().getOrDefault(id, List.of()), viewerId));
+                viewerFactsOf(assignment, linked.reviews().getOrDefault(id, List.of()), viewerId),
+                linked.transport().get(id));
         addressVisibility.protect(assignment.getJob(), dto.job(), viewerId, activeWorker);
         return dto;
     }
@@ -553,9 +559,9 @@ public class JobAssignmentManager implements JobAssignmentService {
         return authorIsWorker != viewerIsWorker;
     }
 
-    private LinkedRecords linkedRecordsOf(List<JobAssignment> assignments) {
+    private LinkedRecords linkedRecordsOf(List<JobAssignment> assignments, UUID viewerId) {
         if (assignments.isEmpty()) {
-            return new LinkedRecords(Map.of(), Map.of(), Map.of(), Map.of());
+            return new LinkedRecords(Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
         }
         List<UUID> ids = assignments.stream().map(JobAssignment::getId).toList();
 
@@ -574,11 +580,13 @@ public class JobAssignmentManager implements JobAssignmentService {
             reviews.computeIfAbsent(review.getJobAssignment().getId(), key -> new ArrayList<>()).add(review);
         }
 
-        return new LinkedRecords(cancellations, payouts, paymentService.securedAtForAssignments(ids), reviews);
+        return new LinkedRecords(cancellations, payouts, paymentService.securedAtForAssignments(ids), reviews,
+                transportService.viewsForAssignments(assignments, viewerId));
     }
 
     private record LinkedRecords(Map<UUID, Cancellation> cancellations, Map<UUID, Payout> payouts,
-                                 Map<UUID, Instant> paymentSecuredAt, Map<UUID, List<Review>> reviews) {
+                                 Map<UUID, Instant> paymentSecuredAt, Map<UUID, List<Review>> reviews,
+                                 Map<UUID, AssignmentTransportDto> transport) {
     }
 
     @Override

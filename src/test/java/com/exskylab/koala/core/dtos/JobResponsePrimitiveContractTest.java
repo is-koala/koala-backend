@@ -46,6 +46,7 @@ class JobResponsePrimitiveContractTest {
             "JobDetailDto.hiredCount",
             "JobSummaryDto.applicationCount",
             "JobSummaryDto.hiredCount",
+            "JobSummaryDto.hasShuttle",
             "CompanyJobDto.addressPublic");
 
     @Test
