@@ -30,7 +30,7 @@ public class ShuttleStop extends BaseEntity {
     @JoinColumn(name = "shuttle_id", nullable = false)
     private Shuttle shuttle;
 
-    @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.LAZY, optional = false)
+    @OneToOne(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "address_id", nullable = false)
     private Address address;
 

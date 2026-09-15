@@ -45,6 +45,7 @@ import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.business.abstracts.BadgeService;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.core.helpers.JobAddressVisibility;
+import com.exskylab.koala.core.helpers.JobEditors;
 import com.exskylab.koala.entities.CancellationParty;
 import java.time.Instant;
 import com.exskylab.koala.business.abstracts.PayoutService;
@@ -128,6 +129,7 @@ public class JobAssignmentManager implements JobAssignmentService {
     private final JobService jobService;
     private final ReviewDao reviewDao;
     private final TransportService transportService;
+    private final JobEditors jobEditors;
     private final JobAddressVisibility addressVisibility = new JobAddressVisibility();
 
 
@@ -143,7 +145,7 @@ public class JobAssignmentManager implements JobAssignmentService {
                                ActivityNotificationService activityNotificationService,
                                ApplicationEventPublisher eventPublisher, PaymentMetrics paymentMetrics,
                                CancellationDao cancellationDao, JobService jobService, ReviewDao reviewDao,
-                               TransportService transportService) {
+                               TransportService transportService, JobEditors jobEditors) {
         this.jobAssignmentDao = jobAssignmentDao;
         this.securityService = securityService;
         this.jobAssignmentMapper = jobAssignmentMapper;
@@ -170,6 +172,7 @@ public class JobAssignmentManager implements JobAssignmentService {
         this.jobService = jobService;
         this.reviewDao = reviewDao;
         this.transportService = transportService;
+        this.jobEditors = jobEditors;
     }
 
 
@@ -485,10 +488,7 @@ public class JobAssignmentManager implements JobAssignmentService {
 
         Job job = jobService.getById(jobId);
         UUID actorId = securityService.getAuthenticatedUserId();
-        boolean owner = job.getCreator() != null && job.getCreator().getId().equals(actorId);
-        boolean companyContact = job.getCompany() != null
-                && companyContactService.isUserAContactOfCompany(job.getCompany().getId(), actorId);
-        if (!owner && !companyContact) {
+        if (!jobEditors.isEditor(job, actorId)) {
             throw Concealment.notFound(JobMessages.JOB_NOT_FOUND, actorId, jobId, "not the employer of the job");
         }
 

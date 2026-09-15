@@ -23,6 +23,8 @@ import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.helpers.StaffSearchQuery;
 import com.exskylab.koala.core.mappers.AdminDetailMapper;
 import com.exskylab.koala.core.helpers.JobAddressVisibility;
+import com.exskylab.koala.core.helpers.JobEditors;
+import com.exskylab.koala.core.helpers.Concealment;
 import com.exskylab.koala.core.helpers.JobAvailability;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -84,6 +86,7 @@ public class JobManager implements JobService {
     private final JobAvailability jobAvailability;
     private final AdminDetailMapper adminDetailMapper;
     private final TransportService transportService;
+    private final JobEditors jobEditors;
     private final JobAddressVisibility addressVisibility = new JobAddressVisibility();
 
     public JobManager(JobDao jobDao, SecurityService securityService, JobCategoryService jobCategoryService, AddressService addressService, CompanyService companyService, JobMapper jobMapper,
@@ -93,7 +96,7 @@ public class JobManager implements JobService {
                       JobAssignmentDao jobAssignmentDao, NotificationService notificationService,
                       MessageResolver messageResolver, PricingService pricingService,
                       JobAvailability jobAvailability, AdminDetailMapper adminDetailMapper,
-                      TransportService transportService) {
+                      TransportService transportService, JobEditors jobEditors) {
         this.jobDao = jobDao;
         this.securityService = securityService;
         this.jobCategoryService = jobCategoryService;
@@ -113,6 +116,7 @@ public class JobManager implements JobService {
         this.jobAvailability = jobAvailability;
         this.adminDetailMapper = adminDetailMapper;
         this.transportService = transportService;
+        this.jobEditors = jobEditors;
     }
 
     @Override
@@ -486,12 +490,8 @@ public class JobManager implements JobService {
                 .orElseThrow(() -> new ResourceNotFoundException(JobMessages.JOB_NOT_FOUND));
 
         UUID currentUserId = securityService.getAuthenticatedUserId();
-        boolean isOwner = job.getCreator() != null && job.getCreator().getId().equals(currentUserId);
-        boolean isCompanyContact = job.getCompany() != null
-                && companyContactService.isUserAContactOfCompany(job.getCompany().getId(), currentUserId);
-
-        if (!isOwner && !isCompanyContact) {
-            throw new ResourceNotFoundException(JobMessages.JOB_NOT_FOUND);
+        if (!jobEditors.isEditor(job, currentUserId)) {
+            throw Concealment.notFound(JobMessages.JOB_NOT_FOUND, currentUserId, jobId, "not the employer of the job");
         }
         return job;
     }
@@ -621,10 +621,7 @@ public class JobManager implements JobService {
     }
 
     private JobMapper.ViewerFacts detailViewerFactsOf(Job job, UUID viewerId) {
-        boolean employerView = isOwner(job, viewerId)
-                || viewerId != null && job.getCompany() != null
-                && companyContactService.isUserAContactOfCompany(job.getCompany().getId(), viewerId);
-        return employerView ? JobMapper.ViewerFacts.EMPLOYER : JobMapper.ViewerFacts.PUBLIC;
+        return jobEditors.isEditor(job, viewerId) ? JobMapper.ViewerFacts.EMPLOYER : JobMapper.ViewerFacts.PUBLIC;
     }
 
     private static boolean isOwner(Job job, UUID viewerId) {

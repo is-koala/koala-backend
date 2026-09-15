@@ -11,6 +11,9 @@ public class TransportMessages {
     public static final String SHUTTLE_FULL = "{transport.shuttle.full}";
     public static final String SHUTTLE_CAPACITY_BELOW_SEATS = "{transport.shuttle.capacity.below.seats}";
     public static final String ASSIGNMENT_NOT_ACTIVE = "{transport.assignment.not.active}";
+    public static final String SEAT_ALREADY_TAKEN = "{transport.seat.already.taken}";
+    public static final String SHUTTLE_DIRECTION_LOCKED = "{transport.shuttle.direction.locked}";
+    public static final String SEAT_DROPPED_NOTICE = "{transport.seat.dropped.notice}";
     public static final String SEAT_SAVED = "{transport.seat.saved}";
     public static final String ASSIGNMENT_TRANSPORT_RETRIEVED = "{transport.assignment.retrieved}";
     public static final String OUTBOUND_METHOD_NOT_NULL = "{transport.outbound.method.not.null}";

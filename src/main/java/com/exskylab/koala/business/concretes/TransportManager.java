@@ -1,7 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.AddressService;
-import com.exskylab.koala.business.abstracts.CompanyContactService;
 import com.exskylab.koala.business.abstracts.NotificationService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.TransportService;
@@ -25,6 +24,9 @@ import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.core.helpers.Concealment;
+import com.exskylab.koala.core.helpers.ConstraintViolations;
+import com.exskylab.koala.core.helpers.JobAddressVisibility;
+import com.exskylab.koala.core.helpers.JobEditors;
 import com.exskylab.koala.core.helpers.MessageResolver;
 import com.exskylab.koala.core.mappers.TransportMapper;
 import com.exskylab.koala.core.properties.TransportReminderProperties;
@@ -48,6 +50,7 @@ import com.exskylab.koala.entities.TransportMethod;
 import com.exskylab.koala.entities.TransportPlan;
 import com.exskylab.koala.entities.User;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -71,14 +74,16 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @Service
 @Slf4j
 public class TransportManager implements TransportService {
 
-    private static final Set<AssignmentStatus> SEAT_STATUSES = EnumSet.of(AssignmentStatus.PENDING_CONFIRMATION,
-            AssignmentStatus.CONFIRMED, AssignmentStatus.IN_PROGRESS);
+    private static final Set<AssignmentStatus> SEAT_STATUSES = EnumSet.of(AssignmentStatus.CONFIRMED,
+            AssignmentStatus.IN_PROGRESS);
 
     private static final Set<AssignmentStatus> VIEW_STATUSES = EnumSet.of(AssignmentStatus.PENDING_CONFIRMATION,
             AssignmentStatus.CONFIRMED, AssignmentStatus.IN_PROGRESS, AssignmentStatus.COMPLETED);
@@ -101,17 +106,18 @@ public class TransportManager implements TransportService {
     private final JobDao jobDao;
     private final JobAssignmentDao jobAssignmentDao;
     private final SecurityService securityService;
-    private final CompanyContactService companyContactService;
+    private final JobEditors jobEditors;
     private final AddressService addressService;
     private final AssignmentParticipants participants;
     private final NotificationService notificationService;
     private final MessageResolver messageResolver;
     private final TransportMapper transportMapper;
     private final TransportReminderProperties reminderProperties;
+    private final JobAddressVisibility addressVisibility = new JobAddressVisibility();
 
     public TransportManager(TransportPlanDao transportPlanDao, ShuttleDao shuttleDao, ShuttleStopDao shuttleStopDao,
                             SeatAssignmentDao seatAssignmentDao, JobDao jobDao, JobAssignmentDao jobAssignmentDao,
-                            SecurityService securityService, CompanyContactService companyContactService,
+                            SecurityService securityService, JobEditors jobEditors,
                             AddressService addressService, AssignmentParticipants participants,
                             NotificationService notificationService, MessageResolver messageResolver,
                             TransportMapper transportMapper, TransportReminderProperties reminderProperties) {
@@ -122,7 +128,7 @@ public class TransportManager implements TransportService {
         this.jobDao = jobDao;
         this.jobAssignmentDao = jobAssignmentDao;
         this.securityService = securityService;
-        this.companyContactService = companyContactService;
+        this.jobEditors = jobEditors;
         this.addressService = addressService;
         this.participants = participants;
         this.notificationService = notificationService;
@@ -148,90 +154,131 @@ public class TransportManager implements TransportService {
         plan.setAllowanceNote(blankToNull(request.getAllowanceNote()));
         plan.setNotes(blankToNull(request.getNotes()));
 
-        Map<UUID, Shuttle> existing = plan.getShuttles().stream()
-                .collect(Collectors.toMap(Shuttle::getId, shuttle -> shuttle));
-        List<ShuttleWriteDto> requested = request.getShuttles() == null ? List.of() : request.getShuttles();
+        Rewrite rewrite = new Rewrite();
+        Reconciled<Shuttle> shuttles = reconcile(plan.getShuttles(), Shuttle::getId,
+                request.getShuttles() == null ? List.of() : request.getShuttles(), ShuttleWriteDto::getId,
+                () -> newShuttle(plan),
+                shuttleId -> Concealment.notFound(TransportMessages.SHUTTLE_NOT_FOUND, actorId, shuttleId,
+                        "shuttle is not part of the job's transport plan"),
+                TransportMessages.SHUTTLE_DUPLICATE,
+                (shuttle, dto, order) -> applyShuttle(shuttle, dto, order, actorId, rewrite), rewrite);
 
-        Set<UUID> keptShuttleIds = new HashSet<>();
-        Set<UUID> removedStopIds = new HashSet<>();
-        Map<UUID, Integer> requestedCapacity = new HashMap<>();
-        List<Shuttle> added = new ArrayList<>();
-        int order = 0;
-        for (ShuttleWriteDto dto : requested) {
-            Shuttle shuttle;
-            if (dto.getId() == null) {
-                shuttle = new Shuttle();
-                shuttle.setPlan(plan);
-                shuttle.setQrSecret(newSecret());
-                added.add(shuttle);
-            } else {
-                shuttle = requireShuttle(existing, dto.getId(), actorId);
-                if (!keptShuttleIds.add(shuttle.getId())) {
-                    throw new ValidationException(TransportMessages.SHUTTLE_DUPLICATE);
-                }
-                requestedCapacity.put(shuttle.getId(), dto.getCapacity());
-            }
-            shuttle.setDirection(dto.getDirection());
-            shuttle.setName(dto.getName().trim());
-            shuttle.setPlate(blankToNull(dto.getPlate()));
-            shuttle.setCapacity(dto.getCapacity());
-            shuttle.setDriverName(blankToNull(dto.getDriverName()));
-            shuttle.setDriverPhone(blankToNull(dto.getDriverPhone()));
-            shuttle.setSortOrder(order++);
-            removedStopIds.addAll(applyStops(shuttle, dto.getStops(), actorId));
-        }
-
-        Set<UUID> removedShuttleIds = existing.keySet().stream()
-                .filter(id -> !keptShuttleIds.contains(id))
-                .collect(Collectors.toSet());
-        dropSeats(removedShuttleIds, removedStopIds);
-
-        plan.getShuttles().removeIf(shuttle -> removedShuttleIds.contains(shuttle.getId()));
-        plan.getShuttles().addAll(added);
+        rewrite.removedShuttleIds.addAll(shuttles.removedIds());
+        Set<UUID> droppedAssignmentIds = dropSeats(rewrite.removedShuttleIds, rewrite.removedStopIds);
+        rewrite.collectionEdits.forEach(Runnable::run);
         TransportPlan saved = transportPlanDao.save(plan);
         transportPlanDao.flush();
-        rejectCapacityBelowSeats(requestedCapacity);
+        rejectCapacityBelowSeats(rewrite.requestedCapacity);
+        resetReminders(rewrite.rescheduledStopIds);
 
-        log.info("Transport plan {} for job {} written by user {}: {} shuttles, {} removed",
-                saved.getId(), jobId, actorId, requested.size(), removedShuttleIds.size());
-        notifyPlanUpdated(job);
+        log.info("Transport plan {} for job {} written by user {}: {} shuttles kept or added, {} removed",
+                saved.getId(), jobId, actorId, shuttles.ordered().size(), rewrite.removedShuttleIds.size());
+        notifyPlanUpdated(job, droppedAssignmentIds);
         return planDto(saved);
     }
 
-    private Set<UUID> applyStops(Shuttle shuttle, List<ShuttleStopWriteDto> requested, UUID actorId) {
-        Map<UUID, ShuttleStop> existing = shuttle.getStops().stream()
-                .collect(Collectors.toMap(ShuttleStop::getId, stop -> stop));
+    private static final class Rewrite {
+        private final Set<UUID> removedShuttleIds = new HashSet<>();
+        private final Set<UUID> removedStopIds = new HashSet<>();
+        private final Set<UUID> rescheduledStopIds = new HashSet<>();
+        private final Map<UUID, Integer> requestedCapacity = new HashMap<>();
+        private final List<Runnable> collectionEdits = new ArrayList<>();
+    }
+
+    private Shuttle newShuttle(TransportPlan plan) {
+        Shuttle shuttle = new Shuttle();
+        shuttle.setPlan(plan);
+        shuttle.setQrSecret(newSecret());
+        return shuttle;
+    }
+
+    private void applyShuttle(Shuttle shuttle, ShuttleWriteDto dto, int order, UUID actorId, Rewrite rewrite) {
+        if (shuttle.getId() != null) {
+            if (shuttle.getDirection() != dto.getDirection()) {
+                throw new ConflictException(TransportMessages.SHUTTLE_DIRECTION_LOCKED);
+            }
+            rewrite.requestedCapacity.put(shuttle.getId(), dto.getCapacity());
+        }
+        shuttle.setDirection(dto.getDirection());
+        shuttle.setName(dto.getName().trim());
+        shuttle.setPlate(blankToNull(dto.getPlate()));
+        shuttle.setCapacity(dto.getCapacity());
+        shuttle.setDriverName(blankToNull(dto.getDriverName()));
+        shuttle.setDriverPhone(blankToNull(dto.getDriverPhone()));
+        shuttle.setSortOrder(order);
+
+        Reconciled<ShuttleStop> stops = reconcile(shuttle.getStops(), ShuttleStop::getId, dto.getStops(),
+                ShuttleStopWriteDto::getId,
+                () -> {
+                    ShuttleStop stop = new ShuttleStop();
+                    stop.setShuttle(shuttle);
+                    return stop;
+                },
+                stopId -> Concealment.notFound(TransportMessages.STOP_NOT_FOUND, actorId, stopId,
+                        "stop is not part of the shuttle"),
+                TransportMessages.STOP_DUPLICATE,
+                (stop, stopDto, stopOrder) -> applyStop(stop, stopDto, stopOrder, rewrite), rewrite);
+        rewrite.removedStopIds.addAll(stops.removedIds());
+    }
+
+    private void applyStop(ShuttleStop stop, ShuttleStopWriteDto dto, int order, Rewrite rewrite) {
+        if (stop.getId() != null && !dto.getScheduledAt().equals(stop.getScheduledAt())) {
+            rewrite.rescheduledStopIds.add(stop.getId());
+        }
+        if (dto.getAddress() != null) {
+            stop.setAddress(addressService.createAddress(dto.getAddress()));
+        }
+        stop.setLabel(blankToNull(dto.getLabel()));
+        stop.setScheduledAt(dto.getScheduledAt());
+        stop.setSortOrder(order);
+    }
+
+    private interface Apply<E, D> {
+        void apply(E entity, D request, int order);
+    }
+
+    private record Reconciled<E>(List<E> ordered, Set<UUID> removedIds) {
+    }
+
+    private static <E, D> Reconciled<E> reconcile(List<E> current, Function<E, UUID> entityId, List<D> requested,
+                                                  Function<D, UUID> requestedId, Supplier<E> create,
+                                                  Function<UUID, ResourceNotFoundException> missing,
+                                                  String duplicateKey, Apply<E, D> apply, Rewrite rewrite) {
+        Map<UUID, E> existing = new LinkedHashMap<>();
+        current.forEach(entity -> existing.put(entityId.apply(entity), entity));
         Set<UUID> kept = new HashSet<>();
-        List<ShuttleStop> added = new ArrayList<>();
+        List<E> ordered = new ArrayList<>();
+        List<E> added = new ArrayList<>();
         int order = 0;
-        for (ShuttleStopWriteDto dto : requested) {
-            ShuttleStop stop;
-            if (dto.getId() == null) {
-                stop = new ShuttleStop();
-                stop.setShuttle(shuttle);
-                added.add(stop);
+        for (D dto : requested) {
+            UUID id = requestedId.apply(dto);
+            E entity;
+            if (id == null) {
+                entity = create.get();
+                added.add(entity);
             } else {
-                stop = requireStop(existing, dto.getId(), actorId);
-                if (!kept.add(stop.getId())) {
-                    throw new ValidationException(TransportMessages.STOP_DUPLICATE);
+                entity = existing.get(id);
+                if (entity == null) {
+                    throw missing.apply(id);
+                }
+                if (!kept.add(id)) {
+                    throw new ValidationException(duplicateKey);
                 }
             }
-            if (dto.getAddress() != null) {
-                stop.setAddress(addressService.createAddress(dto.getAddress()));
-            }
-            stop.setLabel(blankToNull(dto.getLabel()));
-            stop.setScheduledAt(dto.getScheduledAt());
-            stop.setSortOrder(order++);
+            apply.apply(entity, dto, order++);
+            ordered.add(entity);
         }
         Set<UUID> removed = existing.keySet().stream()
                 .filter(id -> !kept.contains(id))
                 .collect(Collectors.toSet());
-        shuttle.getStops().removeIf(stop -> removed.contains(stop.getId()));
-        shuttle.getStops().addAll(added);
-        return removed;
+        rewrite.collectionEdits.add(() -> {
+            current.removeIf(entity -> removed.contains(entityId.apply(entity)));
+            current.addAll(added);
+        });
+        return new Reconciled<>(ordered, removed);
     }
 
-    private void dropSeats(Set<UUID> removedShuttleIds, Set<UUID> removedStopIds) {
+    private Set<UUID> dropSeats(Set<UUID> removedShuttleIds, Set<UUID> removedStopIds) {
         Map<UUID, SeatAssignment> doomed = new LinkedHashMap<>();
         if (!removedShuttleIds.isEmpty()) {
             seatAssignmentDao.findAllByShuttleIdIn(removedShuttleIds).forEach(seat -> doomed.put(seat.getId(), seat));
@@ -240,11 +287,27 @@ public class TransportManager implements TransportService {
             seatAssignmentDao.findAllByStopIdIn(removedStopIds).forEach(seat -> doomed.put(seat.getId(), seat));
         }
         if (doomed.isEmpty()) {
-            return;
+            return Set.of();
         }
+        Set<UUID> assignmentIds = doomed.values().stream()
+                .map(seat -> seat.getJobAssignment().getId())
+                .collect(Collectors.toSet());
         seatAssignmentDao.deleteAll(doomed.values());
         seatAssignmentDao.flush();
         log.info("{} seat assignments dropped because their shuttle or stop left the plan", doomed.size());
+        return assignmentIds;
+    }
+
+    private void resetReminders(Set<UUID> rescheduledStopIds) {
+        if (rescheduledStopIds.isEmpty()) {
+            return;
+        }
+        List<SeatAssignment> seats = seatAssignmentDao.findAllByStopIdIn(rescheduledStopIds);
+        seats.forEach(seat -> {
+            seat.setEveningReminderSentAt(null);
+            seat.setDepartureReminderSentAt(null);
+        });
+        seatAssignmentDao.saveAll(seats);
     }
 
     private void rejectCapacityBelowSeats(Map<UUID, Integer> requestedCapacity) {
@@ -287,17 +350,18 @@ public class TransportManager implements TransportService {
             throw new ConflictException(TransportMessages.ASSIGNMENT_NOT_ACTIVE);
         }
         TransportPlan plan = requirePlan(assignment.getJob().getId());
-        Shuttle shuttle = requireLockedShuttle(plan, request.getShuttleId(), actorId);
+        Shuttle shuttle = requireShuttle(plan, request.getShuttleId(), actorId);
         ShuttleStop stop = requireStop(shuttle, request.getStopId(), actorId);
 
         SeatAssignment seat = seatAssignmentDao.findByJobAssignmentIdAndDirection(assignmentId, shuttle.getDirection())
                 .orElse(null);
         boolean sameShuttle = seat != null && seat.getShuttle().getId().equals(shuttle.getId());
         if (!sameShuttle) {
+            int capacity = shuttleDao.lockAndReadCapacity(shuttle.getId()).orElse(0);
             long taken = seatAssignmentDao.countByShuttleId(shuttle.getId());
-            if (taken >= shuttle.getCapacity()) {
+            if (taken >= capacity) {
                 log.info("Seat refused on shuttle {} for assignment {}: {} of {} seats taken",
-                        shuttle.getId(), assignmentId, taken, shuttle.getCapacity());
+                        shuttle.getId(), assignmentId, taken, capacity);
                 throw new ConflictException(TransportMessages.SHUTTLE_FULL);
             }
         }
@@ -313,8 +377,16 @@ public class TransportManager implements TransportService {
             seat.setEveningReminderSentAt(null);
             seat.setDepartureReminderSentAt(null);
         }
-        seatAssignmentDao.save(seat);
-        seatAssignmentDao.flush();
+        try {
+            seatAssignmentDao.saveAndFlush(seat);
+        } catch (DataIntegrityViolationException exception) {
+            if (ConstraintViolations.named(exception, "uk_seat_assignments_assignment_direction_active")) {
+                log.info("Seat for assignment {} on direction {} was taken by a concurrent request",
+                        assignmentId, shuttle.getDirection());
+                throw new ConflictException(TransportMessages.SEAT_ALREADY_TAKEN);
+            }
+            throw exception;
+        }
         log.info("Seat for assignment {} on direction {} set to shuttle {} stop {} by user {}",
                 assignmentId, shuttle.getDirection(), shuttle.getId(), stop.getId(), actorId);
 
@@ -454,7 +526,7 @@ public class TransportManager implements TransportService {
         return data;
     }
 
-    private void notifyPlanUpdated(Job job) {
+    private void notifyPlanUpdated(Job job, Set<UUID> droppedAssignmentIds) {
         List<JobAssignment> assigned = jobAssignmentDao.findAllByJobIdAndStatusIn(job.getId(), NOTIFIED_STATUSES);
         if (assigned.isEmpty()) {
             return;
@@ -462,14 +534,16 @@ public class TransportManager implements TransportService {
         notificationService.preparePushRecipients(assigned.stream()
                 .map(assignment -> assignment.getWorker().getId())
                 .toList());
-        String body = messageResolver.resolve(TransportMessages.PLAN_UPDATED_NOTICE);
+        String updated = messageResolver.resolve(TransportMessages.PLAN_UPDATED_NOTICE);
+        String dropped = messageResolver.resolve(TransportMessages.SEAT_DROPPED_NOTICE);
         for (JobAssignment assignment : assigned) {
+            boolean seatDropped = droppedAssignmentIds.contains(assignment.getId());
             Map<String, String> data = Map.of(
                     "type", PUSH_TYPE,
-                    "event", "PLAN_UPDATED",
+                    "event", seatDropped ? "SEAT_DROPPED" : "PLAN_UPDATED",
                     "jobId", job.getId().toString(),
                     "jobAssignmentId", assignment.getId().toString());
-            notifyWorker(assignment, body, data);
+            notifyWorker(assignment, seatDropped ? dropped : updated, data);
         }
     }
 
@@ -508,20 +582,12 @@ public class TransportManager implements TransportService {
                 .orElseThrow(() -> new ResourceNotFoundException(TransportMessages.PLAN_NOT_FOUND));
     }
 
-    private Shuttle requireLockedShuttle(TransportPlan plan, UUID shuttleId, UUID actorId) {
-        return shuttleDao.findByIdForUpdate(shuttleId)
-                .filter(candidate -> candidate.getPlan().getId().equals(plan.getId()))
+    private static Shuttle requireShuttle(TransportPlan plan, UUID shuttleId, UUID actorId) {
+        return plan.getShuttles().stream()
+                .filter(candidate -> candidate.getId().equals(shuttleId))
+                .findFirst()
                 .orElseThrow(() -> Concealment.notFound(TransportMessages.SHUTTLE_NOT_FOUND, actorId, shuttleId,
                         "shuttle is not part of the assignment's job plan"));
-    }
-
-    private static Shuttle requireShuttle(Map<UUID, Shuttle> planShuttles, UUID shuttleId, UUID actorId) {
-        Shuttle shuttle = planShuttles.get(shuttleId);
-        if (shuttle == null) {
-            throw Concealment.notFound(TransportMessages.SHUTTLE_NOT_FOUND, actorId, shuttleId,
-                    "shuttle is not part of the job's transport plan");
-        }
-        return shuttle;
     }
 
     private static ShuttleStop requireStop(Shuttle shuttle, UUID stopId, UUID actorId) {
@@ -532,23 +598,11 @@ public class TransportManager implements TransportService {
                         "stop is not part of the selected shuttle"));
     }
 
-    private static ShuttleStop requireStop(Map<UUID, ShuttleStop> shuttleStops, UUID stopId, UUID actorId) {
-        ShuttleStop stop = shuttleStops.get(stopId);
-        if (stop == null) {
-            throw Concealment.notFound(TransportMessages.STOP_NOT_FOUND, actorId, stopId,
-                    "stop is not part of the shuttle");
-        }
-        return stop;
-    }
-
     private Job requireEditor(UUID jobId) {
         Job job = jobDao.findById(jobId)
                 .orElseThrow(() -> new ResourceNotFoundException(JobMessages.JOB_NOT_FOUND));
         UUID actorId = securityService.getAuthenticatedUserId();
-        boolean owner = job.getCreator() != null && job.getCreator().getId().equals(actorId);
-        boolean contact = job.getCompany() != null
-                && companyContactService.isUserAContactOfCompany(job.getCompany().getId(), actorId);
-        if (!owner && !contact) {
+        if (!jobEditors.isEditor(job, actorId)) {
             throw Concealment.notFound(JobMessages.JOB_NOT_FOUND, actorId, jobId, "not the employer of the job");
         }
         return job;
@@ -567,28 +621,37 @@ public class TransportManager implements TransportService {
 
     private TransportPlanDto planDto(TransportPlan plan) {
         TransportPlanDto dto = transportMapper.toTransportPlanDto(plan);
-        dto.setShuttles(shuttleDtos(plan.getShuttles(), load(List.of(plan)), null));
+        dto.setShuttles(shuttleDtos(plan.getShuttles(), load(List.of(plan)), View.EMPLOYER));
         return dto;
     }
 
     private AssignmentTransportDto assignmentView(TransportPlan plan, JobAssignment assignment,
                                                   List<SeatAssignment> seats, UUID viewerId, Loaded loaded) {
         boolean workerView = assignment.getWorker() != null && assignment.getWorker().getId().equals(viewerId);
-        Set<UUID> revealed;
+        View view;
         if (!workerView) {
-            revealed = null;
+            view = View.EMPLOYER;
         } else if (VIEW_STATUSES.contains(assignment.getStatus())) {
-            revealed = seats.stream().map(seat -> seat.getShuttle().getId()).collect(Collectors.toSet());
+            view = new View(seats.stream().map(seat -> seat.getShuttle().getId()).collect(Collectors.toSet()), true);
         } else {
-            revealed = Set.of();
+            view = new View(Set.of(), false);
         }
         AssignmentTransportDto dto = transportMapper.toAssignmentTransportDto(plan);
-        dto.setShuttles(shuttleDtos(plan.getShuttles(), loaded, revealed));
+        dto.setShuttles(shuttleDtos(plan.getShuttles(), loaded, view));
         dto.setSeats(seats.stream().map(transportMapper::toSeatAssignmentDto).toList());
         return dto;
     }
 
-    private List<ShuttleDto> shuttleDtos(List<Shuttle> shuttles, Loaded loaded, Set<UUID> revealed) {
+    private record View(Set<UUID> revealedShuttleIds, boolean fullAddresses) {
+
+        private static final View EMPLOYER = new View(null, true);
+
+        boolean reveals(UUID shuttleId) {
+            return revealedShuttleIds == null || revealedShuttleIds.contains(shuttleId);
+        }
+    }
+
+    private List<ShuttleDto> shuttleDtos(List<Shuttle> shuttles, Loaded loaded, View view) {
         List<ShuttleDto> result = new ArrayList<>();
         for (Shuttle shuttle : shuttles) {
             ShuttleDto dto = transportMapper.toShuttleDto(shuttle);
@@ -597,10 +660,13 @@ public class TransportManager implements TransportService {
                     .map(stop -> {
                         ShuttleStopDto stopDto = transportMapper.toShuttleStopDto(stop);
                         stopDto.setSeatsTaken(loaded.seatsByStop().getOrDefault(stop.getId(), 0L));
+                        if (!view.fullAddresses()) {
+                            addressVisibility.approximate(stopDto.getAddress());
+                        }
                         return stopDto;
                     })
                     .toList());
-            if (revealed != null && !revealed.contains(shuttle.getId())) {
+            if (!view.reveals(shuttle.getId())) {
                 dto.setPlate(null);
                 dto.setDriverName(null);
                 dto.setDriverPhone(null);

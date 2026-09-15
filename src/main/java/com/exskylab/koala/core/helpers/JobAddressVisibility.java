@@ -44,6 +44,10 @@ public final class JobAddressVisibility {
                 ? AddressPrecision.EXACT : AddressPrecision.APPROXIMATE;
     }
 
+    public void approximate(AddressDto address) {
+        mask(address);
+    }
+
     private void mask(AddressDto address) {
         if (address == null) {
             return;

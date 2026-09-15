@@ -375,7 +375,7 @@ class MapperCharacterizationTest {
     @Test
     void nestedJobSummariesAndSavedJobsDefaultToTheWorkerPricingView() {
         var assignment = jobAssignmentMapper.toMyAssignmentDto(pricedAssignment(pricedJob()), null, null, null,
-                employerFacts());
+                employerFacts(), null);
         var saved = jobMapper.toJobSummaryDtoList(List.of(pricedJob())).get(0);
 
         assertEquals("100.00", assignment.job().getPricing().workerPayout());

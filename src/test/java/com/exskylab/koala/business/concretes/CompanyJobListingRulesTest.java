@@ -84,7 +84,8 @@ class CompanyJobListingRulesTest {
                 mock(NotificationService.class), mock(MessageResolver.class),
                 new PricingManager(FallbackSettings.commissionCalculator()), mock(JobAvailability.class),
                 mock(com.exskylab.koala.core.mappers.AdminDetailMapper.class),
-                mock(com.exskylab.koala.business.abstracts.TransportService.class));
+                mock(com.exskylab.koala.business.abstracts.TransportService.class),
+                new com.exskylab.koala.core.helpers.JobEditors(companyContactService));
 
         when(jobMapper.toJobSummaryDto(any(Job.class), any(JobMapper.ViewerFacts.class)))
                 .thenAnswer(invocation -> unprotected(invocation.getArgument(0)));

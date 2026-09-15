@@ -1,9 +1,16 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.business.abstracts.TransportService;
+import com.exskylab.koala.core.dtos.transport.request.SeatSelectionDto;
+import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.schedulers.TransportReminderScheduler;
 import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.support.AbstractIntegrationTest;
+import com.exskylab.koala.support.OverlappingWrites;
+import jakarta.persistence.EntityManagerFactory;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -11,6 +18,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import tools.jackson.core.type.TypeReference;
@@ -48,6 +59,7 @@ class TransportPlanIT extends AbstractIntegrationTest {
 
     private static final ZoneId ISTANBUL = ZoneId.of("Europe/Istanbul");
     private static final String PLATE = "34 ABC 12";
+    private static final String OTHER_PLATE = "34 XYZ 99";
     private static final String DRIVER_PHONE = "+905551112233";
 
     @Autowired
@@ -61,6 +73,15 @@ class TransportPlanIT extends AbstractIntegrationTest {
 
     @Autowired
     private TransportReminderScheduler reminderScheduler;
+
+    @Autowired
+    private TransportService transportService;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+
+    @Autowired
+    private EntityManagerFactory entityManagerFactory;
 
     private final UUID employerId = UUID.randomUUID();
     private final UUID workerId = UUID.randomUUID();
@@ -118,10 +139,12 @@ class TransportPlanIT extends AbstractIntegrationTest {
         }
         jdbc.update("delete from notifications where recipient_id in (?, ?, ?, ?)",
                 employerId, workerId, secondWorkerId, outsiderId);
+        jdbc.update("delete from devices where user_id in (?, ?, ?, ?)", employerId, workerId, secondWorkerId, outsiderId);
         jdbc.update("delete from job_assignments where job_id in (?, ?)", jobId, otherJobId);
         jdbc.update("delete from jobs where id in (?, ?)", jobId, otherJobId);
         jdbc.update("delete from job_categories where id = ?", categoryId);
         jdbc.update("delete from addresses where id = ?", jobAddressId);
+        jdbc.update("delete from addresses where district_id = ?", districtId);
         jdbc.update("delete from districts where id = ?", districtId);
         jdbc.update("delete from cities where id = ?", cityId);
         jdbc.update("delete from countries where id = ?", countryId);
@@ -374,6 +397,277 @@ class TransportPlanIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.details[0].field").value("allowanceAmountConsistent"));
     }
 
+
+    @Test
+    void thePlateAndDriverShowOnlyOnTheShuttleTheWorkerPicked() throws Exception {
+        putPlan(employerId, jobId, planWith(
+                shuttleJson(null, "OUTBOUND", "Anadolu servisi", PLATE, 2, stopJson(null, "Kadıköy", departureAt(), true)),
+                shuttleJson(null, "OUTBOUND", "Avrupa servisi", OTHER_PLATE, 2, stopJson(null, "Beşiktaş", departureAt(), true))))
+                .andExpect(status().isOk());
+        List<UUID> shuttles = shuttleIdsOf(jobId);
+        UUID stopOfSecond = stopIdsOf(shuttles.get(1)).get(0);
+
+        String body = selectSeat(workerId, assignmentId, shuttles.get(1), stopOfSecond)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.shuttles[0].plate").doesNotExist())
+                .andExpect(jsonPath("$.data.shuttles[0].driverPhone").doesNotExist())
+                .andExpect(jsonPath("$.data.shuttles[1].plate").value(OTHER_PLATE))
+                .andExpect(jsonPath("$.data.shuttles[1].driverPhone").value(DRIVER_PHONE))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertFalse(body.contains(PLATE), body);
+    }
+
+    @Test
+    void removingOnlyAStopDropsItsSeatsAndTellsThatWorkerToPickAgain() throws Exception {
+        putPlan(employerId, jobId, planWith(shuttleJson(null, "OUTBOUND", "Servis", PLATE, 4,
+                stopJson(null, "Kadıköy", departureAt(), true),
+                stopJson(null, "Üsküdar", departureAt().plusSeconds(600), true))))
+                .andExpect(status().isOk());
+        UUID shuttleId = shuttleIdsOf(jobId).get(0);
+        List<UUID> stops = stopIdsOf(shuttleId);
+        selectSeat(workerId, assignmentId, shuttleId, stops.get(0)).andExpect(status().isOk());
+        selectSeat(secondWorkerId, secondAssignmentId, shuttleId, stops.get(1)).andExpect(status().isOk());
+        jdbc.update("delete from notifications where recipient_id in (?, ?)", workerId, secondWorkerId);
+        insertPushDevice(workerId);
+        insertPushDevice(secondWorkerId);
+
+        putPlan(employerId, jobId, planWith(shuttleJson(shuttleId, "OUTBOUND", "Servis", PLATE, 4,
+                stopJson(stops.get(0), "Kadıköy", departureAt(), false))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.shuttles[0].id").value(shuttleId.toString()))
+                .andExpect(jsonPath("$.data.shuttles[0].stops", hasSize(1)))
+                .andExpect(jsonPath("$.data.shuttles[0].seatsTaken").value(1));
+
+        assertEquals(1, jdbc.queryForObject("select count(*) from shuttle_stops where id = ? and is_deleted = true",
+                Integer.class, stops.get(1)));
+        assertEquals(1, jdbc.queryForObject("select count(*) from seat_assignments where job_assignment_id = ? "
+                + "and is_deleted = false", Integer.class, assignmentId));
+        assertEquals(0, jdbc.queryForObject("select count(*) from seat_assignments where job_assignment_id = ? "
+                + "and is_deleted = false", Integer.class, secondAssignmentId));
+        assertEquals("PLAN_UPDATED", pushEventFor(workerId));
+        assertEquals("SEAT_DROPPED", pushEventFor(secondWorkerId));
+        String droppedBody = jdbc.queryForObject("select body from notifications where recipient_id = ? "
+                + "and channel = 'IN_APP' and category = 'TRANSPORT'", String.class, secondWorkerId);
+        assertTrue(droppedBody.contains("yeniden"), droppedBody);
+    }
+
+    @Test
+    void anExistingShuttleCannotChangeDirectionAndAReschedulingResetsTheReminders() throws Exception {
+        UUID shuttleId = writePlanAndReadShuttleId(2);
+        UUID stopId = stopIdOf(shuttleId);
+        selectSeat(workerId, assignmentId, shuttleId, stopId).andExpect(status().isOk());
+        jdbc.update("update seat_assignments set evening_reminder_sent_at = now(), departure_reminder_sent_at = now() "
+                + "where job_assignment_id = ?", assignmentId);
+
+        putPlan(employerId, jobId, "{\"outboundMethod\":\"SHUTTLE\",\"returnMethod\":\"SHUTTLE\",\"shuttles\":["
+                + shuttleJson(shuttleId, "RETURN", "Anadolu servisi", PLATE, 2,
+                stopJson(stopId, "Kadıköy İskele", departureAt(), false)) + "]}")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("TRANSPORT_SHUTTLE_DIRECTION_LOCKED"));
+        assertEquals("OUTBOUND", jdbc.queryForObject("select direction from shuttles where id = ?", String.class, shuttleId));
+
+        putPlan(employerId, jobId, planWith(shuttleJson(shuttleId, "OUTBOUND", "Anadolu servisi", PLATE, 2,
+                stopJson(stopId, "Kadıköy İskele", departureAt().plusSeconds(1800), false))))
+                .andExpect(status().isOk());
+        assertNull(jdbc.queryForObject("select evening_reminder_sent_at from seat_assignments "
+                + "where job_assignment_id = ?", Object.class, assignmentId));
+        assertNull(jdbc.queryForObject("select departure_reminder_sent_at from seat_assignments "
+                + "where job_assignment_id = ?", Object.class, assignmentId));
+        assertEquals(1, jdbc.queryForObject("select count(*) from seat_assignments where job_assignment_id = ? "
+                + "and is_deleted = false", Integer.class, assignmentId));
+    }
+
+    @Test
+    void replacingAStopsAddressSoftDeletesTheOldAddressRow() throws Exception {
+        UUID shuttleId = writePlanAndReadShuttleId(2);
+        UUID stopId = stopIdOf(shuttleId);
+        UUID oldAddressId = jdbc.queryForObject("select address_id from shuttle_stops where id = ?", UUID.class, stopId);
+
+        putPlan(employerId, jobId, planWith(shuttleJson(shuttleId, "OUTBOUND", "Anadolu servisi", PLATE, 2,
+                stopJson(stopId, "Kadıköy İskele", departureAt(), true))))
+                .andExpect(status().isOk());
+
+        UUID newAddressId = jdbc.queryForObject("select address_id from shuttle_stops where id = ?", UUID.class, stopId);
+        assertFalse(oldAddressId.equals(newAddressId));
+        assertEquals(Boolean.TRUE, jdbc.queryForObject("select is_deleted from addresses where id = ?",
+                Boolean.class, oldAddressId));
+        assertEquals(Boolean.FALSE, jdbc.queryForObject("select is_deleted from addresses where id = ?",
+                Boolean.class, newAddressId));
+    }
+
+    @Test
+    void aPendingAssignmentCannotPickASeatAndACancelledWorkerSeesOnlyDistrictLevelStops() throws Exception {
+        UUID shuttleId = writePlanAndReadShuttleId(2);
+        UUID stopId = stopIdOf(shuttleId);
+        selectSeat(workerId, assignmentId, shuttleId, stopId).andExpect(status().isOk());
+
+        jdbc.update("update job_assignments set status = 'PENDING_CONFIRMATION' where id = ?", secondAssignmentId);
+        selectSeat(secondWorkerId, secondAssignmentId, shuttleId, stopId)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("TRANSPORT_ASSIGNMENT_NOT_ACTIVE"));
+
+        jdbc.update("update job_assignments set status = 'CANCELLED' where id = ?", assignmentId);
+        String body = mockMvc.perform(get("/job-assignments/{id}/transport", assignmentId)
+                        .with(user(principal(workerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.shuttles[0].plate").doesNotExist())
+                .andExpect(jsonPath("$.data.shuttles[0].stops[0].address.districtName").value("Kadıköy"))
+                .andExpect(jsonPath("$.data.shuttles[0].stops[0].address.components.neighborhood").value("Yıldız Mah."))
+                .andExpect(jsonPath("$.data.shuttles[0].stops[0].address.components.thoroughfare").doesNotExist())
+                .andExpect(jsonPath("$.data.shuttles[0].stops[0].address.components.buildingNumber").doesNotExist())
+                .andExpect(jsonPath("$.data.shuttles[0].stops[0].address.position.latitude").value(41.05))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertFalse(body.contains("Barbaros"), body);
+        assertFalse(body.contains(DRIVER_PHONE), body);
+    }
+
+    @Test
+    void thePushCarriesTheTransportTypeAndTheEvent() throws Exception {
+        insertPushDevice(workerId);
+        writePlanAndReadShuttleId(2);
+        String payload = jdbc.queryForObject("select push_data_payload from notifications where recipient_id = ? "
+                + "and channel = 'PUSH' and category = 'TRANSPORT'", String.class, workerId);
+        Map<String, String> data = objectMapper.readValue(payload, new TypeReference<Map<String, String>>() {
+        });
+        assertEquals("TRANSPORT", data.get("type"));
+        assertEquals("PLAN_UPDATED", data.get("event"));
+        assertEquals(jobId.toString(), data.get("jobId"));
+        assertEquals(assignmentId.toString(), data.get("jobAssignmentId"));
+    }
+
+    @Test
+    void theAssignmentListsAreBuiltWithoutAQueryPerRowWhenTransportIsPresent() throws Exception {
+        UUID shuttleId = writePlanAndReadShuttleId(2);
+        UUID stopId = stopIdOf(shuttleId);
+        selectSeat(workerId, assignmentId, shuttleId, stopId).andExpect(status().isOk());
+        selectSeat(secondWorkerId, secondAssignmentId, shuttleId, stopId).andExpect(status().isOk());
+
+        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        boolean wasEnabled = statistics.isStatisticsEnabled();
+        statistics.setStatisticsEnabled(true);
+        try {
+            statistics.clear();
+            mockMvc.perform(get("/jobs/{jobId}/assignments", jobId).param("size", "1")
+                            .with(user(principal(employerId))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content[0].transport.seats", hasSize(1)));
+            long statementsForOneRow = statistics.getPrepareStatementCount();
+            long fetchesForOneRow = statistics.getEntityFetchCount();
+
+            statistics.clear();
+            mockMvc.perform(get("/jobs/{jobId}/assignments", jobId).param("size", "2")
+                            .with(user(principal(employerId))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content", hasSize(2)))
+                    .andExpect(jsonPath("$.data.content[1].transport.shuttles[0].plate").value(PLATE));
+            long statementsForTwoRows = statistics.getPrepareStatementCount();
+
+            assertEquals(statementsForOneRow, statementsForTwoRows,
+                    "ulaşım görünümü satır sayısıyla büyüyen sorgu atıyor (N+1)");
+            assertEquals(0, fetchesForOneRow, "ulaşım görünümü satır başına lazy entity yüklüyor");
+            assertEquals(0, statistics.getEntityFetchCount(), "ulaşım görünümü satır başına lazy entity yüklüyor");
+        } finally {
+            statistics.setStatisticsEnabled(wasEnabled);
+        }
+    }
+
+    @Test
+    void twoWorkersRacingForTheLastSeatLeaveExactlyOneSeatAndOneRefusal() throws Exception {
+        UUID shuttleId = writePlanAndReadShuttleId(1);
+        UUID stopId = stopIdOf(shuttleId);
+        widenTheSeatInsertWindow();
+        try {
+            OverlappingWrites overlap = new OverlappingWrites();
+            List<String> outcomes = overlap.outcomesOf(
+                    () -> selectThroughTheService(workerId, assignmentId, shuttleId, stopId, overlap),
+                    () -> selectThroughTheService(secondWorkerId, secondAssignmentId, shuttleId, stopId, overlap));
+
+            assertEquals(1, outcomes.stream().filter("SUCCESS"::equals).count(), "exactly one seat must win: " + outcomes);
+            assertEquals(1, outcomes.stream().filter("TRANSPORT_SHUTTLE_FULL"::equals).count(),
+                    "the loser must be refused as full: " + outcomes);
+            assertEquals(1, jdbc.queryForObject("select count(*) from seat_assignments where shuttle_id = ? "
+                    + "and is_deleted = false", Integer.class, shuttleId));
+        } finally {
+            narrowTheSeatInsertWindow();
+        }
+    }
+
+    @Test
+    void theSameWorkerRacingOnTwoShuttlesKeepsOneSeatPerDirection() throws Exception {
+        putPlan(employerId, jobId, planWith(
+                shuttleJson(null, "OUTBOUND", "Anadolu servisi", PLATE, 2, stopJson(null, "Kadıköy", departureAt(), true)),
+                shuttleJson(null, "OUTBOUND", "Avrupa servisi", OTHER_PLATE, 2, stopJson(null, "Beşiktaş", departureAt(), true))))
+                .andExpect(status().isOk());
+        List<UUID> shuttles = shuttleIdsOf(jobId);
+        UUID firstStop = stopIdsOf(shuttles.get(0)).get(0);
+        UUID secondStop = stopIdsOf(shuttles.get(1)).get(0);
+        widenTheSeatInsertWindow();
+        try {
+            OverlappingWrites overlap = new OverlappingWrites();
+            List<String> outcomes = overlap.outcomesOf(
+                    () -> selectThroughTheService(workerId, assignmentId, shuttles.get(0), firstStop, overlap),
+                    () -> selectThroughTheService(workerId, assignmentId, shuttles.get(1), secondStop, overlap));
+
+            assertEquals(1, outcomes.stream().filter("SUCCESS"::equals).count(), "exactly one seat must win: " + outcomes);
+            assertEquals(1, outcomes.stream().filter("TRANSPORT_SEAT_ALREADY_TAKEN"::equals).count(),
+                    "the loser must be refused by the per-direction index as 409: " + outcomes);
+            assertEquals(1, jdbc.queryForObject("select count(*) from seat_assignments where job_assignment_id = ? "
+                    + "and is_deleted = false", Integer.class, assignmentId));
+        } finally {
+            narrowTheSeatInsertWindow();
+        }
+    }
+
+    private String selectThroughTheService(UUID actorId, UUID assignment, UUID shuttleId, UUID stopId,
+                                           OverlappingWrites overlap) {
+        UserPrincipal principal = principal(actorId);
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
+        TransactionTemplate transactions = new TransactionTemplate(transactionManager);
+        try {
+            transactions.execute(status -> {
+                overlap.meet();
+                return transportService.selectSeat(assignment, new SeatSelectionDto(shuttleId, stopId));
+            });
+            return "SUCCESS";
+        } catch (ConflictException conflict) {
+            return conflict.getErrorCode();
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+    }
+
+    private void widenTheSeatInsertWindow() {
+        jdbc.execute("""
+                create or replace function delay_seat_assignment_insert() returns trigger as $$
+                begin
+                    perform pg_sleep(0.5);
+                    return new;
+                end;
+                $$ language plpgsql
+                """);
+        jdbc.execute("create trigger delay_seat_assignment_insert before insert on seat_assignments "
+                + "for each row execute function delay_seat_assignment_insert()");
+    }
+
+    private void narrowTheSeatInsertWindow() {
+        jdbc.execute("drop trigger if exists delay_seat_assignment_insert on seat_assignments");
+        jdbc.execute("drop function if exists delay_seat_assignment_insert()");
+    }
+
+    private void insertPushDevice(UUID userId) {
+        jdbc.update("insert into devices (id, created_at, is_deleted, user_id, type, name, client_device_id, push_token) "
+                + "values (?, now(), false, ?, 'ANDROID', 'transport-device', ?, ?)",
+                UUID.randomUUID(), userId, UUID.randomUUID().toString(), "transport-token-" + userId);
+    }
+
+    private String pushEventFor(UUID recipient) throws Exception {
+        String payload = jdbc.queryForObject("select push_data_payload from notifications where recipient_id = ? "
+                + "and channel = 'PUSH' and category = 'TRANSPORT'", String.class, recipient);
+        return objectMapper.readValue(payload, new TypeReference<Map<String, String>>() {
+        }).get("event");
+    }
+
     private UUID writePlanAndReadShuttleId(int capacity) throws Exception {
         putPlan(employerId, jobId, planJson(null, null, capacity)).andExpect(status().isOk());
         return jdbc.queryForObject("select s.id from shuttles s join transport_plans p on p.id = s.plan_id "
@@ -410,13 +704,37 @@ class TransportPlanIT extends AbstractIntegrationTest {
     }
 
     private String shuttleJson(UUID shuttleId, UUID stopId, int capacity) {
+        return shuttleJson(shuttleId, "OUTBOUND", "Anadolu servisi", PLATE, capacity,
+                stopJson(stopId, "Kadıköy İskele", departureAt(), stopId == null));
+    }
+
+    private String shuttleJson(UUID shuttleId, String direction, String name, String plate, int capacity,
+                               String... stops) {
         String idField = shuttleId == null ? "" : "\"id\":\"" + shuttleId + "\",";
-        String stopIdField = stopId == null ? "" : "\"id\":\"" + stopId + "\",";
-        String address = stopId == null ? ",\"address\":" + addressJson() : "";
-        return "{" + idField + "\"direction\":\"OUTBOUND\",\"name\":\"Anadolu servisi\",\"plate\":\"" + PLATE + "\","
+        return "{" + idField + "\"direction\":\"" + direction + "\",\"name\":\"" + name + "\",\"plate\":\"" + plate + "\","
                 + "\"capacity\":" + capacity + ",\"driverName\":\"Ahmet Şoför\",\"driverPhone\":\"" + DRIVER_PHONE + "\","
-                + "\"stops\":[{" + stopIdField + "\"label\":\"Kadıköy İskele\",\"scheduledAt\":\"" + departureAt() + "\""
-                + address + "}]}";
+                + "\"stops\":[" + String.join(",", stops) + "]}";
+    }
+
+    private String stopJson(UUID stopId, String label, Instant scheduledAt, boolean withAddress) {
+        String idField = stopId == null ? "" : "\"id\":\"" + stopId + "\",";
+        String address = withAddress ? ",\"address\":" + addressJson() : "";
+        return "{" + idField + "\"label\":\"" + label + "\",\"scheduledAt\":\"" + scheduledAt + "\"" + address + "}";
+    }
+
+    private String planWith(String... shuttles) {
+        return "{\"outboundMethod\":\"SHUTTLE\",\"returnMethod\":\"NONE\",\"shuttles\":["
+                + String.join(",", shuttles) + "]}";
+    }
+
+    private List<UUID> shuttleIdsOf(UUID job) {
+        return jdbc.queryForList("select s.id from shuttles s join transport_plans p on p.id = s.plan_id "
+                + "where p.job_id = ? and s.is_deleted = false order by s.sort_order", UUID.class, job);
+    }
+
+    private List<UUID> stopIdsOf(UUID shuttleId) {
+        return jdbc.queryForList("select id from shuttle_stops where shuttle_id = ? and is_deleted = false "
+                + "order by sort_order", UUID.class, shuttleId);
     }
 
     private String addressJson() {

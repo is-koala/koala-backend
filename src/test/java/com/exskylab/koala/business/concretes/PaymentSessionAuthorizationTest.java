@@ -96,7 +96,8 @@ class PaymentSessionAuthorizationTest {
                 mock(com.exskylab.koala.dataAccess.CancellationDao.class),
                 mock(com.exskylab.koala.business.abstracts.JobService.class),
                 mock(com.exskylab.koala.dataAccess.ReviewDao.class),
-                mock(com.exskylab.koala.business.abstracts.TransportService.class));
+                mock(com.exskylab.koala.business.abstracts.TransportService.class),
+                new com.exskylab.koala.core.helpers.JobEditors(companyContactService));
     }
 
     @Test

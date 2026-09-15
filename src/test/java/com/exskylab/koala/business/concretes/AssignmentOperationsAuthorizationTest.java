@@ -120,7 +120,8 @@ class AssignmentOperationsAuthorizationTest {
                 new com.exskylab.koala.core.monitoring.PaymentMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()),
                 cancellationDao, mock(com.exskylab.koala.business.abstracts.JobService.class),
                 mock(com.exskylab.koala.dataAccess.ReviewDao.class),
-                mock(com.exskylab.koala.business.abstracts.TransportService.class));
+                mock(com.exskylab.koala.business.abstracts.TransportService.class),
+                new com.exskylab.koala.core.helpers.JobEditors(mock(CompanyContactService.class)));
 
         when(cancellationDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(disputeDaoStub.save(any())).thenAnswer(i -> i.getArgument(0));
