@@ -735,6 +735,39 @@ class AdminListSearchIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
+    void theAssignmentListResolvesWorkersWithOneBatchQueryAndNeverOpensTheWorkerProxy() throws Exception {
+        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        boolean wasEnabled = statistics.isStatisticsEnabled();
+        statistics.setStatisticsEnabled(true);
+        try {
+            statistics.clear();
+            filtered("/admin/job-assignments", financeToken, "size", "1", "sort", "createdAt,desc")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content", hasSize(1)))
+                    .andExpect(jsonPath("$.data.content[0].worker.id").isNotEmpty());
+            long statementsForOneRow = statistics.getPrepareStatementCount();
+            long lazyFetchesForOneRow = statistics.getEntityFetchCount();
+
+            statistics.clear();
+            filtered("/admin/job-assignments", financeToken, "size", "2", "sort", "createdAt,desc")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content", hasSize(2)))
+                    .andExpect(jsonPath("$.data.content[*].worker.id",
+                            containsInAnyOrder(workerId.toString(), bystanderId.toString())));
+            long statementsForTwoRows = statistics.getPrepareStatementCount();
+
+            assertEquals(0L, lazyFetchesForOneRow,
+                    "atama listesi worker proxy'sini açmamalı; çalışanlar tek toplu sorguyla gelir");
+            assertEquals(0L, statistics.getEntityFetchCount(),
+                    "atama listesi worker proxy'sini açmamalı; çalışanlar tek toplu sorguyla gelir");
+            assertEquals(statementsForOneRow, statementsForTwoRows,
+                    "atama listesi satır sayısıyla büyüyen sorgu atıyor (N+1)");
+        } finally {
+            statistics.setStatisticsEnabled(wasEnabled);
+        }
+    }
+
+    @Test
     void theCreatedAtBoundsAreInclusiveToTheMillisecond() throws Exception {
         Instant createdAt = Instant.parse("2026-09-10T12:00:00.250Z");
         jdbc.update("update job_assignments set created_at = ? where id = ?",

@@ -123,7 +123,8 @@ public class AdminController {
                     + "query (2-100 karakter, kırpılır; kısa ya da boş değer süzmez) atama id'si, "
                     + "ilan başlığı, işveren ve çalışanın ad-soyadı ile e-postasında büyük-küçük harf ve Türkçe karakter "
                     + "duyarsız arar; 100 karakteri aşarsa 400. workerId, employerId ve jobId süzgeçleri birbirleriyle, "
-                    + "status, tarih aralığı ve query ile kesişir; kullanıcı ve ilan detayları bu süzgeçlerle buraya bağlanır.")
+                    + "status, tarih aralığı ve query ile kesişir; kullanıcı ve ilan detayları bu süzgeçlerle buraya bağlanır. "
+                    + "Çalışan hesabını silmişse satır listede kalır, worker null döner.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Atamalar listelendi"),
             @ApiResponse(responseCode = "400", description = "query 100 karakteri aşıyor, tarih dilimsiz ya da bilinmeyen sıralama alanı",
@@ -514,8 +515,9 @@ public class AdminController {
             description = "İşverenlerin GET /job-assignments/{id}/worker-identity ile bu kullanıcının kimlik bilgilerini "
                     + "görüntüleme kayıtları, yeniden eskiye. Her satır görüntüleyenin id'si ve ad soyadı, atama ve ilan "
                     + "kimliği, ilan başlığı, an ve maskeli IP taşır; TC kimlik numarası dönmez. Yalnız revealedAt ile "
-                    + "sıralanabilir, bilinmeyen sıralama alanı 400. Uç user.read_pii ile korunur (PERSONAL_DATA); her "
-                    + "okuma denetim satırı yazar.")
+                    + "sıralanabilir, bilinmeyen sıralama alanı 400. Görüntüleyen hesabını silmişse satır kalır, viewerId "
+                    + "durur ve viewerFullName null döner. Uç user.read_pii ile korunur (PERSONAL_DATA); her okuma denetim "
+                    + "satırı yazar.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Görüntüleme kayıtları listelendi"),
             @ApiResponse(responseCode = "400", description = "Bilinmeyen sıralama alanı",

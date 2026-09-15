@@ -389,7 +389,7 @@ class ReportModerationIT extends AbstractStaffIntegrationTest {
             assertNull(detail.report().reporter());
             assertEquals(reportById, detail.report().id());
 
-            UUID staffId = createStaffMember("departed-reporter-" + UUID.randomUUID() + "@iskoala.com",
+            UUID staffId = createStaffMember("decision-" + UUID.randomUUID() + "@iskoala.com",
                     "Moderator", "MODERATOR");
             StaffPrincipal moderator = new StaffPrincipal(staffId, "moderator@iskoala.com",
                     "Moderator", Set.of("MODERATOR"), Set.of(), false);

@@ -70,12 +70,12 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.BinaryOperator;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -714,12 +714,10 @@ public class JobAssignmentManager implements JobAssignmentService {
         Page<JobAssignment> page = jobAssignmentDao.findAllForStaff(filter, StaffSearchQuery.normalize(query),
                 workerId, employerId, jobId, createdAt.from(), createdAt.to(),
                 pageableSanitizer.sanitize(requested, ADMIN_LIST_SORTABLE, ADMIN_LIST_SORT));
-        Map<UUID, User> workers = new HashMap<>();
-        for (User worker : userService.getAllByIdIn(page.getContent().stream()
-                .map(assignment -> assignment.getWorker().getId())
-                .collect(Collectors.toCollection(LinkedHashSet::new)))) {
-            workers.put(worker.getId(), worker);
-        }
+        Map<UUID, User> workers = userService.getAllByIdIn(page.getContent().stream()
+                        .map(assignment -> assignment.getWorker().getId())
+                        .collect(Collectors.toSet())).stream()
+                .collect(Collectors.toMap(User::getId, Function.identity()));
         return page.map(assignment -> jobAssignmentMapper.toAdminAssignmentDto(assignment,
                 workers.get(assignment.getWorker().getId())));
     }

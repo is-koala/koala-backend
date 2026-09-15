@@ -2689,9 +2689,14 @@ zorunlu hop yalnız koleksiyon elemanını budar, kökü değil (Hibernate iç i
 **Personel uçlarında kural: liste ve okuma zorunlu soft-delete'li ilişkiyi fetch etmez; ilişkili satırlar sayfa
 başına tek toplu sorguyla gelir.** Personel metodu = adı `staff`/`search`/`moderation` içeren DAO metodu **ya da**
 `STAFF_READ_METHODS`'ta controller zinciriyle yazılı metot (`CancellationDao.findWithCancellerByJobAssignmentId` →
-`GET /admin/job-assignments/{id}` gibi). Kalıp §2y3'ün hakediş kuyruğundakiyle aynı: grafik ilişkiyi çekmez, mapper
-proxy'den yalnız `getId()` okur (sorgusuz), kişiler `UserService.getAllByIdIn` ile gelir ve silinmiş kullanıcı
-**`null`** döner — satır ve ilan bilgisi kalır. Bu turda üç yüzey bu kalıba çekildi ve her biri "silinmiş ilişki +
+`GET /admin/job-assignments/{id}` gibi). Kalıp §2y3'ün hakediş kuyruğundakiyle aynı: grafik ilişkiyi çekmez, **manager**
+sayfadaki satırlardan proxy'nin yalnız `getId()`'sini okur (sorgusuz), kişileri tek `UserService.getAllByIdIn` ile
+alıp `Collectors.toMap(User::getId, identity())` haritasına koyar ve mapper'a ikinci kaynak olarak verir
+(`toAdminAssignmentDto(assignment, worker)`); mapper entity'deki ilişkiye hiç dokunmaz, silinmiş kullanıcı haritada
+yoktur ve alan **`null`** döner — satır ve ilan bilgisi kalır. Proxy'nin gerçekten açılmadığı ölçülüyor:
+`AdminListSearchIT.theAssignmentListResolvesWorkersWithOneBatchQueryAndNeverOpensTheWorkerProxy` `size=1` ile
+`size=2`'nin statement sayısını eşitliyor ve `EntityFetchCount`'u sıfırlıyor (`JobAssignment.worker` EAGER to-one;
+fetch grafiği altında proxy kalır, mapper dokunmadığı sürece sorgu atılmaz). Bu turda üç yüzey bu kalıba çekildi ve her biri "silinmiş ilişki +
 satır görünür" IT'siyle sabit: `GET /admin/job-assignments` (`findAllForStaff` grafiğinden `worker` düştü,
 `JobAssignmentMapper.toAdminAssignmentDto(assignment, worker)`,
 `AdminListSearchIT.aDeletedWorkersAssignmentStaysOnTheStaffListWithItsJobAndANullWorker`), `/admin/reports` liste,
@@ -2701,7 +2706,7 @@ geçtiği için silinmiş şikayetçinin dosyası artık proxy açarken 500 verm
 `ReportModerationIT.aReportWhoseReporterDeletedTheirAccountStaysInTheQueueAndTheDetailWithANullReporter`) ve
 `GET /admin/users/{id}/identity-reveals` (`findAllByWorker_Id` grafiğinden `viewer` düştü, bileşim controller'dan
 `IdentityRevealManager.listForStaff`'a indi ve `Page<AdminIdentityRevealDto>` döner, silinmiş izleyen `viewerId` ile
-kalır, `viewerFullName` `null`;
+kalır, `viewerFullName` `null`; üç ucun OpenAPI açıklaması da "hesabını silmişse satır kalır, alan null" der;
 `WorkerIdentityRevealIT.aRevealByAnEmployerWhoLaterDeletedTheirAccountStaysInTheStaffTrailWithoutAName`). Üç IT de
 grafik geri konduğunda kırmızıya döndüğü mutasyonla görüldü.
 
@@ -2714,8 +2719,8 @@ uyuşmazlıklar; açan kullanıcı hesabını silince satır düşer), `Cancella
 ve `JobAssignmentDao.findWithDetailsForPaymentById#worker` ile `PaymentDao.findForStaffById#jobAssignment.worker` (atama
 ve ödeme tekil okumaları; §2s7'nin "tekil okuma, kural değişmedi" notu — silinmiş işçide 404),
 `CompanyContactDao.findAllByCompanyId(In)#user` (şirket detayındaki yetkililer; `company_contacts` anonimleştirmede
-silinmiyor). Her biri `"follow-up of #309"` gerekçesiyle listede; issue açıldığında gerekçe numaraya çevrilir. **Katılımcı
-uçları ayrı değerlendirmeye bırakıldı** ve `PARTICIPANT_PATHS_AWAITING_EVALUATION` her birini adıyla tutuyor
+silinmiyor). Her biri `"follow-up: #321"` gerekçesiyle listede — takip issue'su **is-koala/koala-backend#321**. **Katılımcı
+uçları da aynı issue'da ayrı değerlendirmeye bırakıldı** ve `PARTICIPANT_PATHS_AWAITING_EVALUATION` her birini adıyla tutuyor
 (değerlendirme listesi, başvuru listeleri, işçinin/işverenin atama listeleri, engel listesi, takipçiler, konuşma,
 mesaj şikayeti, ödeme callback yolları, ulaşım koltuk detayı, galeri ve sahip-okuma yolları): satır karşı taraf
 silinince kalmalı mı ("Silinmiş kullanıcı" gösterimi) sorusunun cevabı uç uç verilecek; o güne kadar yeni bir
@@ -5207,6 +5212,7 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 | Sohbet listesi `/user/queue/messages`'a abone olur | tek akış, 20 topic yerine (§2z) |
 | Presence aboneliği `/topic/presence/{userId}` | global `/topic/presence` **kaldırıldı** (§2z) |
 | Girişte `X-Koala-Device-Model`, `X-Koala-OS`, `X-Koala-App-Version` başlıkları; oturum satırı → `GET /users/me/sessions/{id}` detayı; `PATCH /users/me/devices/{id}` `{name}` | §2bc (#306) |
+| Panel: `GET /admin/job-assignments` satırında `worker`, `/admin/reports` kuyruk/detay/karar yanıtında `reporter`, `/admin/users/{id}/identity-reveals` satırında `viewerFullName` hesabını silmiş kullanıcıda `null` gelir; satır düşmez, "Silinmiş kullanıcı" çizilmeli | §2af (#309) |
 | Aynı mesaj iki kanaldan gelebilir, `message.id` ile tekilleştir | sohbet açıkken hem topic hem kişisel kuyruk (§2z) |
 
 **Şirket detayından mesaj gönderme** istemcide duruyor ama **yapılmayacak** — konuşma ilana bağlı kalıyor, başvuru şartı korunuyor. Tasarımdan çıkarılmalı.

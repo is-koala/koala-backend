@@ -33,11 +33,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -141,12 +140,10 @@ public class IdentityRevealManager implements IdentityRevealService {
         userService.getById(workerId);
         Page<IdentityReveal> page = identityRevealDao.findAllByWorker_Id(workerId,
                 pageableSanitizer.sanitize(pageable, SORTABLE, Sort.by(Sort.Direction.DESC, "revealedAt")));
-        Map<UUID, User> viewers = new HashMap<>();
-        for (User viewer : userService.getAllByIdIn(page.getContent().stream()
-                .map(reveal -> reveal.getViewer().getId())
-                .collect(Collectors.toCollection(LinkedHashSet::new)))) {
-            viewers.put(viewer.getId(), viewer);
-        }
+        Map<UUID, User> viewers = userService.getAllByIdIn(page.getContent().stream()
+                        .map(reveal -> reveal.getViewer().getId())
+                        .collect(Collectors.toSet())).stream()
+                .collect(Collectors.toMap(User::getId, Function.identity()));
         return page.map(reveal -> identityRevealMapper.toAdminIdentityRevealDto(reveal,
                 viewers.get(reveal.getViewer().getId())));
     }

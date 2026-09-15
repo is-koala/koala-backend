@@ -36,24 +36,6 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Every entity is soft-deleted and carries {@code @SQLRestriction("is_deleted = false")}. Hibernate 7 writes that
- * restriction into the ON clause of a fetch join, and a to-one association declared {@code optional = false} /
- * {@code nullable = false} is fetched with an INNER join — so when the related row is soft-deleted the owning row
- * vanishes from the result. It happened three times before this scan existed: the payout queue lost a PROCESSING
- * payout whose worker had deleted their account (§2y3), the message page lost a deleted sender's messages (§2o), and
- * {@code /admin/payments} lost a deleted worker's SUCCEEDED payments (§2s7, #301). Each was found by hand (#309).
- * <p>
- * The scan walks every {@code @EntityGraph} path and every {@code join fetch} in a DAO and flags the hop when all
- * three hold: the association is mandatory, the target is soft-deleted, and the codebase has a path that actually
- * soft-deletes the target (a DAO {@code delete*} call, an anonymizer statement, or {@code orphanRemoval}). Entities
- * nothing deletes today (Job, JobAssignment, Payment, Dispute, Report, Conversation, ...) are not flagged; the day
- * someone adds a delete path for them, every dependent fetch path surfaces here.
- * <p>
- * Staff list and read endpoints must not lose rows this way: the fix is the batch second query per page
- * ({@code UserService.getAllByIdIn}, {@code JobAssignmentDao.findStaffSummariesByIdIn}). Participant endpoints are
- * listed for a separate evaluation.
- */
 class SoftDeletedJoinVisibilityTest {
 
     private static final Path MAIN = Path.of("src/main/java/com/exskylab/koala");
@@ -73,10 +55,6 @@ class SoftDeletedJoinVisibilityTest {
     private static final Pattern JOIN_FETCH = Pattern.compile("(left\\s+)?join\\s+fetch\\s+\\w+\\.([\\w.]+)",
             Pattern.CASE_INSENSITIVE);
 
-    /**
-     * DAO methods that admin endpoints reach although the name does not say so. Key: DAO.method; value: the
-     * controller chain.
-     */
     private static final Map<String, String> STAFF_READ_METHODS = Map.ofEntries(
             Map.entry("CancellationDao.findWithCancellerByJobAssignmentId",
                     "AdminController GET /admin/job-assignments/{id} -> AdminDetailManager.getAssignmentDetail"),
@@ -97,49 +75,33 @@ class SoftDeletedJoinVisibilityTest {
             Map.entry("ReportDao.findDetailedById",
                     "ReportsController GET /admin/reports/{id} -> ReportManager.getForModeration"));
 
-    /**
-     * Staff fetch paths that may keep the INNER join. Only two reasons are accepted: the related row is deleted
-     * together with the owning row (cascade, nothing is orphaned), or the fix is tracked in an issue. Key:
-     * DAO.method#path.
-     */
     private static final Map<String, String> STAFF_ALLOWLIST = Map.ofEntries(
-            // PostgresAccountAnonymizer soft-deletes the user's bank_accounts with the user; no orphan row exists.
             Map.entry("BankAccountDao.findAwaitingStaffConfirmation#user", "cascade: anonymizer deletes bank_accounts"),
             Map.entry("BankAccountDao.findAwaitingStaffConfirmation#user.profilePicture",
                     "cascade: anonymizer deletes bank_accounts"),
-            // PostgresAccountAnonymizer soft-deletes dispute_evidence uploaded by the user.
             Map.entry("DisputeEvidenceDao.findAllByDisputeIdOrderByCreatedAtAsc#uploadedBy",
                     "cascade: anonymizer deletes dispute_evidence of the uploader"),
             Map.entry("DisputeEvidenceDao.findAllByDisputeIdOrderByCreatedAtAsc#uploadedBy.profilePicture",
                     "cascade: anonymizer deletes dispute_evidence of the uploader"),
-            // Staff single reads whose composition still carries the worker (§2s7 #301: "tekil okuma, kural
-            // değişmedi") and the assignment detail's cancellation/dispute rows; tracked as follow-ups of #309.
-            Map.entry("CancellationDao.findWithCancellerByJobAssignmentId#cancelledBy", "follow-up of #309"),
+            Map.entry("CancellationDao.findWithCancellerByJobAssignmentId#cancelledBy", "follow-up: #321"),
             Map.entry("CancellationDao.findWithCancellerByJobAssignmentId#cancelledBy.profilePicture",
-                    "follow-up of #309"),
-            Map.entry("DisputeDao.findAllByJobAssignmentIdOrderByCreatedAtDesc#openedBy", "follow-up of #309"),
+                    "follow-up: #321"),
+            Map.entry("DisputeDao.findAllByJobAssignmentIdOrderByCreatedAtDesc#openedBy", "follow-up: #321"),
             Map.entry("DisputeDao.findAllByJobAssignmentIdOrderByCreatedAtDesc#openedBy.profilePicture",
-                    "follow-up of #309"),
-            Map.entry("DisputeDao.searchForStaff#openedBy", "follow-up of #309"),
-            Map.entry("DisputeDao.searchForStaff#openedBy.profilePicture", "follow-up of #309"),
-            Map.entry("DisputeDao.findByIdForStaff#openedBy", "follow-up of #309"),
-            Map.entry("DisputeDao.findByIdForStaff#openedBy.profilePicture", "follow-up of #309"),
-            Map.entry("JobAssignmentDao.findWithDetailsForPaymentById#worker", "follow-up of #309"),
-            Map.entry("JobAssignmentDao.findWithDetailsForPaymentById#worker.profilePicture", "follow-up of #309"),
-            Map.entry("PaymentDao.findForStaffById#jobAssignment.worker", "follow-up of #309"),
-            // Company contacts of a deleted user stay in company_contacts; the staff company detail drops them.
-            Map.entry("CompanyContactDao.findAllByCompanyId#user", "follow-up of #309"),
-            Map.entry("CompanyContactDao.findAllByCompanyId#user.profilePicture", "follow-up of #309"),
-            Map.entry("CompanyContactDao.findAllByCompanyIdIn#user", "follow-up of #309"),
-            Map.entry("CompanyContactDao.findAllByCompanyIdIn#user.profilePicture", "follow-up of #309"));
+                    "follow-up: #321"),
+            Map.entry("DisputeDao.searchForStaff#openedBy", "follow-up: #321"),
+            Map.entry("DisputeDao.searchForStaff#openedBy.profilePicture", "follow-up: #321"),
+            Map.entry("DisputeDao.findByIdForStaff#openedBy", "follow-up: #321"),
+            Map.entry("DisputeDao.findByIdForStaff#openedBy.profilePicture", "follow-up: #321"),
+            Map.entry("JobAssignmentDao.findWithDetailsForPaymentById#worker", "follow-up: #321"),
+            Map.entry("JobAssignmentDao.findWithDetailsForPaymentById#worker.profilePicture", "follow-up: #321"),
+            Map.entry("PaymentDao.findForStaffById#jobAssignment.worker", "follow-up: #321"),
+            Map.entry("CompanyContactDao.findAllByCompanyId#user", "follow-up: #321"),
+            Map.entry("CompanyContactDao.findAllByCompanyId#user.profilePicture", "follow-up: #321"),
+            Map.entry("CompanyContactDao.findAllByCompanyIdIn#user", "follow-up: #321"),
+            Map.entry("CompanyContactDao.findAllByCompanyIdIn#user.profilePicture", "follow-up: #321"));
 
-    /**
-     * Participant and owner fetch paths through a mandatory soft-deleted relation. Whether the row must survive
-     * the counterpart's deletion (a "Silinmiş kullanıcı" rendering) is decided per endpoint in the follow-up of
-     * #309; until then every path is listed so that a new one cannot appear unnoticed. Key: DAO.method#path.
-     */
     private static final Set<String> PARTICIPANT_PATHS_AWAITING_EVALUATION = Set.of(
-            // Owner reads: the row is the user's own and is soft-deleted with the user by the anonymizer.
             "AvailabilityExceptionDao.findWithUserById#user",
             "AvailabilitySlotDao.findWithUserById#user",
             "EducationDao.findWithDetailsById#user",
@@ -151,14 +113,12 @@ class SoftDeletedJoinVisibilityTest {
             "TalentPoolEntryDao.findAllByEmployerId#worker",
             "TalentPoolEntryDao.findAllByEmployerId#worker.profilePicture",
             "UnsubscribeTokenDao.findByTokenDigest#user",
-            // Gallery rows are deleted with their image (GalleryManager.removeImageEverywhere).
             "CompanyImageDao.findAllByCompanyIdOrderBySortOrderAsc#image",
             "CompanyImageDao.findWithDetailsById#image",
             "CompanyImageDao.findByCompanyIdAndImageId#image",
             "JobImageDao.findAllByJobIdOrderBySortOrderAsc#image",
             "JobImageDao.findAllByJobIdInAndCoverTrue#image",
             "JobImageDao.findWithDetailsById#image",
-            // Transport plan rows own their stops and addresses (orphanRemoval); the seat is the worker's own.
             "SeatAssignmentDao.findWithDetailsById#jobAssignment.worker",
             "SeatAssignmentDao.findWithDetailsById#shuttle",
             "SeatAssignmentDao.findWithDetailsById#stop",
@@ -168,7 +128,6 @@ class SoftDeletedJoinVisibilityTest {
             "ShuttleStopDao.findAllByShuttleIdInOrderBySortOrderAsc#address.city",
             "ShuttleStopDao.findAllByShuttleIdInOrderBySortOrderAsc#address.city.country",
             "ShuttleStopDao.findAllByShuttleIdInOrderBySortOrderAsc#address.district",
-            // Counterpart may have deleted their account: the participant's own list loses the row.
             "CompanyFollowDao.findAllByCompanyId#follower",
             "ConversationDao.findWithParticipantsById#employer",
             "ConversationDao.findWithParticipantsById#employer.profilePicture",
@@ -316,9 +275,6 @@ class SoftDeletedJoinVisibilityTest {
         return risky;
     }
 
-    /**
-     * Every {@code @EntityGraph} attribute path and every {@code join fetch} of every DAO method, unresolved.
-     */
     private List<FetchPath> fetchPaths() throws Exception {
         List<FetchPath> paths = new ArrayList<>();
         for (Class<?> dao : daoInterfaces()) {
@@ -344,11 +300,6 @@ class SoftDeletedJoinVisibilityTest {
         return paths;
     }
 
-    /**
-     * Walks {@code path} from {@code root}. A hop drops the owning row when the association is mandatory (an INNER
-     * join), the target is soft-deleted and something in the codebase deletes the target. Hops after a collection
-     * only prune collection elements, never the root, so the walk stops there.
-     */
     static List<String> droppedBy(Class<?> root, String path, Set<String> deletable) {
         List<String> droppedBy = new ArrayList<>();
         Class<?> current = root;
@@ -402,17 +353,11 @@ class SoftDeletedJoinVisibilityTest {
             try {
                 return current.getDeclaredField(name);
             } catch (NoSuchFieldException ignored) {
-                // keep climbing
             }
         }
         return null;
     }
 
-    /**
-     * Entities something in {@code src/main} soft-deletes: a {@code *Dao.delete*} call resolved through the field's
-     * declared type, an anonymizer {@code update ... is_deleted = true} resolved through the table name, or a
-     * {@code orphanRemoval = true} association.
-     */
     static Set<String> deletableEntities() throws Exception {
         Set<String> deletable = new TreeSet<>();
         Map<String, Class<?>> daoDomains = new HashMap<>();

@@ -34,11 +34,11 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -226,12 +226,9 @@ public class ReportManager implements ReportService {
     private Map<UUID, User> reportersOf(List<Report> reports) {
         Set<UUID> reporterIds = reports.stream()
                 .map(report -> report.getReporter().getId())
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-        Map<UUID, User> reporters = new HashMap<>();
-        for (User reporter : userService.getAllByIdIn(reporterIds)) {
-            reporters.put(reporter.getId(), reporter);
-        }
-        return reporters;
+                .collect(Collectors.toSet());
+        return userService.getAllByIdIn(reporterIds).stream()
+                .collect(Collectors.toMap(User::getId, Function.identity()));
     }
 
     private Map<UUID, UUID> assignmentIds(List<Report> reports) {
