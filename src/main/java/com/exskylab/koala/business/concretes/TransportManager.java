@@ -333,6 +333,14 @@ public class TransportManager implements TransportService {
 
     @Override
     @Transactional(readOnly = true)
+    public TransportPlanDto getPlanForStaff(UUID jobId) {
+        jobDao.findById(jobId)
+                .orElseThrow(() -> new ResourceNotFoundException(JobMessages.JOB_NOT_FOUND));
+        return planDto(requirePlan(jobId));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public AssignmentTransportDto getAssignmentTransport(UUID assignmentId) {
         JobAssignment assignment = requireParty(assignmentId);
         UUID actorId = securityService.getAuthenticatedUserId();

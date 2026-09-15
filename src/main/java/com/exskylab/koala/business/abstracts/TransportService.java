@@ -21,6 +21,12 @@ public interface TransportService {
 
     TransportPlanDto getPlan(UUID jobId);
 
+    /**
+     * Personel görünümü: işveren kontrolü yok. İlan yoksa JOB_NOT_FOUND,
+     * plan yoksa PLAN_NOT_FOUND. Plaka ve şoför her serviste dolu.
+     */
+    TransportPlanDto getPlanForStaff(UUID jobId);
+
     AssignmentTransportDto getAssignmentTransport(UUID assignmentId);
 
     AssignmentTransportDto selectSeat(UUID assignmentId, SeatSelectionDto request);

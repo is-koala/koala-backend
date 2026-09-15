@@ -33,4 +33,5 @@ public class AdminMessages {
     public static final String PAYOUT_DETAIL = "{admin.payout.detail}";
     public static final String JOBS_LISTED = "{admin.jobs.listed}";
     public static final String JOB_DETAIL = "{admin.job.detail}";
+    public static final String JOB_TRANSPORT_PLAN = "{admin.job.transport.plan}";
 }

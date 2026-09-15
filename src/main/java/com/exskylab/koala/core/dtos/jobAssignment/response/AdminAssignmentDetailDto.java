@@ -3,6 +3,7 @@ package com.exskylab.koala.core.dtos.jobAssignment.response;
 import com.exskylab.koala.core.dtos.common.LinkedRecordDto;
 import com.exskylab.koala.core.dtos.payment.response.PricingBreakdownDto;
 import com.exskylab.koala.core.dtos.timesheet.response.WorkSessionDto;
+import com.exskylab.koala.core.dtos.transport.response.AssignmentTransportDto;
 import com.exskylab.koala.core.dtos.user.response.SafeUserDto;
 import com.exskylab.koala.entities.AssignmentStatus;
 import com.exskylab.koala.entities.JobEmployerType;
@@ -25,5 +26,6 @@ public record AdminAssignmentDetailDto(UUID id, UUID jobId, String jobTitle, UUI
                                        List<AdminReviewDto> reviews,
                                        List<LinkedRecordDto> payments, LinkedRecordDto payout,
                                        List<LinkedRecordDto> disputes, List<LinkedRecordDto> reports,
+                                       AssignmentTransportDto transport,
                                        Instant createdAt, Instant updatedAt) {
 }

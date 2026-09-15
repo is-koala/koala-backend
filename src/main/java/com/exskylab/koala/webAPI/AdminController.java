@@ -46,6 +46,8 @@ import com.exskylab.koala.core.dtos.job.response.AdminJobDetailDto;
 import com.exskylab.koala.core.dtos.job.response.AdminJobDto;
 import com.exskylab.koala.business.abstracts.AdminDetailService;
 import com.exskylab.koala.business.abstracts.JobService;
+import com.exskylab.koala.business.abstracts.TransportService;
+import com.exskylab.koala.core.dtos.transport.response.TransportPlanDto;
 import com.exskylab.koala.entities.AssignmentStatus;
 import com.exskylab.koala.entities.PaymentAttemptStatus;
 import com.exskylab.koala.entities.JobStatus;
@@ -91,6 +93,7 @@ public class AdminController {
     private final SignedFileResponses signedFileResponses;
     private final AdminDetailService adminDetailService;
     private final JobService jobService;
+    private final TransportService transportService;
     private final IdentityRevealService identityRevealService;
 
     public AdminController(CompanyService companyService, UserService userService, UserMapper userMapper,
@@ -99,7 +102,8 @@ public class AdminController {
                            BankAccountService bankAccountService, BankAccountMapper bankAccountMapper,
                            IdentityDocumentReviewService identityDocumentReviewService,
                            SignedFileResponses signedFileResponses, AdminDetailService adminDetailService,
-                           JobService jobService, IdentityRevealService identityRevealService) {
+                           JobService jobService, TransportService transportService,
+                           IdentityRevealService identityRevealService) {
         this.companyService = companyService;
         this.userService = userService;
         this.userMapper = userMapper;
@@ -112,6 +116,7 @@ public class AdminController {
         this.signedFileResponses = signedFileResponses;
         this.adminDetailService = adminDetailService;
         this.jobService = jobService;
+        this.transportService = transportService;
         this.identityRevealService = identityRevealService;
     }
 
@@ -277,6 +282,23 @@ public class AdminController {
         return ResponseEntity.ok(new SuccessDataResult<>(
                 jobService.getAdminDetail(jobId),
                 AdminMessages.JOB_DETAIL, HttpStatus.OK));
+    }
+
+    @Operation(summary = "İlanın ulaşım planı (personel)",
+            description = "İşveren görünümüyle aynı gövde: plaka, şoför, tam durak adresleri ve servis/durak "
+                    + "başına seçilmiş koltuk sayısı. Uç job.read ile korunur; personel ilanın işvereni olmak zorunda "
+                    + "değildir. İlan yoksa JOB_NOT_FOUND, plan yoksa TRANSPORT_PLAN_NOT_FOUND.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Ulaşım planı getirildi"),
+            @ApiResponse(responseCode = "404", description = "İlan veya plan bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(StaffPermission.JOB_READ)
+    @GetMapping("/jobs/{jobId}/transport-plan")
+    public ResponseEntity<SuccessDataResult<TransportPlanDto>> jobTransportPlan(@PathVariable UUID jobId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                transportService.getPlanForStaff(jobId),
+                AdminMessages.JOB_TRANSPORT_PLAN, HttpStatus.OK));
     }
 
     @Operation(summary = "Görseli her yerden kaldır",

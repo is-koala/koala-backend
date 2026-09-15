@@ -425,6 +425,7 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
                 .andExpect(jsonPath("$.data.reports", hasSize(1)))
                 .andExpect(jsonPath("$.data.reports[0].id").value(reportId.toString()))
                 .andExpect(jsonPath("$.data.reports[0].status").value("OPEN"))
+                .andExpect(jsonPath("$.data.transport").value(nullValue()))
                 .andExpect(content().string(not(containsString(unrelatedReportId.toString()))))
                 .andExpect(content().string(not(containsString(otherJobReportId.toString()))));
     }
