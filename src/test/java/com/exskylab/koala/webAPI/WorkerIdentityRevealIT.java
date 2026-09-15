@@ -32,7 +32,9 @@ import java.util.regex.Pattern;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -44,6 +46,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class WorkerIdentityRevealIT extends AbstractStaffIntegrationTest {
 
     private static final String WORKER_TCKN = "10000000146";
+    private static final String LEGACY_WORKER_TCKN = "10000000278";
     private static final String REVEAL_MESSAGE =
             "İşvereniniz sigorta bildirimi için kimlik bilgilerinizi görüntüledi.";
     private static final Pattern ELEVEN_DIGITS = Pattern.compile("(?<!\\d)\\d{11}(?!\\d)");
@@ -72,6 +75,12 @@ class WorkerIdentityRevealIT extends AbstractStaffIntegrationTest {
     private final UUID companyAssignmentId = UUID.randomUUID();
     private final UUID pendingAssignmentId = UUID.randomUUID();
     private final UUID unverifiedAssignmentId = UUID.randomUUID();
+    private final UUID rejectedAssignmentId = UUID.randomUUID();
+    private final UUID cancelledAssignmentId = UUID.randomUUID();
+    private final UUID legacyWorkerId = UUID.randomUUID();
+    private final UUID legacyAssignmentId = UUID.randomUUID();
+    private final UUID otherCompanyAdminId = UUID.randomUUID();
+    private final UUID otherCompanyId = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
@@ -80,9 +89,16 @@ class WorkerIdentityRevealIT extends AbstractStaffIntegrationTest {
         insertUser(workerId, "Çağrı", "Yılmaz", true);
         insertUser(unverifiedWorkerId, "Doğrulanmamış", "İşçi", false);
         insertUser(outsiderId, "Yabancı", "Kişi", false);
+        insertUser(legacyWorkerId, "Eski", "Kayıt", true);
+        insertUser(otherCompanyAdminId, "Başka", "Yetkili", false);
         jdbc.update("update users set tc_identity_number = ?, birth_date = '1990-05-17', "
                         + "identity_verified_at = '2026-09-01T10:15:30Z', identity_verification_method = 'DOCUMENT' "
                         + "where id = ?", WORKER_TCKN, workerId);
+        jdbc.update("update users set tc_identity_number = ?, birth_date = '1985-01-02' where id = ?",
+                LEGACY_WORKER_TCKN, legacyWorkerId);
+        jdbc.update("insert into devices (id, created_at, is_deleted, user_id, type, name, client_device_id, "
+                        + "push_token) values (?, now(), false, ?, 'ANDROID', 'telefon', ?, ?)",
+                UUID.randomUUID(), workerId, UUID.randomUUID().toString(), "fcm-" + workerId);
 
         jdbc.update("insert into companies (id, created_at, is_deleted, name, tax_number, email, approval_status) "
                         + "values (?, now(), false, ?, ?, ?, 'APPROVED')",
@@ -91,6 +107,13 @@ class WorkerIdentityRevealIT extends AbstractStaffIntegrationTest {
         jdbc.update("insert into company_contacts (id, created_at, is_deleted, company_id, user_id, role) "
                         + "values (?, now(), false, ?, ?, 'ADMIN')",
                 UUID.randomUUID(), companyId, companyAdminId);
+        jdbc.update("insert into companies (id, created_at, is_deleted, name, tax_number, email, approval_status) "
+                        + "values (?, now(), false, ?, ?, ?, 'APPROVED')",
+                otherCompanyId, "Başka Şirket " + otherCompanyId,
+                String.valueOf(Math.abs(otherCompanyId.hashCode())), otherCompanyId + "@example.com");
+        jdbc.update("insert into company_contacts (id, created_at, is_deleted, company_id, user_id, role) "
+                        + "values (?, now(), false, ?, ?, 'ADMIN')",
+                UUID.randomUUID(), otherCompanyId, otherCompanyAdminId);
         jdbc.update("insert into job_categories (id, name, code, requires_insurance) values (?, ?, ?, false)",
                 categoryId, "Kimlik", "IDENTITY_REVEAL_" + categoryId);
         insertJob(jobId, null, "INDIVIDUAL");
@@ -99,27 +122,35 @@ class WorkerIdentityRevealIT extends AbstractStaffIntegrationTest {
         insertAssignment(companyAssignmentId, companyJobId, workerId, "IN_PROGRESS");
         insertAssignment(pendingAssignmentId, jobId, workerId, "PENDING_CONFIRMATION");
         insertAssignment(unverifiedAssignmentId, jobId, unverifiedWorkerId, "COMPLETED");
+        insertAssignment(rejectedAssignmentId, jobId, workerId, "REJECTED");
+        insertAssignment(cancelledAssignmentId, jobId, workerId, "CANCELLED");
+        insertAssignment(legacyAssignmentId, jobId, legacyWorkerId, "CONFIRMED");
     }
 
     @AfterEach
     void tearDown() {
+        UUID[] users = {employerId, companyAdminId, workerId, unverifiedWorkerId, outsiderId,
+                legacyWorkerId, otherCompanyAdminId};
         jdbc.update("delete from admin_audit_entries");
-        jdbc.update("delete from identity_reveals where worker_id in (?, ?)", workerId, unverifiedWorkerId);
-        jdbc.update("delete from notifications where recipient_id in (?, ?, ?, ?, ?) "
-                        + "or sender_id in (?, ?, ?, ?, ?) or created_by_id in (?, ?, ?, ?, ?)",
-                employerId, companyAdminId, workerId, unverifiedWorkerId, outsiderId,
-                employerId, companyAdminId, workerId, unverifiedWorkerId, outsiderId,
-                employerId, companyAdminId, workerId, unverifiedWorkerId, outsiderId);
-        jdbc.update("delete from job_assignments where id in (?, ?, ?, ?)",
-                confirmedAssignmentId, companyAssignmentId, pendingAssignmentId, unverifiedAssignmentId);
+        jdbc.update("delete from identity_reveals where worker_id in (?, ?, ?)",
+                workerId, unverifiedWorkerId, legacyWorkerId);
+        jdbc.update("delete from notifications where recipient_id in (?, ?, ?, ?, ?, ?, ?) "
+                        + "or sender_id in (?, ?, ?, ?, ?, ?, ?) or created_by_id in (?, ?, ?, ?, ?, ?, ?)",
+                users[0], users[1], users[2], users[3], users[4], users[5], users[6],
+                users[0], users[1], users[2], users[3], users[4], users[5], users[6],
+                users[0], users[1], users[2], users[3], users[4], users[5], users[6]);
+        jdbc.update("delete from devices where user_id = ?", workerId);
+        jdbc.update("delete from job_assignments where id in (?, ?, ?, ?, ?, ?, ?)",
+                confirmedAssignmentId, companyAssignmentId, pendingAssignmentId, unverifiedAssignmentId,
+                rejectedAssignmentId, cancelledAssignmentId, legacyAssignmentId);
         jdbc.update("delete from jobs where id in (?, ?)", jobId, companyJobId);
         jdbc.update("delete from job_categories where id = ?", categoryId);
-        jdbc.update("delete from company_contacts where company_id = ?", companyId);
-        jdbc.update("delete from companies where id = ?", companyId);
-        jdbc.update("delete from authorities where user_id in (?, ?, ?, ?, ?)",
-                employerId, companyAdminId, workerId, unverifiedWorkerId, outsiderId);
-        jdbc.update("delete from users where id in (?, ?, ?, ?, ?)",
-                employerId, companyAdminId, workerId, unverifiedWorkerId, outsiderId);
+        jdbc.update("delete from company_contacts where company_id in (?, ?)", companyId, otherCompanyId);
+        jdbc.update("delete from companies where id in (?, ?)", companyId, otherCompanyId);
+        jdbc.update("delete from authorities where user_id in (?, ?, ?, ?, ?, ?, ?)",
+                users[0], users[1], users[2], users[3], users[4], users[5], users[6]);
+        jdbc.update("delete from users where id in (?, ?, ?, ?, ?, ?, ?)",
+                users[0], users[1], users[2], users[3], users[4], users[5], users[6]);
         deleteStaffMembersLike("identity-reveal-%@iskoala.com");
     }
 
@@ -155,6 +186,44 @@ class WorkerIdentityRevealIT extends AbstractStaffIntegrationTest {
     void anAssignmentTheWorkerHasNotAcceptedYetLooksMissingEvenToTheEmployer() throws Exception {
         assertIndistinguishableFromMissing(pendingAssignmentId, employerId);
         assertEquals(0, revealCount(pendingAssignmentId), "başvuru aşamasındaki atama kayıt yazmamalı");
+    }
+
+    @Test
+    void rejectedAndCancelledAssignmentsLookMissingEvenToTheEmployer() throws Exception {
+        assertIndistinguishableFromMissing(rejectedAssignmentId, employerId);
+        assertIndistinguishableFromMissing(cancelledAssignmentId, employerId);
+        assertEquals(0, revealCount(rejectedAssignmentId) + revealCount(cancelledAssignmentId));
+    }
+
+    @Test
+    void aContactOfAnotherCompanySeesTheAssignmentAsMissing() throws Exception {
+        assertIndistinguishableFromMissing(companyAssignmentId, otherCompanyAdminId);
+    }
+
+    @Test
+    void aWorkerVerifiedBeforeTheStampExistedComesBackWithoutVerificationTimeOrMethod() throws Exception {
+        reveal(legacyAssignmentId, employerId)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.fullName").value("Eski Kayıt"))
+                .andExpect(jsonPath("$.data.tcIdentityNumber").value(LEGACY_WORKER_TCKN))
+                .andExpect(jsonPath("$.data.birthDate").value("1985-01-02"))
+                .andExpect(jsonPath("$.data.verifiedAt").value(nullValue()))
+                .andExpect(jsonPath("$.data.verificationMethod").value(nullValue()));
+    }
+
+    @Test
+    void theWorkerIsPushedOncePerDayAndThePushCarriesNoIdentityNumber() throws Exception {
+        reveal(confirmedAssignmentId, employerId).andExpect(status().isOk());
+        reveal(confirmedAssignmentId, employerId).andExpect(status().isOk());
+
+        List<Map<String, Object>> pushes = jdbc.queryForList(
+                "select category, subject, body, push_data_payload, dispatch_payload from notifications "
+                        + "where recipient_id = ? and channel = 'PUSH'", workerId);
+        assertEquals(1, pushes.size(), "24 saat içinde ikinci okuma ikinci push üretmemeli");
+        Map<String, Object> push = pushes.getFirst();
+        assertEquals("ACCOUNT_SECURITY", push.get("category"));
+        assertEquals(REVEAL_MESSAGE, push.get("body"));
+        assertFalse(push.toString().contains(WORKER_TCKN), "push kaydı TCKN taşımamalı: " + push);
     }
 
     @Test

@@ -292,10 +292,6 @@ public class JobManager implements JobService {
             java.util.EnumSet.of(AssignmentStatus.PENDING_CONFIRMATION, AssignmentStatus.CONFIRMED,
                     AssignmentStatus.IN_PROGRESS);
 
-    private static final Set<AssignmentStatus> HIRED_STATUSES =
-            java.util.EnumSet.of(AssignmentStatus.CONFIRMED, AssignmentStatus.IN_PROGRESS,
-                    AssignmentStatus.COMPLETED);
-
     private static final Set<AssignmentStatus> ADDRESS_VISIBLE_ASSIGNMENT_STATUSES =
             java.util.EnumSet.of(AssignmentStatus.PENDING_CONFIRMATION, AssignmentStatus.CONFIRMED,
                     AssignmentStatus.IN_PROGRESS);
@@ -319,7 +315,7 @@ public class JobManager implements JobService {
     public JobDetailDto getJobDetail(UUID jobId, UUID viewerId) {
         Job job = getDetailedById(jobId);
         JobDetailDto detail = jobMapper.toJobDetailDto(job, detailViewerFactsOf(job, viewerId));
-        detail.setHiredCount(jobAssignmentDao.countByJobIdAndStatusIn(jobId, HIRED_STATUSES));
+        detail.setHiredCount(jobAssignmentDao.countByJobIdAndStatusIn(jobId, AssignmentStatus.HIRED));
         detail.setApplicationCount(jobApplicationDao.countByJobId(jobId));
         detail.setAcceptingApplications(jobAvailability.acceptsApplications(job));
         addressVisibility.protect(job, detail, viewerId, hasAddressAccess(jobId, viewerId));
@@ -575,7 +571,7 @@ public class JobManager implements JobService {
                 .collect(Collectors.toMap(JobApplicationDao.JobApplicationCount::getJobId,
                         JobApplicationDao.JobApplicationCount::getTotal));
 
-        Map<UUID, Long> hired = jobAssignmentDao.countHiredByJobIds(ids, HIRED_STATUSES).stream()
+        Map<UUID, Long> hired = jobAssignmentDao.countHiredByJobIds(ids, AssignmentStatus.HIRED).stream()
                 .collect(Collectors.toMap(JobAssignmentDao.HiredCount::getJobId,
                         JobAssignmentDao.HiredCount::getTotal));
 

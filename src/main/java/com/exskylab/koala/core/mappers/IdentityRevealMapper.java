@@ -2,6 +2,7 @@ package com.exskylab.koala.core.mappers;
 
 import com.exskylab.koala.core.dtos.identity.response.AdminIdentityRevealDto;
 import com.exskylab.koala.core.dtos.identity.response.WorkerIdentityDto;
+import com.exskylab.koala.core.helpers.DisplayNames;
 import com.exskylab.koala.entities.IdentityReveal;
 import com.exskylab.koala.entities.User;
 import org.mapstruct.InjectionStrategy;
@@ -30,11 +31,6 @@ public interface IdentityRevealMapper {
 
     @Named("fullName")
     static String fullName(User user) {
-        if (user == null) {
-            return null;
-        }
-        String first = user.getFirstName() == null ? "" : user.getFirstName().trim();
-        String last = user.getLastName() == null ? "" : user.getLastName().trim();
-        return (first + " " + last).trim();
+        return user == null ? null : DisplayNames.of(user.getFirstName(), user.getLastName());
     }
 }

@@ -40,8 +40,6 @@ public class IdentityRevealManager implements IdentityRevealService {
 
     static final Duration NOTIFICATION_QUIET_PERIOD = Duration.ofHours(24);
     static final String RATE_LIMIT_BUDGET = "identity-reveal";
-    private static final Set<AssignmentStatus> HIRED_STATUSES =
-            Set.of(AssignmentStatus.CONFIRMED, AssignmentStatus.IN_PROGRESS, AssignmentStatus.COMPLETED);
     private static final Set<String> SORTABLE = Set.of("revealedAt");
 
     private final IdentityRevealDao identityRevealDao;
@@ -88,7 +86,7 @@ public class IdentityRevealManager implements IdentityRevealService {
             throw Concealment.notFound(JobAssignmentMessages.NOT_FOUND, actorId, assignmentId,
                     "not the employer of the assignment");
         }
-        if (!HIRED_STATUSES.contains(assignment.getStatus())) {
+        if (!AssignmentStatus.HIRED.contains(assignment.getStatus())) {
             throw Concealment.notFound(JobAssignmentMessages.NOT_FOUND, actorId, assignmentId,
                     "assignment is not a hire yet: " + assignment.getStatus());
         }
@@ -106,6 +104,7 @@ public class IdentityRevealManager implements IdentityRevealService {
         }
 
         Instant now = clock.instant();
+        String maskedIp = LogMasks.ip(clientIpAddress);
         boolean recentlyRevealed = identityRevealDao.existsByViewer_IdAndJobAssignment_IdAndRevealedAtAfter(
                 actorId, assignmentId, now.minus(NOTIFICATION_QUIET_PERIOD));
 
@@ -114,11 +113,11 @@ public class IdentityRevealManager implements IdentityRevealService {
         reveal.setWorker(worker);
         reveal.setJobAssignment(assignment);
         reveal.setRevealedAt(now);
-        reveal.setIpAddress(LogMasks.ip(clientIpAddress));
+        reveal.setIpAddress(maskedIp);
         identityRevealDao.save(reveal);
 
         log.info("Worker identity revealed: viewer={} worker={} assignment={} ip={} notified={}",
-                actorId, worker.getId(), assignmentId, LogMasks.ip(clientIpAddress), !recentlyRevealed);
+                actorId, worker.getId(), assignmentId, maskedIp, !recentlyRevealed);
 
         if (!recentlyRevealed) {
             activityNotificationService.identityRevealed(assignment);

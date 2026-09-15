@@ -171,15 +171,9 @@ public class ActivityNotificationManager implements ActivityNotificationService 
 
     @Override
     public void identityRevealed(JobAssignment assignment) {
-        User worker = assignment.getWorker();
-        if (worker == null) {
-            return;
-        }
-        String message = messageResolver.resolve(ActivityMessages.IDENTITY_REVEALED);
-        inApp(worker, assignment.getJob().getTitle(), message, NotificationCategory.ACCOUNT_SECURITY,
-                ActivityMessages.IDENTITY_REVEALED, NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
-        push(worker, assignment.getJob().getTitle(), message, NotificationCategory.ACCOUNT_SECURITY,
-                ActivityMessages.IDENTITY_REVEALED);
+        notifyInAppAndPush(assignment.getWorker(), assignment.getJob().getTitle(),
+                ActivityMessages.IDENTITY_REVEALED, NotificationCategory.ACCOUNT_SECURITY,
+                NotificationTargetType.JOB_ASSIGNMENT, assignment.getId());
     }
 
     @Override
@@ -258,9 +252,24 @@ public class ActivityNotificationManager implements ActivityNotificationService 
 
         String message = messageResolver.resolve(bodyKey);
 
+        inAppAndPush(recipient, jobTitle, message, category, bodyKey, targetType, targetId);
+        email(recipient, jobTitle, message, category, bodyKey);
+    }
+
+    private void notifyInAppAndPush(User recipient, String jobTitle, String bodyKey,
+                                    NotificationCategory category, NotificationTargetType targetType,
+                                    UUID targetId) {
+        if (recipient == null) {
+            return;
+        }
+
+        inAppAndPush(recipient, jobTitle, messageResolver.resolve(bodyKey), category, bodyKey, targetType, targetId);
+    }
+
+    private void inAppAndPush(User recipient, String jobTitle, String message, NotificationCategory category,
+                              String bodyKey, NotificationTargetType targetType, UUID targetId) {
         inApp(recipient, jobTitle, message, category, bodyKey, targetType, targetId);
         push(recipient, jobTitle, message, category, bodyKey);
-        email(recipient, jobTitle, message, category, bodyKey);
     }
 
     private void inApp(User recipient, String jobTitle, String message, NotificationCategory category,
