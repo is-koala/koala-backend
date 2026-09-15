@@ -225,11 +225,12 @@ public class PostgresAccountAnonymizer implements AccountAnonymizer {
                    set refresh_token_hash = null, ip_address = null, location = null, is_active = false
                  where device_id in (select id from devices where user_id = ?)
                 """, userId);
-        jdbcTemplate.update("update devices set name = null, client_device_id = null, push_token = null, is_deleted = true, deleted_at = now() where user_id = ?",
+        jdbcTemplate.update("update devices set name = null, custom_name = null, client_device_id = null, push_token = null, is_deleted = true, deleted_at = now() where user_id = ?",
                 userId);
         jdbcTemplate.update("""
                 update login_attempts
-                   set email_attempted = null, failure_reason = null, ip_address = null, device_name = null
+                   set email_attempted = null, failure_reason = null, ip_address = null, device_name = null,
+                       location = null
                  where user_id = ?
                     or (user_id is null and email_attempted is not null
                         and lower(email_attempted) = (select lower(email) from users where id = ?))

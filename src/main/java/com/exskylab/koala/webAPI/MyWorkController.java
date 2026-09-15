@@ -21,6 +21,7 @@ import com.exskylab.koala.core.dtos.jobAssignment.response.MyAssignmentDto;
 import com.exskylab.koala.core.dtos.myWork.response.WorkFeedDto;
 import com.exskylab.koala.core.dtos.notification.response.NotificationDto;
 import com.exskylab.koala.core.dtos.notification.response.NotificationFeedDto;
+import com.exskylab.koala.core.dtos.session.response.SessionDetailDto;
 import com.exskylab.koala.core.dtos.session.response.SessionDto;
 import com.exskylab.koala.core.mappers.NotificationMapper;
 import com.exskylab.koala.core.mappers.SessionMapper;
@@ -136,8 +137,26 @@ public class MyWorkController {
                 sessions, MyWorkMessages.SESSIONS_LISTED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Oturum detayı",
+            description = "Cihaz adı ve tipi, oluşturulma ve son erişim zamanı, oturumun güncel IP adresi ve "
+                    + "GeoIP konumu (şehir, ülke kodu; GeoIP veritabanı yoksa null), bu cihazdan yapılan "
+                    + "başarılı giriş sayısı (logins) ve bu cihazdan yapılan son 20 giriş denemesi "
+                    + "(loginHistory: zaman, IP, konum, başarılı mı). Geçmiş yalnız bu sürümden sonraki girişleri "
+                    + "kapsar; daha eski denemeler cihaza bağlı olmadığı için görünmez. IP kullanıcının kendi "
+                    + "verisidir, maskelenmez. Başkasının ya da kapatılmış bir oturumun kimliği 404 döner.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Oturum detayı"),
+            @ApiResponse(responseCode = "404", description = "Oturum bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @GetMapping("/sessions/{sessionId}")
+    public ResponseEntity<SuccessDataResult<SessionDetailDto>> mySessionDetail(@PathVariable UUID sessionId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                sessionService.getMySessionDetail(sessionId), MyWorkMessages.SESSION_DETAIL, HttpStatus.OK));
+    }
+
     @Operation(summary = "Bir oturumu kapat",
-            description = "Başkasının oturumunu kapatmaya çalışmak 404 döner.")
+            description = "Başkasının ya da zaten kapatılmış bir oturumu kapatmaya çalışmak 404 döner.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Oturum kapatıldı"),
             @ApiResponse(responseCode = "404", description = "Oturum bulunamadı",

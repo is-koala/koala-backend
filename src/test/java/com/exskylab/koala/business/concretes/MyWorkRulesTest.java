@@ -8,6 +8,9 @@ import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.dataAccess.NotificationDao;
 import com.exskylab.koala.dataAccess.SessionDao;
 import com.exskylab.koala.entities.*;
+import com.exskylab.koala.core.mappers.SessionMapperImpl;
+import com.exskylab.koala.core.geoip.GeoIpResolver;
+import com.exskylab.koala.business.abstracts.LoginAttemptService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -37,7 +40,8 @@ class MyWorkRulesTest {
         securityService = mock(SecurityService.class);
 
         sessionManager = new SessionManager(sessionDao, mock(PasswordEncoder.class),
-                mock(JwtService.class), new SessionProperties(), securityService);
+                mock(JwtService.class), new SessionProperties(), securityService,
+                GeoIpResolver.unavailable(), mock(LoginAttemptService.class), new SessionMapperImpl());
 
         when(sessionDao.save(any())).thenAnswer(i -> i.getArgument(0));
         when(securityService.getAuthenticatedUserId()).thenReturn(me.getId());
@@ -63,7 +67,7 @@ class MyWorkRulesTest {
         session.setDevice(device);
         session.setActive(true);
 
-        when(sessionDao.findById(session.getId())).thenReturn(Optional.of(session));
+        when(sessionDao.findByIdAndIsActive(session.getId(), true)).thenReturn(Optional.of(session));
         return session;
     }
 

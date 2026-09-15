@@ -10,6 +10,7 @@ import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.SessionService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.dtos.auth.request.AuthStartRegistrationDto;
+import com.exskylab.koala.core.geoip.GeoIpResolver;
 import com.exskylab.koala.core.properties.SessionProperties;
 import com.exskylab.koala.core.security.JwtService;
 import com.exskylab.koala.entities.PendingRegistration;
@@ -60,7 +61,8 @@ class RegistrationEnumerationTest {
                 new SessionProperties(),
                 mock(LegalService.class),
                 mock(com.exskylab.koala.business.abstracts.PasswordResetTokenService.class),
-                mock(org.springframework.context.ApplicationEventPublisher.class));
+                mock(org.springframework.context.ApplicationEventPublisher.class),
+                GeoIpResolver.unavailable());
 
         PendingRegistration pending = pendingRegistration();
         when(pendingRegistrationService.createPendingRegistration(any())).thenReturn(pending);

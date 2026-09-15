@@ -4,6 +4,7 @@ import com.exskylab.koala.business.abstracts.*;
 import com.exskylab.koala.core.dtos.auth.request.ForgotPasswordDto;
 import com.exskylab.koala.core.dtos.auth.request.ResetPasswordDto;
 import com.exskylab.koala.core.dtos.notification.request.SendEmailDto;
+import com.exskylab.koala.core.geoip.GeoIpResolver;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.events.PasswordResetCompletedEvent;
@@ -56,7 +57,8 @@ class PasswordResetTest {
                 authLinkService,
                 jwtService, passwordEncoder, mock(DeviceService.class), sessionService,
                 mock(LoginAttemptService.class), mock(SecurityService.class), new SessionProperties(),
-                mock(LegalService.class), passwordResetTokenService, eventPublisher);
+                mock(LegalService.class), passwordResetTokenService, eventPublisher,
+                GeoIpResolver.unavailable());
     }
 
     private User user() {

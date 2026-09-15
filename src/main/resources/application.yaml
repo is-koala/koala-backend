@@ -326,6 +326,9 @@ login-attempt:
     unattributed-days: ${LOGIN_ATTEMPT_RETENTION_UNATTRIBUTED_DAYS:30}
     cron: ${LOGIN_ATTEMPT_RETENTION_CRON:0 50 3 * * *}
 
+geoip:
+  database-path: ${GEOIP_DATABASE_PATH:}
+
 bank:
   verification:
     collection-iban: ${BANK_VERIFICATION_COLLECTION_IBAN:}

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-15-02-01-device-custom-name" author="koala">
+        <addColumn tableName="devices">
+            <column name="custom_name" type="VARCHAR(60)"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="devices" columnName="custom_name"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-15-02-02-login-attempt-device-and-location" author="koala">
+        <addColumn tableName="login_attempts">
+            <column name="device_id" type="UUID"/>
+            <column name="location" type="VARCHAR(255)"/>
+        </addColumn>
+        <addForeignKeyConstraint baseTableName="login_attempts"
+                                 baseColumnNames="device_id"
+                                 constraintName="fk_login_attempts_device"
+                                 referencedTableName="devices" referencedColumnNames="id"/>
+        <createIndex tableName="login_attempts" indexName="idx_login_attempts_device_time">
+            <column name="device_id"/>
+            <column name="time_stamp"/>
+        </createIndex>
+        <rollback>
+            <dropIndex tableName="login_attempts" indexName="idx_login_attempts_device_time"/>
+            <dropForeignKeyConstraint baseTableName="login_attempts" constraintName="fk_login_attempts_device"/>
+            <dropColumn tableName="login_attempts" columnName="location"/>
+            <dropColumn tableName="login_attempts" columnName="device_id"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

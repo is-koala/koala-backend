@@ -2,6 +2,7 @@ package com.exskylab.koala.business.abstracts;
 
 import com.exskylab.koala.core.dtos.user.response.AdminSessionSummaryDto;
 import com.exskylab.koala.core.dtos.session.response.CreatedSessionDto;
+import com.exskylab.koala.core.dtos.session.response.SessionDetailDto;
 import com.exskylab.koala.entities.Device;
 import com.exskylab.koala.entities.Session;
 
@@ -20,6 +21,8 @@ public interface SessionService {
     void invalidateActiveSessionsForUserIdExcludingSessionId(UUID userId, UUID sessionId);
 
     List<Session> getMyActiveSessions();
+
+    SessionDetailDto getMySessionDetail(UUID sessionId);
 
     void revokeSession(UUID sessionId);
 

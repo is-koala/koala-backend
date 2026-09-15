@@ -6,6 +6,7 @@ import com.exskylab.koala.dataAccess.DeviceDao;
 import com.exskylab.koala.entities.Device;
 import com.exskylab.koala.entities.User;
 import org.mockito.InOrder;
+import com.exskylab.koala.core.mappers.DeviceMapperImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -37,7 +38,7 @@ class PushTokenRulesTest {
         pushTokenDeliveryLock = mock(PushTokenDeliveryLock.class);
         when(securityService.getAuthenticatedUser()).thenReturn(owner);
 
-        manager = new DeviceManager(deviceDao, securityService, pushTokenDeliveryLock);
+        manager = new DeviceManager(deviceDao, securityService, pushTokenDeliveryLock, new DeviceMapperImpl());
 
         when(deviceDao.save(any())).thenAnswer(call -> call.getArgument(0));
         when(deviceDao.findAllByPushToken(any())).thenReturn(List.of());

@@ -9,6 +9,7 @@ public class MyWorkMessages {
     public static final String SESSION_REVOKED = "{my.session.revoked}";
     public static final String SESSIONS_REVOKED = "{my.sessions.revoked}";
     public static final String SESSION_NOT_FOUND = "{my.session.not.found}";
+    public static final String SESSION_DETAIL = "{my.session.detail}";
     public static final String NOTIFICATIONS_LISTED = "{my.notifications.listed}";
     public static final String NOTIFICATIONS_READ = "{my.notifications.read}";
 }

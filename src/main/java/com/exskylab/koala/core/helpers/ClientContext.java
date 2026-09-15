@@ -5,18 +5,22 @@ import jakarta.servlet.http.HttpServletRequest;
 import com.exskylab.koala.core.constants.AuthMessages;
 import com.exskylab.koala.core.exceptions.ValidationException;
 
-public record ClientContext(String ipAddress, String userAgent, String deviceId, ClientPlatform platform) {
+public record ClientContext(String ipAddress, String userAgent, String deviceId, ClientPlatform platform,
+                            DeviceHints deviceHints) {
 
-    public ClientContext(String ipAddress, String userAgent, String deviceId) {
-        this(ipAddress, userAgent, deviceId, ClientPlatform.UNKNOWN);
+    public ClientContext {
+        platform = platform == null ? ClientPlatform.UNKNOWN : platform;
+        deviceHints = deviceHints == null ? DeviceHints.NONE : deviceHints;
     }
 
     public static ClientContext from(HttpServletRequest request, ClientIpResolver clientIpResolver) {
-        return new ClientContext(
-                clientIpResolver.resolve(request),
-                request.getHeader("User-Agent"),
-                DeviceIdentity.fromRequest(request),
-                ClientPlatform.from(request.getHeader(ClientPlatform.HEADER)));
+        DeviceIdentityRequest identity = DeviceIdentityRequest.from(request);
+        return new ClientContext(clientIpResolver.resolve(request), identity.userAgent(), identity.deviceId(),
+                identity.platform(), identity.hints());
+    }
+
+    public DeviceIdentityRequest deviceIdentity() {
+        return new DeviceIdentityRequest(userAgent, deviceId, platform, deviceHints);
     }
 
     public void requireWebDeviceId() {

@@ -1,9 +1,14 @@
 package com.exskylab.koala.business.concretes;
 
 import lombok.extern.slf4j.Slf4j;
+import com.exskylab.koala.business.abstracts.LoginAttemptService;
 import com.exskylab.koala.business.abstracts.SessionService;
 import com.exskylab.koala.core.constants.SessionMessages;
 import com.exskylab.koala.core.dtos.session.response.CreatedSessionDto;
+import com.exskylab.koala.core.dtos.session.response.SessionDetailDto;
+import com.exskylab.koala.core.geoip.GeoIpResolver;
+import com.exskylab.koala.core.helpers.Concealment;
+import com.exskylab.koala.core.mappers.SessionMapper;
 import com.exskylab.koala.core.dtos.user.response.AdminSessionSummaryDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.properties.SessionProperties;
@@ -30,19 +35,29 @@ public class SessionManager implements SessionService {
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
+    static final int LOGIN_HISTORY_SIZE = 20;
+
     private final SessionDao sessionDao;
     private final SecurityService securityService;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final SessionProperties sessionProperties;
+    private final GeoIpResolver geoIpResolver;
+    private final LoginAttemptService loginAttemptService;
+    private final SessionMapper sessionMapper;
 
     public SessionManager(SessionDao sessionDao, PasswordEncoder passwordEncoder, JwtService jwtService,
-                          SessionProperties sessionProperties, SecurityService securityService) {
+                          SessionProperties sessionProperties, SecurityService securityService,
+                          GeoIpResolver geoIpResolver, LoginAttemptService loginAttemptService,
+                          SessionMapper sessionMapper) {
         this.sessionDao = sessionDao;
         this.securityService = securityService;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.sessionProperties = sessionProperties;
+        this.geoIpResolver = geoIpResolver;
+        this.loginAttemptService = loginAttemptService;
+        this.sessionMapper = sessionMapper;
     }
 
     @Override
@@ -63,6 +78,7 @@ public class SessionManager implements SessionService {
         Session session = new Session();
         session.setDevice(device);
         session.setIpAddress(ipAddress);
+        session.setLocation(geoIpResolver.locate(ipAddress).orElse(null));
         session.setRefreshTokenHash(hashedRefreshToken);
         session.setRefreshExpiresAt(Instant.now().plus(sessionProperties.getRefreshValidityDays(), ChronoUnit.DAYS));
         session.setActive(true);
@@ -123,6 +139,16 @@ public class SessionManager implements SessionService {
         log.info("Invalidated {} active sessions for user with id: {}", activeSessions.size(), userId);
     }
 
+    private Session myActiveSession(UUID sessionId, UUID userId) {
+        Session session = sessionDao.findByIdAndIsActive(sessionId, true)
+                .orElseThrow(() -> new ResourceNotFoundException(MyWorkMessages.SESSION_NOT_FOUND));
+        if (!session.getDevice().getUser().getId().equals(userId)) {
+            throw Concealment.notFound(MyWorkMessages.SESSION_NOT_FOUND, userId, sessionId,
+                    "session belongs to another user");
+        }
+        return session;
+    }
+
     private String generateSecureRandomToken() {
         byte[] randomBytes = new byte[32];
         SECURE_RANDOM.nextBytes(randomBytes);
@@ -136,14 +162,22 @@ public class SessionManager implements SessionService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public SessionDetailDto getMySessionDetail(UUID sessionId) {
+        UUID userId = securityService.getAuthenticatedUserId();
+        UUID currentSessionId = securityService.getAuthenticatedPrincipal().sessionId();
+        Session session = myActiveSession(sessionId, userId);
+
+        UUID deviceId = session.getDevice().getId();
+        return sessionMapper.toSessionDetailDto(session, session.getId().equals(currentSessionId),
+                loginAttemptService.countSuccessfulForDevice(userId, deviceId),
+                loginAttemptService.recentForDevice(userId, deviceId, LOGIN_HISTORY_SIZE));
+    }
+
+    @Override
     @Transactional
     public void revokeSession(UUID sessionId) {
-        Session session = sessionDao.findById(sessionId)
-                .orElseThrow(() -> new ResourceNotFoundException(MyWorkMessages.SESSION_NOT_FOUND));
-
-        if (!session.getDevice().getUser().getId().equals(securityService.getAuthenticatedUserId())) {
-            throw new ResourceNotFoundException(MyWorkMessages.SESSION_NOT_FOUND);
-        }
+        Session session = myActiveSession(sessionId, securityService.getAuthenticatedUserId());
 
         session.setActive(false);
         sessionDao.save(session);

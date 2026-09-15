@@ -21,7 +21,9 @@ import com.exskylab.koala.core.mappers.EducationMapper;
 import com.exskylab.koala.business.abstracts.CompanyService;
 import com.exskylab.koala.business.abstracts.DeviceService;
 import com.exskylab.koala.core.constants.DeviceMessages;
+import com.exskylab.koala.core.dtos.device.request.RenameDeviceDto;
 import com.exskylab.koala.core.dtos.device.request.SavePushTokenDto;
+import com.exskylab.koala.core.dtos.device.response.DeviceDto;
 import com.exskylab.koala.core.helpers.ClientContext;
 import com.exskylab.koala.core.helpers.ClientIpResolver;
 import jakarta.servlet.http.HttpServletRequest;
@@ -94,6 +96,25 @@ public class UserProfileController {
         deviceService.savePushToken(client.userAgent(), client.deviceId(), request.getPushToken());
 
         return ResponseEntity.ok(new SuccessResult(DeviceMessages.PUSH_TOKEN_SAVED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "Cihazı adlandır",
+            description = "Oturum listesinde ve detayında görünen cihaz adını kullanıcının seçtiği bir adla "
+                    + "değiştirir (en fazla 60 karakter, ör. \"Evdeki iPad\"). Otomatik üretilen ad "
+                    + "saklanmaya devam eder; yanıttaki customName kullanıcının verdiği ad, name ise "
+                    + "gösterilen addır. Başkasının cihazı 404 döner.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Cihaz adlandırıldı"),
+            @ApiResponse(responseCode = "400", description = "Ad boş ya da 60 karakterden uzun",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "Cihaz bulunamadı",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @PatchMapping("/devices/{deviceId}")
+    public ResponseEntity<SuccessDataResult<DeviceDto>> renameDevice(@PathVariable UUID deviceId,
+                                                                     @RequestBody @Valid RenameDeviceDto request) {
+        return ResponseEntity.ok(new SuccessDataResult<>(
+                deviceService.renameMyDevice(deviceId, request.getName()), DeviceMessages.RENAMED, HttpStatus.OK));
     }
 
     @Operation(summary = "Push bildirim token'ını sil",

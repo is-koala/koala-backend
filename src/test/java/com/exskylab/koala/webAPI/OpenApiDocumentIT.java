@@ -463,4 +463,19 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.components.schemas.WorkSessionDto.properties.checkOutReceivedAt").exists())
                 .andExpect(jsonPath("$.components.schemas.WorkSessionDto.properties.checkOutPlausibilityFlags").exists());
     }
+
+    @Test
+    void theSessionDetailAndDeviceRenameAreDocumentedInTurkish() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath("$.paths['/users/me/sessions/{sessionId}'].get.summary").value("Oturum detayı"))
+                .andExpect(jsonPath("$.paths['/users/me/sessions/{sessionId}'].get.description",
+                        containsString("loginHistory")))
+                .andExpect(jsonPath("$.paths['/users/me/sessions/{sessionId}'].get.responses.404").exists())
+                .andExpect(jsonPath("$.paths['/users/me/devices/{deviceId}'].patch.summary").value("Cihazı adlandır"))
+                .andExpect(jsonPath("$.paths['/users/me/devices/{deviceId}'].patch.responses.400").exists())
+                .andExpect(jsonPath("$.paths['/users/me/devices/{deviceId}'].patch.responses.404").exists())
+                .andExpect(jsonPath("$.paths['/auth/login'].post.description", containsString("X-Koala-Device-Model")))
+                .andExpect(jsonPath("$.components.schemas.SessionDetailDto.properties.loginHistory").exists())
+                .andExpect(jsonPath("$.components.schemas.LoginHistoryEntryDto.properties.location").exists());
+    }
 }

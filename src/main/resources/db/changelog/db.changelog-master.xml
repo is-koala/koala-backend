@@ -97,4 +97,5 @@
     <include file="db/changelog/2026/09/14-03-assignment-timeline-stamps.xml"/>
     <include file="db/changelog/2026/09/14-04-staff-decision-provenance.xml"/>
     <include file="db/changelog/2026/09/15-04-identity-reveals.xml"/>
+    <include file="db/changelog/2026/09/15-02-session-detail-and-device-name.xml"/>
 </databaseChangeLog>

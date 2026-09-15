@@ -8,6 +8,8 @@ import com.exskylab.koala.core.dtos.notificationPreference.request.UpdateNotific
 import com.exskylab.koala.core.dtos.notificationPreference.response.NotificationPreferenceDto;
 import com.exskylab.koala.core.dtos.notificationPreference.response.UnsubscribedChannelDto;
 import com.exskylab.koala.core.helpers.ClientContext;
+import com.exskylab.koala.core.helpers.ClientPlatform;
+import com.exskylab.koala.core.helpers.DeviceHints;
 import com.exskylab.koala.core.mappers.NotificationPreferenceMapperImpl;
 import com.exskylab.koala.dataAccess.CommercialMessageConsentDao;
 import com.exskylab.koala.dataAccess.NotificationPreferenceDao;
@@ -43,7 +45,7 @@ class NotificationPreferenceRulesTest {
 
     private final UUID userId = UUID.randomUUID();
 
-    private final ClientContext client = new ClientContext("203.0.113.7", "Koala IT", "device-1");
+    private final ClientContext client = new ClientContext("203.0.113.7", "Koala IT", "device-1", ClientPlatform.UNKNOWN, DeviceHints.NONE);
 
     private NotificationPreferenceDao preferenceDao;
     private CommercialMessageConsentDao consentDao;

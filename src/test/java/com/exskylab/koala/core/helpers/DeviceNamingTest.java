@@ -1,0 +1,102 @@
+package com.exskylab.koala.core.helpers;
+
+import com.exskylab.koala.entities.DeviceType;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class DeviceNamingTest {
+
+    private static final DeviceNaming.ParsedAgent BLIND_AGENT =
+            new DeviceNaming.ParsedAgent("??", "iOS ??", "??", "??");
+
+    @Test
+    void headersProduceTheMarketingNameOsAndAppVersion() {
+        String name = DeviceNaming.name(DeviceHints.of("iPhone15,3", "iOS 18.1", "1.1.0"), BLIND_AGENT,
+                DeviceType.IOS);
+
+        assertEquals("iPhone 14 Pro Max · iOS 18.1 · Koala 1.1.0", name);
+    }
+
+    @Test
+    void anUnknownModelStaysRaw() {
+        String name = DeviceNaming.name(DeviceHints.of("Pixel 8", "Android 15", "1.1.0"), BLIND_AGENT,
+                DeviceType.ANDROID);
+
+        assertEquals("Pixel 8 · Android 15 · Koala 1.1.0", name);
+    }
+
+    @Test
+    void aPartialHeaderSetOnlyPrintsWhatItHas() {
+        assertEquals("iOS 18.1", DeviceNaming.name(DeviceHints.of(null, "iOS 18.1", null), BLIND_AGENT,
+                DeviceType.IOS));
+        assertEquals("iPhone 15 Pro · Koala 2.0.0", DeviceNaming.name(DeviceHints.of("iPhone16,1", null, "2.0.0"),
+                BLIND_AGENT, DeviceType.IOS));
+    }
+
+    @Test
+    void withoutHeadersTheUserAgentPathNeverPrintsQuestionMarks() {
+        String name = DeviceNaming.name(DeviceHints.NONE, BLIND_AGENT, DeviceType.IOS);
+
+        assertFalse(name.contains("??"), name);
+        assertEquals("iOS", name);
+    }
+
+    @Test
+    void aFullyUnknownAgentBecomesTheUnknownDeviceLabel() {
+        DeviceNaming.ParsedAgent nothing = new DeviceNaming.ParsedAgent("??", "??", "Unknown ??", "Unknown");
+
+        assertEquals(DeviceNaming.UNKNOWN_DEVICE, DeviceNaming.name(DeviceHints.NONE, nothing, DeviceType.UNKNOWN));
+        assertEquals(DeviceNaming.UNKNOWN_DEVICE, DeviceNaming.name(DeviceHints.NONE, nothing, DeviceType.WEB_BROWSER));
+    }
+
+    @Test
+    void aBrowserIsNamedAfterItsAgentAndOsWithTheWebSuffix() {
+        DeviceNaming.ParsedAgent chrome = new DeviceNaming.ParsedAgent("Apple Macintosh", "Mac OS X 10.15.7",
+                "Chrome 128", "Mac OS X 10");
+
+        assertEquals("Chrome 128 · Mac OS X 10 · web",
+                DeviceNaming.name(DeviceHints.NONE, chrome, DeviceType.WEB_BROWSER));
+    }
+
+    @Test
+    void aBrowserThatSendsTheHeadersStillGetsTheWebSuffix() {
+        assertEquals("MacBookPro18,3 · macOS 15.1 · Koala 2.0.0 · web",
+                DeviceNaming.name(DeviceHints.of("MacBookPro18,3", "macOS 15.1", "2.0.0"), BLIND_AGENT,
+                        DeviceType.WEB_BROWSER));
+    }
+
+    @Test
+    void theCapCountsCodePointsSoASurrogatePairIsNeverSplit() {
+        String emoji = "\uD83D\uDE00".repeat(70);
+        String name = DeviceNaming.name(DeviceHints.of(emoji, emoji, null), BLIND_AGENT, DeviceType.OTHER);
+
+        assertTrue(name.codePointCount(0, name.length()) <= DeviceNaming.MAX_LENGTH);
+        assertFalse(Character.isHighSurrogate(name.charAt(name.length() - 1)), "yarim surrogate kaldi");
+        String model = DeviceHints.of(emoji, null, null).model();
+        assertEquals(64, model.codePointCount(0, model.length()));
+    }
+
+    @Test
+    void theNameIsCappedSoAHostileHeaderCannotOverflowTheColumn() {
+        String longModel = "x".repeat(200);
+        String name = DeviceNaming.name(DeviceHints.of(longModel, "y".repeat(200), "z".repeat(100)), BLIND_AGENT,
+                DeviceType.OTHER);
+
+        assertTrue(name.length() <= DeviceNaming.MAX_LENGTH, "uzunluk " + name.length());
+    }
+
+    @Test
+    void controlCharactersAndBlankHeadersAreDropped() {
+        DeviceHints hints = DeviceHints.of("  iPhone15,3\u0000\n", "   ", "\u200B");
+
+        assertEquals("iPhone15,3", hints.model());
+        assertNull(hints.os());
+        assertNull(hints.appVersion());
+        assertTrue(hints.describesDevice());
+        assertEquals(DeviceHints.NONE, DeviceHints.of("", null, "  "));
+    }
+}

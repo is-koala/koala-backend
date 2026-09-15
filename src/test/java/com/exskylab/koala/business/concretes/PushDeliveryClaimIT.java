@@ -13,6 +13,9 @@ import com.exskylab.koala.core.utilities.push.PushService;
 import com.exskylab.koala.dataAccess.DeviceDao;
 import com.exskylab.koala.entities.Device;
 import com.exskylab.koala.entities.User;
+import com.exskylab.koala.core.mappers.DeviceMapperImpl;
+import com.exskylab.koala.core.helpers.DeviceIdentityRequest;
+import com.exskylab.koala.core.helpers.DeviceHints;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -179,8 +182,8 @@ class PushDeliveryClaimIT extends AbstractIntegrationTest {
                 + "Chrome/140.0.0.0 Mobile Safari/537.36";
         DeviceManager deviceManager = deviceManager();
         TransactionTemplate transaction = new TransactionTemplate(transactionManager);
-        Device device = transaction.execute(status -> deviceManager.findOrCreateDevice(
-                systemUser(), "192.0.2.10", userAgent, null, ClientPlatform.ANDROID));
+        Device device = transaction.execute(status -> deviceManager.findOrCreateDevice(systemUser(),
+                identity(userAgent, null, ClientPlatform.ANDROID)));
         UUID deviceId = device.getId();
         jdbcTemplate.update("update devices set push_token = 'invalid-fcm-token' where id = ?", deviceId);
 
@@ -415,8 +418,7 @@ class PushDeliveryClaimIT extends AbstractIntegrationTest {
 
         try {
             Future<?> metadataUpdate = executor.submit(() -> transaction.executeWithoutResult(status -> {
-                deviceManager.findOrCreateDevice(
-                        systemUser(), "192.0.2.20", userAgent, clientDeviceId, platform);
+                deviceManager.findOrCreateDevice(systemUser(), identity(userAgent, clientDeviceId, platform));
                 metadataUpdated.countDown();
                 await(allowMetadataCommit);
             }));
@@ -489,8 +491,8 @@ class PushDeliveryClaimIT extends AbstractIntegrationTest {
         TransactionTemplate transaction = new TransactionTemplate(transactionManager);
         UUID oldDeviceId;
         if (clientDeviceId == null) {
-            Device oldDevice = transaction.execute(status -> metadataManager.findOrCreateDevice(
-                    systemUser(), "192.0.2.30", userAgent, null, ClientPlatform.ANDROID));
+            Device oldDevice = transaction.execute(status -> metadataManager.findOrCreateDevice(systemUser(),
+                    identity(userAgent, null, ClientPlatform.ANDROID)));
             oldDeviceId = oldDevice.getId();
             jdbcTemplate.update("update devices set push_token = ? where id = ?", token, oldDeviceId);
         } else {
@@ -507,8 +509,8 @@ class PushDeliveryClaimIT extends AbstractIntegrationTest {
 
         try {
             Future<?> metadataUpdate = executor.submit(() -> transaction.executeWithoutResult(status ->
-                    metadataManager.findOrCreateDevice(
-                            systemUser(), "192.0.2.31", userAgent, clientDeviceId, ClientPlatform.ANDROID)));
+                    metadataManager.findOrCreateDevice(systemUser(),
+                            identity(userAgent, clientDeviceId, ClientPlatform.ANDROID))));
             TestLatches.awaitProgress(metadataReadToken);
 
             transaction.executeWithoutResult(status -> transferManager.savePushToken(
@@ -542,7 +544,7 @@ class PushDeliveryClaimIT extends AbstractIntegrationTest {
                 jdbcTemplate.queryForObject(
                         "select exists(select 1 from users where id = ? and is_deleted = false)",
                         Boolean.class, authenticatedUser.getId())));
-        return new DeviceManager(deviceDao, securityService, mutationLock);
+        return new DeviceManager(deviceDao, securityService, mutationLock, new DeviceMapperImpl());
     }
 
     private User systemUser() {
@@ -568,5 +570,13 @@ class PushDeliveryClaimIT extends AbstractIntegrationTest {
                 values (?, now(), false, ?, 'PUSH', 'ACCOUNT_SECURITY', ?, ?, 'title', 'body',
                     'QUEUED', 0, '{"route":"home"}', null)
                 """, notificationId, SYSTEM_USER_ID, "snapshot-token", deviceId);
+    }
+
+    private static DeviceIdentityRequest identity(String userAgent, String deviceId) {
+        return DeviceIdentityRequest.legacy(userAgent, deviceId);
+    }
+
+    private static DeviceIdentityRequest identity(String userAgent, String deviceId, ClientPlatform platform) {
+        return new DeviceIdentityRequest(userAgent, deviceId, platform, DeviceHints.NONE);
     }
 }

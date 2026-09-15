@@ -1499,7 +1499,7 @@ bırakıp anlatıyı silmek tutarsız olurdu. `storage_key` ve `checksum_sha256`
 
 `GET /users/me/applications` (isteğe bağlı `status` filtresi) ve `GET /users/me/assignments` (`asEmployer=true` ile işveren tarafı). İkisi de sayfalı, sıralama `PageableSanitizer` beyaz listesiyle kısıtlı, entity graph ile tek sorguda ilan + kategori + adres + şirket yükleniyor.
 
-**Oturum listeleme kendi oturumunu işaretler.** `UserPrincipal` artık `sessionId` taşıyor; `GET /users/me/sessions` her satırda `current` bayrağı döndürüyor, `DELETE /users/me/sessions` **istek atan oturum hariç** hepsini kapatıyor. Başkasının oturumunu kapatmaya çalışmak 404 döner.
+**Oturum listeleme kendi oturumunu işaretler.** `UserPrincipal` artık `sessionId` taşıyor; `GET /users/me/sessions` her satırda `current` bayrağı döndürüyor, `DELETE /users/me/sessions` **istek atan oturum hariç** hepsini kapatıyor. Başkasının oturumunu kapatmaya çalışmak 404 döner. Oturum detayı, cihaz adlandırma ve GeoIP konumu §2bc'de (#306).
 
 **K-07 kapandı: oturum yazımı seyreltildi.** `SessionAuthFilter` her istekte `lastAccessedAt` yazıp `save` çağırıyordu — istek başına bir UPDATE. Artık yalnızca son erişim **5 dakikadan eskiyse** yazılıyor (`LAST_ACCESS_WRITE_INTERVAL`). Oturum tazeliği bu çözünürlükte yeterli; asıl süre kontrolü `refreshExpiresAt` üzerinden yapılıyor.
 
@@ -4480,6 +4480,123 @@ ayrı. `IdentityVerificationStampMigrationIT` (probe veritabanı, `MessageReport
 iki kuralla. `ActivityNotificationRulesTest`: `identityRevealed` akış + push, e-posta yok, işçisiz atama sessiz.
 `LogMasksTest.anIpKeepsOnlyItsNetworkPrefix`, `RateLimitBucketTest`.
 
+## 2bc. Oturum detayı, cihaz adı ve GeoIP konumu (#306)
+
+Cihaz testi (14.09.2026): oturum listesi cihazları `?? (iOS ??)` gösteriyordu — mobil `User-Agent: Koala (iOS)`
+gönderiyor, YAUAA model/sürüm çıkaramıyor ve `DeviceManager.describe` `%s (%s)` ile iki `??`'yı olduğu gibi
+yazıyordu. Oturuma dokununca detay yoktu; `login_attempts` tablosu yazılıyor ama hiçbir uçtan okunmuyordu
+(§2aw "adli iz, canlı savunma değil"). Dört parça birlikte indi.
+
+**Cihaz adı üç kaynaktan, tek kuralla: `core/helpers/DeviceNaming`.** `DeviceManager.identify` YAUAA'yı bir
+kez çalıştırır ve `DeviceNaming.name(hints, parsedAgent, type)` çağırır:
+
+| Kaynak | Ad | Örnek |
+|---|---|---|
+| `X-Koala-Device-Model` / `X-Koala-OS` / `X-Koala-App-Version` başlıkları (`core/helpers/DeviceHints`) | model→pazarlama adı · OS · `Koala ` + sürüm | `iPhone 14 Pro Max · iOS 18.1 · Koala 1.1.0` |
+| başlık yok, tip `WEB_BROWSER` | tarayıcı (major) · OS (major) · `web` | `Chrome 128 · Mac OS X 10 · web` |
+| başlık var, tip `WEB_BROWSER` | başlık adı · `web` | `MacBookPro18,3 · macOS 15.1 · Koala 2.0.0 · web` |
+| başlık yok, diğer | YAUAA cihaz adı · OS | `Apple iPhone · iOS 17.4` |
+| hiçbir parça okunamıyor | `Bilinmeyen cihaz` | curl, `hacker` |
+
+`??` **hiçbir zaman** yazılmaz: her parçadan `??` dizisi ve `Unknown`/`Hacker`/`Robot` değerleri düşürülür,
+kalan parçalar ` · ` ile birleşir; boş kalırsa sabit etiket. `Koala (iOS)` başlıksız `Apple iPhone · iOS` olur
+(`?? (iOS ??)` değil), `curl/8.4.0` `Curl · Cloud`, `hacker` ve boş UA `Bilinmeyen cihaz` (ölçüldü). Model→pazarlama adı tablosu `core/helpers/AppleDeviceNames` — küçük ve statik (iPhone 11–16e, güncel
+iPad'ler); bilinmeyen model **ham** kalır (`Pixel 8`, `SM-S928B`). Başlıklar saldırgan girdisidir: kontrol ve
+biçim karakterleri silinir, model/OS 64, sürüm 32 kod noktasında kesilir (surrogate çifti bölünmez), ad
+120'de (`devices.name` 255). Tip kuralı değişmedi: `X-Client-Platform: web` → `WEB_BROWSER`, gerisi UA sezgisi
+(`Koala (iOS)` → `IOS`); IOS/ANDROID başlığının tipi ezmesi bilerek eklenmedi, kapsam dışı.
+
+**Kullanıcı adı `custom_name`'e yazılır, otomatik ad yerinde durur.** `PATCH /users/me/devices/{deviceId}`
+`{name}` (`@NotBlank @Size(max=60)`, kırpılır) `Device.customName`'i yazar; `name` her girişte yeniden üretilmeye
+devam eder (OS/sürüm güncellemesi görünsün diye) ve `Device.displayName()` = `customName ?? name` DTO'lardaki
+`deviceName`'in tek kaynağı (`SessionDto`, `SessionDetailDto`, `DeviceDto` — hepsi MapStruct `expression` ile).
+Neden ayrı sütun: UA-yolu cihaz eşlemesi (`findByUserAndNameAndType`) `name`'e bakıyor; rename `name`'i
+değiştirseydi X-Device-Id göndermeyen bir istemcinin oturumu ilk istekte `SESSION_NOT_MATCHING_CURRENT_DEVICE`
+ile düşerdi. Başkasının cihazı `findByIdAndUser_Id` ile aynı sorguda elenip 404 `DEVICE_NOT_FOUND` alır — tek
+dal, gizlenecek ayrım yok (§2d2). Temizleme (custom_name'i sıfırlama) bilerek yok; gerekirse boş dize kabul
+eden ayrı bir karar.
+
+**Cihaz kimliği tek nesneyle taşınır: `core/helpers/DeviceIdentityRequest`** (UA, `X-Device-Id`, platform,
+başlık ipuçları). `DeviceService.findOrCreateDevice(user, identity)` / `findDevice(user, identity)` başka aşırı
+yükleme taşımaz; `ClientContext.deviceIdentity()` HTTP yolundan, `DeviceIdentityRequest.from(request)` filtreden,
+`DeviceIdentityRequest.legacy(ua, deviceId)` push-token uçlarından kurar. Eski `findOrCreateDevice(user, ip, ua,
+id, platform)` merdiveni ve `ClientContext`'in 3/4 argümanlı kurucuları silindi (IP cihaz eşlemesinde hiç
+kullanılmıyordu).
+
+**UA-yolu kimliği başlıkları da içerir.** X-Device-Id göndermeyen istemcide cihaz `name + type` ile aranır ve
+`name` başlıklardan türediği için **uygulama sürümü değişince yeni cihaz satırı açılır** — bugünkü davranışla
+aynı sınıf: tarayıcı UA'sı da sürüm taşır ve her tarayıcı güncellemesi zaten yeni satır açıyordu. İki gerçek
+istemci de `X-Device-Id` gönderiyor (§2m), yani bu yol yalnız curl benzeri çağıranlar için. Fingerprint
+sütunu bu yüzden açılmadı.
+
+**`GET /users/me/sessions/{sessionId}` → `SessionDetailDto`.** Cihaz adı/tipi/`deviceCustomName`, `createdAt`,
+`lastAccessedAt`, `refreshExpiresAt`, `ipAddress` (**maskelenmez** — kullanıcının kendi verisi, §2i'nin log
+kuralı yanıt gövdesine uygulanmaz), `location`, `current`, `logins` (bu cihazdan **başarılı** giriş sayısı) ve
+`loginHistory[]` (son 20 deneme: `at`, `ipAddress`, `location`, `success`). Kaynak `login_attempts`; tabloya
+`device_id` (FK, `login_attempts` → `devices`) ve `location` sütunları eklendi (`2026/09/15-02`). Başarılı
+giriş `Device`'ı, başarısız giriş **tanınan** cihazı bağlar: parola yanlışsa `deviceService.findDevice` ile
+mevcut satır aranır, bulunursa `device_id` yazılır, bulunmazsa (hesap yok / ilk cihaz) boş kalır. Yani "bu
+cihazdan 3 başarısız deneme" sorusu cevaplanabiliyor; hesabı olmayan adresin denemesi eskisi gibi sahipsiz.
+**Arama hesap yokken de koşuyor** (`userService.getReference(rastgele id)` ile aynı sorgu, boş döner; UA-yolunda
+detached proxy `findByUserAndNameAndType`'a parametre olarak giriyor, `SessionDetailIT
+.aClientWithoutADeviceIdIsMatchedByItsUserAgentEvenWhenTheAccountDoesNotExist` gerçek Postgres'te 401 alıyor,
+500 değil): §2d2'nin
+"süre de yanıtın parçası" kuralı — yalnız kayıtlı adreste fazladan bir sorgu atmak #42'nin kapattığı sayım
+kanalını zamanlama üzerinden geri açardı;
+`LoginConcealmentTest.anUnregisteredEmailStillPaysForTheDeviceLookupTheRegisteredOnePays` sabitliyor.
+Sorgu `user_id + device_id` ile (`idx_login_attempts_device_time`), iki sorgu: sayfa (`PageRequest(0, 20)`) +
+sayım. N+1 yok: `LoginHistoryEntryDto` yalnız skaler kolon okur, `user`/`device` proxy'lerine dokunulmaz
+(`CollectionQueryWithoutGraphTest` allowlist'inde); `SessionDetailIT.theDetailDoesNotGrowWithTheLoginHistory`
+1 ve 4 girişli geçmişte statement sayısını eşitliyor, lazy fetch sıfır. Aynı turda
+`SessionDao.findAllByDevice_User_IdAndIsActive` `@EntityGraph("device")` kazandı — liste cihazı satır başına
+yüklüyordu. **Geçmiş yalnız bu sürümden sonraki girişleri kapsar:** migration öncesi satırlarda `device_id`
+`NULL` ve backfill yok (eski satırda cihaz eşlemesi yapılamaz); OpenAPI açıklaması ve `sessions.md` bunu yazıyor.
+
+**Detay ve kapatma aynı kapıdan: `SessionManager.myActiveSession(id, userId)`.** `findByIdAndIsActive(id, true)`
++ sahip kontrolü; başkasının oturumu `Concealment.notFound(MY_SESSION_NOT_FOUND)` ile var olmayan oturumla
+**aynı zarfı** alır (`someoneElsesSessionLooksExactlyLikeAMissingOne` gövdeyi birebir karşılaştırıyor).
+`revokeSession` de bu yardımcıdan geçiyor — eskiden `findById` ile kapalı oturumu da buluyor ve sahiplik
+reddini `Concealment` dışında atıyordu; artık **zaten kapatılmış oturumu kapatmak da 404** (liste yalnız
+aktifleri gösteriyor, kapalı oturumun geçmişi kullanıcı yüzeyinde değil).
+
+**GeoIP: MaxMind GeoLite2-City, süreç içi `.mmdb`, opsiyonel.** `core/geoip/GeoIpResolver` (Spring bean)
+`locate(ip) → Optional<String>`; `GeoIpConfig` `geoip.database-path` (`GEOIP_DATABASE_PATH`) boşsa ya da
+dosya yoksa/okunamıyorsa **tek `WARN` yazıp `GeoIpResolver.unavailable()` bağlar** — açılış düşmez, konum
+`null` kalır (`GeoIpConfigTest` üç hâli, her IT dosyasız açılışı sabitliyor). Dosya varsa
+`MaxMindGeoIpResolver`: `DatabaseReader` + `CHMCache`, biçim `Şehir, ÜLKEKODU` (`Istanbul, TR`), şehir yoksa
+ülke kodu. Özel/loopback/link-local adresler ve `unknown` gibi IP olmayan dizeler aranmaz; arama hatası
+`DEBUG` ve `empty`. **Haftalık güncelleme restart istemez:** okuyucu her aramadan önce dosyanın `mtime`'ına
+bakar, değişmişse `synchronized` bloğunda bir kez yeniden açıp eskisini kapatır; açılamayan (yarım yazılmış)
+dosyada eski okuyucu kalır, o `mtime` bir daha denenmez (`MaxMindGeoIpResolverTest` iki hâli sahte
+`DatabaseReader` kaynağıyla ölçüyor). — **IP hiçbir log satırına girmez**: `LogPrivacyTest` yasaklı listesine `getIpAddress()`,
+`getLocation()`, `getRemoteAddr()` ve `ipAddress`/`clientIp`/`remoteAddress`/`location` değişken adları
+eklendi. Bilinen istisna: `RateLimitFilter`'ın aşım `WARN`'ı `clientIpResolver.resolve(request)` ile IP
+yazıyor — bu PR'dan önce vardı, taramanın tanımadığı yazım, ayrı issue. Konum üç yerde yazılır:
+`SessionManager.createSession` (`sessions.location`), `AuthManager` başarılı/başarısız deneme
+(`login_attempts.location`), `refreshToken` IP değiştiğinde (`session.ipAddress` ile birlikte). Bağımlılık
+`com.maxmind.geoip2:geoip2:4.3.1` (Apache-2.0; veritabanı ayrı lisans). Testte gerçek dosya gerekmez:
+`SessionDetailIT` `@MockitoBean GeoIpResolver` ile tek IP'ye konum verir, diğerleri `null`.
+
+**Lisans, indirme, volume ve haftalık güncelleme `docs/runbooks/geoip.md`'de.** GeoLite2 EULA yeniden
+dağıtımı yasaklıyor: `.mmdb` **imaja gömülmez**, Dokploy volume'una indirilir; lisans anahtarı secret.
+Kullanıcıya görünen gizlilik metnine MaxMind atıfı ve "giriş anında IP'den yaklaşık konum türetilir" cümlesi
+eklenmeli — KVKK aydınlatma güncellemesi ürün/hukuk adımı, backend yalnız veriyi tutar. Hesap anonimleştirmesi
+`login_attempts.location` ve `devices.custom_name`'i de temizler (`PostgresAccountAnonymizer`,
+`AccountAnonymizationLoginAttemptIT`).
+
+**Personel temizliği `docs/runbooks/sessions.md`.** Tek oturumu kapatan (`is_active=false`,
+`refresh_token_hash=null`, `user_id` şartlı) ve bir cihazı bütün oturumlarıyla soft-delete edip push token'ı
+düşüren SQL; `SessionDetailIT` iki bloğu belgeden okuyup gerçek Postgres'te koşuyor (`RunbookSql` kalıbı).
+Kapatılan oturumun erişim token'ıyla ilk istek **404 `SESSION_NOT_FOUND`** alır (`SessionAuthFilter`
+`ResourceNotFoundException`'ı olduğu gibi çözüyor; 401'e çekmek ayrı karar), yenileme 401
+`AUTH_SESSION_NOT_FOUND_OR_INACTIVE`. Admin ucu `DELETE /admin/users/{id}/sessions/{sessionId}`
+(`user.session.revoke`, denetim) **bu PR'da açılmadı** — runbook o güne kadar tek yol; #306'nın 5. maddesi
+not olarak issue'da.
+
+**İstemci tarafı:** mobil/web her isteğe (en azından `login`/`complete-registration`/`refresh-token`) üç
+`X-Koala-*` başlığını eklemeli; oturum satırına dokununca detay sayfası, "Bu cihaz" rozeti (`current`),
+adlandırma; admin "Cihazlar & oturumlar" sekmesi (#108). Ayrı issue'lar.
+
 ---
 
 ## 3. Testler
@@ -4801,6 +4918,7 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 | Web'de `/bildirim-tercihleri/cikis?token=...` sayfası açılışta `POST /notification-preferences/unsubscribe` çağırmalı — giriş istemez | §2at |
 | Sohbet listesi `/user/queue/messages`'a abone olur | tek akış, 20 topic yerine (§2z) |
 | Presence aboneliği `/topic/presence/{userId}` | global `/topic/presence` **kaldırıldı** (§2z) |
+| Girişte `X-Koala-Device-Model`, `X-Koala-OS`, `X-Koala-App-Version` başlıkları; oturum satırı → `GET /users/me/sessions/{id}` detayı; `PATCH /users/me/devices/{id}` `{name}` | §2bc (#306) |
 | Aynı mesaj iki kanaldan gelebilir, `message.id` ile tekilleştir | sohbet açıkken hem topic hem kişisel kuyruk (§2z) |
 
 **Şirket detayından mesaj gönderme** istemcide duruyor ama **yapılmayacak** — konuşma ilana bağlı kalıyor, başvuru şartı korunuyor. Tasarımdan çıkarılmalı.

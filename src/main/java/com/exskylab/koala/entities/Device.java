@@ -39,6 +39,9 @@ public class Device extends BaseEntity{
     @Column(name = "name")
     private String name;
 
+    @Column(name = "custom_name", length = 60)
+    private String customName;
+
     @Column(name = "client_device_id", length = 128)
     private String clientDeviceId;
 
@@ -53,5 +56,9 @@ public class Device extends BaseEntity{
 
     @OneToMany(mappedBy = "device", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Session> sessions;
+
+    public String displayName() {
+        return customName == null || customName.isBlank() ? name : customName;
+    }
 
 }

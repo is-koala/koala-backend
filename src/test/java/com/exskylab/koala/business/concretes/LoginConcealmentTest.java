@@ -11,9 +11,13 @@ import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.SessionService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.dtos.auth.request.AuthLoginDto;
+import com.exskylab.koala.core.geoip.GeoIpResolver;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.UnauthorizedException;
 import com.exskylab.koala.core.helpers.ClientContext;
+import com.exskylab.koala.core.helpers.ClientPlatform;
+import com.exskylab.koala.core.helpers.DeviceHints;
+import com.exskylab.koala.core.helpers.DeviceIdentityRequest;
 import com.exskylab.koala.core.properties.SessionProperties;
 import com.exskylab.koala.core.security.JwtService;
 import com.exskylab.koala.entities.LoginAttempt;
@@ -29,9 +33,13 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -46,6 +54,7 @@ class LoginConcealmentTest {
     private UserService userService;
     private PasswordEncoder passwordEncoder;
     private LoginAttemptService loginAttemptService;
+    private DeviceService deviceService;
     private AuthManager authManager;
 
     @BeforeEach
@@ -53,15 +62,22 @@ class LoginConcealmentTest {
         userService = mock(UserService.class);
         passwordEncoder = mock(PasswordEncoder.class);
         loginAttemptService = mock(LoginAttemptService.class);
+        deviceService = mock(DeviceService.class);
 
         when(passwordEncoder.encode(anyString())).thenReturn(ABSENT_ACCOUNT_HASH);
+        when(userService.getReference(any())).thenAnswer(invocation -> {
+            User phantom = new User();
+            phantom.setId(invocation.getArgument(0));
+            return phantom;
+        });
 
         authManager = new AuthManager(
                 userService, mock(PendingRegistrationService.class), mock(NotificationService.class),
                 mock(AuthLinkService.class), mock(JwtService.class), passwordEncoder,
-                mock(DeviceService.class), mock(SessionService.class), loginAttemptService,
+                deviceService, mock(SessionService.class), loginAttemptService,
                 mock(SecurityService.class), new SessionProperties(), mock(LegalService.class),
-                mock(PasswordResetTokenService.class), mock(ApplicationEventPublisher.class));
+                mock(PasswordResetTokenService.class), mock(ApplicationEventPublisher.class),
+                GeoIpResolver.unavailable());
 
         when(userService.getByEmail(UNREGISTERED_EMAIL))
                 .thenThrow(new ResourceNotFoundException("{user.not.found.by.email}"));
@@ -104,6 +120,18 @@ class LoginConcealmentTest {
         assertNull(saved.getValue().getUser());
     }
 
+    @Test
+    void anUnregisteredEmailStillPaysForTheDeviceLookupTheRegisteredOnePays() {
+        assertThrows(RuntimeException.class, () -> authManager.login(loginWith(UNREGISTERED_EMAIL), client()));
+        assertThrows(RuntimeException.class, () -> authManager.login(loginWith(REGISTERED_EMAIL), client()));
+
+        ArgumentCaptor<User> subjects = ArgumentCaptor.forClass(User.class);
+        verify(deviceService, times(2)).findDevice(subjects.capture(),
+                eq(DeviceIdentityRequest.legacy("Koala JUnit", "cihaz-1")));
+        assertTrue(subjects.getAllValues().stream().allMatch(subject -> subject != null && subject.getId() != null),
+                "hesap yokken de cihaz aramasi gercek bir kimlikle kosmali");
+    }
+
     private User registeredUser() {
         User user = new User();
         user.setId(UUID.randomUUID());
@@ -117,6 +145,6 @@ class LoginConcealmentTest {
     }
 
     private ClientContext client() {
-        return new ClientContext("203.0.113.7", "Koala JUnit", "cihaz-1");
+        return new ClientContext("203.0.113.7", "Koala JUnit", "cihaz-1", ClientPlatform.UNKNOWN, DeviceHints.NONE);
     }
 }

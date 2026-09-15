@@ -6,6 +6,8 @@ import com.exskylab.koala.core.constants.LegalMessages;
 import com.exskylab.koala.core.dtos.legal.request.ConsentDecisionDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.ClientContext;
+import com.exskylab.koala.core.helpers.ClientPlatform;
+import com.exskylab.koala.core.helpers.DeviceHints;
 import com.exskylab.koala.business.abstracts.DisputeService;
 import com.exskylab.koala.business.abstracts.PaymentService;
 import com.exskylab.koala.core.privacy.AccountAnonymizer;
@@ -119,7 +121,7 @@ class LegalConsentTest {
 
         List<ConsentRecord> records = legalManager.recordConsents(user,
                 List.of(decision(terms, true), decision(marketing, false)),
-                new ClientContext("88.244.1.5", "Koala/1.0.0 (android)", "device-1"));
+                new ClientContext("88.244.1.5", "Koala/1.0.0 (android)", "device-1", ClientPlatform.UNKNOWN, DeviceHints.NONE));
 
         assertEquals(2, records.size());
         ConsentRecord accepted = records.stream().filter(ConsentRecord::isGranted).findFirst().orElseThrow();
