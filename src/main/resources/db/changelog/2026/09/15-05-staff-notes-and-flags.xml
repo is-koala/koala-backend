@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-15-05-01-staff-notes" author="koala">
+        <createTable tableName="staff_notes">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="resource_type" type="VARCHAR(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="resource_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="author_staff_id" type="UUID">
+                <constraints nullable="false"
+                             foreignKeyName="fk_staff_notes_author" references="staff_members(id)"/>
+            </column>
+            <column name="body" type="VARCHAR(2000)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMPTZ">
+                <constraints nullable="false"/>
+            </column>
+            <column name="edited_at" type="TIMESTAMPTZ"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
+        </createTable>
+
+        <sql>
+            CREATE INDEX idx_staff_notes_resource_created_at
+                ON staff_notes (resource_type, resource_id, created_at DESC)
+                WHERE is_deleted = false;
+        </sql>
+
+        <rollback>
+            <sql>DROP INDEX IF EXISTS idx_staff_notes_resource_created_at;</sql>
+            <dropTable tableName="staff_notes"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-15-05-02-staff-flags" author="koala">
+        <createTable tableName="staff_flags">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="resource_type" type="VARCHAR(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="resource_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="kind" type="VARCHAR(16)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="label" type="VARCHAR(120)"/>
+            <column name="set_by_staff_id" type="UUID">
+                <constraints nullable="false"
+                             foreignKeyName="fk_staff_flags_set_by" references="staff_members(id)"/>
+            </column>
+            <column name="set_at" type="TIMESTAMPTZ">
+                <constraints nullable="false"/>
+            </column>
+            <column name="cleared_at" type="TIMESTAMPTZ"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMPTZ"/>
+        </createTable>
+
+        <sql>
+            CREATE UNIQUE INDEX uk_staff_flags_active_resource_kind
+                ON staff_flags (resource_type, resource_id, kind)
+                WHERE cleared_at IS NULL;
+        </sql>
+        <sql>
+            CREATE INDEX idx_staff_flags_resource_set_at
+                ON staff_flags (resource_type, resource_id, set_at DESC);
+        </sql>
+
+        <rollback>
+            <sql>DROP INDEX IF EXISTS idx_staff_flags_resource_set_at;</sql>
+            <sql>DROP INDEX IF EXISTS uk_staff_flags_active_resource_kind;</sql>
+            <dropTable tableName="staff_flags"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-15-05-03-staff-note-and-flag-permissions" author="koala">
+        <sql>
+            INSERT INTO staff_role_permissions (id, staff_role_id, permission_code, created_at)
+            SELECT gen_random_uuid(), role.id, grant_row.permission_code, now()
+            FROM (VALUES
+                ('SUPPORT_AGENT', 'note.read'),
+                ('SUPPORT_AGENT', 'note.write'),
+                ('TRUST_LEAD',    'flag.manage')
+            ) AS grant_row (role_code, permission_code)
+            JOIN staff_roles role ON role.code = grant_row.role_code
+            ON CONFLICT ON CONSTRAINT uk_staff_role_permissions_role_code DO NOTHING;
+        </sql>
+        <rollback>
+            <sql>
+                DELETE FROM staff_role_permissions
+                WHERE permission_code IN ('note.read', 'note.write', 'flag.manage');
+            </sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

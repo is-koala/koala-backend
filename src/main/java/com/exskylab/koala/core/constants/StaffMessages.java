@@ -45,4 +45,19 @@ public class StaffMessages {
     public static final String REFRESH_TOKEN_REQUIRED = "{staff.refresh.token.required}";
     public static final String ACTIVE_REQUIRED = "{staff.active.required}";
     public static final String ROLE_CODE_REQUIRED = "{staff.role.code.required}";
+    public static final String NOTES_LISTED = "{staff.notes.listed}";
+    public static final String NOTE_CREATED = "{staff.note.created}";
+    public static final String NOTE_UPDATED = "{staff.note.updated}";
+    public static final String NOTE_DELETED = "{staff.note.deleted}";
+    public static final String NOTE_NOT_FOUND = "{staff.note.not.found}";
+    public static final String NOTE_BODY_REQUIRED = "{staff.note.body.required}";
+    public static final String NOTE_BODY_TOO_LONG = "{staff.note.body.too.long}";
+    public static final String FLAGS_LISTED = "{staff.flags.listed}";
+    public static final String FLAG_SET = "{staff.flag.set}";
+    public static final String FLAG_CLEARED = "{staff.flag.cleared}";
+    public static final String FLAG_NOT_FOUND = "{staff.flag.not.found}";
+    public static final String FLAG_KIND_REQUIRED = "{staff.flag.kind.required}";
+    public static final String FLAG_LABEL_TOO_LONG = "{staff.flag.label.too.long}";
+    public static final String FLAG_RESOURCE_REQUIRED = "{staff.flag.resource.required}";
+    public static final String FLAG_BATCH_TOO_LARGE = "{staff.flag.batch.too.large}";
 }

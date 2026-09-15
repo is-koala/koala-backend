@@ -122,6 +122,16 @@ _Avoid_: Devre dışı hesap, silme talebi
 Hiçbir hesaba bağlanamayan giriş denemesi kaydı; `login_attempts` satırında `user_id` boştur ve satır yalnızca giriş formuna yazılan adresi taşır. Adresin sahibi hiç kaydolmamış olabilir. Kodda tek ad `unattributed` (`unattributedDays`, `deleteUnattributedBefore`, `purgeExpiredUnattributed`, `idx_login_attempts_unattributed_*`), Türkçe belgede tek ad "sahipsiz". Karşıtı **Hesaba Bağlı Giriş Denemesi** (`attributed`).
 _Avoid_: Ownerless, sahipsiz kayıt, anonim giriş denemesi
 
+## Personel notları ve işaretleri
+
+**Personel Notu**:
+Personelin bir kullanıcı, şirket, atama, uyuşmazlık, şikayet ya da ilan hakkında bıraktığı serbest metin (≤2000 karakter); yazarı ve düzenlenme anı taşır, yalnız yazarı ya da `staff.manage` sahibi düzenler/siler. Hedef kaynağın varlığı denetlenmez; kodda `StaffNote`.
+_Avoid_: Yorum, admin notu, kullanıcı notu (kullanıcının kendi yazdığı `notes` alanlarıyla karışır)
+
+**İşaret**:
+Personelin bir kaynağa koyduğu `RISK` / `VIP` / `WATCH` / `OTHER` türünde etiket; aynı kaynakta her türden en fazla bir etkin işaret, kaldırılan işaret `clearedAt` ile kapanır ve listelerde görünmez. Liste rozetleri toplu okumayla (`resourceIds`, ≤200) çekilir; kodda `StaffFlag`.
+_Avoid_: Bayrak, etiket, rozet (kullanıcı rozetleri `Badge` ile karışır)
+
 ## Ulaşım
 
 **Ulaşım Planı**:

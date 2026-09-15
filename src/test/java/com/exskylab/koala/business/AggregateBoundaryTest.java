@@ -38,6 +38,7 @@ class AggregateBoundaryTest {
                     "StaffRolePermissionDao", "StaffRoleIncludeDao")),
             Map.entry("StaffAccountManager", Set.of("StaffMemberDao", "StaffMemberRoleDao")),
             Map.entry("StaffAuditManager", Set.of("AdminAuditEntryDao", "AdminAuditEntryDetailDao")),
+            Map.entry("StaffNoteManager", Set.of("StaffNoteDao", "StaffFlagDao")),
             Map.entry("NotificationPreferenceManager",
                     Set.of("NotificationPreferenceDao", "CommercialMessageConsentDao")),
             Map.entry("NotificationDispatchManager", Set.of("NotificationDao")),

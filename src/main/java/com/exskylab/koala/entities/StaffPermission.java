@@ -29,7 +29,10 @@ public enum StaffPermission {
     STAFF_READ("staff.read", false, PermissionSensitivity.PERSONAL_DATA),
     STAFF_MANAGE("staff.manage", true, PermissionSensitivity.PERSONAL_DATA),
     ROLE_MANAGE("role.manage", true, PermissionSensitivity.NORMAL),
-    AUDIT_READ("audit.read", false, PermissionSensitivity.PERSONAL_DATA);
+    AUDIT_READ("audit.read", false, PermissionSensitivity.PERSONAL_DATA),
+    NOTE_READ("note.read", false, PermissionSensitivity.PERSONAL_DATA),
+    NOTE_WRITE("note.write", true, PermissionSensitivity.PERSONAL_DATA),
+    FLAG_MANAGE("flag.manage", true, PermissionSensitivity.NORMAL);
 
     private static final Map<String, StaffPermission> BY_CODE = Arrays.stream(values())
             .collect(Collectors.toUnmodifiableMap(StaffPermission::getCode, Function.identity()));
