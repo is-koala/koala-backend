@@ -10,6 +10,8 @@ import com.exskylab.koala.entities.NotificationTargetType;
 import com.exskylab.koala.entities.User;
 import org.junit.jupiter.api.Test;
 
+import tools.jackson.databind.ObjectMapper;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -19,6 +21,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ActivityEmailModelTest {
 
@@ -132,5 +135,21 @@ class ActivityEmailModelTest {
         user.setLastName("Yılmaz");
         assertEquals("Ayşe Yılmaz", ActivityEmailModel.formatWho(user));
         assertNull(ActivityEmailModel.formatWho(null));
+    }
+
+    @Test
+    void typicalActivityEmailParametersDoNotFitVarchar255() {
+        User recipient = new User();
+        recipient.setFirstName("Ayşe");
+        String json = new ObjectMapper().writeValueAsString(ActivityEmailModel.parameters(
+                recipient,
+                "Düğün fotoğrafı — Kadıköy stüdyo çekimi",
+                "İş tamamlandı olarak işaretlendi.",
+                "https://iskoala.com/panel/is/" + ASSIGNMENT_ID,
+                "20 Eylül 2026, 09:30",
+                "Kadıköy, İstanbul",
+                "Mehmet Yılmaz",
+                "1.250,00 ₺"));
+        assertTrue(json.length() > 255, json);
     }
 }
