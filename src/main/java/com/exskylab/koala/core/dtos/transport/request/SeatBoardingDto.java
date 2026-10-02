@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -21,7 +22,8 @@ import java.util.UUID;
 @NoArgsConstructor
 public class SeatBoardingDto {
 
-    @Schema(description = "İşçi QR'ındaki koala://board/worker/{seatAssignmentId}?t=... bağlantısının t parametresi. "
+    @Size(max = 256, message = TransportMessages.TOKEN_MAX_LENGTH)
+    @Schema(description = "İşçi QR'ındaki {şema}://board?t=... bağlantısının t parametresi (w1. ile başlar). "
             + "Verilirse kaynak EMPLOYER_SCANNED_WORKER_QR olur ve kind yalnız BOARDED olabilir; verilmezse "
             + "listeden işaretleme (EMPLOYER_MARKED).")
     private String token;
@@ -45,7 +47,7 @@ public class SeatBoardingDto {
             example = "3d513c3e-e449-4e0a-ae0e-ef3cdef809e4")
     private UUID clientEventId;
 
-    @Schema(description = "BOARDED (varsayılan) ya da NO_SHOW. ALIGHTED bu sürümde kabul edilmez.")
+    @Schema(description = "BOARDED (varsayılan) ya da NO_SHOW.")
     private BoardingKind kind;
 
     @AssertTrue(message = TransportMessages.CAPTURED_AT_NOT_NULL)
@@ -55,10 +57,7 @@ public class SeatBoardingDto {
 
     @AssertTrue(message = TransportMessages.BOARDING_KIND_RULE)
     public boolean isKindConsistentWithToken() {
-        if (token != null && !token.isBlank()) {
-            return kind == null || kind == BoardingKind.BOARDED;
-        }
-        return kind == null || kind == BoardingKind.BOARDED || kind == BoardingKind.NO_SHOW;
+        return token == null || token.isBlank() || kind == null || kind == BoardingKind.BOARDED;
     }
 
     @AssertTrue(message = TransportMessages.BOARDING_POSITION_PAIR)

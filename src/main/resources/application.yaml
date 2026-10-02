@@ -319,9 +319,12 @@ transport:
     batch-size: ${TRANSPORT_REMINDERS_BATCH_SIZE:200}
     cron: ${TRANSPORT_REMINDERS_CRON:0 */5 * * * *}
   boarding:
+    notices-enabled: ${TRANSPORT_BOARDING_NOTICES_ENABLED:false}
     token-ttl: ${TRANSPORT_BOARDING_TOKEN_TTL:PT10M}
     far-from-stop-meters: ${TRANSPORT_BOARDING_FAR_FROM_STOP_METERS:250}
     schedule-tolerance: ${TRANSPORT_BOARDING_SCHEDULE_TOLERANCE:PT30M}
+    clock-skew: ${TRANSPORT_BOARDING_CLOCK_SKEW:PT2M}
+    late-sync-max: ${TRANSPORT_BOARDING_LATE_SYNC_MAX:PT12H}
 
 payout:
   settlement:

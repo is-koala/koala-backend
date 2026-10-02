@@ -15,7 +15,7 @@ import java.time.Instant;
 @NoArgsConstructor
 public class BoardingQrDto {
 
-    @Schema(description = "HMAC biniş token'ı; okutma ucuna token alanında gönderilir.")
+    @Schema(description = "HMAC biniş token'ı (servis: s1., işçi: w1.); okutma ucuna token alanında gönderilir.")
     private String token;
 
     @JsonProperty("static")
@@ -23,9 +23,13 @@ public class BoardingQrDto {
             + "okutulduğunda olay STATIC_QR bayrağı taşır ve ancak servisin QR anahtarı yenilenince geçersizleşir.")
     private boolean staticQr;
 
+    @Schema(description = "Token'ın üretildiği sunucu anı. İstemci refreshAt/expiresAt'i kendi saatine değil bu ana "
+            + "göre (cihaz saat farkını düşerek) planlar.")
+    private Instant issuedAt;
+
     @Schema(types = {"string", "null"}, format = "date-time",
-            description = "Token'ın kabul edildiği son anın sonu (bu andan itibaren 400 TRANSPORT_TOKEN_EXPIRED); "
-                    + "sabit QR'da null.")
+            description = "Token'ın sunucu saatiyle kabul edildiği son anın sonu (sonrası çevrimiçi okutmada 400 "
+                    + "TRANSPORT_TOKEN_EXPIRED); sabit QR'da null.")
     private Instant expiresAt;
 
     @Schema(types = {"string", "null"}, format = "date-time",
@@ -33,7 +37,7 @@ public class BoardingQrDto {
                     + "kabul edilmeye devam eder; sabit QR'da null.")
     private Instant refreshAt;
 
-    @Schema(description = "QR'a basılacak bağlantı: koala://board/shuttle/{shuttleId}?t=<token> ya da "
-            + "koala://board/worker/{seatAssignmentId}?t=<token>.")
+    @Schema(description = "QR'a basılacak bağlantı: {şema}://board?t=<token>. Şema ortama göre koala-dev, "
+            + "koala-staging ya da koala; token türünü ve kimliğini kendisi taşır.")
     private String uri;
 }

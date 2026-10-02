@@ -54,4 +54,8 @@ public class TransportMessages {
     public static final String BOARDINGS_RETRIEVED = "{transport.boardings.retrieved}";
     public static final String QR_ROTATED = "{transport.qr.rotated}";
     public static final String BOARDING_POSITION_PAIR = "{transport.boarding.position.pair}";
+    public static final String TOKEN_MAX_LENGTH = "{transport.boarding.token.max.length}";
+    public static final String WRONG_SHUTTLE = "{transport.wrong.shuttle}";
+    public static final String BOARDING_CONCURRENT = "{transport.boarding.concurrent}";
+    public static final String NOTICE_UNNAMED_WORKER = "{transport.notice.unnamed.worker}";
 }

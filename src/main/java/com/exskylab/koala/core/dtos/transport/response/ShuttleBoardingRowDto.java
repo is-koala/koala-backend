@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Getter
@@ -28,10 +29,16 @@ public class ShuttleBoardingRowDto {
 
     private UUID stopId;
 
-    @Schema(description = "Durağın kalkış gününde BOARDED olayı varsa true.")
+    @Schema(types = {"string", "null"}, description = "Durağın etiketi; yoksa null.")
+    private String stopLabel;
+
+    @Schema(description = "Durağın kalkış anı (UTC).")
+    private Instant scheduledAt;
+
+    @Schema(description = "Bu servis ve durağın kalkış gününde BOARDED olayı varsa true.")
     private boolean boarded;
 
-    @Schema(description = "Satırın durumunu belirleyen olay: o günün BOARDED olayı, yoksa son NO_SHOW işareti, "
+    @Schema(description = "Satırın durumunu belirleyen olay: o kalkışın BOARDED olayı, yoksa son NO_SHOW işareti, "
             + "hiç kayıt yoksa null (henüz binmedi).")
     private BoardingEventDto event;
 }

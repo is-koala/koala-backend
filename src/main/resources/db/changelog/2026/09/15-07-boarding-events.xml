@@ -33,6 +33,15 @@
                 <constraints nullable="false" foreignKeyName="fk_boarding_events_shuttle"
                              references="shuttles(id)"/>
             </column>
+            <column name="stop_id" type="UUID">
+                <constraints nullable="false" foreignKeyName="fk_boarding_events_stop"
+                             references="shuttle_stops(id)"/>
+            </column>
+            <column name="stop_label" type="VARCHAR(120)"/>
+            <column name="stop_scheduled_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="distance_to_stop_meters" type="INTEGER"/>
             <column name="kind" type="VARCHAR(16)">
                 <constraints nullable="false"/>
             </column>
@@ -73,8 +82,11 @@
                 ON boarding_events (seat_assignment_id, client_event_id)
                 WHERE client_event_id IS NOT NULL AND is_deleted = false;
             CREATE UNIQUE INDEX uk_boarding_events_boarded_seat_day
-                ON boarding_events (seat_assignment_id, boarding_day)
+                ON boarding_events (seat_assignment_id, shuttle_id, boarding_day)
                 WHERE kind = 'BOARDED' AND is_deleted = false;
+            CREATE INDEX idx_boarding_events_shuttle_day
+                ON boarding_events (shuttle_id, boarding_day)
+                WHERE is_deleted = false;
             CREATE INDEX idx_boarding_events_seat
                 ON boarding_events (seat_assignment_id)
                 WHERE is_deleted = false;
@@ -84,6 +96,7 @@
         </sql>
         <rollback>
             <sql>
+                DROP INDEX IF EXISTS idx_boarding_events_shuttle_day;
                 DROP INDEX IF EXISTS idx_boarding_events_job_assignment;
                 DROP INDEX IF EXISTS idx_boarding_events_seat;
                 DROP INDEX IF EXISTS uk_boarding_events_boarded_seat_day;

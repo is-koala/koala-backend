@@ -5,11 +5,15 @@ import com.exskylab.koala.core.dtos.transport.request.SeatBoardingDto;
 import com.exskylab.koala.core.dtos.transport.request.ShuttleBoardingDto;
 import com.exskylab.koala.core.dtos.transport.response.BoardingEventDto;
 import com.exskylab.koala.core.helpers.BoardingTokens;
+import com.exskylab.koala.core.privacy.AccountAnonymizer;
+import com.exskylab.koala.core.properties.AuthLinkProperties;
 import com.exskylab.koala.core.properties.TransportBoardingProperties;
 import com.exskylab.koala.core.properties.TransportReminderProperties;
 import com.exskylab.koala.core.schedulers.TransportReminderScheduler;
 import com.exskylab.koala.core.security.UserPrincipal;
+import com.exskylab.koala.dataAccess.ShuttleDao;
 import com.exskylab.koala.entities.Role;
+import com.exskylab.koala.entities.Shuttle;
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
 import com.exskylab.koala.support.OverlappingWrites;
 import jakarta.persistence.EntityManagerFactory;
@@ -44,14 +48,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
-import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.startsWith;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -89,7 +95,16 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
     private TransportBoardingProperties boardingProperties;
 
     @Autowired
+    private AuthLinkProperties authLinkProperties;
+
+    @Autowired
     private TransportService transportService;
+
+    @Autowired
+    private ShuttleDao shuttleDao;
+
+    @Autowired
+    private AccountAnonymizer accountAnonymizer;
 
     @Autowired
     private PlatformTransactionManager transactionManager;
@@ -117,7 +132,10 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
     private final UUID secondAssignmentId = UUID.randomUUID();
     private final UUID thirdAssignmentId = UUID.randomUUID();
     private final Instant departure = Instant.now().plus(Duration.ofMinutes(5)).truncatedTo(ChronoUnit.SECONDS);
+    private final Instant laterDeparture = departure.plus(Duration.ofHours(2));
     private final Instant returnDeparture = departure.plus(Duration.ofHours(9));
+    private final List<UUID> extraUsers = new ArrayList<>();
+    private boolean noticesWereEnabled;
 
     private UUID shuttleA;
     private UUID shuttleB;
@@ -125,6 +143,8 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        noticesWereEnabled = boardingProperties.isNoticesEnabled();
+        boardingProperties.setNoticesEnabled(true);
         insertUser(employerId, "İşveren", "Bir");
         insertUser(contactId, "Yetkili", "İki");
         insertUser(formerContactId, "Eski", "Yetkili");
@@ -174,7 +194,9 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
 
     @AfterEach
     void tearDown() {
-        narrowTheBoardingInsertWindow();
+        boardingProperties.setNoticesEnabled(noticesWereEnabled);
+        dropTrigger("delay_boarding_event_insert");
+        dropTrigger("duplicate_boarding_event_insert");
         List<UUID> stopAddresses = jdbc.queryForList("select st.address_id from shuttle_stops st "
                 + "join shuttles s on s.id = st.shuttle_id join transport_plans p on p.id = s.plan_id "
                 + "where p.job_id = ?", UUID.class, jobId);
@@ -187,9 +209,14 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
         jdbc.update("delete from shuttles where plan_id in (select id from transport_plans where job_id = ?)", jobId);
         jdbc.update("delete from transport_plans where job_id = ?", jobId);
         stopAddresses.forEach(id -> jdbc.update("delete from addresses where id = ?", id));
-        for (UUID id : users) {
+        List<UUID> everyone = new ArrayList<>(users);
+        everyone.addAll(extraUsers);
+        for (UUID id : everyone) {
             jdbc.update("delete from notifications where recipient_id = ?", id);
             jdbc.update("delete from devices where user_id = ?", id);
+            jdbc.update("delete from account_anonymization_audit where request_id in "
+                    + "(select id from account_deletion_requests where user_id = ?)", id);
+            jdbc.update("delete from account_deletion_requests where user_id = ?", id);
         }
         jdbc.update("delete from job_assignments where job_id = ?", jobId);
         jdbc.update("delete from jobs where id = ?", jobId);
@@ -201,7 +228,7 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
         jdbc.update("delete from countries where id = ?", countryId);
         jdbc.update("delete from company_contacts where company_id = ?", companyId);
         jdbc.update("delete from companies where id = ?", companyId);
-        for (UUID id : users) {
+        for (UUID id : everyone) {
             jdbc.update("delete from authorities where user_id = ?", id);
             jdbc.update("delete from users where id = ?", id);
         }
@@ -214,13 +241,15 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
         Instant before = Instant.now();
         JsonNode qr = data(mockMvc.perform(get("/shuttles/{id}/qr", shuttleA).with(user(principal(employerId))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.static").value(false))
-                .andExpect(jsonPath("$.data.uri", startsWith("koala://board/shuttle/" + shuttleA + "?t=s1."))));
+                .andExpect(jsonPath("$.data.static").value(false)));
         String token = qr.get("token").asText();
-        assertEquals("koala://board/shuttle/" + shuttleA + "?t=" + token, qr.get("uri").asText());
+        assertTrue(token.startsWith("s1." + shuttleA + "."), token);
+        assertEquals(authLinkProperties.getAppScheme() + "://board?t=" + token, qr.get("uri").asText());
+        Instant issuedAt = Instant.parse(qr.get("issuedAt").asText());
         Instant refreshAt = Instant.parse(qr.get("refreshAt").asText());
         Instant expiresAt = Instant.parse(qr.get("expiresAt").asText());
-        assertTrue(refreshAt.isAfter(before), "the screen must refresh after the token was minted");
+        assertFalse(issuedAt.isBefore(before.truncatedTo(ChronoUnit.SECONDS)));
+        assertTrue(refreshAt.isAfter(issuedAt), "the screen must refresh after the token was minted");
         assertEquals(boardingProperties.getTokenTtl(), Duration.between(refreshAt, expiresAt),
                 "the token stays accepted one whole window after the screen moves on");
 
@@ -232,7 +261,9 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
                 .andExpect(jsonPath("$.data.seatAssignmentId").value(seatId.toString()))
                 .andExpect(jsonPath("$.data.jobAssignmentId").value(assignmentId.toString()))
                 .andExpect(jsonPath("$.data.shuttleId").value(shuttleA.toString()))
+                .andExpect(jsonPath("$.data.stopId").value(stopOf(shuttleA).toString()))
                 .andExpect(jsonPath("$.data.recordedById").value(workerId.toString()))
+                .andExpect(jsonPath("$.data.replayed").value(false))
                 .andExpect(jsonPath("$.data.flags", hasSize(0))));
         assertEquals(capturedAt, Instant.parse(event.get("occurredAt").asText()),
                 "the boarding time must not be clamped to the job window");
@@ -242,16 +273,85 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
-    void aBoardingFarFromTheStopAndOffItsScheduleIsRecordedWithBothFlags() throws Exception {
-        pickSeat(workerId, assignmentId, shuttleA);
-        Instant capturedAt = Instant.now().minus(Duration.ofMinutes(50)).truncatedTo(ChronoUnit.MILLIS);
+    void anOutboundBoardingFarFromTheStopAndOffItsScheduleIsRecordedWithBothFlags() throws Exception {
+        pickSeat(workerId, assignmentId, shuttleB);
+        Instant capturedAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
 
-        JsonNode event = data(scan(workerId, shuttleA, shuttleToken(shuttleA, false), capturedAt, FAR_LAT, FAR_LNG,
+        JsonNode event = data(scan(workerId, shuttleB, shuttleToken(shuttleB, false), capturedAt, FAR_LAT, FAR_LNG,
                 UUID.randomUUID())
                 .andExpect(status().isOk()));
 
         assertEquals(Set.of("FAR_FROM_STOP", "OFF_SCHEDULE"), flagsOf(event));
         assertEquals(capturedAt, Instant.parse(event.get("occurredAt").asText()));
+    }
+
+    @Test
+    void aCaptureTimeOutsideTheTokenWindowIsPulledIntoTheWindowAndFlagged() throws Exception {
+        pickSeat(workerId, assignmentId, shuttleA);
+        JsonNode qr = data(mockMvc.perform(get("/shuttles/{id}/qr", shuttleA).with(user(principal(employerId))))
+                .andExpect(status().isOk()));
+        Instant windowStart = Instant.parse(qr.get("refreshAt").asText()).minus(boardingProperties.getTokenTtl());
+        Instant backDated = Instant.now().minus(Duration.ofMinutes(50)).truncatedTo(ChronoUnit.MILLIS);
+
+        JsonNode event = data(scan(workerId, shuttleA, qr.get("token").asText(), backDated, null, null,
+                UUID.randomUUID()).andExpect(status().isOk()));
+
+        assertEquals(windowStart, Instant.parse(event.get("occurredAt").asText()),
+                "a token minted now cannot prove a boarding fifty minutes ago");
+        assertEquals(backDated, Instant.parse(event.get("capturedAt").asText()));
+        assertTrue(flagsOf(event).contains("DEVICE_TIME_IMPLAUSIBLE"), event.toString());
+    }
+
+    @Test
+    void aLateOfflineUploadIsAcceptedOnlyWhileTheTokenWasValidWhenScanned() throws Exception {
+        pickSeat(workerId, assignmentId, shuttleA);
+        pickSeat(secondWorkerId, secondAssignmentId, shuttleA);
+        Instant scannedAt = Instant.now().minus(Duration.ofMinutes(21)).truncatedTo(ChronoUnit.MILLIS);
+        String offline = BoardingTokens.mintShuttle(secretOf(shuttleA), shuttleA, scannedAt,
+                boardingProperties.getTokenTtl(), false);
+
+        JsonNode event = data(scan(workerId, shuttleA, offline, scannedAt, null, null, UUID.randomUUID())
+                .andExpect(status().isOk()));
+        assertEquals(Set.of("LATE_SYNC"), flagsOf(event));
+        assertEquals(scannedAt, Instant.parse(event.get("occurredAt").asText()));
+
+        scan(secondWorkerId, shuttleA, offline, Instant.now(), null, null, UUID.randomUUID())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("TRANSPORT_TOKEN_EXPIRED"));
+        Instant tooLate = Instant.now().minus(boardingProperties.getLateSyncMax()).minus(Duration.ofMinutes(5));
+        String yesterday = BoardingTokens.mintShuttle(secretOf(shuttleA), shuttleA, tooLate,
+                boardingProperties.getTokenTtl(), false);
+        scan(secondWorkerId, shuttleA, yesterday, tooLate, null, null, UUID.randomUUID())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("TRANSPORT_TOKEN_EXPIRED"));
+        assertEquals(1, boardingRows());
+    }
+
+    @Test
+    void anOfflineRetryOfASavedBoardingIsAnsweredWithoutLookingAtTheToken() throws Exception {
+        UUID seatId = pickSeat(workerId, assignmentId, shuttleA);
+        UUID retryId = UUID.randomUUID();
+        Instant capturedAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+        String eventId = data(scan(workerId, shuttleA, shuttleToken(shuttleA, false), capturedAt, NEAR_LAT, NEAR_LNG,
+                retryId).andExpect(status().isOk())).get("id").asText();
+        String expired = BoardingTokens.mintShuttle(secretOf(shuttleA), shuttleA,
+                Instant.now().minus(Duration.ofMinutes(40)), boardingProperties.getTokenTtl(), false);
+        String expiredWorker = BoardingTokens.mintWorker(secretOf(shuttleA), seatId,
+                Instant.now().minus(Duration.ofMinutes(40)), boardingProperties.getTokenTtl());
+
+        scan(workerId, shuttleA, expired, capturedAt, NEAR_LAT, NEAR_LNG, retryId)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(eventId))
+                .andExpect(jsonPath("$.data.replayed").value(true));
+        scan(workerId, shuttleA, "s1.garbage", Instant.now(), null, null, UUID.randomUUID())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(eventId))
+                .andExpect(jsonPath("$.data.replayed").value(true));
+        mark(employerId, seatId, "{\"token\":\"" + expiredWorker + "\",\"capturedAt\":\"" + Instant.now() + "\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(eventId))
+                .andExpect(jsonPath("$.data.replayed").value(true));
+        assertEquals(1, boardingRows());
     }
 
     @Test
@@ -263,29 +363,32 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
                         .with(user(principal(workerId))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.static").value(false)));
-        assertEquals("koala://board/worker/" + outboundSeat + "?t=" + outboundQr.get("token").asText(),
+        assertTrue(outboundQr.get("token").asText().startsWith("w1." + outboundSeat + "."));
+        assertEquals(authLinkProperties.getAppScheme() + "://board?t=" + outboundQr.get("token").asText(),
                 outboundQr.get("uri").asText());
 
         JsonNode returnQr = data(mockMvc.perform(get("/job-assignments/{id}/transport/qr", assignmentId)
                         .param("direction", "RETURN")
                         .with(user(principal(workerId))))
                 .andExpect(status().isOk()));
-        assertEquals("koala://board/worker/" + returnSeat + "?t=" + returnQr.get("token").asText(),
-                returnQr.get("uri").asText());
+        assertTrue(returnQr.get("token").asText().startsWith("w1." + returnSeat + "."));
 
         mark(employerId, returnSeat, "{\"token\":\"" + returnQr.get("token").asText() + "\",\"capturedAt\":\""
-                + Instant.now().truncatedTo(ChronoUnit.MILLIS) + "\"}")
+                + Instant.now().truncatedTo(ChronoUnit.MILLIS) + "\",\"latitude\":" + FAR_LAT + ",\"longitude\":"
+                + FAR_LNG + "}")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.kind").value("BOARDED"))
                 .andExpect(jsonPath("$.data.source").value("EMPLOYER_SCANNED_WORKER_QR"))
                 .andExpect(jsonPath("$.data.shuttleId").value(returnShuttle.toString()))
-                .andExpect(jsonPath("$.data.recordedById").value(employerId.toString()));
+                .andExpect(jsonPath("$.data.recordedById").value(employerId.toString()))
+                .andExpect(jsonPath("$.data.flags", hasSize(0)));
         mark(contactId, outboundSeat, "{\"token\":\"" + outboundQr.get("token").asText() + "\",\"capturedAt\":\""
                 + Instant.now().truncatedTo(ChronoUnit.MILLIS) + "\"}")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.seatAssignmentId").value(outboundSeat.toString()));
 
-        mark(employerId, outboundSeat, "{\"token\":\"" + returnQr.get("token").asText() + "\",\"capturedAt\":\""
+        UUID secondSeat = pickSeat(secondWorkerId, secondAssignmentId, shuttleA);
+        mark(employerId, secondSeat, "{\"token\":\"" + returnQr.get("token").asText() + "\",\"capturedAt\":\""
                 + Instant.now() + "\"}")
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("TRANSPORT_SEAT_ASSIGNMENT_NOT_FOUND"));
@@ -300,23 +403,37 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
-    void anExpiredTokenIs400AndAnotherShuttlesTokenLooksLikeAMissingShuttle() throws Exception {
+    void aStaleTokenIs400AndOnlyJobPartiesLearnWhyTheyCannotBoard() throws Exception {
         pickSeat(workerId, assignmentId, shuttleA);
-        String secret = jdbc.queryForObject("select qr_secret from shuttles where id = ?", String.class, shuttleA);
-        String stale = BoardingTokens.mintShuttle(secret, shuttleA, Instant.now().minus(Duration.ofMinutes(25)),
-                boardingProperties.getTokenTtl(), false);
+        pickSeat(thirdWorkerId, thirdAssignmentId, shuttleA);
+        jdbc.update("update job_assignments set status = 'CANCELLED' where id = ?", thirdAssignmentId);
+        String stale = BoardingTokens.mintShuttle(secretOf(shuttleA), shuttleA,
+                Instant.now().minus(Duration.ofMinutes(25)), boardingProperties.getTokenTtl(), false);
         scan(workerId, shuttleA, stale, Instant.now(), null, null, UUID.randomUUID())
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("TRANSPORT_TOKEN_EXPIRED"));
 
+        String tokenOfA = shuttleToken(shuttleA, false);
         String tokenOfB = shuttleToken(shuttleB, false);
+        scan(workerId, shuttleB, tokenOfB, Instant.now(), null, null, UUID.randomUUID())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("TRANSPORT_WRONG_SHUTTLE"));
+        scan(secondWorkerId, shuttleA, tokenOfA, Instant.now(), null, null, UUID.randomUUID())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("TRANSPORT_SEAT_NOT_SELECTED"));
+        scan(thirdWorkerId, shuttleA, tokenOfA, Instant.now(), null, null, UUID.randomUUID())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("TRANSPORT_ASSIGNMENT_NOT_ACTIVE"));
+
         UUID phantom = UUID.randomUUID();
         String missing = envelope(scan(workerId, phantom, tokenOfB, Instant.now(), null, null, UUID.randomUUID())
                 .andExpect(status().isNotFound()), phantom);
         assertEquals(missing, envelope(scan(workerId, shuttleA, tokenOfB, Instant.now(), null, null, UUID.randomUUID())
-                .andExpect(status().isNotFound()), shuttleA));
-        assertEquals(missing, envelope(scan(workerId, shuttleB, tokenOfB, Instant.now(), null, null, UUID.randomUUID())
-                .andExpect(status().isNotFound()), shuttleB));
+                .andExpect(status().isNotFound()), shuttleA), "another shuttle's token is just an invalid token");
+        assertEquals(missing, envelope(scan(outsiderId, shuttleA, tokenOfA, Instant.now(), null, null,
+                UUID.randomUUID()).andExpect(status().isNotFound()), shuttleA), "a genuine token does not help a stranger");
+        assertEquals(missing, envelope(scan(secondWorkerId, shuttleB, "s1.garbage", Instant.now(), null, null,
+                UUID.randomUUID()).andExpect(status().isNotFound()), shuttleB), "a party with garbage stays concealed");
         assertEquals(
                 envelope(mockMvc.perform(get("/shuttles/{id}/qr", phantom).with(user(principal(employerId))))
                         .andExpect(status().isNotFound()), phantom),
@@ -332,11 +449,13 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
         UUID clientEventId = UUID.randomUUID();
         Instant capturedAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
         String eventId = data(scan(workerId, shuttleA, token, capturedAt, NEAR_LAT, NEAR_LNG, clientEventId)
-                .andExpect(status().isOk())).get("id").asText();
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.replayed").value(false))).get("id").asText();
 
         scan(workerId, shuttleA, token, capturedAt.plusSeconds(20), NEAR_LAT, NEAR_LNG, UUID.randomUUID())
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.id").value(eventId));
+                .andExpect(jsonPath("$.data.id").value(eventId))
+                .andExpect(jsonPath("$.data.replayed").value(true));
         scan(workerId, shuttleA, token, capturedAt, NEAR_LAT, NEAR_LNG, clientEventId)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(eventId));
@@ -379,6 +498,38 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
+    void aWorkerMovedToAnotherShuttleTheSameDayBoardsThereOnItsOwnRecord() throws Exception {
+        UUID seatId = pickSeat(workerId, assignmentId, shuttleA);
+        String onA = data(scan(workerId, shuttleA, shuttleToken(shuttleA, false), Instant.now(), null, null,
+                UUID.randomUUID()).andExpect(status().isOk())).get("id").asText();
+        jdbc.update("update shuttle_stops set scheduled_at = ? where shuttle_id = ?",
+                java.sql.Timestamp.from(departure.plus(Duration.ofMinutes(20))), shuttleB);
+        assertEquals(seatId, pickSeat(employerId, assignmentId, shuttleB), "the move keeps the same seat row");
+
+        mockMvc.perform(get("/shuttles/{id}/boardings", shuttleB).with(user(principal(employerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(1)))
+                .andExpect(jsonPath("$.data[0].boarded").value(false))
+                .andExpect(jsonPath("$.data[0].event").doesNotExist());
+        mockMvc.perform(get("/job-assignments/{id}/transport", assignmentId).with(user(principal(workerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.seats[0].boarding").doesNotExist());
+
+        String onB = data(scan(workerId, shuttleB, shuttleToken(shuttleB, false), Instant.now(), null, null,
+                UUID.randomUUID())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.shuttleId").value(shuttleB.toString()))
+                .andExpect(jsonPath("$.data.replayed").value(false))).get("id").asText();
+
+        assertNotEquals(onA, onB);
+        mockMvc.perform(get("/job-assignments/{id}/transport", assignmentId).with(user(principal(workerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.seats[0].boarding.kind").value("BOARDED"))
+                .andExpect(jsonPath("$.data.seats[0].boarding.occurredAt").exists());
+        assertEquals(2, boardingRows());
+    }
+
+    @Test
     void aNoShowMarkRepeatsIdempotentlyAndALateBoardingStillWins() throws Exception {
         UUID seatId = pickSeat(workerId, assignmentId, shuttleA);
         String noShow = data(mark(employerId, seatId, "{\"kind\":\"NO_SHOW\"}")
@@ -388,7 +539,11 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
                 .andExpect(jsonPath("$.data.capturedAt").doesNotExist())).get("id").asText();
         mark(contactId, seatId, "{\"kind\":\"NO_SHOW\"}")
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.id").value(noShow));
+                .andExpect(jsonPath("$.data.id").value(noShow))
+                .andExpect(jsonPath("$.data.replayed").value(true));
+        mockMvc.perform(get("/job-assignments/{id}/transport", assignmentId).with(user(principal(workerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.seats[0].boarding.kind").value("NO_SHOW"));
 
         String boarded = data(scan(workerId, shuttleA, shuttleToken(shuttleA, false), Instant.now(), null, null,
                 UUID.randomUUID()).andExpect(status().isOk())).get("id").asText();
@@ -400,6 +555,31 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
                 .andExpect(jsonPath("$.data[0].event.id").value(boarded))
                 .andExpect(jsonPath("$.data[0].event.kind").value("BOARDED"));
         assertEquals(2, boardingRows());
+    }
+
+    @Test
+    void aCompletedAssignmentStillBoardsAndAReturnSeatCarriesNoPickupFlags() throws Exception {
+        UUID returnSeat = pickSeat(workerId, assignmentId, returnShuttle);
+        jdbc.update("update job_assignments set status = 'COMPLETED' where id = ?", assignmentId);
+
+        String token = data(mockMvc.perform(get("/job-assignments/{id}/transport/qr", assignmentId)
+                        .param("direction", "RETURN")
+                        .with(user(principal(workerId))))
+                .andExpect(status().isOk())).get("token").asText();
+        mark(employerId, returnSeat, "{\"token\":\"" + token + "\",\"capturedAt\":\""
+                + Instant.now().truncatedTo(ChronoUnit.MILLIS) + "\",\"latitude\":" + FAR_LAT + ",\"longitude\":"
+                + FAR_LNG + "}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.kind").value("BOARDED"))
+                .andExpect(jsonPath("$.data.flags", hasSize(0)));
+        scan(workerId, returnShuttle, shuttleToken(returnShuttle, false), Instant.now(), FAR_LAT, FAR_LNG,
+                UUID.randomUUID())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.replayed").value(true));
+        mockMvc.perform(get("/shuttles/{id}/boardings", returnShuttle).with(user(principal(contactId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(1)))
+                .andExpect(jsonPath("$.data[0].boarded").value(true));
     }
 
     @Test
@@ -421,7 +601,10 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
         assertTrue(boarded.get("boarded").asBoolean());
         assertEquals("Ayşe", boarded.get("firstName").asText());
         assertEquals(workerId.toString(), boarded.get("workerId").asText());
+        assertEquals("Kadıköy İskele", boarded.get("stopLabel").asText());
+        assertEquals(departure, Instant.parse(boarded.get("scheduledAt").asText()));
         assertEquals(Set.of("FAR_FROM_STOP", "STATIC_QR"), flagsOf(boarded.get("event")));
+        assertFalse(boarded.get("event").get("replayed").asBoolean());
         assertFalse(waiting.get("boarded").asBoolean());
         assertTrue(waiting.get("event").isNull());
         assertFalse(body.contains(thirdWorkerId.toString()), "a cancelled assignment must not look not-boarded");
@@ -479,22 +662,18 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
         String printed = shuttleToken(shuttleA, true);
         String workerToken = data(mockMvc.perform(get("/job-assignments/{id}/transport/qr", assignmentId)
                 .with(user(principal(workerId)))).andExpect(status().isOk())).get("token").asText();
-        String secretBefore = jdbc.queryForObject("select qr_secret from shuttles where id = ?", String.class, shuttleA);
+        String secretBefore = secretOf(shuttleA);
 
         mockMvc.perform(post("/shuttles/{id}/qr/rotate", shuttleA).with(user(principal(outsiderId))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("TRANSPORT_SHUTTLE_NOT_FOUND"));
-        assertEquals(secretBefore, jdbc.queryForObject("select qr_secret from shuttles where id = ?", String.class,
-                shuttleA));
+        assertEquals(secretBefore, secretOf(shuttleA));
 
         String fresh = data(mockMvc.perform(post("/shuttles/{id}/qr/rotate", shuttleA)
                         .with(user(principal(contactId))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.static").value(false))
-                .andExpect(jsonPath("$.data.uri", startsWith("koala://board/shuttle/" + shuttleA)))).get("token")
-                .asText();
-        assertNotEquals(secretBefore, jdbc.queryForObject("select qr_secret from shuttles where id = ?",
-                String.class, shuttleA));
+                .andExpect(jsonPath("$.data.static").value(false))).get("token").asText();
+        assertNotEquals(secretBefore, secretOf(shuttleA));
 
         scan(secondWorkerId, shuttleA, printed, Instant.now(), null, null, UUID.randomUUID())
                 .andExpect(status().isNotFound())
@@ -509,11 +688,56 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
+    void aPlanSaveRacingARotationCannotWriteTheOldSecretBack() throws Exception {
+        String secretBefore = secretOf(shuttleA);
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            Shuttle stale = shuttleDao.findById(shuttleA).orElseThrow();
+            stale.setName("A servisi (yeni ad)");
+            CompletableFuture.runAsync(() -> asUser(employerId, () -> transportService.rotateShuttleQr(shuttleA)))
+                    .orTimeout(30, TimeUnit.SECONDS)
+                    .join();
+        });
+
+        assertEquals("A servisi (yeni ad)", jdbc.queryForObject("select name from shuttles where id = ?",
+                String.class, shuttleA));
+        assertNotEquals(secretBefore, secretOf(shuttleA), "the stale entity flushed the revoked secret back");
+    }
+
+    @Test
+    void aConstraintViolationBehindTheLockIsAConflictNotAServerError() throws Exception {
+        UUID seatId = pickSeat(workerId, assignmentId, shuttleA);
+        jdbc.execute("""
+                create or replace function duplicate_boarding_event_insert() returns trigger as $$
+                declare
+                    twin boarding_events%rowtype;
+                begin
+                    if pg_trigger_depth() = 1 then
+                        twin := new;
+                        twin.id := gen_random_uuid();
+                        insert into boarding_events values (twin.*);
+                    end if;
+                    return new;
+                end;
+                $$ language plpgsql
+                """);
+        jdbc.execute("create trigger duplicate_boarding_event_insert before insert on boarding_events "
+                + "for each row execute function duplicate_boarding_event_insert()");
+
+        mark(employerId, seatId, "{\"kind\":\"BOARDED\"}")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("TRANSPORT_BOARDING_CONCURRENT"));
+        mark(employerId, seatId, "{\"kind\":\"NO_SHOW\",\"clientEventId\":\"" + UUID.randomUUID() + "\"}")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("TRANSPORT_BOARDING_IDEMPOTENCY_CONFLICT"));
+        dropTrigger("duplicate_boarding_event_insert");
+        assertEquals(0, boardingRows());
+    }
+
+    @Test
     void theMarkingRulesAreValidatedAtTheBoundary() throws Exception {
         UUID seatId = pickSeat(workerId, assignmentId, shuttleA);
         mark(employerId, seatId, "{\"kind\":\"ALIGHTED\"}")
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.details[0].field").value("kindConsistentWithToken"));
+                .andExpect(status().isBadRequest());
         mark(employerId, seatId, "{\"kind\":\"NO_SHOW\",\"token\":\"w1.x.y.z\",\"capturedAt\":\"" + Instant.now()
                 + "\"}")
                 .andExpect(status().isBadRequest())
@@ -521,12 +745,18 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
         mark(employerId, seatId, "{\"latitude\":41.05}")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.details[0].field").value("positionComplete"));
+        mark(employerId, seatId, "{\"token\":\"" + "w".repeat(300) + "\",\"capturedAt\":\"" + Instant.now() + "\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details[0].field").value("token"));
         mockMvc.perform(post("/shuttles/{id}/boardings", shuttleA).with(user(principal(workerId)))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"token\":\"s1.x.y.z\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.details[0].field").value("capturedAt"));
         mark(outsiderId, seatId, "{\"kind\":\"BOARDED\"}")
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("TRANSPORT_SEAT_ASSIGNMENT_NOT_FOUND"));
+        mark(employerId, UUID.randomUUID(), "{\"kind\":\"BOARDED\"}")
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("TRANSPORT_SEAT_ASSIGNMENT_NOT_FOUND"));
         jdbc.update("update job_assignments set status = 'CANCELLED' where id = ?", assignmentId);
@@ -537,9 +767,10 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
-    void theStaffTimelineKeepsTheBoardingAfterThePlanDropsTheSeat() throws Exception {
+    void theStaffTimelineKeepsTheBoardingEvidenceAfterThePlanDropsTheSeat() throws Exception {
         UUID seatId = pickSeat(workerId, assignmentId, shuttleA);
-        String eventId = data(scan(workerId, shuttleA, shuttleToken(shuttleA, false), Instant.now(), null, null,
+        Instant capturedAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+        String eventId = data(scan(workerId, shuttleA, shuttleToken(shuttleA, false), capturedAt, NEAR_LAT, NEAR_LNG,
                 UUID.randomUUID()).andExpect(status().isOk())).get("id").asText();
         String token = staffTokenFor("boarding-staff-" + UUID.randomUUID() + "@iskoala.com", "Analist",
                 "FINANCE_ANALYST");
@@ -550,29 +781,65 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
                 .andExpect(jsonPath("$.data.timeline[0].type").value("SEAT"))
                 .andExpect(jsonPath("$.data.timeline[0].seatAssignmentId").value(seatId.toString()))
                 .andExpect(jsonPath("$.data.timeline[1].type").value("BOARDING"))
-                .andExpect(jsonPath("$.data.timeline[1].id").value(eventId))
-                .andExpect(jsonPath("$.data.timeline[1].kind").value("BOARDED"))
-                .andExpect(jsonPath("$.data.timeline[1].source").value("WORKER_SCANNED_SHUTTLE_QR"))
-                .andExpect(jsonPath("$.data.timeline[1].shuttleId").value(shuttleA.toString()));
+                .andExpect(jsonPath("$.data.timeline[1].id").value(eventId));
 
         putPlan(employerId, "{\"outboundMethod\":\"SELF\",\"returnMethod\":\"NONE\",\"shuttles\":[]}")
                 .andExpect(status().isOk());
         assertEquals(Boolean.TRUE, jdbc.queryForObject("select is_deleted from seat_assignments where id = ?",
                 Boolean.class, seatId));
 
-        mockMvc.perform(get("/admin/job-assignments/{id}", assignmentId).header("Authorization", "Bearer " + token))
+        JsonNode boarding = data(mockMvc.perform(get("/admin/job-assignments/{id}", assignmentId)
+                        .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.timeline", hasSize(1)))
-                .andExpect(jsonPath("$.data.timeline[0].type").value("BOARDING"))
-                .andExpect(jsonPath("$.data.timeline[0].id").value(eventId))
-                .andExpect(jsonPath("$.data.timeline[0].shuttleId").value(shuttleA.toString()))
-                .andExpect(jsonPath("$.data.timeline[0].seatAssignmentId").value(seatId.toString()));
+                .andExpect(jsonPath("$.data.timeline", hasSize(1)))).get("timeline").get(0);
+        assertEquals("BOARDING", boarding.get("type").asText());
+        assertEquals(eventId, boarding.get("id").asText());
+        assertEquals("BOARDED", boarding.get("kind").asText());
+        assertEquals("WORKER_SCANNED_SHUTTLE_QR", boarding.get("source").asText());
+        assertEquals("WORKER", boarding.get("recorderRole").asText());
+        assertEquals(shuttleA.toString(), boarding.get("shuttleId").asText());
+        assertEquals(seatId.toString(), boarding.get("seatAssignmentId").asText());
+        assertEquals("Kadıköy İskele", boarding.get("stopLabel").asText());
+        assertEquals(departure, Instant.parse(boarding.get("stopScheduledAt").asText()));
+        assertEquals(capturedAt, Instant.parse(boarding.get("capturedAt").asText()));
+        assertFalse(boarding.get("receivedAt").isNull(), "the server receipt time is evidence too");
+        assertEquals(new BigDecimal(NEAR_LAT), boarding.get("latitude").decimalValue().setScale(6));
+        assertEquals(new BigDecimal(NEAR_LNG), boarding.get("longitude").decimalValue().setScale(6));
+        int meters = boarding.get("distanceToStopMeters").asInt();
+        assertTrue(meters > 5 && meters < 30, "about 14 m from the pin, was " + meters);
     }
 
     @Test
-    void theBoardingReminderGoesFifteenMinutesBeforeDepartureOnlyToSeatsNotYetSettled() throws Exception {
+    void deletingAnAccountScrubsTheBoardingLocationsItLeftBehind() throws Exception {
+        UUID seatId = pickSeat(workerId, assignmentId, shuttleA);
+        UUID otherSeat = pickSeat(secondWorkerId, secondAssignmentId, shuttleA);
+        scan(workerId, shuttleA, shuttleToken(shuttleA, false), Instant.now(), NEAR_LAT, NEAR_LNG, UUID.randomUUID())
+                .andExpect(status().isOk());
+        mark(contactId, otherSeat, "{\"kind\":\"NO_SHOW\",\"latitude\":" + FAR_LAT + ",\"longitude\":" + FAR_LNG + "}")
+                .andExpect(status().isOk());
+
+        anonymize(workerId);
+        assertNull(jdbc.queryForObject("select latitude from boarding_events where seat_assignment_id = ?",
+                Object.class, seatId));
+        assertNull(jdbc.queryForObject("select longitude from boarding_events where seat_assignment_id = ?",
+                Object.class, seatId));
+        assertNull(jdbc.queryForObject("select distance_to_stop_meters from boarding_events where seat_assignment_id = ?",
+                Object.class, seatId));
+        assertNotNull(jdbc.queryForObject("select latitude from boarding_events where seat_assignment_id = ?",
+                Object.class, otherSeat), "another worker's row is not the deleted account's data");
+
+        anonymize(contactId);
+        assertNull(jdbc.queryForObject("select latitude from boarding_events where seat_assignment_id = ?",
+                Object.class, otherSeat), "the contact's phone position is the contact's personal data");
+        assertEquals(2, boardingRows(), "the boarding evidence itself stays");
+    }
+
+    @Test
+    void theBoardingReminderGoesFifteenMinutesBeforeAnOutboundDepartureToSeatsNotYetSettled() throws Exception {
         pickSeat(workerId, assignmentId, shuttleA);
-        pickSeat(secondWorkerId, secondAssignmentId, shuttleA);
+        UUID waitingSeat = pickSeat(secondWorkerId, secondAssignmentId, shuttleA);
+        pickSeat(secondWorkerId, secondAssignmentId, returnShuttle);
+        insertPushDevice(secondWorkerId);
         scan(workerId, shuttleA, shuttleToken(shuttleA, false), Instant.now(), null, null, UUID.randomUUID())
                 .andExpect(status().isOk());
         silenceTheEarlierReminders();
@@ -590,8 +857,37 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
                 + "and category = 'TRANSPORT'", String.class, secondWorkerId);
         assertTrue(body.contains("QR"), body);
         assertTrue(body.contains("15"), body);
-        assertEquals(2, jdbc.queryForObject("select count(*) from seat_assignments where shuttle_id = ? "
-                + "and boarding_reminder_sent_at is not null and is_deleted = false", Integer.class, shuttleA));
+        Map<String, String> push = pushPayloadOf(secondWorkerId);
+        assertEquals("SHUTTLE_REMINDER_BOARDING", push.get("event"));
+        assertEquals("OUTBOUND", push.get("direction"));
+        assertEquals(waitingSeat.toString(), push.get("seatAssignmentId"));
+
+        reminderScheduler.sendDueReminders(returnDeparture.minus(Duration.ofMinutes(14)));
+        reminderScheduler.sendDueReminders(returnDeparture.plus(Duration.ofMinutes(13)));
+        assertEquals(1, transportNotices(secondWorkerId), "a return seat is not a pickup point until T3");
+        assertEquals(0, transportNotices(employerId));
+    }
+
+    @Test
+    void theBoardingNoticesStayOffUntilTheyAreEnabledWhileTheT1RemindersKeepGoing() throws Exception {
+        pickSeat(workerId, assignmentId, shuttleA);
+        pickSeat(secondWorkerId, secondAssignmentId, shuttleA);
+        scan(workerId, shuttleA, shuttleToken(shuttleA, false), Instant.now(), null, null, UUID.randomUUID())
+                .andExpect(status().isOk());
+        jdbc.update("update seat_assignments set evening_reminder_sent_at = now() where shuttle_id = ?", shuttleA);
+        jdbc.update("delete from notifications where recipient_id in (?, ?)", workerId, secondWorkerId);
+        boardingProperties.setNoticesEnabled(false);
+
+        reminderScheduler.sendDueReminders(departure.minus(Duration.ofMinutes(14)));
+        reminderScheduler.sendDueReminders(departure.plus(Duration.ofMinutes(13)));
+
+        assertEquals(0, jdbc.queryForObject("select count(*) from notifications where recipient_id = ? "
+                + "and channel = 'IN_APP' and body like '%QR%'", Integer.class, secondWorkerId));
+        assertEquals(0, transportNotices(employerId));
+        assertEquals(0, transportNotices(contactId));
+        assertEquals(1, transportNotices(secondWorkerId), "the T1 departure reminder is not gated by the T2 flag");
+        assertNull(jdbc.queryForObject("select boarding_reminder_sent_at from seat_assignments where "
+                + "job_assignment_id = ? and is_deleted = false", Object.class, secondAssignmentId));
     }
 
     @Test
@@ -599,63 +895,57 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
         pickSeat(workerId, assignmentId, shuttleA);
         UUID noShowSeat = pickSeat(secondWorkerId, secondAssignmentId, shuttleA);
         pickSeat(thirdWorkerId, thirdAssignmentId, shuttleA);
-        List<UUID> lateWorkers = List.of(UUID.randomUUID(), UUID.randomUUID());
-        List<UUID> lateAssignments = List.of(UUID.randomUUID(), UUID.randomUUID());
-        insertUser(lateWorkers.get(0), "Ali", "Gelmeyen");
-        insertUser(lateWorkers.get(1), "Veli", "Uyuyan");
-        try {
-            for (int i = 0; i < lateWorkers.size(); i++) {
-                insertAssignment(lateAssignments.get(i), lateWorkers.get(i));
-                pickSeat(lateWorkers.get(i), lateAssignments.get(i), shuttleA);
-            }
-            scan(workerId, shuttleA, shuttleToken(shuttleA, false), Instant.now(), null, null, UUID.randomUUID())
-                    .andExpect(status().isOk());
-            mark(employerId, noShowSeat, "{\"kind\":\"NO_SHOW\"}").andExpect(status().isOk());
-            jdbc.update("update job_assignments set status = 'CANCELLED' where id = ?", thirdAssignmentId);
-            silenceTheEarlierReminders();
-            jdbc.update("update seat_assignments set boarding_reminder_sent_at = now() where shuttle_id = ?",
-                    shuttleA);
-            int configured = reminderProperties.getNotBoardedAfterMinutes();
-            reminderProperties.setNotBoardedAfterMinutes(12);
-            try {
-                reminderScheduler.sendDueReminders(departure.plus(Duration.ofMinutes(11)));
-                assertEquals(0, transportNotices(employerId), "the delay has not passed yet");
-
-                reminderScheduler.sendDueReminders(departure.plus(Duration.ofMinutes(13)));
-                reminderScheduler.sendDueReminders(departure.plus(Duration.ofMinutes(18)));
-            } finally {
-                reminderProperties.setNotBoardedAfterMinutes(configured);
-            }
-
-            assertEquals(1, transportNotices(employerId), "one notice per departure, not one per missing seat");
-            assertEquals(1, transportNotices(contactId), "a current company contact edits the job too");
-            assertEquals(0, transportNotices(formerContactId), "a removed contact is no longer an editor");
-            String body = jdbc.queryForObject("select body from notifications where recipient_id = ? "
-                    + "and channel = 'IN_APP' and category = 'TRANSPORT'", String.class, employerId);
-            assertTrue(body.contains("12 dakika"), "the configured delay must be in the text: " + body);
-            assertTrue(body.contains("A servisi"), body);
-            assertTrue(body.contains(" 2 kişi"), body);
-            assertTrue(body.contains("Ali Gelmeyen") && body.contains("Veli Uyuyan"), body);
-            assertFalse(body.contains("Ayşe"), "a boarded worker is not missing: " + body);
-            assertFalse(body.contains("Mehmet"), "a no-show was already settled by the employer: " + body);
-            assertFalse(body.contains("Zeynep"), "a cancelled assignment is not expected on the shuttle: " + body);
-            assertEquals("JOB", jdbc.queryForObject("select target_type from notifications where recipient_id = ? "
-                    + "and channel = 'IN_APP'", String.class, employerId));
-            assertEquals(jobId, jdbc.queryForObject("select target_id from notifications where recipient_id = ? "
-                    + "and channel = 'IN_APP'", UUID.class, employerId));
-        } finally {
-            for (int i = 0; i < lateWorkers.size(); i++) {
-                jdbc.update("delete from seat_assignments where job_assignment_id = ?", lateAssignments.get(i));
-                jdbc.update("delete from notifications where recipient_id = ?", lateWorkers.get(i));
-                jdbc.update("delete from job_assignments where id = ?", lateAssignments.get(i));
-                jdbc.update("delete from users where id = ?", lateWorkers.get(i));
-            }
+        UUID named = extraWorker("Ali", "Gelmeyen");
+        UUID unnamed = extraWorker(null, null);
+        for (UUID late : List.of(named, unnamed)) {
+            UUID lateAssignment = UUID.randomUUID();
+            insertAssignment(lateAssignment, late);
+            pickSeat(late, lateAssignment, shuttleA);
         }
+        scan(workerId, shuttleA, shuttleToken(shuttleA, false), Instant.now(), null, null, UUID.randomUUID())
+                .andExpect(status().isOk());
+        mark(employerId, noShowSeat, "{\"kind\":\"NO_SHOW\"}").andExpect(status().isOk());
+        jdbc.update("update job_assignments set status = 'CANCELLED' where id = ?", thirdAssignmentId);
+        silenceTheEarlierReminders();
+        jdbc.update("update seat_assignments set boarding_reminder_sent_at = now() where shuttle_id = ?", shuttleA);
+        int configured = reminderProperties.getNotBoardedAfterMinutes();
+        reminderProperties.setNotBoardedAfterMinutes(12);
+        try {
+            reminderScheduler.sendDueReminders(departure.plus(Duration.ofMinutes(11)));
+            assertEquals(0, transportNotices(employerId), "the delay has not passed yet");
+
+            reminderScheduler.sendDueReminders(departure.plus(Duration.ofMinutes(13)));
+            reminderScheduler.sendDueReminders(departure.plus(Duration.ofMinutes(18)));
+        } finally {
+            reminderProperties.setNotBoardedAfterMinutes(configured);
+        }
+
+        assertEquals(1, transportNotices(employerId), "one notice per departure, not one per missing seat");
+        assertEquals(1, transportNotices(contactId), "a current company contact edits the job too");
+        assertEquals(0, transportNotices(formerContactId), "a removed contact is no longer an editor");
+        String body = jdbc.queryForObject("select body from notifications where recipient_id = ? "
+                + "and channel = 'IN_APP' and category = 'TRANSPORT'", String.class, employerId);
+        assertTrue(body.contains("12 dakika"), "the configured delay must be in the text: " + body);
+        assertTrue(body.startsWith("A servisi ("), body);
+        assertTrue(body.contains(", Kadıköy İskele)"), body);
+        assertTrue(body.contains(" 2 kişi"), body);
+        assertTrue(body.contains("Ali Gelmeyen") && body.contains("adı olmayan işçi"),
+                "every missing seat is named, even without a name: " + body);
+        assertFalse(body.contains("Ayşe"), "a boarded worker is not missing: " + body);
+        assertFalse(body.contains("Mehmet"), "a no-show was already settled by the employer: " + body);
+        assertFalse(body.contains("Zeynep"), "a cancelled assignment is not expected on the shuttle: " + body);
+        assertEquals("JOB", jdbc.queryForObject("select target_type from notifications where recipient_id = ? "
+                + "and channel = 'IN_APP'", String.class, employerId));
+        assertEquals(jobId, jdbc.queryForObject("select target_id from notifications where recipient_id = ? "
+                + "and channel = 'IN_APP'", UUID.class, employerId));
     }
 
     @Test
     void theNotBoardedNoticeIgnoresDeparturesOlderThanTheLookback() throws Exception {
+        pickSeat(workerId, assignmentId, shuttleA);
         pickSeat(secondWorkerId, secondAssignmentId, shuttleA);
+        scan(workerId, shuttleA, shuttleToken(shuttleA, false), Instant.now(), null, null, UUID.randomUUID())
+                .andExpect(status().isOk());
         silenceTheEarlierReminders();
         jdbc.update("update seat_assignments set boarding_reminder_sent_at = now() where shuttle_id = ?", shuttleA);
         Instant lateDeploy = departure.plus(Duration.ofMinutes(reminderProperties.getNotBoardedAfterMinutes()
@@ -670,32 +960,57 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
+    void noNotBoardedNoticeForADepartureNobodyScanned() throws Exception {
+        pickSeat(workerId, assignmentId, shuttleA);
+        pickSeat(secondWorkerId, secondAssignmentId, shuttleA);
+        silenceTheEarlierReminders();
+        jdbc.update("update seat_assignments set boarding_reminder_sent_at = now() where shuttle_id = ?", shuttleA);
+
+        reminderScheduler.sendDueReminders(departure.plus(Duration.ofMinutes(13)));
+
+        assertEquals(0, transportNotices(employerId), "the employer is not scanning today; two missing is not news");
+        assertEquals(0, transportNotices(contactId));
+        assertNotNull(jdbc.queryForObject("select not_boarded_notice_sent_at from seat_assignments "
+                + "where job_assignment_id = ? and is_deleted = false", Object.class, secondAssignmentId));
+    }
+
+    @Test
     void aWorkerScanAndAnEmployerMarkRacingOnOneSeatLeaveOneBoarding() throws Exception {
         UUID seatId = pickSeat(workerId, assignmentId, shuttleA);
         String token = shuttleToken(shuttleA, false);
-        widenTheBoardingInsertWindow();
-        try {
-            OverlappingWrites overlap = new OverlappingWrites();
-            List<String> outcomes = overlap.outcomesOf(
-                    () -> asUser(workerId, overlap, () -> transportService.boardOnShuttle(shuttleA,
-                            new ShuttleBoardingDto(token, Instant.now(), null, null, UUID.randomUUID()))),
-                    () -> asUser(employerId, overlap, () -> transportService.markSeatBoarding(seatId,
-                            new SeatBoardingDto(null, null, null, null, UUID.randomUUID(), null))));
+        jdbc.execute("""
+                create or replace function delay_boarding_event_insert() returns trigger as $$
+                begin
+                    perform pg_sleep(0.5);
+                    return new;
+                end;
+                $$ language plpgsql
+                """);
+        jdbc.execute("create trigger delay_boarding_event_insert before insert on boarding_events "
+                + "for each row execute function delay_boarding_event_insert()");
+        OverlappingWrites overlap = new OverlappingWrites();
+        List<String> outcomes = overlap.outcomesOf(
+                () -> inTransaction(workerId, overlap, () -> transportService.boardOnShuttle(shuttleA,
+                        new ShuttleBoardingDto(token, Instant.now(), null, null, UUID.randomUUID()))),
+                () -> inTransaction(employerId, overlap, () -> transportService.markSeatBoarding(seatId,
+                        new SeatBoardingDto(null, null, null, null, UUID.randomUUID(), null))));
+        dropTrigger("delay_boarding_event_insert");
 
-            assertEquals(2, outcomes.stream().filter(outcome -> outcome.startsWith("EVENT ")).count(),
-                    "both writers must get the boarding: " + outcomes);
-            assertEquals(outcomes.get(0), outcomes.get(1), "both writers must see one and the same event");
-            assertEquals(1, boardingRows());
-        } finally {
-            narrowTheBoardingInsertWindow();
-        }
+        assertEquals(2, outcomes.stream().filter(outcome -> outcome.startsWith("EVENT ")).count(),
+                "both writers must get the boarding: " + outcomes);
+        assertEquals(outcomes.get(0), outcomes.get(1), "both writers must see one and the same event");
+        assertEquals(1, boardingRows());
     }
 
     private interface Write {
         BoardingEventDto run();
     }
 
-    private String asUser(UUID actorId, OverlappingWrites overlap, Write write) {
+    private interface Call {
+        Object run();
+    }
+
+    private String inTransaction(UUID actorId, OverlappingWrites overlap, Write write) {
         UserPrincipal principal = principal(actorId);
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
@@ -713,22 +1028,28 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
         }
     }
 
-    private void widenTheBoardingInsertWindow() {
-        jdbc.execute("""
-                create or replace function delay_boarding_event_insert() returns trigger as $$
-                begin
-                    perform pg_sleep(0.5);
-                    return new;
-                end;
-                $$ language plpgsql
-                """);
-        jdbc.execute("create trigger delay_boarding_event_insert before insert on boarding_events "
-                + "for each row execute function delay_boarding_event_insert()");
+    private void asUser(UUID actorId, Call call) {
+        UserPrincipal principal = principal(actorId);
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
+        try {
+            call.run();
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
     }
 
-    private void narrowTheBoardingInsertWindow() {
-        jdbc.execute("drop trigger if exists delay_boarding_event_insert on boarding_events");
-        jdbc.execute("drop function if exists delay_boarding_event_insert()");
+    private void anonymize(UUID userId) {
+        UUID requestId = UUID.randomUUID();
+        jdbc.update("insert into account_deletion_requests (id, user_id, subject_id, status, requested_at, created_at, "
+                + "is_deleted) values (?, ?, ?, 'REQUESTED', now(), now(), false)", requestId, userId, userId);
+        new TransactionTemplate(transactionManager).executeWithoutResult(
+                status -> accountAnonymizer.anonymize(userId, requestId));
+    }
+
+    private void dropTrigger(String name) {
+        jdbc.execute("drop trigger if exists " + name + " on boarding_events");
+        jdbc.execute("drop function if exists " + name + "()");
     }
 
     private void silenceTheEarlierReminders() {
@@ -741,13 +1062,30 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
                 + "and category = 'TRANSPORT'", Integer.class, recipient);
     }
 
+    private Map<String, String> pushPayloadOf(UUID recipient) throws Exception {
+        String payload = jdbc.queryForObject("select push_data_payload from notifications where recipient_id = ? "
+                + "and channel = 'PUSH' and category = 'TRANSPORT'", String.class, recipient);
+        return objectMapper.readValue(payload, new TypeReference<Map<String, String>>() {
+        });
+    }
+
+    private void insertPushDevice(UUID userId) {
+        jdbc.update("insert into devices (id, created_at, is_deleted, user_id, type, name, client_device_id, push_token) "
+                        + "values (?, now(), false, ?, 'ANDROID', 'boarding-device', ?, ?)",
+                UUID.randomUUID(), userId, UUID.randomUUID().toString(), "boarding-token-" + userId);
+    }
+
     private int boardingRows() {
         return jdbc.queryForObject("select count(*) from boarding_events where job_assignment_id in "
                 + "(select id from job_assignments where job_id = ?)", Integer.class, jobId);
     }
 
+    private String secretOf(UUID shuttleId) {
+        return jdbc.queryForObject("select qr_secret from shuttles where id = ?", String.class, shuttleId);
+    }
+
     private Set<String> flagsOf(JsonNode event) {
-        Set<String> flags = new java.util.TreeSet<>();
+        Set<String> flags = new TreeSet<>();
         event.get("flags").forEach(flag -> flags.add(flag.asText()));
         return flags;
     }
@@ -792,15 +1130,18 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
     }
 
     private UUID pickSeat(UUID actorId, UUID assignment, UUID shuttleId) throws Exception {
-        UUID stopId = jdbc.queryForObject("select id from shuttle_stops where shuttle_id = ? and is_deleted = false",
-                UUID.class, shuttleId);
         mockMvc.perform(put("/job-assignments/{id}/transport/seat", assignment)
                         .with(user(principal(actorId)))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"shuttleId\":\"" + shuttleId + "\",\"stopId\":\"" + stopId + "\"}"))
+                        .content("{\"shuttleId\":\"" + shuttleId + "\",\"stopId\":\"" + stopOf(shuttleId) + "\"}"))
                 .andExpect(status().isOk());
         String direction = jdbc.queryForObject("select direction from shuttles where id = ?", String.class, shuttleId);
         return seatOf(assignment, direction);
+    }
+
+    private UUID stopOf(UUID shuttleId) {
+        return jdbc.queryForObject("select id from shuttle_stops where shuttle_id = ? and is_deleted = false",
+                UUID.class, shuttleId);
     }
 
     private UUID seatOf(UUID assignment, String direction) {
@@ -828,7 +1169,7 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
     private String planJson() {
         return "{\"outboundMethod\":\"SHUTTLE\",\"returnMethod\":\"SHUTTLE\",\"shuttles\":["
                 + shuttleJson("OUTBOUND", "A servisi", "34 ABC 12", departure) + ","
-                + shuttleJson("OUTBOUND", "B servisi", "34 XYZ 99", departure) + ","
+                + shuttleJson("OUTBOUND", "B servisi", "34 XYZ 99", laterDeparture) + ","
                 + shuttleJson("RETURN", "Dönüş servisi", "34 DNS 01", returnDeparture) + "]}";
     }
 
@@ -850,6 +1191,13 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
         parsed.remove("timeStamp");
         parsed.remove("requestId");
         return parsed.toString().replace(resourceId.toString(), "{istenen-id}");
+    }
+
+    private UUID extraWorker(String firstName, String lastName) {
+        UUID id = UUID.randomUUID();
+        insertUser(id, firstName, lastName);
+        extraUsers.add(id);
+        return id;
     }
 
     private void insertAssignment(UUID id, UUID worker) {

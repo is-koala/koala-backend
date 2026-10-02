@@ -169,6 +169,15 @@ public class PostgresAccountAnonymizer implements AccountAnonymizer {
                        join jobs j on j.id = a.job_id
                        where a.worker_id = ? or j.creator_id = ?)
                 """, userId, userId);
+        jdbcTemplate.update("""
+                update boarding_events
+                   set latitude = null, longitude = null, distance_to_stop_meters = null
+                 where recorded_by_id = ?
+                    or job_assignment_id in (
+                       select a.id from job_assignments a
+                       join jobs j on j.id = a.job_id
+                       where a.worker_id = ? or j.creator_id = ?)
+                """, userId, userId, userId);
         jdbcTemplate.update("update educations set is_deleted = true, deleted_at = now() where user_id = ?", userId);
         jdbcTemplate.update("""
                 update notifications

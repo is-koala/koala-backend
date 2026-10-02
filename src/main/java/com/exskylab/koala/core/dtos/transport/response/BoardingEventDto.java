@@ -3,6 +3,7 @@ package com.exskylab.koala.core.dtos.transport.response;
 import com.exskylab.koala.entities.BoardingKind;
 import com.exskylab.koala.entities.BoardingSource;
 import com.exskylab.koala.entities.TimesheetPlausibilityFlag;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -29,12 +30,15 @@ public class BoardingEventDto {
     @Schema(description = "Olayın kaydedildiği andaki servis; koltuk sonradan başka servise taşınsa da değişmez.")
     private UUID shuttleId;
 
-    @Schema(description = "BOARDED ya da NO_SHOW.")
+    @Schema(description = "Olayın kaydedildiği andaki durak.")
+    private UUID stopId;
+
     private BoardingKind kind;
 
     private BoardingSource source;
 
-    @Schema(description = "Biniş anı: capturedAt, makul değilse sunucu saati. İlan saatine kırpılmaz.")
+    @Schema(description = "Biniş anı: capturedAt; cihaz saati makul değilse ya da token penceresinin dışındaysa "
+            + "sunucu saatine/pencereye çekilir ve DEVICE_TIME_IMPLAUSIBLE bayrağı düşer. İlan saatine kırpılmaz.")
     private Instant occurredAt;
 
     @Schema(types = {"string", "null"}, format = "date-time",
@@ -45,9 +49,16 @@ public class BoardingEventDto {
 
     private BigDecimal longitude;
 
-    @Schema(description = "Makullük bayrakları: FAR_FROM_STOP (durağa uzak), OFF_SCHEDULE (durak saatinden sapma), "
-            + "STATIC_QR (sabit QR), DEVICE_TIME_IMPLAUSIBLE (cihaz saati). Kapı değildir; yalnız kanıt.")
+    @ArraySchema(schema = @Schema(implementation = String.class,
+            allowableValues = {"DEVICE_TIME_IMPLAUSIBLE", "FAR_FROM_STOP", "OFF_SCHEDULE", "STATIC_QR", "LATE_SYNC"}),
+            arraySchema = @Schema(description = "Makullük bayrakları: FAR_FROM_STOP (gidişte durağa uzak), OFF_SCHEDULE "
+                    + "(gidişte durak saatinden sapma), STATIC_QR (sabit QR), LATE_SYNC (süresi geçmiş ama okutulduğu an "
+                    + "geçerli token'la geç gönderim), DEVICE_TIME_IMPLAUSIBLE (cihaz saati). Kapı değildir; yalnız kanıt."))
     private Set<TimesheetPlausibilityFlag> flags;
 
     private UUID recordedById;
+
+    @Schema(description = "Yalnız biniş POST yanıtında anlamlı: true ise yeni olay yazılmadı, kayıtlı olay döndü "
+            + "(aynı clientEventId ya da o kalkış için zaten kayıtlı biniş). Listede ve zaman çizelgesinde false.")
+    private boolean replayed;
 }

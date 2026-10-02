@@ -15,10 +15,12 @@ public interface BoardingEventDao extends JpaRepository<BoardingEvent, UUID> {
 
     Optional<BoardingEvent> findBySeatAssignmentIdAndClientEventId(UUID seatAssignmentId, UUID clientEventId);
 
-    List<BoardingEvent> findAllBySeatAssignmentIdAndBoardingDayOrderByCreatedAtAscIdAsc(UUID seatAssignmentId,
-                                                                                       LocalDate boardingDay);
+    List<BoardingEvent> findAllBySeatAssignmentIdAndShuttleIdAndBoardingDayOrderByCreatedAtAscIdAsc(
+            UUID seatAssignmentId, UUID shuttleId, LocalDate boardingDay);
 
     List<BoardingEvent> findAllBySeatAssignmentIdInOrderByCreatedAtAscIdAsc(Collection<UUID> seatAssignmentIds);
 
     List<BoardingEvent> findAllByJobAssignmentIdOrderByOccurredAtAscIdAsc(UUID jobAssignmentId);
+
+    boolean existsByShuttleIdAndBoardingDay(UUID shuttleId, LocalDate boardingDay);
 }

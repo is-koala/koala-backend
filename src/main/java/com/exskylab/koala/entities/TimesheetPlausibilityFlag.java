@@ -6,5 +6,6 @@ public enum TimesheetPlausibilityFlag {
     NON_MONOTONIC,
     FAR_FROM_STOP,
     OFF_SCHEDULE,
-    STATIC_QR
+    STATIC_QR,
+    LATE_SYNC
 }

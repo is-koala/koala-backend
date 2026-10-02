@@ -53,6 +53,19 @@ public class BoardingEvent extends BaseEntity {
     @JoinColumn(name = "shuttle_id", nullable = false, updatable = false)
     private Shuttle shuttle;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "stop_id", nullable = false, updatable = false)
+    private ShuttleStop stop;
+
+    @Column(name = "stop_label", length = 120, updatable = false)
+    private String stopLabel;
+
+    @Column(name = "stop_scheduled_at", nullable = false, updatable = false)
+    private Instant stopScheduledAt;
+
+    @Column(name = "distance_to_stop_meters")
+    private Integer distanceToStopMeters;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "kind", nullable = false, length = 16)
     private BoardingKind kind;

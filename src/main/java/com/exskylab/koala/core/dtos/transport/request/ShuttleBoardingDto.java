@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -23,7 +24,8 @@ import java.util.UUID;
 public class ShuttleBoardingDto {
 
     @NotBlank(message = TransportMessages.TOKEN_NOT_BLANK)
-    @Schema(description = "Servis QR'ındaki koala://board/shuttle/{shuttleId}?t=... bağlantısının t parametresi.")
+    @Size(max = 256, message = TransportMessages.TOKEN_MAX_LENGTH)
+    @Schema(description = "Servis QR'ındaki {şema}://board?t=... bağlantısının t parametresi (s1. ile başlar).")
     private String token;
 
     @NotNull(message = TransportMessages.CAPTURED_AT_NOT_NULL)

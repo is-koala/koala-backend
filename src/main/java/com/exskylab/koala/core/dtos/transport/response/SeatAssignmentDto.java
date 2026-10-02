@@ -28,4 +28,8 @@ public class SeatAssignmentDto {
     @Schema(types = {"string", "null"}, format = "date-time",
             description = "Koltuğun seçildiği an. Personel zaman çizelgesi bu alanı kullanır.")
     private Instant createdAt;
+
+    @Schema(description = "Bu koltuğun güncel servisi ve kalkış günü için biniş durumu: BOARDED olayı, yoksa son "
+            + "NO_SHOW işareti; kayıt yoksa null.")
+    private SeatBoardingStatusDto boarding;
 }
