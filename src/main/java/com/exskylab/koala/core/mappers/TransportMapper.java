@@ -16,11 +16,11 @@ import com.exskylab.koala.entities.SeatAssignment;
 import com.exskylab.koala.entities.Shuttle;
 import com.exskylab.koala.entities.ShuttleStop;
 import com.exskylab.koala.entities.TransportPlan;
-
-import java.util.UUID;
 import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+
+import java.util.UUID;
 
 @Mapper(componentModel = "spring", uses = {AddressMapper.class}, injectionStrategy = InjectionStrategy.CONSTRUCTOR)
 public interface TransportMapper {
@@ -55,10 +55,11 @@ public interface TransportMapper {
     @Mapping(target = "stopId", source = "stop.id")
     SeatAssignmentDto toSeatAssignmentDto(SeatAssignment seat);
 
-    @Mapping(target = "seatAssignmentId", source = "event.seatAssignment.id")
-    @Mapping(target = "recordedById", source = "event.recordedBy.id")
-    @Mapping(target = "shuttleId", source = "shuttleId")
-    BoardingEventDto toBoardingEventDto(BoardingEvent event, UUID shuttleId);
+    @Mapping(target = "seatAssignmentId", source = "seatAssignment.id")
+    @Mapping(target = "jobAssignmentId", source = "jobAssignment.id")
+    @Mapping(target = "shuttleId", source = "shuttle.id")
+    @Mapping(target = "recordedById", source = "recordedBy.id")
+    BoardingEventDto toBoardingEventDto(BoardingEvent event);
 
     @Mapping(target = "seatAssignmentId", source = "seat.id")
     @Mapping(target = "jobAssignmentId", source = "seat.jobAssignment.id")
@@ -66,10 +67,10 @@ public interface TransportMapper {
     @Mapping(target = "firstName", source = "firstName")
     @Mapping(target = "lastName", source = "lastName")
     @Mapping(target = "stopId", source = "seat.stop.id")
-    @Mapping(target = "lastEvent", source = "lastEvent")
     @Mapping(target = "boarded", source = "boarded")
+    @Mapping(target = "event", source = "event")
     ShuttleBoardingRowDto toShuttleBoardingRowDto(SeatAssignment seat, UUID workerId, String firstName, String lastName,
-                                                  BoardingEventDto lastEvent, boolean boarded);
+                                                  boolean boarded, BoardingEventDto event);
 
     @Mapping(target = "type", constant = "SEAT")
     @Mapping(target = "at", source = "createdAt")
@@ -82,13 +83,9 @@ public interface TransportMapper {
     AdminTimelineEventDto toSeatTimelineEvent(SeatAssignment seat);
 
     @Mapping(target = "type", constant = "BOARDING")
-    @Mapping(target = "at", source = "event.occurredAt")
-    @Mapping(target = "id", source = "event.id")
-    @Mapping(target = "kind", source = "event.kind")
-    @Mapping(target = "source", source = "event.source")
-    @Mapping(target = "flags", source = "event.flags")
-    @Mapping(target = "recordedById", source = "event.recordedBy.id")
-    @Mapping(target = "shuttleId", source = "shuttleId")
-    @Mapping(target = "seatAssignmentId", source = "event.seatAssignment.id")
-    AdminTimelineEventDto toBoardingTimelineEvent(BoardingEvent event, UUID shuttleId);
+    @Mapping(target = "at", source = "occurredAt")
+    @Mapping(target = "recordedById", source = "recordedBy.id")
+    @Mapping(target = "shuttleId", source = "shuttle.id")
+    @Mapping(target = "seatAssignmentId", source = "seatAssignment.id")
+    AdminTimelineEventDto toBoardingTimelineEvent(BoardingEvent event);
 }

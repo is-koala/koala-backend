@@ -13,7 +13,9 @@ import com.exskylab.koala.core.dtos.transport.response.ShuttleBoardingRowDto;
 import com.exskylab.koala.core.dtos.transport.response.TransportPlanDto;
 import com.exskylab.koala.core.utilities.results.ErrorResult;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
+import com.exskylab.koala.entities.TransportDirection;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -121,9 +123,11 @@ public class TransportController {
     }
 
     @Operation(summary = "Servis QR kodu",
-            description = "İlan sahibi ya da şirket yetkilisi servisin HMAC QR token'ını alır. "
-                    + "static=true süre dolmayan sabit QR üretir; tarama STATIC_QR bayrağı taşır. "
-                    + "Yetkisiz kullanıcı 404 alır ve servisin varlığı sızmaz.")
+            description = "İlan sahibi ya da şirket yetkilisi servisin HMAC biniş QR'ını alır; uri "
+                    + "koala://board/shuttle/{shuttleId}?t=<token> biçimindedir. Varsayılan QR dönen pencerelidir: "
+                    + "token expiresAt'e kadar kabul edilir, ekran refreshAt'te yenilenmelidir. static=true kâğıda basılabilen "
+                    + "süresiz QR üretir; bu QR ile yapılan biniş STATIC_QR bayrağı taşır ve ancak QR anahtarı yenilenince "
+                    + "geçersizleşir. Yetkisiz kullanıcı 404 alır ve servisin varlığı sızmaz.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "QR token döndürüldü"),
             @ApiResponse(responseCode = "404", description = "Servis bulunamadı ya da yetki yok",
@@ -132,37 +136,61 @@ public class TransportController {
     @GetMapping("/shuttles/{shuttleId}/qr")
     public ResponseEntity<SuccessDataResult<BoardingQrDto>> issueShuttleQr(
             @PathVariable UUID shuttleId,
+            @Parameter(description = "true ise süresiz, basılabilir sabit QR")
             @RequestParam(name = "static", defaultValue = "false") boolean staticQr) {
         return ResponseEntity.ok(new SuccessDataResult<>(transportService.issueShuttleQr(shuttleId, staticQr),
                 TransportMessages.QR_ISSUED, HttpStatus.OK));
     }
 
+    @Operation(summary = "Servis QR anahtarını yenile",
+            description = "Servisin QR imza anahtarını yeniler: basılmış sabit QR dahil önceki bütün servis QR'ları ve "
+                    + "o servisteki işçi QR'ları anında geçersiz olur (okutma 404). Yeni dönen pencereli QR döner; basılı "
+                    + "sürüm gerekiyorsa ardından GET ?static=true çağrılır. Yalnız ilan sahibi ya da şirket yetkilisi; "
+                    + "yetkisiz kullanıcı 404 alır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Anahtar yenilendi; yeni QR döndürüldü"),
+            @ApiResponse(responseCode = "404", description = "Servis bulunamadı ya da yetki yok",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @PostMapping("/shuttles/{shuttleId}/qr/rotate")
+    public ResponseEntity<SuccessDataResult<BoardingQrDto>> rotateShuttleQr(@PathVariable UUID shuttleId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(transportService.rotateShuttleQr(shuttleId),
+                TransportMessages.QR_ROTATED, HttpStatus.OK));
+    }
+
     @Operation(summary = "İşçi biniş QR kodu",
-            description = "İşçinin koltuk seçtiği servis için HMAC QR token'ı. Yalnız atamanın işçisi; "
-                    + "işveren ya da taraf olmayan 404 alır. Koltuk yoksa 409.")
+            description = "İşçinin verilen yöndeki koltuğu için HMAC QR'ı; uri koala://board/worker/{seatAssignmentId}?t=<token> "
+                    + "biçimindedir ve işveren okutur. direction verilmezse OUTBOUND. Yalnız atamanın işçisi; işveren ya da "
+                    + "taraf olmayan 404 alır. Atama CONFIRMED/IN_PROGRESS değilse ya da o yönde koltuk yoksa 409.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "QR token döndürüldü"),
-            @ApiResponse(responseCode = "404", description = "Atama bulunamadı ya da taraf değilsiniz",
+            @ApiResponse(responseCode = "404", description = "Atama bulunamadı ya da işçisi değilsiniz",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
-            @ApiResponse(responseCode = "409", description = "Bu atamada koltuk seçilmemiş",
+            @ApiResponse(responseCode = "409", description = "Bu yönde koltuk seçilmemiş ya da atama binişe kapalı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @GetMapping("/job-assignments/{assignmentId}/transport/qr")
-    public ResponseEntity<SuccessDataResult<BoardingQrDto>> issueWorkerQr(@PathVariable UUID assignmentId) {
-        return ResponseEntity.ok(new SuccessDataResult<>(transportService.issueWorkerQr(assignmentId),
+    public ResponseEntity<SuccessDataResult<BoardingQrDto>> issueWorkerQr(
+            @PathVariable UUID assignmentId,
+            @Parameter(description = "Koltuğun yönü; varsayılan OUTBOUND")
+            @RequestParam(name = "direction", required = false) TransportDirection direction) {
+        return ResponseEntity.ok(new SuccessDataResult<>(transportService.issueWorkerQr(assignmentId, direction),
                 TransportMessages.QR_ISSUED, HttpStatus.OK));
     }
 
     @Operation(summary = "Servis QR ile biniş",
-            description = "İşçi servis QR'ını tarar. Token bu servise ait değilse ya da işçinin koltuğu yoksa 404; "
-                    + "süresi dolmuş token 400. Aynı gün ikinci biniş aynı gövdeyle idempotent, farklı gövde 409.")
+            description = "İşçi servis QR'ını okutur; kendi koltuğuna BOARDED yazılır (kaynak WORKER_SCANNED_SHUTTLE_QR). "
+                    + "Token bu servise ait değilse ya da işçinin bu serviste koltuğu yoksa 404 ve olmayan servisle aynı zarf; "
+                    + "süresi dolmuş token 400 TRANSPORT_TOKEN_EXPIRED. İdempotent: aynı koltuk ve kalkış günü zaten BOARDED ise "
+                    + "kayıtlı olay 200 ile döner; aynı clientEventId farklı gövdeyle gelirse 409. Konum ve saat yalnız "
+                    + "bayrak üretir (FAR_FROM_STOP, OFF_SCHEDULE, STATIC_QR), binişi reddetmez.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Biniş kaydedildi"),
+            @ApiResponse(responseCode = "200", description = "Biniş kaydedildi ya da kayıtlı biniş döndürüldü"),
             @ApiResponse(responseCode = "400", description = "Token süresi doldu ya da doğrulama hatası",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "404", description = "Servis bulunamadı, koltuk yok ya da token bu servise ait değil",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
-            @ApiResponse(responseCode = "409", description = "Bu gün zaten binildi ya da idempotency çakışması",
+            @ApiResponse(responseCode = "409", description = "Atama binişe kapalı ya da clientEventId farklı gövdeyle tekrar kullanıldı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping("/shuttles/{shuttleId}/boardings")
@@ -173,15 +201,18 @@ public class TransportController {
     }
 
     @Operation(summary = "Koltuk binişi (işveren)",
-            description = "İşveren işçinin QR'ını tarar (token) ya da biniş/gelmedi işaretler. "
-                    + "Yetkisiz 404; süresi dolmuş token 400.")
+            description = "İşveren işçinin QR'ını okutur (token; kaynak EMPLOYER_SCANNED_WORKER_QR) ya da listeden BOARDED/NO_SHOW "
+                    + "işaretler (token yok; kaynak EMPLOYER_MARKED). Yalnız ilan sahibi ya da şirket yetkilisi; yetkisiz ve "
+                    + "başka koltuğun token'ı 404, süresi dolmuş token 400. İdempotent: o kalkış günü zaten BOARDED ise kayıtlı "
+                    + "olay 200 ile döner (işçi kendisi okuttuysa da); tekrar NO_SHOW kayıtlı işareti döner; binmiş koltuğa "
+                    + "NO_SHOW 409 TRANSPORT_ALREADY_BOARDED.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Biniş kaydedildi"),
+            @ApiResponse(responseCode = "200", description = "Biniş kaydedildi ya da kayıtlı olay döndürüldü"),
             @ApiResponse(responseCode = "400", description = "Token süresi doldu ya da doğrulama hatası",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
-            @ApiResponse(responseCode = "404", description = "Koltuk bulunamadı ya da yetki yok",
+            @ApiResponse(responseCode = "404", description = "Koltuk bulunamadı, yetki yok ya da token bu koltuğa ait değil",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
-            @ApiResponse(responseCode = "409", description = "Bu gün zaten binildi ya da idempotency çakışması",
+            @ApiResponse(responseCode = "409", description = "Binmiş koltuğa NO_SHOW, atama binişe kapalı ya da clientEventId çakışması",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @PostMapping("/seat-assignments/{seatAssignmentId}/boardings")
@@ -192,8 +223,9 @@ public class TransportController {
     }
 
     @Operation(summary = "Servis biniş listesi",
-            description = "İlan sahibi ya da şirket yetkilisi; her koltuk için son olay ve boarded bayrağı. "
-                    + "Yetkisiz 404.")
+            description = "İlan sahibi ya da şirket yetkilisi; servisteki her canlı koltuk (CONFIRMED/IN_PROGRESS/COMPLETED "
+                    + "atama) için durağın kalkış günündeki durum: boarded ve durumu belirleyen olay (BOARDED, yoksa son "
+                    + "NO_SHOW, yoksa null) bayraklarıyla. İptal edilmiş atamalar listede yok. Yetkisiz 404.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Biniş listesi döndürüldü"),
             @ApiResponse(responseCode = "404", description = "Servis bulunamadı ya da yetki yok",

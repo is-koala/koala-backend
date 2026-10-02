@@ -16,6 +16,8 @@ public final class BoardingTokens {
     private static final String SHUTTLE_PREFIX = "s1";
     private static final String WORKER_PREFIX = "w1";
     private static final String STATIC_WINDOW = "static";
+    private static final String SHUTTLE_LINK = "koala://board/shuttle/";
+    private static final String WORKER_LINK = "koala://board/worker/";
 
     private BoardingTokens() {
     }
@@ -37,6 +39,22 @@ public final class BoardingTokens {
 
     public static String mintWorker(String secret, UUID seatId, Instant now, Duration ttl) {
         return mint(WORKER_PREFIX, secret, seatId, Long.toString(windowOf(now, ttl)));
+    }
+
+    public static String shuttleLink(UUID shuttleId, String token) {
+        return SHUTTLE_LINK + shuttleId + "?t=" + token;
+    }
+
+    public static String workerLink(UUID seatId, String token) {
+        return WORKER_LINK + seatId + "?t=" + token;
+    }
+
+    public static Instant refreshAt(Instant now, Duration ttl) {
+        return windowStart(windowOf(now, ttl) + 1, ttl);
+    }
+
+    public static Instant acceptedUntil(Instant now, Duration ttl) {
+        return windowStart(windowOf(now, ttl) + 2, ttl);
     }
 
     public static Verified verifyShuttle(String secret, UUID shuttleId, String token, Instant now, Duration ttl) {
@@ -99,8 +117,15 @@ public final class BoardingTokens {
     }
 
     private static long windowOf(Instant now, Duration ttl) {
-        long seconds = Math.max(1L, ttl.toSeconds());
-        return Math.floorDiv(now.getEpochSecond(), seconds);
+        return Math.floorDiv(now.getEpochSecond(), windowSeconds(ttl));
+    }
+
+    private static Instant windowStart(long window, Duration ttl) {
+        return Instant.ofEpochSecond(Math.multiplyExact(window, windowSeconds(ttl)));
+    }
+
+    private static long windowSeconds(Duration ttl) {
+        return Math.max(1L, ttl.toSeconds());
     }
 
     private static String mac(String secret, String canonical) {

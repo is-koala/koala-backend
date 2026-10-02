@@ -115,4 +115,29 @@ class BoardingTokensTest {
         assertThrows(BoardingTokens.InvalidToken.class,
                 () -> BoardingTokens.verifyShuttle(SECRET, shuttleId, null, NOW, TTL));
     }
+
+    @Test
+    void expiresAtIsTheEndOfTheLastWindowThatStillAcceptsTheToken() {
+        UUID shuttleId = UUID.randomUUID();
+        Instant mintedAt = NOW.plusSeconds(37);
+        String token = BoardingTokens.mintShuttle(SECRET, shuttleId, mintedAt, TTL, false);
+        Instant until = BoardingTokens.acceptedUntil(mintedAt, TTL);
+        Instant refresh = BoardingTokens.refreshAt(mintedAt, TTL);
+
+        BoardingTokens.verifyShuttle(SECRET, shuttleId, token, until.minusSeconds(1), TTL);
+        assertThrows(BoardingTokens.ExpiredToken.class,
+                () -> BoardingTokens.verifyShuttle(SECRET, shuttleId, token, until, TTL));
+        assertTrue(refresh.isAfter(mintedAt));
+        assertEquals(TTL, Duration.between(refresh, until));
+    }
+
+    @Test
+    void theDeepLinksFollowTheEpicContract() {
+        UUID id = UUID.fromString("22222222-2222-2222-2222-222222222222");
+        String token = BoardingTokens.mintWorker(SECRET, id, NOW, TTL);
+
+        assertEquals("koala://board/shuttle/" + id + "?t=" + token, BoardingTokens.shuttleLink(id, token));
+        assertEquals("koala://board/worker/" + id + "?t=" + token, BoardingTokens.workerLink(id, token));
+        assertTrue(token.matches("[A-Za-z0-9._-]+"), "token must survive a URL query unescaped: " + token);
+    }
 }

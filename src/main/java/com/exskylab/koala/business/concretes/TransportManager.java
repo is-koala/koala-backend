@@ -83,6 +83,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collection;
@@ -98,7 +99,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Stream;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -115,6 +115,11 @@ public class TransportManager implements TransportService {
 
     private static final Set<AssignmentStatus> NOTIFIED_STATUSES = EnumSet.of(AssignmentStatus.CONFIRMED,
             AssignmentStatus.IN_PROGRESS);
+
+    private static final Set<AssignmentStatus> BOARDING_LIST_STATUSES = EnumSet.of(AssignmentStatus.CONFIRMED,
+            AssignmentStatus.IN_PROGRESS, AssignmentStatus.COMPLETED);
+
+    private static final Set<BoardingKind> SETTLED_KINDS = EnumSet.of(BoardingKind.BOARDED, BoardingKind.NO_SHOW);
 
     private static final Locale REMINDER_LOCALE = Locale.of("tr");
 
@@ -505,38 +510,39 @@ public class TransportManager implements TransportService {
     @Override
     @Transactional(readOnly = true)
     public BoardingQrDto issueShuttleQr(UUID shuttleId, boolean staticQr) {
+        return shuttleQr(requireShuttleEditor(shuttleId), staticQr);
+    }
+
+    @Override
+    @Transactional
+    public BoardingQrDto rotateShuttleQr(UUID shuttleId) {
         Shuttle shuttle = requireShuttleEditor(shuttleId);
-        Instant now = clock.instant();
-        Duration ttl = boardingProperties.getTokenTtl();
-        String token = BoardingTokens.mintShuttle(shuttle.getQrSecret(), shuttle.getId(), now, ttl, staticQr);
-        Instant expiresAt = staticQr ? null : rotatingWindowEnd(now, ttl);
-        return new BoardingQrDto(token, staticQr, expiresAt, "koala://boarding/" + shuttle.getId() + "?token=" + token);
+        shuttle.setQrSecret(newSecret());
+        shuttleDao.save(shuttle);
+        log.info("QR secret of shuttle {} rotated by user {}; every earlier shuttle and worker token is void",
+                shuttleId, securityService.getAuthenticatedUserId());
+        return shuttleQr(shuttle, false);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public BoardingQrDto issueWorkerQr(UUID assignmentId) {
+    public BoardingQrDto issueWorkerQr(UUID assignmentId, TransportDirection direction) {
         JobAssignment assignment = requireParty(assignmentId);
         UUID actorId = securityService.getAuthenticatedUserId();
         if (!assignment.getWorker().getId().equals(actorId)) {
             throw Concealment.notFound(JobAssignmentMessages.NOT_FOUND, actorId, assignmentId,
                     "only the worker may issue a boarding QR");
         }
-        List<SeatAssignment> seats = seatAssignmentDao.findAllByJobAssignmentIdIn(List.of(assignmentId));
-        if (seats.isEmpty()) {
-            throw new ConflictException(TransportMessages.SEAT_NOT_SELECTED);
+        if (!SEAT_STATUSES.contains(assignment.getStatus())) {
+            throw new ConflictException(TransportMessages.ASSIGNMENT_NOT_ACTIVE);
         }
-        SeatAssignment chosen = seats.stream()
-                .filter(candidate -> candidate.getDirection() == TransportDirection.OUTBOUND)
-                .findFirst()
-                .orElse(seats.getFirst());
-        SeatAssignment seat = seatAssignmentDao.findWithDetailsById(chosen.getId())
+        TransportDirection wanted = direction == null ? TransportDirection.OUTBOUND : direction;
+        SeatAssignment seat = seatAssignmentDao.findByJobAssignmentIdAndDirection(assignmentId, wanted)
                 .orElseThrow(() -> new ConflictException(TransportMessages.SEAT_NOT_SELECTED));
         Instant now = clock.instant();
         Duration ttl = boardingProperties.getTokenTtl();
         String token = BoardingTokens.mintWorker(seat.getShuttle().getQrSecret(), seat.getId(), now, ttl);
-        return new BoardingQrDto(token, false, rotatingWindowEnd(now, ttl),
-                "koala://boarding/seat/" + seat.getId() + "?token=" + token);
+        return qrDto(token, false, now, ttl, BoardingTokens.workerLink(seat.getId(), token));
     }
 
     @Override
@@ -544,9 +550,6 @@ public class TransportManager implements TransportService {
     public BoardingEventDto boardOnShuttle(UUID shuttleId, ShuttleBoardingDto request) {
         UUID actorId = securityService.getAuthenticatedUserId();
         SeatAssignment seat = requireWorkerSeatOnShuttle(shuttleId, actorId);
-        if (!SEAT_STATUSES.contains(seat.getJobAssignment().getStatus())) {
-            throw new ConflictException(TransportMessages.ASSIGNMENT_NOT_ACTIVE);
-        }
         BoardingTokens.Verified verified;
         try {
             verified = BoardingTokens.verifyShuttle(seat.getShuttle().getQrSecret(), shuttleId, request.getToken(),
@@ -557,9 +560,9 @@ public class TransportManager implements TransportService {
         } catch (BoardingTokens.ExpiredToken exception) {
             throw new ValidationException(TransportMessages.TOKEN_EXPIRED);
         }
-        return recordBoarding(seat, BoardingKind.BOARDED, BoardingSource.WORKER_SCANNED_SHUTTLE_QR,
+        return recordBoarding(seat, new Mark(BoardingKind.BOARDED, BoardingSource.WORKER_SCANNED_SHUTTLE_QR,
                 request.getCapturedAt(), request.getLatitude(), request.getLongitude(), request.getClientEventId(),
-                verified.staticQr(), actorId);
+                verified.staticQr()), actorId);
     }
 
     @Override
@@ -570,10 +573,8 @@ public class TransportManager implements TransportService {
         if (!SEAT_STATUSES.contains(seat.getJobAssignment().getStatus())) {
             throw new ConflictException(TransportMessages.ASSIGNMENT_NOT_ACTIVE);
         }
-        BoardingKind kind = request.getKind() == null ? BoardingKind.BOARDED : request.getKind();
-        BoardingSource source = BoardingSource.EMPLOYER_MARKED;
-        boolean staticQr = false;
-        if (request.getToken() != null && !request.getToken().isBlank()) {
+        boolean scanned = request.getToken() != null && !request.getToken().isBlank();
+        if (scanned) {
             try {
                 BoardingTokens.verifyWorker(seat.getShuttle().getQrSecret(), seat.getId(), request.getToken(),
                         clock.instant(), boardingProperties.getTokenTtl());
@@ -583,44 +584,44 @@ public class TransportManager implements TransportService {
             } catch (BoardingTokens.ExpiredToken exception) {
                 throw new ValidationException(TransportMessages.TOKEN_EXPIRED);
             }
-            kind = BoardingKind.BOARDED;
-            source = BoardingSource.EMPLOYER_SCANNED_WORKER_QR;
         }
-        Instant capturedAt = request.getCapturedAt() == null ? clock.instant() : request.getCapturedAt();
-        return recordBoarding(seat, kind, source, capturedAt, request.getLatitude(), request.getLongitude(),
-                request.getClientEventId(), staticQr, actorId);
+        BoardingKind kind = scanned || request.getKind() == null ? BoardingKind.BOARDED : request.getKind();
+        BoardingSource source = scanned ? BoardingSource.EMPLOYER_SCANNED_WORKER_QR : BoardingSource.EMPLOYER_MARKED;
+        return recordBoarding(seat, new Mark(kind, source, request.getCapturedAt(), request.getLatitude(),
+                request.getLongitude(), request.getClientEventId(), false), actorId);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<ShuttleBoardingRowDto> listBoardings(UUID shuttleId) {
         requireShuttleEditor(shuttleId);
-        List<SeatAssignment> seats = seatAssignmentDao.findAllWithAssignmentByShuttleId(shuttleId);
+        List<SeatAssignment> seats = seatAssignmentDao.findBoardingRowsByShuttleId(shuttleId, BOARDING_LIST_STATUSES);
         if (seats.isEmpty()) {
             return List.of();
         }
-        List<UUID> seatIds = seats.stream().map(SeatAssignment::getId).toList();
-        Map<UUID, BoardingEvent> lastBySeat = new LinkedHashMap<>();
-        for (BoardingEvent event : boardingEventDao.findAllBySeatAssignmentIdInOrderByOccurredAtDescIdDesc(seatIds)) {
-            lastBySeat.putIfAbsent(event.getSeatAssignment().getId(), event);
-        }
-        List<UUID> workerIds = seats.stream()
-                .map(seat -> seat.getJobAssignment().getWorker().getId())
-                .distinct()
-                .toList();
-        Map<UUID, User> workers = userService.getAllByIdIn(workerIds).stream()
-                .collect(Collectors.toMap(User::getId, Function.identity()));
+        Map<UUID, List<BoardingEvent>> eventsBySeat = boardingEventDao
+                .findAllBySeatAssignmentIdInOrderByCreatedAtAscIdAsc(seats.stream().map(SeatAssignment::getId).toList())
+                .stream()
+                .collect(Collectors.groupingBy(event -> event.getSeatAssignment().getId()));
+        Map<UUID, User> workers = workersOf(seats);
         List<ShuttleBoardingRowDto> rows = new ArrayList<>();
         for (SeatAssignment seat : seats) {
+            LocalDate day = boardingDayOf(seat);
+            List<BoardingEvent> sameDay = eventsBySeat.getOrDefault(seat.getId(), List.of()).stream()
+                    .filter(event -> day.equals(event.getBoardingDay()))
+                    .toList();
+            Optional<BoardingEvent> boarded = firstBoarded(sameDay);
+            BoardingEvent decisive = boarded.orElseGet(() -> sameDay.stream()
+                    .filter(event -> event.getKind() == BoardingKind.NO_SHOW)
+                    .reduce((earlier, later) -> later)
+                    .orElse(null));
             UUID workerId = seat.getJobAssignment().getWorker().getId();
             User worker = workers.get(workerId);
-            BoardingEvent last = lastBySeat.get(seat.getId());
-            BoardingEventDto lastDto = last == null ? null
-                    : transportMapper.toBoardingEventDto(last, seat.getShuttle().getId());
             rows.add(transportMapper.toShuttleBoardingRowDto(seat, workerId,
                     worker == null ? null : worker.getFirstName(),
                     worker == null ? null : worker.getLastName(),
-                    lastDto, last != null && last.getKind() == BoardingKind.BOARDED));
+                    boarded.isPresent(),
+                    decisive == null ? null : transportMapper.toBoardingEventDto(decisive)));
         }
         return rows;
     }
@@ -628,17 +629,12 @@ public class TransportManager implements TransportService {
     @Override
     @Transactional(readOnly = true)
     public List<AdminTimelineEventDto> timelineForStaff(UUID assignmentId) {
-        List<SeatAssignment> seats = seatAssignmentDao.findAllByJobAssignmentIdIn(List.of(assignmentId));
-        Map<UUID, UUID> shuttleBySeat = seats.stream()
-                .collect(Collectors.toMap(SeatAssignment::getId, seat -> seat.getShuttle().getId()));
         List<AdminTimelineEventDto> events = new ArrayList<>();
-        for (SeatAssignment seat : seats) {
+        for (SeatAssignment seat : seatAssignmentDao.findAllByJobAssignmentIdIn(List.of(assignmentId))) {
             events.add(transportMapper.toSeatTimelineEvent(seat));
         }
-        for (BoardingEvent event : boardingEventDao.findAllBySeatAssignment_JobAssignment_IdOrderByOccurredAtAsc(
-                assignmentId)) {
-            events.add(transportMapper.toBoardingTimelineEvent(event,
-                    shuttleBySeat.get(event.getSeatAssignment().getId())));
+        for (BoardingEvent event : boardingEventDao.findAllByJobAssignmentIdOrderByOccurredAtAscIdAsc(assignmentId)) {
+            events.add(transportMapper.toBoardingTimelineEvent(event));
         }
         events.sort(Comparator.comparing(AdminTimelineEventDto::at)
                 .thenComparing(AdminTimelineEventDto::type)
@@ -701,17 +697,8 @@ public class TransportManager implements TransportService {
     @Override
     @Transactional(readOnly = true)
     public List<UUID> findBoardingReminderDueIds(Instant now) {
-        Instant from = now;
         Instant to = now.plus(Duration.ofMinutes(reminderProperties.getBoardingLeadMinutes()));
-        return seatAssignmentDao.findBoardingReminderDueIds(from, to, SEAT_STATUSES,
-                PageRequest.of(0, reminderProperties.getBatchSize()));
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public List<UUID> findNotBoardedNoticeDueIds(Instant now) {
-        Instant cutoff = now.minus(Duration.ofMinutes(reminderProperties.getNotBoardedAfterMinutes()));
-        return seatAssignmentDao.findNotBoardedNoticeDueIds(cutoff, SEAT_STATUSES, BoardingKind.BOARDED,
+        return seatAssignmentDao.findBoardingReminderDueIds(now, to, SEAT_STATUSES,
                 PageRequest.of(0, reminderProperties.getBatchSize()));
     }
 
@@ -722,50 +709,87 @@ public class TransportManager implements TransportService {
         if (seat == null || seat.getBoardingReminderSentAt() != null) {
             return false;
         }
-        if (alreadyBoarded(seat, boardingDayOf(seat))) {
-            seat.setBoardingReminderSentAt(now);
-            seatAssignmentDao.save(seat);
+        seat.setBoardingReminderSentAt(now);
+        seatAssignmentDao.save(seat);
+        if (!settledSeatIds(List.of(seat), boardingDayOf(seat)).isEmpty()) {
             return false;
         }
         String body = reminderBody(seat, TransportMessages.REMINDER_BOARDING,
                 reminderProperties.getBoardingLeadMinutes());
         notifyWorker(seat.getJobAssignment(), body, reminderPayload(seat, "SHUTTLE_REMINDER_BOARDING"));
-        seat.setBoardingReminderSentAt(now);
-        seatAssignmentDao.save(seat);
         return true;
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<UUID> findNotBoardedDepartureIds(Instant now) {
+        Instant to = now.minus(Duration.ofMinutes(reminderProperties.getNotBoardedAfterMinutes()));
+        Instant from = to.minus(Duration.ofMinutes(reminderProperties.getNotBoardedLookbackMinutes()));
+        return seatAssignmentDao.findNotBoardedDueStopIds(from, to, SEAT_STATUSES,
+                PageRequest.of(0, reminderProperties.getBatchSize()));
+    }
+
+    @Override
     @Transactional
-    public boolean sendNotBoardedNotice(UUID seatId, Instant now) {
-        SeatAssignment seat = seatAssignmentDao.findWithDetailsById(seatId).orElse(null);
-        if (seat == null || seat.getNotBoardedNoticeSentAt() != null) {
+    public boolean sendNotBoardedNotice(UUID stopId, Instant now) {
+        List<SeatAssignment> candidates = seatAssignmentDao.findNotBoardedCandidatesByStopId(stopId, SEAT_STATUSES);
+        if (candidates.isEmpty()) {
             return false;
         }
-        if (alreadyBoarded(seat, boardingDayOf(seat))) {
-            seat.setNotBoardedNoticeSentAt(now);
-            seatAssignmentDao.save(seat);
+        candidates.forEach(seat -> seat.setNotBoardedNoticeSentAt(now));
+        seatAssignmentDao.saveAll(candidates);
+        SeatAssignment departure = seatAssignmentDao.findWithDetailsById(candidates.getFirst().getId())
+                .orElseThrow(() -> new IllegalStateException("seat " + candidates.getFirst().getId() + " vanished"));
+        Set<UUID> settled = settledSeatIds(candidates, boardingDayOf(departure));
+        List<SeatAssignment> missing = candidates.stream()
+                .filter(seat -> !settled.contains(seat.getId()))
+                .toList();
+        if (missing.isEmpty()) {
             return false;
         }
-        JobAssignment assignment = seat.getJobAssignment();
-        User employer = userService.getReference(assignment.getJob().getCreator().getId());
-        String workerName = DisplayNames.of(assignment.getWorker().getFirstName(),
-                assignment.getWorker().getLastName());
-        String body = messageResolver.format(TransportMessages.NOTICE_NOT_BOARDED, REMINDER_LOCALE, workerName);
-        notifyUser(employer, assignment, body, reminderPayload(seat, "SHUTTLE_NOTICE_NOT_BOARDED"));
-        seat.setNotBoardedNoticeSentAt(now);
-        seatAssignmentDao.save(seat);
+        Map<UUID, User> workers = workersOf(missing);
+        String names = missing.stream()
+                .map(seat -> workers.get(seat.getJobAssignment().getWorker().getId()))
+                .filter(Objects::nonNull)
+                .map(worker -> DisplayNames.of(worker.getFirstName(), worker.getLastName()))
+                .filter(Objects::nonNull)
+                .collect(Collectors.joining(", "));
+        ShuttleStop stop = departure.getStop();
+        Shuttle shuttle = departure.getShuttle();
+        Job job = departure.getJobAssignment().getJob();
+        String body = messageResolver.format(TransportMessages.NOTICE_NOT_BOARDED, REMINDER_LOCALE,
+                reminderProperties.getNotBoardedAfterMinutes(), shuttle.getName(), stopName(stop),
+                WALL_TIME.format(stop.getScheduledAt().atZone(reminderProperties.getZoneId())), missing.size(), names);
+        Map<String, String> data = new HashMap<>();
+        data.put("type", PUSH_TYPE);
+        data.put("event", "SHUTTLE_NOTICE_NOT_BOARDED");
+        data.put("jobId", job.getId().toString());
+        data.put("shuttleId", shuttle.getId().toString());
+        data.put("stopId", stop.getId().toString());
+        data.put("scheduledAt", stop.getScheduledAt().toString());
+        data.put("notBoardedCount", Integer.toString(missing.size()));
+        List<User> recipients = jobEditors.editorsOf(job);
+        notificationService.preparePushRecipients(recipients.stream().map(User::getId).toList());
+        recipients.forEach(recipient -> notifyUser(recipient, job.getTitle(), NotificationTargetType.JOB, job.getId(),
+                body, data));
+        log.info("Not-boarded notice for stop {} of shuttle {}: {} of {} seats missing, {} recipients",
+                stop.getId(), shuttle.getId(), missing.size(), candidates.size(), recipients.size());
         return true;
     }
 
     private String reminderBody(SeatAssignment seat, String key, int leadMinutes) {
         ShuttleStop stop = seat.getStop();
         String time = WALL_TIME.format(stop.getScheduledAt().atZone(reminderProperties.getZoneId()));
-        String stopName = stop.getLabel() != null ? stop.getLabel()
-                : stop.getAddress().getDistrict() != null ? stop.getAddress().getDistrict().getName() : "";
-        String body = messageResolver.format(key, REMINDER_LOCALE, time, stopName, leadMinutes);
+        String body = messageResolver.format(key, REMINDER_LOCALE, time, stopName(stop), leadMinutes);
         String plate = seat.getShuttle().getPlate();
         return plate == null ? body : body + " (" + plate + ")";
+    }
+
+    private static String stopName(ShuttleStop stop) {
+        if (stop.getLabel() != null) {
+            return stop.getLabel();
+        }
+        return stop.getAddress().getDistrict() != null ? stop.getAddress().getDistrict().getName() : "";
     }
 
     private Map<String, String> reminderPayload(SeatAssignment seat, String event) {
@@ -802,23 +826,24 @@ public class TransportManager implements TransportService {
     }
 
     private void notifyWorker(JobAssignment assignment, String body, Map<String, String> data) {
-        notifyUser(assignment.getWorker(), assignment, body, data);
+        notifyUser(assignment.getWorker(), assignment.getJob().getTitle(), NotificationTargetType.JOB_ASSIGNMENT,
+                assignment.getId(), body, data);
     }
 
-    private void notifyUser(User recipient, JobAssignment assignment, String body, Map<String, String> data) {
-        String title = assignment.getJob().getTitle();
+    private void notifyUser(User recipient, String title, NotificationTargetType targetType, UUID targetId,
+                            String body, Map<String, String> data) {
         try {
             SendInAppDto inApp = new SendInAppDto();
             inApp.setRecipient(recipient);
             inApp.setCategory(NotificationCategory.TRANSPORT);
             inApp.setSubject(title);
             inApp.setBody(body);
-            inApp.setTargetType(NotificationTargetType.JOB_ASSIGNMENT);
-            inApp.setTargetId(assignment.getId());
+            inApp.setTargetType(targetType);
+            inApp.setTargetId(targetId);
             notificationService.sendInApp(inApp);
         } catch (Exception exception) {
-            log.warn("Transport in-app notice could not be recorded for user {} on assignment {}: {}",
-                    recipient.getId(), assignment.getId(), exception.getMessage());
+            log.warn("Transport in-app notice could not be recorded for user {} on {} {}: {}",
+                    recipient.getId(), targetType, targetId, exception.getMessage());
         }
         try {
             SendPushToUserDto push = new SendPushToUserDto();
@@ -829,97 +854,134 @@ public class TransportManager implements TransportService {
             push.setDataPayload(data);
             notificationService.sendPushToUser(push, DispatchPriority.NORMAL, true);
         } catch (Exception exception) {
-            log.warn("Transport push could not be queued for user {} on assignment {}: {}",
-                    recipient.getId(), assignment.getId(), exception.getMessage());
+            log.warn("Transport push could not be queued for user {} on {} {}: {}",
+                    recipient.getId(), targetType, targetId, exception.getMessage());
         }
     }
 
-    private BoardingEventDto recordBoarding(SeatAssignment seat, BoardingKind kind, BoardingSource source,
-                                            Instant capturedAt, BigDecimal latitude, BigDecimal longitude,
-                                            UUID clientEventId, boolean staticQr, UUID actorId) {
-        BigDecimal lat = normalizeCoordinate(latitude);
-        BigDecimal lng = normalizeCoordinate(longitude);
-        if (clientEventId != null) {
-            Optional<BoardingEvent> existing = boardingEventDao.findByClientEventId(clientEventId);
-            if (existing.isPresent()) {
-                BoardingEvent stored = existing.get();
-                requireMatchingPayload(stored, kind, capturedAt, lat, lng);
-                return transportMapper.toBoardingEventDto(stored, seat.getShuttle().getId());
+    private record Mark(BoardingKind kind, BoardingSource source, Instant capturedAt, BigDecimal latitude,
+                        BigDecimal longitude, UUID clientEventId, boolean staticQr) {
+    }
+
+    private BoardingEventDto recordBoarding(SeatAssignment seat, Mark mark, UUID actorId) {
+        seatAssignmentDao.lockById(seat.getId());
+        Instant capturedAt = mark.capturedAt() == null ? null : mark.capturedAt().truncatedTo(ChronoUnit.MICROS);
+        BigDecimal latitude = normalizeCoordinate(mark.latitude());
+        BigDecimal longitude = normalizeCoordinate(mark.longitude());
+        if (mark.clientEventId() != null) {
+            Optional<BoardingEvent> replay = boardingEventDao.findBySeatAssignmentIdAndClientEventId(seat.getId(),
+                    mark.clientEventId());
+            if (replay.isPresent()) {
+                BoardingEvent stored = replay.get();
+                if (stored.getKind() != mark.kind() || !Objects.equals(stored.getCapturedAt(), capturedAt)
+                        || !coordinatesEqual(stored.getLatitude(), latitude)
+                        || !coordinatesEqual(stored.getLongitude(), longitude)) {
+                    log.info("Boarding retry id {} on seat {} reused with a different payload by user {}",
+                            mark.clientEventId(), seat.getId(), actorId);
+                    throw new ConflictException(TransportMessages.IDEMPOTENCY_CONFLICT);
+                }
+                return transportMapper.toBoardingEventDto(stored);
             }
         }
         LocalDate boardingDay = boardingDayOf(seat);
-        Optional<BoardingEvent> boarded = boardingEventDao
-                .findFirstBySeatAssignmentIdAndKindAndBoardingDayOrderByOccurredAtAsc(
-                        seat.getId(), BoardingKind.BOARDED, boardingDay);
-        if (kind == BoardingKind.BOARDED && boarded.isPresent()) {
-            BoardingEvent stored = boarded.get();
-            requireMatchingPayload(stored, kind, capturedAt, lat, lng);
-            return transportMapper.toBoardingEventDto(stored, seat.getShuttle().getId());
+        List<BoardingEvent> sameDay = boardingEventDao.findAllBySeatAssignmentIdAndBoardingDayOrderByCreatedAtAscIdAsc(
+                seat.getId(), boardingDay);
+        Optional<BoardingEvent> boarded = firstBoarded(sameDay);
+        if (boarded.isPresent()) {
+            if (mark.kind() == BoardingKind.NO_SHOW) {
+                throw new ConflictException(TransportMessages.ALREADY_BOARDED);
+            }
+            log.info("Seat {} already boarded on {}; {} by user {} answered with event {}",
+                    seat.getId(), boardingDay, mark.source(), actorId, boarded.get().getId());
+            return transportMapper.toBoardingEventDto(boarded.get());
         }
-        if (kind == BoardingKind.NO_SHOW && boarded.isPresent()) {
-            throw new ConflictException(TransportMessages.ALREADY_BOARDED);
+        if (mark.kind() == BoardingKind.NO_SHOW && !sameDay.isEmpty()) {
+            return transportMapper.toBoardingEventDto(sameDay.getLast());
         }
+
         Instant now = clock.instant();
-        JobAssignment assignment = seat.getJobAssignment();
-        TimesheetEventPolicy.Outcome outcome = timesheetEventPolicy.reconcile(capturedAt, now,
-                assignment.getJob().getStartDateTime(), assignment.getJob().getEndDateTime(), null);
+        TimesheetEventPolicy.Outcome outcome = timesheetEventPolicy.reconcile(capturedAt, now, null, null, null);
         EnumSet<TimesheetPlausibilityFlag> flags = EnumSet.noneOf(TimesheetPlausibilityFlag.class);
         flags.addAll(outcome.flags());
-        Address stopAddress = seat.getStop().getAddress();
-        if (lat != null && lng != null && stopAddress.getLatitude() != null && stopAddress.getLongitude() != null
-                && GeoDistance.metersBetween(lat, lng, stopAddress.getLatitude(), stopAddress.getLongitude())
+        if (mark.kind() == BoardingKind.BOARDED) {
+            flags.addAll(boardingFlags(seat, outcome.effectiveAt(), latitude, longitude, mark.staticQr()));
+        }
+        BoardingEvent event = new BoardingEvent();
+        event.setSeatAssignment(seat);
+        event.setJobAssignment(seat.getJobAssignment());
+        event.setShuttle(seat.getShuttle());
+        event.setKind(mark.kind());
+        event.setSource(mark.source());
+        event.setOccurredAt(outcome.effectiveAt());
+        event.setCapturedAt(capturedAt);
+        event.setBoardingDay(boardingDay);
+        event.setLatitude(latitude);
+        event.setLongitude(longitude);
+        event.setFlags(flags);
+        event.setClientEventId(mark.clientEventId());
+        event.setRecordedBy(userService.getReference(actorId));
+        BoardingEvent saved = boardingEventDao.save(event);
+        log.info("Boarding {} via {} recorded for seat {} on {} by user {} with flags {}",
+                mark.kind(), mark.source(), seat.getId(), boardingDay, actorId, flags);
+        return transportMapper.toBoardingEventDto(saved);
+    }
+
+    private EnumSet<TimesheetPlausibilityFlag> boardingFlags(SeatAssignment seat, Instant occurredAt,
+                                                             BigDecimal latitude, BigDecimal longitude,
+                                                             boolean staticQr) {
+        EnumSet<TimesheetPlausibilityFlag> flags = EnumSet.noneOf(TimesheetPlausibilityFlag.class);
+        ShuttleStop stop = seat.getStop();
+        if (Duration.between(stop.getScheduledAt(), occurredAt).abs()
+                .compareTo(boardingProperties.getScheduleTolerance()) > 0) {
+            flags.add(TimesheetPlausibilityFlag.OFF_SCHEDULE);
+        }
+        Address address = stop.getAddress();
+        if (latitude != null && longitude != null && address != null
+                && address.getLatitude() != null && address.getLongitude() != null
+                && GeoDistance.metersBetween(latitude, longitude, address.getLatitude(), address.getLongitude())
                 > boardingProperties.getFarFromStopMeters()) {
             flags.add(TimesheetPlausibilityFlag.FAR_FROM_STOP);
         }
         if (staticQr) {
             flags.add(TimesheetPlausibilityFlag.STATIC_QR);
         }
-        BoardingEvent event = new BoardingEvent();
-        event.setSeatAssignment(seat);
-        event.setKind(kind);
-        event.setSource(source);
-        event.setOccurredAt(capturedAt == null ? now : outcome.effectiveAt());
-        event.setCapturedAt(capturedAt);
-        event.setBoardingDay(boardingDay);
-        event.setLatitude(lat);
-        event.setLongitude(lng);
-        event.setFlags(flags);
-        event.setClientEventId(clientEventId);
-        event.setRecordedBy(userService.getReference(actorId));
-        try {
-            return transportMapper.toBoardingEventDto(boardingEventDao.saveAndFlush(event),
-                    seat.getShuttle().getId());
-        } catch (DataIntegrityViolationException exception) {
-            if (ConstraintViolations.named(exception, "uk_boarding_events_client_event_active")) {
-                BoardingEvent stored = boardingEventDao.findByClientEventId(clientEventId)
-                        .orElseThrow(() -> exception);
-                requireMatchingPayload(stored, kind, capturedAt, lat, lng);
-                return transportMapper.toBoardingEventDto(stored, seat.getShuttle().getId());
-            }
-            if (ConstraintViolations.named(exception, "uk_boarding_events_boarded_seat_day")) {
-                BoardingEvent stored = boardingEventDao
-                        .findFirstBySeatAssignmentIdAndKindAndBoardingDayOrderByOccurredAtAsc(
-                                seat.getId(), BoardingKind.BOARDED, boardingDay)
-                        .orElseThrow(() -> exception);
-                requireMatchingPayload(stored, kind, capturedAt, lat, lng);
-                return transportMapper.toBoardingEventDto(stored, seat.getShuttle().getId());
-            }
-            throw exception;
-        }
+        return flags;
     }
 
-    private void requireMatchingPayload(BoardingEvent stored, BoardingKind kind, Instant capturedAt,
-                                       BigDecimal latitude, BigDecimal longitude) {
-        if (stored.getKind() != kind || !Objects.equals(stored.getCapturedAt(), capturedAt)
-                || !coordinatesEqual(stored.getLatitude(), latitude)
-                || !coordinatesEqual(stored.getLongitude(), longitude)) {
-            throw new ConflictException(clientEventConflict(stored) ? TransportMessages.IDEMPOTENCY_CONFLICT
-                    : TransportMessages.ALREADY_BOARDED);
-        }
+    private Set<UUID> settledSeatIds(List<SeatAssignment> seats, LocalDate boardingDay) {
+        return boardingEventDao.findAllBySeatAssignmentIdInOrderByCreatedAtAscIdAsc(
+                        seats.stream().map(SeatAssignment::getId).toList()).stream()
+                .filter(event -> boardingDay.equals(event.getBoardingDay()))
+                .filter(event -> SETTLED_KINDS.contains(event.getKind()))
+                .map(event -> event.getSeatAssignment().getId())
+                .collect(Collectors.toSet());
     }
 
-    private static boolean clientEventConflict(BoardingEvent stored) {
-        return stored.getClientEventId() != null;
+    private static Optional<BoardingEvent> firstBoarded(List<BoardingEvent> events) {
+        return events.stream().filter(event -> event.getKind() == BoardingKind.BOARDED).findFirst();
+    }
+
+    private Map<UUID, User> workersOf(List<SeatAssignment> seats) {
+        List<UUID> workerIds = seats.stream()
+                .map(seat -> seat.getJobAssignment().getWorker().getId())
+                .distinct()
+                .toList();
+        return userService.getAllByIdIn(workerIds).stream()
+                .collect(Collectors.toMap(User::getId, Function.identity()));
+    }
+
+    private BoardingQrDto shuttleQr(Shuttle shuttle, boolean staticQr) {
+        Instant now = clock.instant();
+        Duration ttl = boardingProperties.getTokenTtl();
+        String token = BoardingTokens.mintShuttle(shuttle.getQrSecret(), shuttle.getId(), now, ttl, staticQr);
+        return qrDto(token, staticQr, now, ttl, BoardingTokens.shuttleLink(shuttle.getId(), token));
+    }
+
+    private static BoardingQrDto qrDto(String token, boolean staticQr, Instant now, Duration ttl, String uri) {
+        return new BoardingQrDto(token, staticQr,
+                staticQr ? null : BoardingTokens.acceptedUntil(now, ttl),
+                staticQr ? null : BoardingTokens.refreshAt(now, ttl),
+                uri);
     }
 
     private static boolean coordinatesEqual(BigDecimal left, BigDecimal right) {
@@ -935,17 +997,6 @@ public class TransportManager implements TransportService {
 
     private LocalDate boardingDayOf(SeatAssignment seat) {
         return seat.getStop().getScheduledAt().atZone(reminderProperties.getZoneId()).toLocalDate();
-    }
-
-    private boolean alreadyBoarded(SeatAssignment seat, LocalDate boardingDay) {
-        return boardingEventDao.findFirstBySeatAssignmentIdAndKindAndBoardingDayOrderByOccurredAtAsc(
-                seat.getId(), BoardingKind.BOARDED, boardingDay).isPresent();
-    }
-
-    private static Instant rotatingWindowEnd(Instant now, Duration ttl) {
-        long seconds = Math.max(1L, ttl.toSeconds());
-        long window = Math.floorDiv(now.getEpochSecond(), seconds);
-        return Instant.ofEpochSecond(Math.multiplyExact(window + 1, seconds));
     }
 
     private TransportPlan requirePlan(UUID jobId) {
@@ -1017,7 +1068,11 @@ public class TransportManager implements TransportService {
             throw Concealment.notFound(TransportMessages.SHUTTLE_NOT_FOUND, workerId, shuttleId,
                     "worker has no seat on this shuttle");
         }
-        return seatAssignmentDao.findWithDetailsById(seats.getFirst().getId())
+        SeatAssignment active = seats.stream()
+                .filter(seat -> SEAT_STATUSES.contains(seat.getJobAssignment().getStatus()))
+                .findFirst()
+                .orElseThrow(() -> new ConflictException(TransportMessages.ASSIGNMENT_NOT_ACTIVE));
+        return seatAssignmentDao.findWithDetailsById(active.getId())
                 .orElseThrow(() -> Concealment.notFound(TransportMessages.SHUTTLE_NOT_FOUND, workerId, shuttleId,
                         "worker seat could not be loaded"));
     }

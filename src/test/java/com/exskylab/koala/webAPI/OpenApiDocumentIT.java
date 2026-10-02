@@ -524,7 +524,16 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.paths['/shuttles/{shuttleId}/boardings'].get.responses.404").exists())
                 .andExpect(jsonPath("$.paths['/seat-assignments/{seatAssignmentId}/boardings'].post.responses.200")
                         .exists())
+                .andExpect(jsonPath("$.paths['/shuttles/{shuttleId}/qr/rotate'].post.description")
+                        .value(containsString("geçersiz")))
+                .andExpect(jsonPath("$.paths['/job-assignments/{assignmentId}/transport/qr'].get.description")
+                        .value(containsString("koala://board/worker/")))
+                .andExpect(jsonPath("$.paths['/shuttles/{shuttleId}/qr'].get.description")
+                        .value(containsString("koala://board/shuttle/")))
                 .andExpect(jsonPath("$.components.schemas.BoardingQrDto.properties.static").exists())
+                .andExpect(jsonPath("$.components.schemas.BoardingQrDto.properties.refreshAt").exists())
+                .andExpect(jsonPath("$.components.schemas.ShuttleBoardingRowDto.properties.event.description")
+                        .value(containsString("NO_SHOW")))
                 .andExpect(jsonPath("$.components.schemas.ShuttleBoardingDto.properties.token").exists());
     }
 }

@@ -17,6 +17,7 @@ import java.util.UUID;
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -175,6 +176,20 @@ class RateLimitBucketTest {
         assertEquals(200, passing("GET", "/shuttles/" + shuttleId + "/qr", "10.0.0.16", 200));
         assertEquals(200, passing("GET", "/job-assignments/" + UUID.randomUUID() + "/transport/qr",
                 "10.0.0.16", 200));
+    }
+
+    @Test
+    void aFullShuttleScannedFromOnePhoneFitsTheDefaultBoardingAllowanceWithoutDrainingWrites() throws Exception {
+        int busiestShuttle = 100;
+        assertTrue(properties.getBoarding().getMaxAttempts() >= properties.getWrite().getMaxAttempts(),
+                "binis kovasi genel yazmadan siki olamaz: tek telefondan dolu servis taranir");
+
+        for (int seat = 0; seat < busiestShuttle; seat++) {
+            assertEquals(1, passing("POST", "/seat-assignments/" + UUID.randomUUID() + "/boardings",
+                    "10.0.0.17", 1), "seat " + seat + " was refused");
+        }
+        assertEquals(properties.getWrite().getMaxAttempts(),
+                passing("POST", "/reports", "10.0.0.17", properties.getWrite().getMaxAttempts()));
     }
 
     @Test

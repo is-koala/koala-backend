@@ -590,7 +590,7 @@ Gerekçe: (b) elle SQL yazmayı ortadan kaldırmıyor, yalnızca kopyalanacak bi
 
 ## 2j. Hız sınırı
 
-**Yedi kova var, yazma ve pahalı genel uçların hepsi kapsanıyor.**
+**Sekiz kova var, yazma ve pahalı genel uçların hepsi kapsanıyor.**
 
 | Kova | Kapsam | Varsayılan | Anahtar |
 |---|---|---|---|
@@ -600,6 +600,7 @@ Gerekçe: (b) elle SQL yazmayı ortadan kaldırmıyor, yalnızca kopyalanacak bi
 | `REALTIME_CREDENTIAL` | WebSocket bağlantı credential'ı üretme | 10 / 1 dk | kova + IP |
 | `PUBLIC` | ilan listesi/detayı/görselleri ve adres ağ geçidi | 120 / 1 dk | kova + IP |
 | `SITEMAP` | sitemap manifesti ve en çok 50.000 satırlık shard projection'ı | 30 / 1 dk | kova + IP |
+| `BOARDING` | biniş yazımı: `POST /shuttles/{id}/boardings`, `POST /seat-assignments/{id}/boardings` — tek telefondan dolu servis taranabilsin diye `WRITE`'tan gevşek ve ayrı (§2ta T2) | 120 / 1 dk | kova + IP |
 | `WRITE` | **diğer tüm** POST/PUT/PATCH/DELETE — ve tek okuma istisnası olarak `GET /payments/callback` (§2k) | 60 / 1 dk | kova + IP |
 
 **`WRITE` bilerek yakalayıcı.** Yeni bir yazma ucu eklendiğinde listeye yazılması gerekmez, kendiliğinden kapsanır — `SecurityConfig`'teki `anyRequest().authenticated()` ile aynı mantık: unutulan uç açıkta kalmaz.
@@ -4470,8 +4471,9 @@ yönde ve herkese açık listede `jobAssignmentId` null), `ExistenceConcealmentI
 
 Yusuf'un 14.09.2026 kararları epic'te: servisi **işveren** kurar (şoför hesabı yok), **işçi durağını kendisi seçer**,
 işveren kapasiteyi görür ve gerekirse işçi adına seçer, taksi/yol parası **para yolunun dışında**. Bu dilim T1:
-plan, servis, durak, koltuk, ilan görünürlüğü ve servis bildirimleri. Biniş/QR (T2), dönüş + taksi parası kaydı (T3)
-ve canlı konum (T4) **yok**; `shuttles.qr_secret` yalnız T2 için üretilip saklanıyor, hiçbir yanıta çıkmıyor.
+plan, servis, durak, koltuk, ilan görünürlüğü ve servis bildirimleri. Biniş/QR (T2) aşağıda kendi başlığında; dönüş +
+taksi parası kaydı (T3) ve canlı konum (T4) **yok**. `shuttles.qr_secret` hiçbir yanıta çıkmaz; yalnız T2 token'larını
+imzalar.
 
 **Kendi aggregate'i: `TransportManager` → `TransportPlanDao`/`ShuttleDao`/`ShuttleStopDao`/`SeatAssignmentDao`**
 (`AggregateBoundaryTest.OWNED_BY`). `transport_plans` ilanla 1:1 (`uk_transport_plans_job_active` kısmi indeks),
@@ -4586,11 +4588,142 @@ soft-delete eder, `PENDING_CONFIRMATION` seçemez ve `CANCELLED` işçi yalnız 
 bir kez gönderir, üç DTO kuralı 400 + alan adı. `OpenApiDocumentIT` dört ucu, enum'ları ve Türkçe açıklamaları
 sabitliyor.
 
-**Kapsam dışı ve bilinen sınırlar.** Biniş/QR, dönüş, taksi parası "verildi" kaydı, canlı konum (T2–T4). Plan silme
+**Kapsam dışı ve bilinen sınırlar.** Dönüş, taksi parası "verildi" kaydı, canlı konum (T3–T4). Plan silme
 ucu yok — her iki yön `NONE`/`SELF` ve boş `shuttles` ile plan fiilen kapanır. Durak saatinin ilan gününe düşüp
 düşmediği doğrulanmıyor. Hatırlatma yalnız koltuk seçmiş işçiye gider; servis yönteminde koltuk seçmemiş işçiye
 "durağını seç" hatırlatması ayrı iş. Zamanlayıcı tek örnek varsayıyor (§7, Faz 11D). İstemciler: mobil işveren
 düzenleyici + işçi durak seçimi, web düzenleyici, admin özeti — epic'te.
+
+### T2 — biniş teyidi: servis QR'ı, işçi QR'ı, işaretleme, bayraklar (#298)
+
+Epic kararı 3 ve 5: biniş **iki yönlü** teyit edilir (işçi servisteki QR'ı okutur ve/veya işveren işçinin QR'ını okutur,
+ayrıca listeden işaretler) ve **kapı yoktur** — biniş kaydı check-in'i etkilemez, yalnız kanıt ve bildirimdir. Yeni
+aggregate parçası `BoardingEvent` (`boarding_events`, changelog `2026/09/15-07-boarding-events.xml`) yine
+`TransportManager`'ın (`AggregateBoundaryTest.OWNED_BY` → `BoardingEventDao`).
+
+| Uç | Kim | Gövde → yanıt |
+|---|---|---|
+| `GET /shuttles/{id}/qr[?static=true]` | ilan sahibi / şirketin güncel yetkilisi (`JobEditors`) | → `BoardingQrDto{token, static, expiresAt, refreshAt, uri}` |
+| `POST /shuttles/{id}/qr/rotate` | aynı | → yeni dönen `BoardingQrDto` |
+| `GET /job-assignments/{id}/transport/qr[?direction=OUTBOUND\|RETURN]` | atamanın işçisi | → `BoardingQrDto` (işçi QR'ı) |
+| `POST /shuttles/{id}/boardings` | o serviste koltuğu olan işçi | `ShuttleBoardingDto{token, capturedAt, latitude?, longitude?, clientEventId?}` → `BoardingEventDto` |
+| `POST /seat-assignments/{id}/boardings` | ilan sahibi / yetkili | `SeatBoardingDto{token?, capturedAt?, latitude?, longitude?, clientEventId?, kind?}` → `BoardingEventDto` |
+| `GET /shuttles/{id}/boardings` | ilan sahibi / yetkili | → `ShuttleBoardingRowDto[]` |
+| `GET /admin/job-assignments/{id}` | `payment.read` | `AdminAssignmentDetailDto.timeline[]`: `SEAT` + `BOARDING` satırları |
+
+Yetkisiz kullanıcı, başka servisin/koltuğun token'ı, bozuk ya da anahtarı yenilenmiş token olmayan kaynakla **aynı zarfı**
+alır (`TRANSPORT_SHUTTLE_NOT_FOUND` / `TRANSPORT_SEAT_ASSIGNMENT_NOT_FOUND`, §2d2); işçi QR'ını işveren isterse
+`JOB_ASSIGNMENT_NOT_FOUND`. Yalnız MAC'i doğru ama penceresi geçmiş token 400 `TRANSPORT_TOKEN_EXPIRED`. Atama
+`CONFIRMED/IN_PROGRESS` değilse 409 `TRANSPORT_ASSIGNMENT_NOT_ACTIVE`; o yönde koltuk yoksa (işçi QR'ı) 409
+`TRANSPORT_SEAT_NOT_SELECTED`.
+
+**QR sözleşmesi.** Token `s1.{shuttleId}.{pencere|static}.{mac}` (servis) ve `w1.{seatAssignmentId}.{pencere}.{mac}`
+(işçi); mac HMAC-SHA256, anahtar servisin `qr_secret`'ı — işçi QR'ı da koltuğun servisinin anahtarıyla imzalanır.
+Deep link epic'teki biçimde: `koala://board/shuttle/{shuttleId}?t=<token>` ve
+`koala://board/worker/{seatAssignmentId}?t=<token>` (iskelette `koala://boarding/...?token=` idi). Token base64url ve
+noktadan ibaret, URL'de kaçışsız taşınır (`BoardingTokensTest`). Biçim ve pencere hesabı tek yerde,
+`core/helpers/BoardingTokens`. Pencere `transport.boarding.token-ttl` (10 dk) uzunluğunda ve epoch'a hizalı; doğrulama
+**sunucu saatiyle** yapılır ve içinde bulunulan ile bir önceki pencereyi kabul eder. Bu yüzden `expiresAt` mint
+penceresinin **ikinci** sonudur — gerçek kabul bitişi; iskelet birinci sonu dönüyordu ve istemci hâlâ geçerli token'ı
+ölü sanıyordu. `refreshAt` birinci sonu: işveren ekranı o anda yeni QR çeker, eski QR `expiresAt`'e kadar okutulabilir.
+`static=true` kâğıda basılan süresiz QR'dır: `expiresAt`/`refreshAt` `null`, okutma `STATIC_QR` bayrağı taşır ve tek
+iptal yolu `POST /shuttles/{id}/qr/rotate` — anahtar yenilenir, basılı QR dahil önceki bütün servis QR'ları **ve o
+servisteki işçi QR'ları** anında 404'e düşer (işçi QR'ları en çok iki pencere yaşar, uygulama yeniden çeker). Token'ı
+`capturedAt`'e göre doğrulamak bilinçli olarak yapılmadı: istemci saatine güvenmek, iletilen bir QR fotoğrafıyla
+sonradan geriye tarihli biniş yazmayı mümkün kılardı. Pencere dışına taşan çevrimdışı okutma 400 alır ve işveren
+listeden işaretler.
+
+**Biniş anı ilan penceresine kırpılmaz.** İskelet `TimesheetEventPolicy.reconcile`'ı ilanın başlangıç/bitişiyle
+çağırıyordu: gidiş binişi tanım gereği işten **önce** olduğu için her binişe `OUTSIDE_JOB_WINDOW` düşüyor ve
+`occurredAt` ilan başlangıcına çekiliyordu. Politika artık pencere verilmeden çağrılıyor — yalnız cihaz saati kuralı
+kalıyor (`DEVICE_TIME_IMPLAUSIBLE`: 72 saatten eski ya da 5 dakikadan ileri `capturedAt` → sunucu saati). Sapma
+**durağın `scheduledAt`'ine** göre ölçülüyor: `|occurredAt − scheduledAt| > transport.boarding.schedule-tolerance`
+(30 dk) → `OFF_SCHEDULE` (issue'nun "saat sapması"; `TimesheetPlausibilityFlag`'e eklendi). `FAR_FROM_STOP` okutma
+konumu durak pininden `far-from-stop-meters` (250 m) ötedeyse. Konum/saat bayrakları yalnız BOARDED için hesaplanır —
+NO_SHOW işaretinin nerede ve ne zaman basıldığı kanıt değildir. `captured_at` istemcinin değeriyle (mikrosaniyeye
+kırpılarak, Postgres hassasiyeti; yoksa yeniden denemenin gövde karşılaştırması tutmazdı) saklanır, listeden
+işaretlemede boştur.
+
+**Olay, kaydedildiği anın servisini ve atamasını taşır.** `boarding_events.job_assignment_id` ve `shuttle_id` koltuğun
+anlık görüntüsüdür. Koltuk satırı aynı yönde başka servise geçince yerinde güncellenir, plan yeniden yazımında
+soft-delete olur (T1); olay koltuk üzerinden okunsaydı kanıt ya yanlış servisi gösterirdi ya da personel zaman
+çizelgesinden düşerdi (silinmiş ilişki tuzağı, §2af). Zaman çizelgesi FK kolonundan okur
+(`findAllByJobAssignmentIdOrderByOccurredAtAscIdAsc`), koltuk düşse de BOARDING satırı kalır.
+
+**İdempotensi — üç kural, koltuk satırı kilidi altında.**
+1. `clientEventId` **koltuk başına** tekildir (`uk_boarding_events_client_event_active` =
+   `(seat_assignment_id, client_event_id)`). Aynı kimlik aynı gövdeyle (`kind`, `capturedAt`, konum) gelirse kayıtlı
+   olay 200; farklı gövdeyle 409 `TRANSPORT_BOARDING_IDEMPOTENCY_CONFLICT`. İskelette arama globaldi: başka işçinin
+   rastlantıyla aynı UUID'si yanlış koltuğun olayını döndürür ya da 409 alırdı.
+2. Koltuk + kalkış günü (`boarding_day` = durak saatinin `Europe/Istanbul` günü; koltuk yön başına tekil olduğu için
+   yön de anahtarın içinde) zaten BOARDED ise yeni BOARDED — yeni `clientEventId`, farklı `capturedAt`, ya da işçinin
+   kendi okuttuğu koltuğu işverenin okutması/işaretlemesi — **kayıtlı olayı 200 ile döner**, satır açmaz; iskelet
+   bunlara 409 veriyordu. Binmiş koltuğa NO_SHOW 409 `TRANSPORT_ALREADY_BOARDED`.
+3. Tekrar NO_SHOW kayıtlı NO_SHOW'u döner; NO_SHOW'dan sonra gelen BOARDED geçerlidir (geç binen işçi) ve listede
+   BOARDED kazanır.
+
+`recordBoarding` karar vermeden önce koltuk satırını `SeatAssignmentDao.lockById` (`select … for update`) ile
+kilitler. Kilitsiz, işçinin okutması ile işverenin işaretlemesi ön kontrolü birlikte geçer ve ikinci insert
+`uk_boarding_events_boarded_seat_day`'e çarpar; Postgres ihlalden sonra aynı transaction'da okumaya izin vermediği için
+iskeletin "ihlali yakala, kayıtlıyı oku" dalı çalışamazdı. Tek doğru yol kilit; benzersiz indeksler son savunma
+olarak duruyor. `TransportBoardingIT.aWorkerScanAndAnEmployerMarkRacingOnOneSeatLeaveOneBoarding` iki gerçek
+transaction'ı `OverlappingWrites` + `pg_sleep(0.5)` insert tetikleyicisiyle çakıştırır: ikisi de aynı olay id'sini
+alır, satır sayısı 1.
+
+**Biniş listesi canlı koltuklardan.** `findBoardingRowsByShuttleId` yalnız `CONFIRMED/IN_PROGRESS/COMPLETED`
+atamaların koltuklarını getirir; iptal edilmiş atama (T1 iptalde koltuğu düşürmüyor) "henüz binmedi" görünmez. Satır
+`boarded` + `event`: o kalkış gününün BOARDED olayı, yoksa son NO_SHOW, yoksa `null`. Olaylar ve işçi adları sayfa
+başına tek sorgu (`UserService.getAllByIdIn`, §2af kalıbı; hesabını silmiş işçinin satırı `null` adla kalır).
+`theBoardingListIsBuiltWithoutAQueryPerSeat` bir ve iki koltukta statement sayısını eşitliyor ve lazy fetch'i
+sıfırlıyor. Grafikteki `stop` zorunlu ve soft-delete'li; kaldırılan durağın koltukları aynı transaction'da
+düşürüldüğü için yetim kalmıyor — `PARTICIPANT_PATHS_AWAITING_EVALUATION`'da. İskeletin ölü
+`findAllWithJobByIdIn`'i silindi; `ShuttleDao.findWithPlanJobById` grafiği `plan`, `plan.job`'a indi (yetki kontrolü
+şirketin yalnız id'sini okur).
+
+**Hatırlatmalar — `TransportReminderScheduler`'ın aynı 5 dakikalık döngüsü, iki yeni yol.**
+- İşçiye **kalkış −15 dk** (`transport.reminders.boarding-lead-minutes`): `scheduled_at ∈ (now, now + 15]`,
+  `boarding_reminder_sent_at` ile tekil, olay `SHUTTLE_REMINDER_BOARDING`. O gün BOARDED/NO_SHOW olan koltuk
+  damgalanır ama bildirim almaz.
+- İşverene **"henüz binmedi"** — kalkış durağın `scheduled_at`'idir (T1 hatırlatmalarıyla aynı tanım), yani bildirim
+  **kalkış (durak) başına bir tane**. Aday duraklar `(now − after − lookback, now − after]` penceresinde
+  (`not-boarded-after-minutes` 10, `not-boarded-lookback-minutes` 60); alt sınır olmasaydı ilk deploy geçmişteki her
+  koltuk için bildirim yağdırırdı. Durağın damgasız canlı koltuklarının hepsi damgalanır, o gün BOARDED ya da NO_SHOW
+  olanlar elenir, kalanlar tek metinde sayılır: `{1} ({3}, {2}): kalkıştan {0} dakika geçti; henüz binmeyen {4} kişi:
+  {5}` — `{0}` yapılandırılmış gecikme (iskelette metne "10 dakika" gömülüydü ve her koltuk ayrı bildirimdi).
+  Alıcılar ilanın **güncel düzenleyicileri**: `JobEditors.editorsOf` (ilan sahibi + şirketin silinmemiş yetkilileri),
+  "ilanı kim düzenler" kuralının yanında aynı sınıfta; iskelette yalnız ilan sahibiydi. In-app hedefi `JOB` + ilan id;
+  push `event=SHUTTLE_NOTICE_NOT_BOARDED`, `jobId`, `shuttleId`, `stopId`, `scheduledAt`, `notBoardedCount`.
+
+**Hız sınırı: `BOARDING` kovası IP başına 120/dk, `WRITE`'tan bağımsız.** Kapsam yalnız iki POST biniş ucu; QR okumaları
+ve liste sınırsız okuma, rotate `WRITE`'ta. İskeletin 30'u genel yazmadan (60) sıkıydı: tek telefondan 100 koltukluk
+(kapasite üst sınırı) servisi tarayan işveren ya da operatör NAT'ı arkasındaki işçiler 429 alırdı. Kullanıcı başına
+anahtar seçilmedi: `RateLimitFilter` güvenlik zincirinden önce koşar ve principal'ı görmez (§2j); identity-reveal
+kalıbındaki manager içi kullanıcı bütçesi IP filtresi yine önde olduğu için NAT sorununu çözmezdi; filtreyi zincire
+taşımak bütün kovaları etkileyen ayrı bir iş. Kötüye kullanım yüzeyi zaten dar: koltuk-gün başına en çok bir
+BOARDED, NO_SHOW idempotent. `RateLimitBucketTest` kovanın kendi bütçesini, varsayılanın `WRITE`'tan sıkı
+olmadığını ve 100 taramanın sığıp `WRITE`'ı tüketmediğini ölçüyor.
+
+**İşçi QR'ı yön alır** (`?direction`, varsayılan `OUTBOUND`); iskelet hep gidiş koltuğunu seçiyordu, T3 dönüşü bunu
+kullanacak. **`ALIGHTED` bu sürümde 400**: enum epic'in alan modelinden geliyor ama inmenin anlamı T3'ün (dönüş/bırakma)
+konusu; yarım anlamla kabul etmek yerine `SeatBoardingDto` reddediyor. Konum yalnız enlem+boylam birlikte kabul edilir.
+
+**Sabitleyen testler.** `TransportBoardingIT` (gerçek Postgres): gidiş binişi işten önce olduğu halde zamanı korunur ve
+bayraksızdır + QR biçimi ve `expiresAt = refreshAt + ttl`; uzak ve saatinden 50 dk sapan biniş `FAR_FROM_STOP` +
+`OFF_SCHEDULE` ile yazılır; işveren işçi QR'ını iki yönde okutur, yanlış koltuğun token'ı 404, işveren işçi QR'ı
+isteyemez, koltuksuz yön 409; süresi dolmuş token 400, başka servisin token'ı / koltuksuz servis / rastgele UUID aynı
+zarf ve satır yazılmaz; tekrar okutma, aynı `clientEventId`, işverenin okutması ve işaretlemesi aynı olayı 200 ile
+döner, farklı gövde 409, binmiş koltuğa NO_SHOW 409, tek satır; `clientEventId` koltuk başına; NO_SHOW tekrarı
+idempotent ve geç BOARDED kazanır; liste iptal edilmiş atamayı göstermez, bayrakları ve adları taşır, yabancıya aynı
+zarf; liste N+1'siz; sabit QR bayraklı, rotate yabancıya 404 ve anahtarı değiştirmez, yetkiliye yeni QR, basılı QR ve
+eski işçi QR'ı 404'e düşer; DTO kuralları 400 + alan adı; personel zaman çizelgesi koltuk düşünce de binişi taşır;
+−15 dk hatırlatması yalnız binmemiş koltuğa bir kez; "henüz binmedi" bildirimi yapılandırılmış gecikmeyle, durak başına
+tek, ilan sahibine ve güncel yetkiliye (eski yetkiliye değil), yalnız binmemiş/işaretlenmemiş canlı koltuğun adıyla;
+geriye bakış penceresinden eski kalkış bildirim üretmez; okutma ile işaretleme yarışı tek satır. `BoardingTokensTest`
+pencere sınırlarını ve deep link biçimini, `OpenApiDocumentIT` yeni uçları ve alanları sabitliyor.
+
+**Kapsam dışı.** `ALIGHTED`/`WORKER_SELF` (T3), canlı konum (T4), taksi parası (T3). Hız sınırı IP başına (tek örnek
+varsayımı, §2j). İstemciler: mobil iki yönlü QR + işveren listesi, web biniş listesi + QR yazdırma, admin zaman
+çizelgesi — epic'te.
 
 ---
 

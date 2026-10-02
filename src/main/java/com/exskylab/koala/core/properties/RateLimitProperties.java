@@ -23,7 +23,7 @@ public class RateLimitProperties {
     private Bucket realtimeMessage = new Bucket(60, Duration.ofMinutes(1));
     private Bucket realtimeCredential = new Bucket(10, Duration.ofMinutes(1));
     private Bucket identityReveal = new Bucket(30, Duration.ofHours(1));
-    private Bucket boarding = new Bucket(30, Duration.ofMinutes(1));
+    private Bucket boarding = new Bucket(120, Duration.ofMinutes(1));
 
     public static class Bucket {
 

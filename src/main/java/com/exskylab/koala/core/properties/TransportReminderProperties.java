@@ -22,6 +22,8 @@ public class TransportReminderProperties {
 
     private int notBoardedAfterMinutes = 10;
 
+    private int notBoardedLookbackMinutes = 60;
+
     private int batchSize = 200;
 
     public boolean isEnabled() {
@@ -70,6 +72,14 @@ public class TransportReminderProperties {
 
     public void setNotBoardedAfterMinutes(int notBoardedAfterMinutes) {
         this.notBoardedAfterMinutes = notBoardedAfterMinutes;
+    }
+
+    public int getNotBoardedLookbackMinutes() {
+        return notBoardedLookbackMinutes;
+    }
+
+    public void setNotBoardedLookbackMinutes(int notBoardedLookbackMinutes) {
+        this.notBoardedLookbackMinutes = notBoardedLookbackMinutes;
     }
 
     public int getBatchSize() {

@@ -16,6 +16,6 @@ public interface ShuttleDao extends JpaRepository<Shuttle, UUID> {
     @Query(value = "select capacity from shuttles where id = :id and is_deleted = false for update", nativeQuery = true)
     Optional<Integer> lockAndReadCapacity(@Param("id") UUID id);
 
-    @EntityGraph(attributePaths = {"plan", "plan.job", "plan.job.company"})
+    @EntityGraph(attributePaths = {"plan", "plan.job"})
     Optional<Shuttle> findWithPlanJobById(UUID id);
 }

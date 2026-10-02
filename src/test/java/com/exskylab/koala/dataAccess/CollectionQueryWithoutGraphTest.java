@@ -153,13 +153,18 @@ class CollectionQueryWithoutGraphTest {
             "SeatAssignmentDao.findEveningReminderDueIds",
             "SeatAssignmentDao.findDepartureReminderDueIds",
             "SeatAssignmentDao.findBoardingReminderDueIds",
-            "SeatAssignmentDao.findNotBoardedNoticeDueIds",
-            // Worker seat check on a shuttle: ids only, then the chosen row is loaded with its own graph (#298).
+            // Departures (stop ids) due for the aggregated not-boarded notice; each is then handled on its own (#298).
+            "SeatAssignmentDao.findNotBoardedDueStopIds",
+            // The worker's seats on one shuttle (one per assignment, in practice one); only the assignment status is
+            // read before the chosen row is reloaded with its own graph (#298).
             "SeatAssignmentDao.findAllByShuttleIdAndJobAssignment_Worker_Id",
-            // Last-event batch for the boarding list: mapper reads seatAssignment.id and recordedBy.id (proxy identifiers).
-            "BoardingEventDao.findAllBySeatAssignmentIdInOrderByOccurredAtDescIdDesc",
-            // Assignment timeline boarding rows: no graph; shuttle id comes from the already-loaded seats map (#298).
-            "BoardingEventDao.findAllBySeatAssignment_JobAssignment_IdOrderByOccurredAtAsc",
+            // Boarding events of a page of seats; the mapper reads seatAssignment/jobAssignment/shuttle/recordedBy ids
+            // only (proxy identifiers, no query) (#298).
+            "BoardingEventDao.findAllBySeatAssignmentIdInOrderByCreatedAtAscIdAsc",
+            // One seat's events on one departure day for the idempotency decision; ids only (#298).
+            "BoardingEventDao.findAllBySeatAssignmentIdAndBoardingDayOrderByCreatedAtAscIdAsc",
+            // Staff timeline boarding rows of one assignment; ids only, no relation is drawn (#298).
+            "BoardingEventDao.findAllByJobAssignmentIdOrderByOccurredAtAscIdAsc",
             // Job ids whose plan uses a shuttle, for the JobSummaryDto.hasShuttle badge (#297).
             "TransportPlanDao.findJobIdsWithMethod",
             // Staff payout detail renders the task row only; payment/jobAssignment proxies are never touched (#255).

@@ -25,6 +25,14 @@
                 <constraints nullable="false" foreignKeyName="fk_boarding_events_seat"
                              references="seat_assignments(id)"/>
             </column>
+            <column name="job_assignment_id" type="UUID">
+                <constraints nullable="false" foreignKeyName="fk_boarding_events_job_assignment"
+                             references="job_assignments(id)"/>
+            </column>
+            <column name="shuttle_id" type="UUID">
+                <constraints nullable="false" foreignKeyName="fk_boarding_events_shuttle"
+                             references="shuttles(id)"/>
+            </column>
             <column name="kind" type="VARCHAR(16)">
                 <constraints nullable="false"/>
             </column>
@@ -62,7 +70,7 @@
         </createTable>
         <sql>
             CREATE UNIQUE INDEX uk_boarding_events_client_event_active
-                ON boarding_events (client_event_id)
+                ON boarding_events (seat_assignment_id, client_event_id)
                 WHERE client_event_id IS NOT NULL AND is_deleted = false;
             CREATE UNIQUE INDEX uk_boarding_events_boarded_seat_day
                 ON boarding_events (seat_assignment_id, boarding_day)
@@ -70,9 +78,13 @@
             CREATE INDEX idx_boarding_events_seat
                 ON boarding_events (seat_assignment_id)
                 WHERE is_deleted = false;
+            CREATE INDEX idx_boarding_events_job_assignment
+                ON boarding_events (job_assignment_id)
+                WHERE is_deleted = false;
         </sql>
         <rollback>
             <sql>
+                DROP INDEX IF EXISTS idx_boarding_events_job_assignment;
                 DROP INDEX IF EXISTS idx_boarding_events_seat;
                 DROP INDEX IF EXISTS uk_boarding_events_boarded_seat_day;
                 DROP INDEX IF EXISTS uk_boarding_events_client_event_active;

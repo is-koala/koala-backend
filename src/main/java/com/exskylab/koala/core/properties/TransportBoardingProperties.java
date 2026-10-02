@@ -13,6 +13,8 @@ public class TransportBoardingProperties {
 
     private int farFromStopMeters = 250;
 
+    private Duration scheduleTolerance = Duration.ofMinutes(30);
+
     public Duration getTokenTtl() {
         return tokenTtl;
     }
@@ -27,5 +29,13 @@ public class TransportBoardingProperties {
 
     public void setFarFromStopMeters(int farFromStopMeters) {
         this.farFromStopMeters = farFromStopMeters;
+    }
+
+    public Duration getScheduleTolerance() {
+        return scheduleTolerance;
+    }
+
+    public void setScheduleTolerance(Duration scheduleTolerance) {
+        this.scheduleTolerance = scheduleTolerance;
     }
 }

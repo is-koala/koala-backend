@@ -12,6 +12,7 @@ import com.exskylab.koala.core.dtos.transport.response.JobTransportDto;
 import com.exskylab.koala.core.dtos.transport.response.ShuttleBoardingRowDto;
 import com.exskylab.koala.core.dtos.transport.response.TransportPlanDto;
 import com.exskylab.koala.entities.JobAssignment;
+import com.exskylab.koala.entities.TransportDirection;
 
 import java.time.Instant;
 import java.util.Collection;
@@ -45,7 +46,9 @@ public interface TransportService {
 
     BoardingQrDto issueShuttleQr(UUID shuttleId, boolean staticQr);
 
-    BoardingQrDto issueWorkerQr(UUID assignmentId);
+    BoardingQrDto rotateShuttleQr(UUID shuttleId);
+
+    BoardingQrDto issueWorkerQr(UUID assignmentId, TransportDirection direction);
 
     BoardingEventDto boardOnShuttle(UUID shuttleId, ShuttleBoardingDto request);
 
@@ -65,9 +68,9 @@ public interface TransportService {
 
     List<UUID> findBoardingReminderDueIds(Instant now);
 
-    List<UUID> findNotBoardedNoticeDueIds(Instant now);
+    List<UUID> findNotBoardedDepartureIds(Instant now);
 
     boolean sendBoardingReminder(UUID seatId, Instant now);
 
-    boolean sendNotBoardedNotice(UUID seatId, Instant now);
+    boolean sendNotBoardedNotice(UUID stopId, Instant now);
 }

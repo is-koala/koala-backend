@@ -15,14 +15,25 @@ import java.time.Instant;
 @NoArgsConstructor
 public class BoardingQrDto {
 
+    @Schema(description = "HMAC biniş token'ı; okutma ucuna token alanında gönderilir.")
     private String token;
 
     @JsonProperty("static")
-    @Schema(name = "static", description = "true ise süre dolmayan sabit QR; tarama FAR_FROM_STOP yanında STATIC_QR bayrağı taşır.")
+    @Schema(name = "static", description = "true ise süresi dolmayan, kâğıda basılabilen sabit servis QR'ı; "
+            + "okutulduğunda olay STATIC_QR bayrağı taşır ve ancak servisin QR anahtarı yenilenince geçersizleşir.")
     private boolean staticQr;
 
-    @Schema(description = "Dönen HMAC penceresinin bitişi; sabit QR'da null.")
+    @Schema(types = {"string", "null"}, format = "date-time",
+            description = "Token'ın kabul edildiği son anın sonu (bu andan itibaren 400 TRANSPORT_TOKEN_EXPIRED); "
+                    + "sabit QR'da null.")
     private Instant expiresAt;
 
+    @Schema(types = {"string", "null"}, format = "date-time",
+            description = "Ekrandaki QR'ın yenilenmesi gereken an: yeni pencere başlar, eski token expiresAt'e kadar "
+                    + "kabul edilmeye devam eder; sabit QR'da null.")
+    private Instant refreshAt;
+
+    @Schema(description = "QR'a basılacak bağlantı: koala://board/shuttle/{shuttleId}?t=<token> ya da "
+            + "koala://board/worker/{seatAssignmentId}?t=<token>.")
     private String uri;
 }

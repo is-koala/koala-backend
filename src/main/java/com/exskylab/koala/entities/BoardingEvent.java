@@ -42,8 +42,16 @@ public class BoardingEvent extends BaseEntity {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "seat_assignment_id", nullable = false)
+    @JoinColumn(name = "seat_assignment_id", nullable = false, updatable = false)
     private SeatAssignment seatAssignment;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "job_assignment_id", nullable = false, updatable = false)
+    private JobAssignment jobAssignment;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "shuttle_id", nullable = false, updatable = false)
+    private Shuttle shuttle;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "kind", nullable = false, length = 16)

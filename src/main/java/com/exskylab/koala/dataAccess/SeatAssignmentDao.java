@@ -1,7 +1,6 @@
 package com.exskylab.koala.dataAccess;
 
 import com.exskylab.koala.entities.AssignmentStatus;
-import com.exskylab.koala.entities.BoardingKind;
 import com.exskylab.koala.entities.SeatAssignment;
 import com.exskylab.koala.entities.TransportDirection;
 import org.springframework.data.domain.Pageable;
@@ -80,25 +79,43 @@ public interface SeatAssignmentDao extends JpaRepository<SeatAssignment, UUID> {
                                           Pageable pageable);
 
     @Query("""
-            select s.id from SeatAssignment s
-            where s.notBoardedNoticeSentAt is null
-              and s.stop.scheduledAt <= :cutoff
-              and s.jobAssignment.status in :statuses
-              and not exists (select 1 from BoardingEvent e where e.seatAssignment = s and e.kind = :kind)
-            order by s.stop.scheduledAt asc
+            select st.id from ShuttleStop st
+            where st.scheduledAt > :from and st.scheduledAt <= :to
+              and exists (select 1 from SeatAssignment s
+                          where s.stop = st
+                            and s.notBoardedNoticeSentAt is null
+                            and s.jobAssignment.status in :statuses)
+            order by st.scheduledAt asc
             """)
-    List<UUID> findNotBoardedNoticeDueIds(@Param("cutoff") Instant cutoff,
-                                          @Param("statuses") Collection<AssignmentStatus> statuses,
-                                          @Param("kind") BoardingKind kind,
-                                          Pageable pageable);
+    List<UUID> findNotBoardedDueStopIds(@Param("from") Instant from, @Param("to") Instant to,
+                                        @Param("statuses") Collection<AssignmentStatus> statuses,
+                                        Pageable pageable);
+
+    @Query(value = "select id from seat_assignments where id = :id and is_deleted = false for update",
+            nativeQuery = true)
+    Optional<UUID> lockById(@Param("id") UUID id);
 
     List<SeatAssignment> findAllByShuttleIdAndJobAssignment_Worker_Id(UUID shuttleId, UUID workerId);
 
-    @EntityGraph(attributePaths = {"jobAssignment", "stop", "shuttle"})
-    List<SeatAssignment> findAllWithAssignmentByShuttleId(UUID shuttleId);
+    @EntityGraph(attributePaths = {"jobAssignment"})
+    @Query("""
+            select s from SeatAssignment s
+            where s.stop.id = :stopId
+              and s.notBoardedNoticeSentAt is null
+              and s.jobAssignment.status in :statuses
+            """)
+    List<SeatAssignment> findNotBoardedCandidatesByStopId(@Param("stopId") UUID stopId,
+                                                          @Param("statuses") Collection<AssignmentStatus> statuses);
 
-    @EntityGraph(attributePaths = {"jobAssignment", "jobAssignment.job", "shuttle", "stop"})
-    List<SeatAssignment> findAllWithJobByIdIn(Collection<UUID> ids);
+    @EntityGraph(attributePaths = {"jobAssignment", "stop"})
+    @Query("""
+            select s from SeatAssignment s
+            where s.shuttle.id = :shuttleId
+              and s.jobAssignment.status in :statuses
+            order by s.stop.sortOrder asc, s.createdAt asc, s.id asc
+            """)
+    List<SeatAssignment> findBoardingRowsByShuttleId(@Param("shuttleId") UUID shuttleId,
+                                                     @Param("statuses") Collection<AssignmentStatus> statuses);
 
     @EntityGraph(attributePaths = {"jobAssignment", "jobAssignment.worker", "jobAssignment.job",
             "shuttle", "stop", "stop.address", "stop.address.district"})

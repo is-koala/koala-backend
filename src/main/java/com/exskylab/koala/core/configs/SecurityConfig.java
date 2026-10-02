@@ -164,6 +164,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/job-assignments/{assignmentId}/transport/seat").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/job-assignments/{assignmentId}/transport/qr").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/shuttles/{shuttleId}/qr").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/shuttles/{shuttleId}/qr/rotate").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/shuttles/{shuttleId}/boardings").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/shuttles/{shuttleId}/boardings").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/seat-assignments/{seatAssignmentId}/boardings").hasAnyRole("USER", "ADMIN")

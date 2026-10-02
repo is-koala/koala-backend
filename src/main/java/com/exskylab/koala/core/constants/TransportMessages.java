@@ -52,4 +52,6 @@ public class TransportMessages {
     public static final String BOARDING_RECORDED = "{transport.boarding.recorded}";
     public static final String QR_ISSUED = "{transport.qr.issued}";
     public static final String BOARDINGS_RETRIEVED = "{transport.boardings.retrieved}";
+    public static final String QR_ROTATED = "{transport.qr.rotated}";
+    public static final String BOARDING_POSITION_PAIR = "{transport.boarding.position.pair}";
 }
