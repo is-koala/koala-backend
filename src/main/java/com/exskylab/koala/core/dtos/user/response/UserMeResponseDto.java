@@ -1,6 +1,7 @@
 package com.exskylab.koala.core.dtos.user.response;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import com.exskylab.koala.core.dtos.address.response.AddressDto;
 import com.exskylab.koala.core.dtos.company.response.CompanyMembershipDto;
@@ -17,6 +18,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -61,6 +63,13 @@ public class UserMeResponseDto {
     private List<EducationDto> educations;
 
     private List<BadgeDto> badges;
+
+    @Schema(description = "Hakkındaki değerlendirmelerin ortalaması; değerlendirme yoksa 0. GET /users/{id} (PublicProfileDto) "
+            + "ve GET /users/{id}/rating-summary ile aynı kaynaktan. reviewCount 0 iken istemci puan çizmez.")
+    private BigDecimal averageRating;
+
+    @Schema(description = "Hakkındaki değerlendirme sayısı; yoksa 0. GET /users/{id} (PublicProfileDto) ile aynı kaynaktan.")
+    private int reviewCount;
 
     private AddressDto address;
 

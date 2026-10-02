@@ -1256,6 +1256,19 @@ MessagingAvailability.class` ile `@Named` niteleyicilerden dolduruyor, ek sorgu 
 
 **`RatingSummary` biriktirir, yeniden hesaplamaz.** `reviewCount` ve `ratingSum` artırılıp ortalama türetiliyor; her profil görüntülemesinde toplama sorgusu atılmıyor. Ortalama `NUMERIC(3,2)`, `HALF_UP`.
 
+**Puan özetinin tek sahibi `RatingSummaryManager` (#329).** Özet eskiden `ReviewManager`'ın içindeydi
+(`applyToSummary` + `ReviewService.getSummaryFor`) ve "özet yoksa `0`/`0`" kuralı iki orkestratörde
+(`PublicProfileManager`, `StatisticsManager`) ayrı ayrı yazılıydı. `GET /users/me` de aynı rakamları isteyince üçüncü
+kopya ya da `UserManager → ReviewService` bağımlılığı gerekecekti; ikincisi döngü — `ReviewManager` `UserService`'e
+(ve `JobAssignmentService` zinciri üzerinden yine ona) bağlı. Çözüm özetin kendi servisine çıkması: `RatingSummaryService`
+yalnız `RatingSummaryDao`'ya bağlı, hiçbir servise değil; yani her yerden döngüsüz çağrılır. Üç işi var:
+`record(subject, rating)` (değerlendirme yazılınca biriktirir, `ReviewManager` çağırır), `findFor(userId)` (ham özet —
+`/users/{id}/rating-summary` özet yoksa `null` döner, rozet kuralı eşiği buradan okur) ve `figuresOf(userId)`
+(`RatingFigures(averageRating, reviewCount)`, özet yoksa ya da ortalama boşsa `0`/`0`). **Profil biçimi yalnız
+`figuresOf`'tan okunur**: `PublicProfileDto`, `EmployerStatsDto` ve `UserMeResponseDto` aynı metottan geçtiği için
+rakamlar birbirinden ayrışamaz. Yan kazanç: `BadgeManager→RatingSummaryDao` muafiyeti (§2ae) düştü — gerekçesi
+"`ReviewManager` `BadgeService`'e bağlı" idi ve özet artık `ReviewManager`'da değil.
+
 **Anonim değerlendirme kararı ve gizlemenin mapper'da tek yerde oluşu §2am'de** ("Anonim değerlendirme — karar tersine döndü" ve devamı); aşağıdaki iki paragraf onun üzerine kurulu.
 
 **"Değerlendirdim mi" bilgisinin doğruluk kaynağı sunucu (#293).** İstemciler bunu cihazda (SharedPreferences)
@@ -1495,6 +1508,11 @@ bırakıp anlatıyı silmek tutarsız olurdu. `storage_key` ve `checksum_sha256`
 `GET/POST/PUT/DELETE /users/me/educations[/{id}]` — eğitim kayıtları. Başkasının kaydına dokunmak **404** döner. Fakülte seçilen üniversiteye, bölüm seçilen fakülteye ait değilse 400 — istemci üç ayrı seçim yapıyor, tutarlılık sunucuda doğrulanıyor.
 
 `GET /reference/universities`, `/universities/{id}/faculties`, `/faculties/{id}/departments` — eğitim seçimi için referans veri, herkese açık.
+
+`GET /users/me` (ve `PATCH /users/me` yanıtındaki `user`) `averageRating`/`reviewCount` taşır (#329) — `PublicProfileDto`
+ile aynı sözleşme: özet yoksa `0`/`0`, istemci `reviewCount == 0` iken yıldız çizmez. Rakamlar
+`RatingSummaryService.figuresOf`'tan gelir (§2o), yani `/users/{id}` ve `/users/{id}/rating-summary` ile ayrışamaz;
+mobil "Profilim" ekranı ayrı `rating-summary` çağrısını bırakabilir. Uca tek bir `rating_summaries` okuması eklendi.
 
 ## 2s. Kendi verim uçları ve yönetim
 
@@ -2644,7 +2662,7 @@ Bu yüzden kural iki parçalı:
 - **Komutlar** (yazma, iş kuralı tetikleme) daima diğer aggregate'in `Service`'i üzerinden.
 - **Salt okuma sorguları**, servis üzerinden gitmek döngü yaratıyorsa doğrudan DAO ile yapılabilir — ve `AggregateBoundaryTest` içindeki listeye **gerekçesiyle** yazılır.
 
-Muaf olan yedi yer ve nedenleri testte yazılı: `SecurityManager→UserDao` (altyapı, ters yön zaten bağlı), `BadgeManager→User/JobAssignment/RatingSummaryDao` (üç manager da `BadgeService`'e bağlı), `PayoutManager→JobAssignment/DisputeDao`, `SettlementManager→PayoutDao`.
+Muaf olan yedi yer ve nedenleri testte yazılı: `SecurityManager→UserDao` (altyapı, ters yön zaten bağlı), `BadgeManager→User/JobAssignmentDao` (iki manager da `BadgeService`'e bağlı; `RatingSummaryDao` muafiyeti #329 ile düştü, özet `RatingSummaryService`'ten okunuyor, §2o), `PayoutManager→JobAssignment/DisputeDao`, `SettlementManager→PayoutDao`.
 
 **Döngüyü kırmak için bir iş akışı da taşındı.** Otomatik tamamlamadaki uyuşmazlık kontrolü `JobAssignmentManager`'dan `AssignmentAutoCompletionScheduler`'a çıktı — iki aggregate'i koordine eden şey artık *orkestratör*, aggregate'in kendisi değil. Emanet çıkışındaki uyuşmazlık kilidi (asıl para kapısı) `PayoutManager`'da yerinde duruyor. İşveren tamamlamasında orkestratör yok (tek transaction, §2u); oradaki koşullu çıkış `PayoutService.releaseToWorkerUnlessDisputed` ile yine `PayoutManager`'ın muaf `DisputeDao` erişimine yaslanır, `JobAssignmentManager` uyuşmazlığa dokunmaz.
 
@@ -4400,8 +4418,9 @@ hız sınırı kovası yok (§2j, `/jobs/{jobId}/applications` ile aynı). `JobA
 `PayoutDto` (`/users/me/payouts`): `jobTitle`, `companyName`; grafik `jobAssignment.job(.company)` kazandı,
 `company.logo` muafiyette (DTO çizmiyor). `JobDetailDto`: `applicationCount` (`countByJobId`, durumdan bağımsız),
 `updatedAt`, `cancelledAt`. `PublicProfileDto` (`GET /users/{id}`): `completedJobCount`
-(`JobAssignmentService.countCompletedForWorker`), `averageRating`/`reviewCount` (`ReviewService.getSummaryFor`,
-yoksa `0`/`0` — `EmployerStatsDto` ile aynı karar; `/users/{id}/rating-summary` ise özet yokken `null` döner),
+(`JobAssignmentService.countCompletedForWorker`), `averageRating`/`reviewCount` (`RatingSummaryService.figuresOf`,
+yoksa `0`/`0` — `EmployerStatsDto` ve `UserMeResponseDto` ile aynı metot, §2o; `/users/{id}/rating-summary` ise özet
+yokken `null` döner),
 `badges[]` (`BadgeService.getBadgesOf`, `/users/{id}/badges` ile aynı liste ve grafik). `PublicProfileManager`
 orkestratör kaldı, DAO'ya uzanmaz.
 

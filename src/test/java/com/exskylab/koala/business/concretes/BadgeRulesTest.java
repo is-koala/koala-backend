@@ -37,7 +37,7 @@ class BadgeRulesTest {
         UserDao userDao = mock(UserDao.class);
 
         manager = new BadgeManager(badgeDao, userBadgeDao, userDao, jobAssignmentDao,
-                ratingSummaryDao, mock(com.exskylab.koala.business.abstracts.ImageService.class));
+                new RatingSummaryManager(ratingSummaryDao), mock(com.exskylab.koala.business.abstracts.ImageService.class));
 
         silver = badge("GEZGIN_SILVER", BadgeTier.SILVER, 5);
         gold = badge("GEZGIN_GOLD", BadgeTier.GOLD, 25);

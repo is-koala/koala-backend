@@ -49,7 +49,7 @@ class ReviewRulesTest {
         UserService userService = mock(UserService.class);
         notifications = mock(ActivityNotificationService.class);
 
-        manager = new ReviewManager(reviewDao, ratingSummaryDao, jobAssignmentService, userService,
+        manager = new ReviewManager(reviewDao, new RatingSummaryManager(ratingSummaryDao), jobAssignmentService, userService,
                 securityService, mock(CompanyContactService.class), new PageableSanitizer(),
                 mock(BadgeService.class), notifications);
 

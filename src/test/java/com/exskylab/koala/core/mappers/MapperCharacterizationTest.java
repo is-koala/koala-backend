@@ -99,7 +99,7 @@ class MapperCharacterizationTest {
         user.setProfilePicture(image());
 
         assertEquals(PUBLIC_URL + "/images/abc-foto.png", userMapper.toSafeUserDto(user).getProfilePictureUrl());
-        assertEquals(PUBLIC_URL + "/images/abc-foto.png", userMapper.toUserMeResponseDto(user, null, null).getProfilePictureUrl());
+        assertEquals(PUBLIC_URL + "/images/abc-foto.png", userMapper.toUserMeResponseDto(user, null, null, null).getProfilePictureUrl());
     }
 
     @Test
@@ -108,14 +108,14 @@ class MapperCharacterizationTest {
         user.setProfilePicture(null);
 
         assertNull(userMapper.toSafeUserDto(user).getProfilePictureUrl());
-        assertNull(userMapper.toUserMeResponseDto(user, null, null).getProfilePictureUrl());
+        assertNull(userMapper.toUserMeResponseDto(user, null, null, null).getProfilePictureUrl());
     }
 
     @Test
     void everyMapperReturnsNullForNullInput() {
         assertNull(addressMapper.toAddressDto(null));
         assertNull(userMapper.toSafeUserDto(null));
-        assertNull(userMapper.toUserMeResponseDto(null, null, null));
+        assertNull(userMapper.toUserMeResponseDto(null, null, null, null));
         assertNull(jobCategoryMapper.toCategoryDto(null));
         assertNull(imageMapper.toUploadImageResponseDto(null));
         assertNull(companyMapper.toOnlyCompanyDto(null));
@@ -234,7 +234,7 @@ class MapperCharacterizationTest {
         User user = user();
         user.setAddress(address());
 
-        var dto = userMapper.toUserMeResponseDto(user, null, null);
+        var dto = userMapper.toUserMeResponseDto(user, null, null, null);
 
         assertNotNull(dto.getAddress());
         assertEquals("Istanbul", dto.getAddress().getCityName());
@@ -258,7 +258,7 @@ class MapperCharacterizationTest {
         employer.setEmailVerified(true);
         employer.setAuthorities(java.util.Set.of(com.exskylab.koala.entities.Role.ROLE_USER));
 
-        var dto = userMapper.toUserMeResponseDto(employer, null, null);
+        var dto = userMapper.toUserMeResponseDto(employer, null, null, null);
 
         assertTrue(dto.isEmployer(), "Router guard bu alana bagli; eksik olamaz.");
         assertTrue(dto.isEmailVerified());
@@ -268,7 +268,7 @@ class MapperCharacterizationTest {
 
     @Test
     void aWorkerIsNotReportedAsAnEmployer() {
-        assertFalse(userMapper.toUserMeResponseDto(user(), null, null).isEmployer());
+        assertFalse(userMapper.toUserMeResponseDto(user(), null, null, null).isEmployer());
     }
 
     @Test

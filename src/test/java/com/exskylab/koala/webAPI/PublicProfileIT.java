@@ -109,6 +109,36 @@ class PublicProfileIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data[0].code").value("GEZGIN_SILVER"));
     }
 
+    @Test
+    void theOwnProfileReportsZeroRatingLikeThePublicProfileWhenNobodyReviewedYet() throws Exception {
+        mockMvc.perform(get("/users/me").with(user(principal(workerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(workerId.toString()))
+                .andExpect(jsonPath("$.data.averageRating").value(0))
+                .andExpect(jsonPath("$.data.reviewCount").value(0));
+    }
+
+    @Test
+    void theOwnProfileCarriesTheSameRatingFiguresAsThePublicProfileAndTheSummary() throws Exception {
+        jdbc.update("insert into rating_summaries (id, created_at, is_deleted, user_id, review_count, rating_sum, "
+                        + "average_rating) values (?, now(), false, ?, 3, 13, 4.33)",
+                summaryId, workerId);
+
+        mockMvc.perform(get("/users/me").with(user(principal(workerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(workerId.toString()))
+                .andExpect(jsonPath("$.data.averageRating").value(4.33))
+                .andExpect(jsonPath("$.data.reviewCount").value(3));
+        mockMvc.perform(get("/users/{userId}", workerId).with(user(principal(viewerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.averageRating").value(4.33))
+                .andExpect(jsonPath("$.data.reviewCount").value(3));
+        mockMvc.perform(get("/users/{userId}/rating-summary", workerId).with(user(principal(viewerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.averageRating").value(4.33))
+                .andExpect(jsonPath("$.data.reviewCount").value(3));
+    }
+
     private void insertAssignment(UUID id, String status, String paymentStatus) {
         jdbc.update("insert into job_assignments (id, created_at, is_deleted, job_id, worker_id, status, "
                         + "payment_status, assignment_date_time, work_hours, worker_payout, commission_rate, "

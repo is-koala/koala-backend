@@ -46,7 +46,7 @@ class UserProfileContractTest {
         User user = user();
         user.setExperiences(List.of(experience));
 
-        var experiences = userMapper.toUserMeResponseDto(user, null, null).getExperiences();
+        var experiences = userMapper.toUserMeResponseDto(user, null, null, null).getExperiences();
 
         assertEquals(1, experiences.size());
         assertEquals("Barista", experiences.getFirst().title());
@@ -59,19 +59,19 @@ class UserProfileContractTest {
         User user = user();
         user.setJobTitle("Fotoğrafçı");
 
-        assertEquals("Fotoğrafçı", userMapper.toUserMeResponseDto(user, null, null).getJobTitle());
+        assertEquals("Fotoğrafçı", userMapper.toUserMeResponseDto(user, null, null, null).getJobTitle());
     }
 
     @Test
     void theIbanComesBackMaskedNotWhole() {
-        var dto = userMapper.toUserMeResponseDto(user(), "TR33***4444", null);
+        var dto = userMapper.toUserMeResponseDto(user(), "TR33***4444", null, null);
 
         assertEquals("TR33***4444", dto.getMaskedIban());
     }
 
     @Test
     void aUserWithoutABankAccountHasNoIbanField() {
-        assertNull(userMapper.toUserMeResponseDto(user(), null, null).getMaskedIban());
+        assertNull(userMapper.toUserMeResponseDto(user(), null, null, null).getMaskedIban());
     }
 
     @Test
@@ -82,7 +82,7 @@ class UserProfileContractTest {
         User user = user();
         user.setCv(cv);
 
-        String cvUrl = userMapper.toUserMeResponseDto(user, null, null).getCvUrl();
+        String cvUrl = userMapper.toUserMeResponseDto(user, null, null, null).getCvUrl();
 
         assertEquals("http://localhost:8080/uploads/files/abc-cv.pdf", cvUrl);
         assertFalse(cvUrl.startsWith(PUBLIC_URL),
@@ -98,12 +98,12 @@ class UserProfileContractTest {
         user.setProfilePicture(picture);
 
         assertEquals(PUBLIC_URL + "/images/abc-foto.png",
-                userMapper.toUserMeResponseDto(user, null, null).getProfilePictureUrl());
+                userMapper.toUserMeResponseDto(user, null, null, null).getProfilePictureUrl());
     }
 
     @Test
     void aUserWithoutACvHasNoUrl() {
-        assertNull(userMapper.toUserMeResponseDto(user(), null, null).getCvUrl());
+        assertNull(userMapper.toUserMeResponseDto(user(), null, null, null).getCvUrl());
     }
 
     @Test
@@ -133,7 +133,7 @@ class UserProfileContractTest {
         User user = user();
         user.setEducations(List.of(education));
 
-        var dto = userMapper.toUserMeResponseDto(user, null, null);
+        var dto = userMapper.toUserMeResponseDto(user, null, null, null);
 
         assertEquals(1, dto.getEducations().size());
         assertEquals("Boğaziçi Üniversitesi", dto.getEducations().getFirst().universityName());

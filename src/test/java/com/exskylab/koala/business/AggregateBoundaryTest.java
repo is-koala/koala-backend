@@ -29,7 +29,6 @@ class AggregateBoundaryTest {
             Map.entry("LegalManager", Set.of("AgreementVersionDao", "ConsentRecordDao", "AccountDeletionRequestDao")),
             Map.entry("LocationManager", Set.of("CountryDao", "CityDao", "DistrictDao")),
             Map.entry("AcademicReferenceManager", Set.of("UniversityDao", "FacultyDao", "DepartmentDao")),
-            Map.entry("ReviewManager", Set.of("ReviewDao", "RatingSummaryDao")),
             Map.entry("PayoutManager", Set.of("PayoutDao", "RefundDao")),
             Map.entry("TimesheetManager", Set.of("WorkSessionDao")),
             Map.entry("CvManager", Set.of("MediaDao")),
@@ -66,8 +65,6 @@ class AggregateBoundaryTest {
                     "salt okuma; UserManager BadgeService'e bağlı olduğu için ters yön döngü olurdu"),
             new Exemption("BadgeManager", "JobAssignmentDao",
                     "salt okuma; JobAssignmentManager BadgeService'e bağlı olduğu için ters yön döngü olurdu"),
-            new Exemption("BadgeManager", "RatingSummaryDao",
-                    "salt okuma; ReviewManager BadgeService'e bağlı olduğu için ters yön döngü olurdu"),
             new Exemption("JobAssignmentManager", "CancellationDao",
                     "salt okuma; atama yanıtı iptal özetini taşır ve CancellationManager JobAssignmentService'e bağlı "
                             + "olduğu için ters yön döngü olurdu"),
