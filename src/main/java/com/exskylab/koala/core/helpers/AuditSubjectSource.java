@@ -32,7 +32,10 @@ public enum AuditSubjectSource {
     STAFF_ACCOUNTS("staff", Resolution.NONE, null,
             "personel hesabı; konu türleri pazaryeri tarafıdır (USER|COMPANY), personel değil"),
     STAFF_ROLES("roles", Resolution.NONE, null,
-            "personel rol grafiği; konu türleri pazaryeri tarafıdır, personel değil");
+            "personel rol grafiği; konu türleri pazaryeri tarafıdır, personel değil"),
+    CLIENT_EVENTS("audit-log", Resolution.SERVICE, null,
+            "istemci olayının satırını yetki kararı değil StaffAuditManager.recordClientEvent yazar; konuyu "
+                    + "gövdedeki subjectType/subjectId'den, varlığını doğrulayarak o verir");
 
     public enum Resolution {
         PATH,

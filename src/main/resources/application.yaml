@@ -255,6 +255,9 @@ rate-limit:
   boarding:
     max-attempts: ${RATE_LIMIT_BOARDING_MAX_ATTEMPTS:120}
     window: ${RATE_LIMIT_BOARDING_WINDOW:1m}
+  audit-event:
+    max-attempts: ${RATE_LIMIT_AUDIT_EVENT_MAX_ATTEMPTS:60}
+    window: ${RATE_LIMIT_AUDIT_EVENT_WINDOW:1h}
   public:
     max-attempts: ${RATE_LIMIT_PUBLIC_MAX_ATTEMPTS:120}
     window: ${RATE_LIMIT_PUBLIC_WINDOW:1m}

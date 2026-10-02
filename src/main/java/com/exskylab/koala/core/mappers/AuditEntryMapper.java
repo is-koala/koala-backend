@@ -1,6 +1,7 @@
 package com.exskylab.koala.core.mappers;
 
 import com.exskylab.koala.core.dtos.audit.response.AuditEntryDto;
+import com.exskylab.koala.core.dtos.audit.response.RecordedAuditEventDto;
 import com.exskylab.koala.entities.AdminAuditEntry;
 import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
@@ -15,4 +16,6 @@ public interface AuditEntryMapper {
     @Mapping(target = "before", source = "detail.beforeValue")
     @Mapping(target = "after", source = "detail.afterValue")
     AuditEntryDto toAuditEntryDto(AdminAuditEntry entry);
+
+    RecordedAuditEventDto toRecordedAuditEventDto(AdminAuditEntry entry);
 }

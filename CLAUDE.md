@@ -3667,7 +3667,9 @@ taşıması ve dış ön koşulların tek kaynağı `docs/runbooks/iys.md` dosya
 
 **Ne izinler ne roller token'a girmez.** Token yalnız personel id'si, token sürümü ve audience taşır; **rol üyeliği de `staff_member_roles`'tan okunur** (ADR-0010 onu Keycloak'a vermişti, ADR-0014 geri aldı). Rol→izin çözümü her istekte veritabanından, DAG aşağı gezilerek yapılır. Sonucu: **rol iptali anında geçerli** — üyelik satırı silindiği anda bir sonraki istek reddediliyor, token'ın yenilenmesi beklenmiyor (ADR-0014 §Sonuçlar'ın "beklenmedik kazanç"ı; `StaffAuthenticationIT.revokingTheMembershipTakesEffectOnTheVeryNextRequest` sabitliyor). Tanınmayan rol adı ve tanınmayan izin kodu **loglanıp atlanır** — bilinmeyen bir kod yüzünden uygulamanın açılmaması rollback'i imkânsızlaştırırdı. Bunu `StaffRoleGraphSeedTest` CI'da yakalar.
 
-**`StaffPermission` metadata taşır.** Her sabit `code`, `mutating` ve `sensitivity` (`NORMAL`/`PERSONAL_DATA`/`FINANCIAL`) verir; denetim kaydı bunları okuyarak neyin yazılacağına ve satırın ne kadar saklanacağına karar veriyor (§2av). `@RequiresPermission` ayrıca non-GET uçlarda bir `action` adı ister. `AdminPermissionMappingIT` dört şeyi birden sabitliyor: her `/admin` mapping'i anotasyon taşır, adı geçen her izin gerçek bir sabittir, her non-GET bir eylem adı verir ve **bir yazma ucu okuma izniyle korunamaz**. İzin adı vermeyen tek anotasyon `/admin/me`'dedir; test bunun başka yerde kullanılmamasını da kontrol eder.
+**`StaffPermission` metadata taşır.** Her sabit `code`, `mutating` ve `sensitivity` (`NORMAL`/`PERSONAL_DATA`/`FINANCIAL`) verir; denetim kaydı bunları okuyarak neyin yazılacağına ve satırın ne kadar saklanacağına karar veriyor (§2av). `@RequiresPermission` ayrıca non-GET uçlarda bir `action` adı ister. `AdminPermissionMappingIT` dört şeyi birden sabitliyor: her `/admin` mapping'i anotasyon taşır, adı geçen her izin gerçek bir sabittir, her non-GET bir eylem adı verir ve **bir yazma ucu okuma izniyle korunamaz**. İzin adı vermeyen tek anotasyon `/admin/me`'dedir; test bunun başka yerde kullanılmamasını da kontrol eder. **Tek istisna gövdeye bağlı izinli yazma (#311):** `POST /admin/audit-log/events` izin adlandırmaz, gereken izni
+(dışa aktarılan listenin izni) manager token'daki personelde arar; muafiyet `BODY_DEPENDENT_PERMISSION_WRITES`'ta
+gerekçesiyle ve ayrı bir testle bağlı (§2av "İstemci denetim olayı").
 
 **Rollerin ne yapabildiği de kimin hangi rolde olduğu da Koala'da.** Rol grafiği `06-20-staff-authorization.xml` ile seed'lenir ve grafik [ADR-0014](docs/adr/0014-keep-staff-identity-in-koala.md) §Rol grafiği ile birebir aynıdır; görev ayrılığı (OWNER dışında hiçbir rol hem trust hem finans dalını kapsayamaz) seed anında `StaffRoleGraphSeedTest` ile, çalışma anında da iki yazma yolunda birden zorlanır — aşağıda §Görev ayrılığı. **Üyelik `staff_member_roles`'ta** (`07-02-staff-login.xml`), birincil anahtarı `(staff_member_id, staff_role_id)`. Ayrıntı aşağıda, §Personel girişi.
 
@@ -4089,6 +4091,62 @@ adlandırsa da satır tek bir kaydın değil bir sorgunun izidir; süzgeç `requ
 `ImageService.deleteImage` → `securityService.getAuthenticatedUser()` (§0b'nin tuzağı, iki seviye derinde —
 `AdminStaffPrincipalGuardIT`'in yazılı kör noktası). Denetim satırı yine konusuyla yazılıyor
 (`AuditSubjectIT.anImageRemovalIsAboutTheCompanyWhoseGalleryHoldsIt`). Düzeltme #345'te.
+
+### İstemci denetim olayı — CSV dışa aktarma (#311)
+
+Panelin dört "CSV indir" rotası (koala-admin#110: atamalar, hakedişler, şikayetler, uyuşmazlıklar; ilk 1000 satır)
+dışa aktarmayı yalnız süreç günlüğüne yazıyordu; liste GET'inin kendi denetim satırı "sayfa mı dışa aktarma mı"
+ayırmıyordu. Panel artık dosyayı ürettikten sonra olayı bildirir.
+
+**Sözleşme: `POST /admin/audit-log/events`** (201, `SuccessDataResult<RecordedAuditEventDto {id, action,
+resourceType, occurredAt}>`). Gövde `ClientAuditEventDto`:
+
+| Alan | Kural |
+|---|---|
+| `action` | zorunlu, `ClientAuditAction` — bugün yalnız `EXPORT`; tanınmayan değer 400 `REQUEST_MALFORMED` |
+| `resourceType` | zorunlu, `StaffExportList`: `JOB_ASSIGNMENTS` / `PAYOUTS` / `REPORTS` / `DISPUTES`; tanınmayan 400 |
+| `filters` | isteğe bağlı metin, ≤1000 karakter; e-posta, 10+ haneli sayı dizisi (telefon/TCKN; UUID ve ISO tarih hariç) ve IBAN içerirse 400 (`details[].field=filtersFreeOfPersonalData`, `{audit.event.filters.personal.data}`) — arama metni gönderilecekse panel onu çıkarır |
+| `rowCount` | zorunlu, 0–1000 |
+| `piiIncluded` | zorunlu boolean |
+| `subjectType`/`subjectId` | isteğe bağlı, ikisi birlikte (`USER|COMPANY` + uuid) — dışa aktarma tek bir kişinin/şirketin listesiyse (#307 zaman çizelgesi) |
+
+**Aktör yalnız token'dan.** Gövdede aktör alanı yok; gönderilen `actorStaffId`, `allowed`, `permission` gibi alanlar
+Jackson tarafından yok sayılır (`ClientAuditEventIT.theActorComesFromTheTokenAndActorFieldsInTheBodyAreIgnored`).
+
+**İzin gövdeye bağlı, uç her personele açık.** `@RequiresPermission(action = "audit.event.record")` izin
+adlandırmıyor (zincir yalnız kayıtlı ve parolasını değiştirmiş personeli geçirir); kayıt **dışa aktarılan listenin
+izniyle** yazılır ve izin `StaffAuditManager.recordClientEvent` içinde token'daki personelin izinlerinde aranır:
+`JOB_ASSIGNMENTS` → `payment.read`, `PAYOUTS` → `payout.reconcile`, `REPORTS` → `content.moderate`, `DISPUTES` →
+`dispute.resolve` — panel rotalarının ve `GET /admin/<liste>` uçlarının kapısıyla aynı (eşleme `StaffExportList`'te tek
+yerde; `ClientAuditEventIT.everyExportableListNamesThePermissionThatGuardsItsStaffList` her sabiti ilgili GET
+mapping'inin `@RequiresPermission`'ına bağlıyor). İzni olmayan personel **403 `AUDIT_EVENT_LIST_PERMISSION_MISSING`**
+alır ve ret de `allowed=false` satırı yazar (§2av kural 1; metot `@Transactional(noRollbackFor =
+ForbiddenException.class)`). Bu, `AdminPermissionMappingIT`'in iki kuralına (izin adı vermeyen anotasyon yalnız
+`/admin/me`'de; yazma ucu mutating bir izinle korunur) **adlandırılmış bir muafiyet** açtı:
+`BODY_DEPENDENT_PERMISSION_WRITES` gerekçesiyle `POST /admin/audit-log/events`'i tutar ve yeni test
+(`everyBodyDependentPermissionWriteNamesNoPermissionAndHandsTheStaffActorToTheService`) muaf ucun izin
+adlandırmadığını, `StaffPrincipal` aldığını ve onu servise geçirdiğini, bayat muafiyet kalmadığını doğrular. Yeni
+bir blanket izin (`audit.event.write`) elendi: her role tohumlanacak, her rolü sayan testleri değiştirecek ve gerçek
+kapıyı (listenin izni) zaten ikinci kez soracak bir izin olurdu.
+
+**Satır:** `action = "export"` (eylem sözlüğü küçük harf; `GET /admin/audit-log?action=export`), `permission` listenin
+izni, `resourceType` listenin denetim kaynak türü (`job-assignments`, `payouts`, `reports`, `disputes` — aynı listenin
+GET satırlarıyla `resourceType` süzgecinde yan yana durur), `resourceId` boş, `mutating=false` (iş verisi değişmedi),
+hassasiyet listenin izninden; `piiIncluded=true` ise en az `PERSONAL_DATA` (FINANCIAL düşürülmez) — saklama süresi
+buna göre (§2av). Gövde (filters, rowCount, piiIncluded, konu) detayın `requestBody`'sinde JSON olarak durur, yani
+6 ay sonra ya da KVKK silmesinde gider; çekirdek kim/ne zaman/hangi liste/izin/sonuç/konu bilgisini tutar. Yetki
+anında satır açılmaz (anotasyon izin adlandırmadığı için `AuditScope.isAuditable` false), tek satırı manager yazar;
+#307'nin kapsam taraması bu yüzden `audit-log` türünü `CLIENT_EVENTS` olarak konusuz tanır, konuyu gövdeden manager
+verir.
+
+**Hız sınırı iki katman.** İstek filtrede mevcut `WRITE` kovasına düşer (personel yazmalarıyla aynı, IP başına
+60/dk); ayrıca manager içinde personel başına `rate-limit.audit-event` bütçesi (varsayılan 60 / 1 saat,
+`RATE_LIMIT_AUDIT_EVENT_*`) — `identity-reveal` kalıbı (§2j). Bütçe izin kontrolünden **önce** düşülür, yani reddedilen
+denemeler de harcar ve sel tabloyu dolduramaz; 429 `AUDIT_EVENT_TOO_MANY` alan çağrı kayda geçmez.
+
+**Panel tarafı (koala-admin#110):** `csv-export.ts` `logExport` yerine bu uca yazar; başarısızlıkta indirme yine sürer,
+uyarı loglanır. Panel liste adını eşler (`assignments` → `JOB_ASSIGNMENTS` …), `filters`'tan arama metnini çıkarır ve
+kullanıcı/şirket sayfasından yapılan dışa aktarmada `subjectType`/`subjectId` gönderir.
 
 ---
 

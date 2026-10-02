@@ -2,7 +2,17 @@ package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.business.abstracts.StaffAuditService;
 import com.exskylab.koala.core.constants.AuditMessages;
+import com.exskylab.koala.core.dtos.audit.request.ClientAuditEventDto;
 import com.exskylab.koala.core.dtos.audit.response.AuditEntryDto;
+import com.exskylab.koala.core.dtos.audit.response.RecordedAuditEventDto;
+import com.exskylab.koala.core.helpers.ClientIpResolver;
+import com.exskylab.koala.core.security.StaffPrincipal;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.mappers.AuditEntryMapper;
 import com.exskylab.koala.core.security.RequiresPermission;
@@ -41,10 +51,53 @@ public class AuditLogController {
 
     private final StaffAuditService staffAuditService;
     private final AuditEntryMapper auditEntryMapper;
+    private final ClientIpResolver clientIpResolver;
 
-    public AuditLogController(StaffAuditService staffAuditService, AuditEntryMapper auditEntryMapper) {
+    public AuditLogController(StaffAuditService staffAuditService, AuditEntryMapper auditEntryMapper,
+                              ClientIpResolver clientIpResolver) {
         this.staffAuditService = staffAuditService;
         this.auditEntryMapper = auditEntryMapper;
+        this.clientIpResolver = clientIpResolver;
+    }
+
+    @Operation(summary = "İstemci denetim olayı kaydet (CSV dışa aktarma)",
+            description = "Yönetim paneli bir personel listesini CSV olarak dışa aktardığında bu uca bildirir; olay "
+                    + "denetim kaydına tek satır olarak yazılır ve GET /admin/audit-log?action=export ile listelenir. "
+                    + "Bugün yalnız action=EXPORT kabul edilir. Aktör her zaman token'daki personeldir; gövdede aktör "
+                    + "alanı yoktur, gönderilirse yok sayılır. Uç her personele açıktır ama kayıt, çağıranın "
+                    + "dışa aktarılan liste için taşıdığı izinle yazılır (JOB_ASSIGNMENTS payment.read, PAYOUTS "
+                    + "payout.reconcile, REPORTS content.moderate, DISPUTES dispute.resolve): izin yoksa satır "
+                    + "allowed=false olarak yazılır ve 403 döner. Satır mutating=false; hassasiyet listenin izninden "
+                    + "gelir, piiIncluded=true ise en az PERSONAL_DATA olur. resourceType kaydın kaynak türü olur "
+                    + "(job-assignments, payouts, reports, disputes), resourceId boş; filters, rowCount ve piiIncluded "
+                    + "detay satırının requestBody alanında saklanır (6 ay). subjectType/subjectId verilirse kayıt o "
+                    + "kullanıcının/şirketin zaman çizelgesinde görünür. Personel başına saatlik bütçe var (429); "
+                    + "bütçeyi aşan çağrı kayda geçmez. Panel kaydı yazamazsa indirmeyi durdurmamalı, uyarı "
+                    + "loglamalıdır.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Olay kaydedildi"),
+            @ApiResponse(responseCode = "400", description = "Eylem/liste tanınmıyor, süzgeç özeti 1000 karakteri aşıyor "
+                    + "ya da kişisel veri taşıyor (AUDIT_EVENT_FILTERS_PERSONAL_DATA), satır sayısı 0-1000 dışında, "
+                    + "konu türü ile kimliği birlikte verilmemiş",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "403", description = "Çağıran dışa aktarılan listenin iznini taşımıyor "
+                    + "(AUDIT_EVENT_LIST_PERMISSION_MISSING); ret de denetim kaydına yazılır",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "429", description = "Personel başına olay bütçesi doldu (AUDIT_EVENT_TOO_MANY)",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(action = "audit.event.record")
+    @PostMapping("/events")
+    public ResponseEntity<SuccessDataResult<RecordedAuditEventDto>> recordEvent(
+            @RequestBody @Valid ClientAuditEventDto request,
+            @AuthenticationPrincipal StaffPrincipal actor,
+            HttpServletRequest httpRequest) {
+
+        AdminAuditEntry entry = staffAuditService.recordClientEvent(actor, request,
+                clientIpResolver.resolve(httpRequest), httpRequest.getHeader(HttpHeaders.USER_AGENT));
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(new SuccessDataResult<>(
+                auditEntryMapper.toRecordedAuditEventDto(entry), AuditMessages.EVENT_RECORDED, HttpStatus.CREATED));
     }
 
     @Operation(summary = "Denetim kaydını listele",

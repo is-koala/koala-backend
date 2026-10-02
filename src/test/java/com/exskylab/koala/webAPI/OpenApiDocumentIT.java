@@ -492,6 +492,28 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void theClientAuditEventContractIsDocumentedInTurkish() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath("$.paths['/admin/audit-log/events'].post.summary",
+                        containsString("dışa aktarma")))
+                .andExpect(jsonPath("$.paths['/admin/audit-log/events'].post.description",
+                        containsString("token'daki personel")))
+                .andExpect(jsonPath("$.paths['/admin/audit-log/events'].post.responses.201").exists())
+                .andExpect(jsonPath("$.paths['/admin/audit-log/events'].post.responses.403.description",
+                        containsString("AUDIT_EVENT_LIST_PERMISSION_MISSING")))
+                .andExpect(jsonPath("$.paths['/admin/audit-log/events'].post.responses.429").exists())
+                .andExpect(jsonPath("$.components.schemas.ClientAuditEventDto.properties.action.enum",
+                        contains("EXPORT")))
+                .andExpect(jsonPath("$.components.schemas.ClientAuditEventDto.properties.resourceType.enum",
+                        containsInAnyOrder("JOB_ASSIGNMENTS", "PAYOUTS", "REPORTS", "DISPUTES")))
+                .andExpect(jsonPath("$.components.schemas.ClientAuditEventDto.properties.filters.description",
+                        containsString("Kişisel veri")))
+                .andExpect(jsonPath("$.components.schemas.ClientAuditEventDto.properties.subjectComplete")
+                        .doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.RecordedAuditEventDto.properties.id").exists());
+    }
+
+    @Test
     void theAuditTrailDocumentsItsSubjectFieldsAndTimelineFilterInTurkish() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(jsonPath("$.paths['/admin/audit-log'].get.parameters[?(@.name == 'subjectId')].description")

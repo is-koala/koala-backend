@@ -1,6 +1,8 @@
 package com.exskylab.koala.business.abstracts;
 
+import com.exskylab.koala.core.dtos.audit.request.ClientAuditEventDto;
 import com.exskylab.koala.core.security.StaffAuditRecord;
+import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.entities.AdminAuditEntry;
 import com.exskylab.koala.entities.AuditSubjectType;
 import org.springframework.data.domain.Page;
@@ -17,6 +19,8 @@ public interface StaffAuditService {
                                  String resourceId, AuditSubjectType subjectType, UUID subjectId,
                                  Instant from, Instant to, Boolean allowed, Boolean mutating,
                                  Pageable pageable);
+
+    AdminAuditEntry recordClientEvent(StaffPrincipal actor, ClientAuditEventDto event, String ip, String userAgent);
 
     int purgeExpiredDetails();
 

@@ -71,6 +71,13 @@ class RateLimitBucketTest {
     }
 
     @Test
+    void aClientAuditEventSpendsTheSharedStaffWriteBucketAndHasItsOwnPerStaffBudget() throws Exception {
+        assertEquals(60, properties.getAuditEvent().getMaxAttempts());
+        assertEquals(Duration.ofHours(1), properties.getAuditEvent().getWindow());
+        assertEquals(60, passing("POST", "/admin/audit-log/events", "10.0.0.14", 61));
+    }
+
+    @Test
     void publicJobReadsShareALooseButFiniteAllowance() throws Exception {
         properties.getPublic().setMaxAttempts(2);
 

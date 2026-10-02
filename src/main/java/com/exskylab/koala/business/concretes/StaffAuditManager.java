@@ -1,7 +1,15 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.StaffAuditService;
+import com.exskylab.koala.core.constants.AuditMessages;
+import com.exskylab.koala.core.dtos.audit.request.ClientAuditEventDto;
+import com.exskylab.koala.core.exceptions.ForbiddenException;
+import com.exskylab.koala.core.exceptions.TooManyRequestsException;
+import com.exskylab.koala.core.helpers.AuditScope;
 import com.exskylab.koala.core.helpers.CreatedAtRange;
+import com.exskylab.koala.core.helpers.RateLimiter;
+import com.exskylab.koala.core.properties.RateLimitProperties;
+import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.properties.AuditRetentionProperties;
 import com.exskylab.koala.core.security.AuditSubject;
@@ -13,12 +21,15 @@ import com.exskylab.koala.entities.AdminAuditEntry;
 import com.exskylab.koala.entities.AdminAuditEntryDetail;
 import com.exskylab.koala.entities.AuditSubjectType;
 import com.exskylab.koala.entities.PermissionSensitivity;
+import com.exskylab.koala.entities.StaffExportList;
+import com.exskylab.koala.entities.StaffPermission;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -38,6 +49,7 @@ public class StaffAuditManager implements StaffAuditService {
     private static final int IP_LIMIT = 45;
     private static final int USER_AGENT_LIMIT = 512;
     private static final String UNKNOWN_ACTOR = "unknown";
+    static final String CLIENT_EVENT_BUDGET = "audit-event";
 
     private static final Set<String> SORTABLE = Set.of("occurredAt");
     private static final Sort NEWEST_FIRST = Sort.by(Sort.Direction.DESC, "occurredAt");
@@ -46,15 +58,24 @@ public class StaffAuditManager implements StaffAuditService {
     private final AdminAuditEntryDetailDao adminAuditEntryDetailDao;
     private final AuditRetentionProperties retentionProperties;
     private final PageableSanitizer pageableSanitizer;
+    private final RateLimiter rateLimiter;
+    private final RateLimitProperties rateLimitProperties;
+    private final ObjectMapper objectMapper;
 
     public StaffAuditManager(AdminAuditEntryDao adminAuditEntryDao,
                              AdminAuditEntryDetailDao adminAuditEntryDetailDao,
                              AuditRetentionProperties retentionProperties,
-                             PageableSanitizer pageableSanitizer) {
+                             PageableSanitizer pageableSanitizer,
+                             RateLimiter rateLimiter,
+                             RateLimitProperties rateLimitProperties,
+                             ObjectMapper objectMapper) {
         this.adminAuditEntryDao = adminAuditEntryDao;
         this.adminAuditEntryDetailDao = adminAuditEntryDetailDao;
         this.retentionProperties = retentionProperties;
         this.pageableSanitizer = pageableSanitizer;
+        this.rateLimiter = rateLimiter;
+        this.rateLimitProperties = rateLimitProperties;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -87,6 +108,52 @@ public class StaffAuditManager implements StaffAuditService {
         entry.setDetail(detail);
 
         return adminAuditEntryDao.save(entry);
+    }
+
+    @Override
+    @Transactional(noRollbackFor = ForbiddenException.class)
+    public AdminAuditEntry recordClientEvent(StaffPrincipal actor, ClientAuditEventDto event, String ip,
+                                             String userAgent) {
+        if (actor == null || !actor.isRegistered()) {
+            log.warn("Client audit event refused: the caller is not a registered staff member");
+            throw new ForbiddenException(AuditMessages.EVENT_LIST_PERMISSION_MISSING);
+        }
+
+        RateLimitProperties.Bucket budget = rateLimitProperties.getAuditEvent();
+        if (!rateLimiter.tryAcquire(CLIENT_EVENT_BUDGET + ":" + actor.staffId(),
+                budget.getMaxAttempts(), budget.getWindow())) {
+            log.warn("Client audit event refused, budget exhausted: staff={} action={} list={}",
+                    actor.staffId(), event.getAction(), event.getResourceType());
+            throw new TooManyRequestsException(AuditMessages.EVENT_TOO_MANY);
+        }
+
+        StaffExportList list = event.getResourceType();
+        StaffPermission permission = list.getPermission();
+        boolean allowed = actor.holds(permission);
+
+        AdminAuditEntry entry = record(new StaffAuditRecord(
+                actor.staffId(),
+                actor.displayName() == null || actor.displayName().isBlank() ? actor.email() : actor.displayName(),
+                permission.getCode(),
+                event.getAction().getCode(),
+                list.getResourceType(),
+                AuditScope.NO_RECORD,
+                allowed,
+                false,
+                sensitivityOf(permission, Boolean.TRUE.equals(event.getPiiIncluded())),
+                ip,
+                userAgent,
+                subjectsOf(event)), objectMapper.writeValueAsString(event), null, null);
+
+        if (!allowed) {
+            log.warn("Client audit event refused, the caller lacks the list permission: staff={} list={} "
+                    + "permission={} entry={}", actor.staffId(), list, permission.getCode(), entry.getId());
+            throw new ForbiddenException(AuditMessages.EVENT_LIST_PERMISSION_MISSING);
+        }
+
+        log.info("Client audit event recorded: staff={} action={} list={} rows={} pii={} entry={}",
+                actor.staffId(), event.getAction(), list, event.getRowCount(), event.getPiiIncluded(), entry.getId());
+        return entry;
     }
 
     @Override
@@ -140,6 +207,21 @@ public class StaffAuditManager implements StaffAuditService {
             log.info("Audit detail rows erased on anonymization for resource {}: {}", resourceId, erased);
         }
         return erased;
+    }
+
+    private static PermissionSensitivity sensitivityOf(StaffPermission permission, boolean piiIncluded) {
+        PermissionSensitivity listSensitivity = permission.getSensitivity();
+        if (piiIncluded && listSensitivity.getRank() < PermissionSensitivity.PERSONAL_DATA.getRank()) {
+            return PermissionSensitivity.PERSONAL_DATA;
+        }
+        return listSensitivity;
+    }
+
+    private static AuditSubjects subjectsOf(ClientAuditEventDto event) {
+        if (event.getSubjectType() == null || event.getSubjectId() == null) {
+            return AuditSubjects.NONE;
+        }
+        return AuditSubjects.of(new AuditSubject(event.getSubjectType(), event.getSubjectId()));
     }
 
     private static void stampSubjects(AdminAuditEntry entry, AuditSubjects subjects) {

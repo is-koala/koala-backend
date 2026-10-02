@@ -34,6 +34,12 @@ class AdminPermissionMappingIT extends AbstractIntegrationTest {
     private static final String AUTHENTICATION_PREFIX = "/admin/auth/";
     private static final String IDENTITY_PATTERN = "/admin/me";
 
+    private static final Map<String, String> BODY_DEPENDENT_PERMISSION_WRITES = Map.of(
+            "POST /admin/audit-log/events",
+            "istemci denetim olayı: gereken izin gövdedeki listeden gelir (dışa aktarılan listenin izni) ve "
+                    + "StaffAuditManager.recordClientEvent onu token'daki personelin izinlerinde arar; ret de "
+                    + "denetim satırı yazar");
+
     private static final List<String> MONEY_MOVING_CALLS = List.of(
             "staffPayoutService.releaseToWorker(",
             "staffPayoutService.refundEmployer(",
@@ -155,6 +161,9 @@ class AdminPermissionMappingIT extends AbstractIntegrationTest {
             if (declared == null || "GET".equals(mapping.verb())) {
                 continue;
             }
+            if (isBodyDependentPermissionWrite(mapping)) {
+                continue;
+            }
             if (declared.value().length == 0
                     || Arrays.stream(declared.value()).anyMatch(permission -> !permission.isMutating())) {
                 weak.add(mapping + " → " + Arrays.stream(declared.value()).map(StaffPermission::getCode).toList());
@@ -162,6 +171,38 @@ class AdminPermissionMappingIT extends AbstractIntegrationTest {
         }
 
         assertTrue(weak.isEmpty(), "Yazma ucu okuma izniyle korunamaz: " + weak);
+    }
+
+    @Test
+    void everyBodyDependentPermissionWriteNamesNoPermissionAndHandsTheStaffActorToTheService() throws IOException {
+        List<String> problems = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+
+        for (AdminMapping mapping : adminMappings()) {
+            if (!isBodyDependentPermissionWrite(mapping)) {
+                continue;
+            }
+            seen.add(mapping.verb() + " " + mapping.pattern());
+            RequiresPermission declared = mapping.declared();
+            boolean takesTheActor = Arrays.asList(mapping.handler().getMethod().getParameterTypes())
+                    .contains(StaffPrincipal.class);
+            if (declared == null || declared.value().length != 0 || !takesTheActor
+                    || !handlerBody(mapping.handler()).contains("(actor,")) {
+                problems.add(mapping.toString());
+            }
+        }
+
+        assertTrue(problems.isEmpty(),
+                "Gövdeye bağlı izinli yazma ucu anotasyonda izin adlandırmaz ve personel aktörünü servise geçirir: "
+                        + problems);
+        assertTrue(seen.containsAll(BODY_DEPENDENT_PERMISSION_WRITES.keySet()),
+                "Artık var olmayan gövdeye bağlı izin muafiyeti listede duruyor: " + BODY_DEPENDENT_PERMISSION_WRITES.keySet());
+        assertTrue(BODY_DEPENDENT_PERMISSION_WRITES.values().stream().noneMatch(String::isBlank),
+                "Gerekçesiz muafiyet: " + BODY_DEPENDENT_PERMISSION_WRITES);
+    }
+
+    private static boolean isBodyDependentPermissionWrite(AdminMapping mapping) {
+        return BODY_DEPENDENT_PERMISSION_WRITES.containsKey(mapping.verb() + " " + mapping.pattern());
     }
 
     private static String handlerBody(HandlerMethod handler) throws IOException {
@@ -265,11 +306,13 @@ class AdminPermissionMappingIT extends AbstractIntegrationTest {
         List<String> open = adminMappings().stream()
                 .filter(mapping -> mapping.declared() != null && mapping.declared().value().length == 0)
                 .filter(mapping -> !IDENTITY_PATTERN.equals(mapping.pattern()))
+                .filter(mapping -> !isBodyDependentPermissionWrite(mapping))
                 .map(AdminMapping::toString)
                 .sorted()
                 .toList();
 
         assertTrue(open.isEmpty(),
-                "İzin adı vermeyen anotasyon yalnız " + IDENTITY_PATTERN + " için geçerlidir: " + open);
+                "İzin adı vermeyen anotasyon yalnız " + IDENTITY_PATTERN + " ve gövdeye bağlı izinli yazma "
+                        + "uçları için geçerlidir: " + open);
     }
 }
