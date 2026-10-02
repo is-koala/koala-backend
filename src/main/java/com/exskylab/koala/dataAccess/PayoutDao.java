@@ -21,6 +21,9 @@ import java.util.UUID;
 @Repository
 public interface PayoutDao extends JpaRepository<Payout, UUID> {
 
+    @Query("select p.worker.id from Payout p where p.id = :id")
+    Optional<UUID> findWorkerIdById(@Param("id") UUID id);
+
     List<Payout> findAllByJobAssignmentIdIn(Collection<UUID> jobAssignmentIds);
 
     Optional<Payout> findByPaymentId(UUID paymentId);

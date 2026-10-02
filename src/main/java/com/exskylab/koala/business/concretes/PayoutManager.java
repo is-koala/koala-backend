@@ -346,6 +346,12 @@ public class PayoutManager implements PayoutService {
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<UUID> findWorkerIdOf(UUID payoutId) {
+        return payoutDao.findWorkerIdById(payoutId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Optional<Payout> findForAssignment(UUID jobAssignmentId) {
         return payoutDao.findByJobAssignmentId(jobAssignmentId);
     }

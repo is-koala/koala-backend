@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.abstracts;
 
+import java.util.Optional;
 import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.core.dtos.dispute.response.StaffDisputeEvidenceDto;
 import com.exskylab.koala.entities.Dispute;
@@ -35,6 +36,8 @@ public interface DisputeService {
     Dispute getForStaff(UUID disputeId);
 
     boolean hasActiveDispute(UUID jobAssignmentId);
+
+    Optional<UUID> findJobAssignmentIdOf(UUID disputeId);
 
     DisputeEvidence attachEvidence(UUID disputeId, MultipartFile file);
 

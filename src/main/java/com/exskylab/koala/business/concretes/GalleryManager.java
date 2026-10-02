@@ -1,5 +1,7 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.core.security.AuditSubject;
+import java.util.Optional;
 import com.exskylab.koala.business.abstracts.GalleryService;
 import com.exskylab.koala.business.abstracts.ImageService;
 import com.exskylab.koala.core.constants.GalleryMessages;
@@ -256,6 +258,23 @@ public class GalleryManager implements GalleryService {
         imageService.deleteImage(imageId);
         log.info("Image {} removed from {} job and {} company gallery entries",
                 imageId, jobEntries.size(), companyEntries.size());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<AuditSubject> findImageOwner(UUID imageId) {
+        Optional<AuditSubject> company = companyImageDao.findAllByImageId(imageId).stream()
+                .findFirst()
+                .map(entry -> AuditSubject.company(entry.getCompany().getId()));
+        if (company.isPresent()) {
+            return company;
+        }
+        return jobImageDao.findAllByImageId(imageId).stream()
+                .findFirst()
+                .map(JobImage::getJob)
+                .map(job -> AuditSubject.employerOf(
+                        job.getCompany() == null ? null : job.getCompany().getId(),
+                        job.getCreator() == null ? null : job.getCreator().getId()));
     }
 
     @Override

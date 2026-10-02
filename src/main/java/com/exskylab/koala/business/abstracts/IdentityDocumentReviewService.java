@@ -33,4 +33,6 @@ public interface IdentityDocumentReviewService {
     VerificationDocument getDocumentForStaffDownload(UUID reviewId, UUID documentId);
 
     Optional<IdentityVerification> findLatestFor(UUID userId);
+
+    Optional<UUID> findReviewedUserId(UUID reviewId);
 }

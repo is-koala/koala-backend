@@ -32,7 +32,7 @@ class AdminAuditRetentionIT extends AbstractIntegrationTest {
     private static StaffAuditRecord record(PermissionSensitivity sensitivity, String resourceId) {
         return new StaffAuditRecord(UUID.randomUUID(), "Saklama Denemesi", "payout.release",
                 "payout.release", "job-assignments", resourceId, true, true, sensitivity,
-                "203.0.113.9", "koala-admin/1.0");
+                "203.0.113.9", "koala-admin/1.0", com.exskylab.koala.core.security.AuditSubjects.NONE);
     }
 
     private UUID agedEntry(String retainInterval, String purgeInterval, String resourceId) {

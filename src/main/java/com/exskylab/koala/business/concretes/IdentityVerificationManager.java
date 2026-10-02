@@ -158,6 +158,12 @@ public class IdentityVerificationManager implements IdentityDocumentReviewServic
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<UUID> findReviewedUserId(UUID reviewId) {
+        return identityVerificationDao.findUserIdById(reviewId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public IdentityVerification getById(UUID reviewId) {
         return identityVerificationDao.findById(reviewId)
                 .orElseThrow(() -> new ResourceNotFoundException(IdentityMessages.REVIEW_NOT_FOUND));

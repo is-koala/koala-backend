@@ -4,11 +4,14 @@ import com.exskylab.koala.business.abstracts.StaffAuditService;
 import com.exskylab.koala.core.helpers.CreatedAtRange;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.properties.AuditRetentionProperties;
+import com.exskylab.koala.core.security.AuditSubject;
+import com.exskylab.koala.core.security.AuditSubjects;
 import com.exskylab.koala.core.security.StaffAuditRecord;
 import com.exskylab.koala.dataAccess.AdminAuditEntryDao;
 import com.exskylab.koala.dataAccess.AdminAuditEntryDetailDao;
 import com.exskylab.koala.entities.AdminAuditEntry;
 import com.exskylab.koala.entities.AdminAuditEntryDetail;
+import com.exskylab.koala.entities.AuditSubjectType;
 import com.exskylab.koala.entities.PermissionSensitivity;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -70,6 +73,7 @@ public class StaffAuditManager implements StaffAuditService {
         entry.setMutating(source.mutating());
         entry.setSensitivity(source.sensitivity());
         entry.setRetainUntil(plusMonths(now, coreMonthsFor(source.sensitivity())));
+        stampSubjects(entry, source.subjects());
 
         AdminAuditEntryDetail detail = new AdminAuditEntryDetail();
         detail.setEntry(entry);
@@ -87,14 +91,15 @@ public class StaffAuditManager implements StaffAuditService {
     @Override
     @Transactional(readOnly = true)
     public Page<AdminAuditEntry> search(UUID actor, String action, String permission, String resourceType,
-                                        String resourceId, Instant from, Instant to, Boolean allowed,
-                                        Pageable pageable) {
+                                        String resourceId, AuditSubjectType subjectType, UUID subjectId,
+                                        Instant from, Instant to, Boolean allowed, Pageable pageable) {
         pageableSanitizer.rejectUnknownSort(pageable, SORTABLE);
         Pageable page = pageableSanitizer.sanitize(pageable, SORTABLE, NEWEST_FIRST);
 
         CreatedAtRange occurredAt = CreatedAtRange.of(from, to);
         return adminAuditEntryDao.search(actor, blankToNull(action), blankToNull(permission),
                 blankToNull(resourceType), blankToNull(resourceId),
+                subjectType == null ? null : subjectType.name(), subjectId,
                 occurredAt.from(), occurredAt.to(),
                 allowed != null, Boolean.TRUE.equals(allowed), page);
     }
@@ -130,6 +135,19 @@ public class StaffAuditManager implements StaffAuditService {
             log.info("Audit detail rows erased on request for resource {}: {}", resourceId, erased);
         }
         return erased;
+    }
+
+    private static void stampSubjects(AdminAuditEntry entry, AuditSubjects subjects) {
+        AuditSubject subject = subjects.subject();
+        if (subject != null) {
+            entry.setSubjectType(subject.type());
+            entry.setSubjectId(subject.id());
+        }
+        AuditSubject related = subjects.related();
+        if (related != null) {
+            entry.setRelatedSubjectType(related.type());
+            entry.setRelatedSubjectId(related.id());
+        }
     }
 
     private int coreMonthsFor(PermissionSensitivity sensitivity) {

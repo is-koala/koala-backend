@@ -110,6 +110,11 @@ class IdentityReviewApprovalIT extends AbstractStaffIntegrationTest {
                 "select is_verified from user_verifications where id = ?", Boolean.class, reviewId));
         assertEquals(Boolean.TRUE, jdbc.queryForObject(
                 "select identity_verified from users where id = ?", Boolean.class, userId));
+        assertEquals("USER", jdbc.queryForObject(
+                "select subject_type from admin_audit_entries where action = 'identity.approve'", String.class));
+        assertEquals(userId, jdbc.queryForObject(
+                "select subject_id from admin_audit_entries where action = 'identity.approve'", UUID.class),
+                "Kimlik onayının denetim satırı kararın konusu olan kullanıcıyı taşımalı, inceleme id'sini değil.");
 
         mockMvc.perform(get("/admin/identity-verifications/" + reviewId)
                         .header("Authorization", "Bearer " + trustLeadToken))

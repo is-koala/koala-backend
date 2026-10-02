@@ -61,7 +61,8 @@ public final class StaffAuditContext {
                 permission.isMutating(),
                 permission.getSensitivity(),
                 source.ip(),
-                source.userAgent());
+                source.userAgent(),
+                source.subjects());
     }
 
     public StaffAuditRecord pending() {

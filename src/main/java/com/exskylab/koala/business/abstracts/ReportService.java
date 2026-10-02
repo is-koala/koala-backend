@@ -1,5 +1,7 @@
 package com.exskylab.koala.business.abstracts;
 
+import java.util.Optional;
+import com.exskylab.koala.core.security.AuditSubject;
 import com.exskylab.koala.core.dtos.report.response.AdminReportDetailDto;
 import com.exskylab.koala.core.dtos.report.response.AdminReportDto;
 import com.exskylab.koala.core.security.StaffPrincipal;
@@ -33,6 +35,8 @@ public interface ReportService {
     List<Report> findAllBetweenAssignmentParties(UUID jobId, Collection<UUID> partyIds);
 
     long countReceivedBy(UUID userId);
+
+    Optional<AuditSubject> findReportedParty(UUID reportId);
 
     long countMadeBy(UUID userId);
 }
