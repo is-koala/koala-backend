@@ -4719,7 +4719,10 @@ eski işçi QR'ı 404'e düşer; DTO kuralları 400 + alan adı; personel zaman 
 −15 dk hatırlatması yalnız binmemiş koltuğa bir kez; "henüz binmedi" bildirimi yapılandırılmış gecikmeyle, durak başına
 tek, ilan sahibine ve güncel yetkiliye (eski yetkiliye değil), yalnız binmemiş/işaretlenmemiş canlı koltuğun adıyla;
 geriye bakış penceresinden eski kalkış bildirim üretmez; okutma ile işaretleme yarışı tek satır. `BoardingTokensTest`
-pencere sınırlarını ve deep link biçimini, `OpenApiDocumentIT` yeni uçları ve alanları sabitliyor.
+pencere sınırlarını ve deep link biçimini, `OpenApiDocumentIT` yeni uçları ve alanları sabitliyor. Her düzeltme
+geri alınınca hedef testinin kırmızıya döndüğü mutasyonla görüldü (23 mutasyon: üç `TransportBoardingIT` turu ve bir
+birim turu; kilitsiz yarış `uk_boarding_events_boarded_seat_day` ihlaliyle, global `clientEventId` 409 ile, ilan
+penceresi `OUTSIDE_JOB_WINDOW` ile, alt sınırsız sorgu eski kalkışa bildirimle düştü).
 
 **Kapsam dışı.** `ALIGHTED`/`WORKER_SELF` (T3), canlı konum (T4), taksi parası (T3). Hız sınırı IP başına (tek örnek
 varsayımı, §2j). İstemciler: mobil iki yönlü QR + işveren listesi, web biniş listesi + QR yazdırma, admin zaman
