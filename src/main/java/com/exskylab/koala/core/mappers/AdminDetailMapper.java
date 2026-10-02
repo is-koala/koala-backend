@@ -6,6 +6,7 @@ import com.exskylab.koala.core.dtos.job.response.AdminJobDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.AdminApplicationDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.AdminAssignmentDetailDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.AdminCancellationDto;
+import com.exskylab.koala.core.dtos.jobAssignment.response.AdminTimelineEventDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.AdminReviewDto;
 import com.exskylab.koala.core.dtos.payment.response.AdminPaymentDto;
 import com.exskylab.koala.core.dtos.transport.response.AssignmentTransportDto;
@@ -207,13 +208,15 @@ public interface AdminDetailMapper {
     @Mapping(target = "disputes", source = "disputes")
     @Mapping(target = "reports", source = "reports")
     @Mapping(target = "transport", source = "transport")
+    @Mapping(target = "timeline", source = "timeline")
     @Mapping(target = "createdAt", source = "assignment.createdAt")
     @Mapping(target = "updatedAt", source = "assignment.updatedAt")
     AdminAssignmentDetailDto toAdminAssignmentDetailDto(JobAssignment assignment, List<WorkSession> workSessions,
                                                         Cancellation cancellation, List<Review> reviews,
                                                         List<Payment> payments, Payout payout,
                                                         List<Dispute> disputes, List<Report> reports,
-                                                        AssignmentTransportDto transport);
+                                                        AssignmentTransportDto transport,
+                                                        List<AdminTimelineEventDto> timeline);
 
     @Mapping(target = "id", source = "job.id")
     @Mapping(target = "title", source = "job.title")

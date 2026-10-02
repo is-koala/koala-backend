@@ -1,6 +1,7 @@
 package com.exskylab.koala.dataAccess;
 
 import com.exskylab.koala.entities.AssignmentStatus;
+import com.exskylab.koala.entities.BoardingKind;
 import com.exskylab.koala.entities.SeatAssignment;
 import com.exskylab.koala.entities.TransportDirection;
 import org.springframework.data.domain.Pageable;
@@ -66,6 +67,38 @@ public interface SeatAssignmentDao extends JpaRepository<SeatAssignment, UUID> {
     List<UUID> findDepartureReminderDueIds(@Param("from") Instant from, @Param("to") Instant to,
                                            @Param("statuses") Collection<AssignmentStatus> statuses,
                                            Pageable pageable);
+
+    @Query("""
+            select s.id from SeatAssignment s
+            where s.boardingReminderSentAt is null
+              and s.stop.scheduledAt > :from and s.stop.scheduledAt <= :to
+              and s.jobAssignment.status in :statuses
+            order by s.stop.scheduledAt asc
+            """)
+    List<UUID> findBoardingReminderDueIds(@Param("from") Instant from, @Param("to") Instant to,
+                                          @Param("statuses") Collection<AssignmentStatus> statuses,
+                                          Pageable pageable);
+
+    @Query("""
+            select s.id from SeatAssignment s
+            where s.notBoardedNoticeSentAt is null
+              and s.stop.scheduledAt <= :cutoff
+              and s.jobAssignment.status in :statuses
+              and not exists (select 1 from BoardingEvent e where e.seatAssignment = s and e.kind = :kind)
+            order by s.stop.scheduledAt asc
+            """)
+    List<UUID> findNotBoardedNoticeDueIds(@Param("cutoff") Instant cutoff,
+                                          @Param("statuses") Collection<AssignmentStatus> statuses,
+                                          @Param("kind") BoardingKind kind,
+                                          Pageable pageable);
+
+    List<SeatAssignment> findAllByShuttleIdAndJobAssignment_Worker_Id(UUID shuttleId, UUID workerId);
+
+    @EntityGraph(attributePaths = {"jobAssignment", "stop", "shuttle"})
+    List<SeatAssignment> findAllWithAssignmentByShuttleId(UUID shuttleId);
+
+    @EntityGraph(attributePaths = {"jobAssignment", "jobAssignment.job", "shuttle", "stop"})
+    List<SeatAssignment> findAllWithJobByIdIn(Collection<UUID> ids);
 
     @EntityGraph(attributePaths = {"jobAssignment", "jobAssignment.worker", "jobAssignment.job",
             "shuttle", "stop", "stop.address", "stop.address.district"})

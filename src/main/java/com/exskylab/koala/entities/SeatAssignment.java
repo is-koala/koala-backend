@@ -47,4 +47,10 @@ public class SeatAssignment extends BaseEntity {
 
     @Column(name = "departure_reminder_sent_at")
     private Instant departureReminderSentAt;
+
+    @Column(name = "boarding_reminder_sent_at")
+    private Instant boardingReminderSentAt;
+
+    @Column(name = "not_boarded_notice_sent_at")
+    private Instant notBoardedNoticeSentAt;
 }

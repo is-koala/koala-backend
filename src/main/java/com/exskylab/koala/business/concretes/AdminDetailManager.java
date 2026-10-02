@@ -27,6 +27,7 @@ import com.exskylab.koala.core.dtos.identity.response.IdentityReviewDto;
 import com.exskylab.koala.core.dtos.legal.response.AccountDeletionDto;
 import com.exskylab.koala.core.dtos.legal.response.DeletionBlockerDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.AdminAssignmentDetailDto;
+import com.exskylab.koala.core.dtos.jobAssignment.response.AdminTimelineEventDto;
 import com.exskylab.koala.core.dtos.payment.response.AdminPaymentDto;
 import com.exskylab.koala.core.dtos.transport.response.AssignmentTransportDto;
 import com.exskylab.koala.core.dtos.payment.response.AdminRefundDto;
@@ -265,6 +266,7 @@ public class AdminDetailManager implements AdminDetailService {
         AssignmentTransportDto transport = transportService.viewsForAssignments(
                         List.of(assignment), assignment.getJob().getCreator().getId())
                 .get(assignment.getId());
+        List<AdminTimelineEventDto> timeline = transportService.timelineForStaff(assignmentId);
 
         return adminDetailMapper.toAdminAssignmentDetailDto(assignment,
                 timesheetService.getSessionsForStaff(assignmentId),
@@ -274,7 +276,8 @@ public class AdminDetailManager implements AdminDetailService {
                 payoutService.findForAssignment(assignmentId).orElse(null),
                 disputeService.findAllForAssignment(assignmentId),
                 reportService.findAllBetweenAssignmentParties(assignment.getJob().getId(), partiesOf(assignment)),
-                transport);
+                transport,
+                timeline);
     }
 
     @Override

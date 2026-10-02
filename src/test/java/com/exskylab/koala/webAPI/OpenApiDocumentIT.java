@@ -513,6 +513,18 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.components.schemas.JobSummaryDto.properties.hasShuttle.description")
                         .value(containsString("servis")))
                 .andExpect(jsonPath("$.components.schemas.MyAssignmentDto.properties.transport.description")
-                        .value(containsString("koltuk")));
+                        .value(containsString("koltuk")))
+                .andExpect(jsonPath("$.paths['/shuttles/{shuttleId}/qr'].get.responses.200").exists())
+                .andExpect(jsonPath("$.paths['/shuttles/{shuttleId}/qr'].get.description")
+                        .value(containsString("QR")))
+                .andExpect(jsonPath("$.paths['/job-assignments/{assignmentId}/transport/qr'].get.responses.409")
+                        .exists())
+                .andExpect(jsonPath("$.paths['/shuttles/{shuttleId}/boardings'].post.responses.400.description")
+                        .value(containsString("Token")))
+                .andExpect(jsonPath("$.paths['/shuttles/{shuttleId}/boardings'].get.responses.404").exists())
+                .andExpect(jsonPath("$.paths['/seat-assignments/{seatAssignmentId}/boardings'].post.responses.200")
+                        .exists())
+                .andExpect(jsonPath("$.components.schemas.BoardingQrDto.properties.static").exists())
+                .andExpect(jsonPath("$.components.schemas.ShuttleBoardingDto.properties.token").exists());
     }
 }

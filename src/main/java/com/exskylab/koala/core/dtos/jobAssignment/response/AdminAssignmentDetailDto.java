@@ -27,5 +27,6 @@ public record AdminAssignmentDetailDto(UUID id, UUID jobId, String jobTitle, UUI
                                        List<LinkedRecordDto> payments, LinkedRecordDto payout,
                                        List<LinkedRecordDto> disputes, List<LinkedRecordDto> reports,
                                        AssignmentTransportDto transport,
+                                       List<AdminTimelineEventDto> timeline,
                                        Instant createdAt, Instant updatedAt) {
 }

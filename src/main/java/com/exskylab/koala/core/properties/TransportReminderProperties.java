@@ -18,6 +18,10 @@ public class TransportReminderProperties {
 
     private int departureLeadMinutes = 60;
 
+    private int boardingLeadMinutes = 15;
+
+    private int notBoardedAfterMinutes = 10;
+
     private int batchSize = 200;
 
     public boolean isEnabled() {
@@ -50,6 +54,22 @@ public class TransportReminderProperties {
 
     public void setDepartureLeadMinutes(int departureLeadMinutes) {
         this.departureLeadMinutes = departureLeadMinutes;
+    }
+
+    public int getBoardingLeadMinutes() {
+        return boardingLeadMinutes;
+    }
+
+    public void setBoardingLeadMinutes(int boardingLeadMinutes) {
+        this.boardingLeadMinutes = boardingLeadMinutes;
+    }
+
+    public int getNotBoardedAfterMinutes() {
+        return notBoardedAfterMinutes;
+    }
+
+    public void setNotBoardedAfterMinutes(int notBoardedAfterMinutes) {
+        this.notBoardedAfterMinutes = notBoardedAfterMinutes;
     }
 
     public int getBatchSize() {

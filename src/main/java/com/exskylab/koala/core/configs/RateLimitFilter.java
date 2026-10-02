@@ -59,6 +59,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
             "/admin/auth/refresh",
             "/admin/auth/password");
 
+    private static final List<PathPattern> BOARDING_PATHS = List.of(
+            PARSER.parse("/shuttles/{shuttleId}/boardings"),
+            PARSER.parse("/seat-assignments/{seatAssignmentId}/boardings"));
+
     private static final List<PathPattern> UPLOAD_PATHS = List.of(
             PARSER.parse("/images"),
             PARSER.parse("/users/me/cv"),
@@ -108,7 +112,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     private enum Bucket {
-        AUTH, UPLOAD, MESSAGE, REALTIME_CREDENTIAL, PUBLIC, SITEMAP, WRITE, NONE
+        AUTH, UPLOAD, MESSAGE, REALTIME_CREDENTIAL, PUBLIC, SITEMAP, BOARDING, WRITE, NONE
     }
 
     @Override
@@ -178,6 +182,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return Bucket.UPLOAD;
         }
 
+        if (BOARDING_PATHS.stream().anyMatch(pattern -> pattern.matches(container))) {
+            return Bucket.BOARDING;
+        }
+
         return Bucket.WRITE;
     }
 
@@ -189,6 +197,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             case REALTIME_CREDENTIAL -> properties.getRealtimeCredential();
             case PUBLIC -> properties.getPublic();
             case SITEMAP -> properties.getSitemap();
+            case BOARDING -> properties.getBoarding();
             default -> properties.getWrite();
         };
     }

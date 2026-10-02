@@ -41,6 +41,10 @@ public class TransportReminderScheduler {
                 transportService::sendEveningReminder);
         sent += send("departure", transportService.findDepartureReminderDueIds(now), now,
                 transportService::sendDepartureReminder);
+        sent += send("boarding", transportService.findBoardingReminderDueIds(now), now,
+                transportService::sendBoardingReminder);
+        sent += send("not-boarded", transportService.findNotBoardedNoticeDueIds(now), now,
+                transportService::sendNotBoardedNotice);
         return sent;
     }
 

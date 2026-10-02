@@ -162,6 +162,22 @@ class RateLimitBucketTest {
     }
 
     @Test
+    void boardingWritesHaveTheirOwnAllowanceAndReadsStayUnlimited() throws Exception {
+        properties.getBoarding().setMaxAttempts(2);
+        properties.getWrite().setMaxAttempts(50);
+
+        UUID shuttleId = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        assertEquals(2, passing("POST", "/shuttles/" + shuttleId + "/boardings", "10.0.0.16", 6));
+        assertEquals(0, passing("POST", "/seat-assignments/" + seatId + "/boardings", "10.0.0.16", 1));
+        assertEquals(50, passing("POST", "/reports", "10.0.0.16", 50));
+        assertEquals(200, passing("GET", "/shuttles/" + shuttleId + "/boardings", "10.0.0.16", 200));
+        assertEquals(200, passing("GET", "/shuttles/" + shuttleId + "/qr", "10.0.0.16", 200));
+        assertEquals(200, passing("GET", "/job-assignments/" + UUID.randomUUID() + "/transport/qr",
+                "10.0.0.16", 200));
+    }
+
+    @Test
     void theCallbackReplayOverGetDrainsTheSameAllowanceAsTheProviderPost() throws Exception {
         properties.getWrite().setMaxAttempts(3);
 

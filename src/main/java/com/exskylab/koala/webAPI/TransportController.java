@@ -2,9 +2,14 @@ package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.business.abstracts.TransportService;
 import com.exskylab.koala.core.constants.TransportMessages;
+import com.exskylab.koala.core.dtos.transport.request.SeatBoardingDto;
 import com.exskylab.koala.core.dtos.transport.request.SeatSelectionDto;
+import com.exskylab.koala.core.dtos.transport.request.ShuttleBoardingDto;
 import com.exskylab.koala.core.dtos.transport.request.TransportPlanWriteDto;
 import com.exskylab.koala.core.dtos.transport.response.AssignmentTransportDto;
+import com.exskylab.koala.core.dtos.transport.response.BoardingEventDto;
+import com.exskylab.koala.core.dtos.transport.response.BoardingQrDto;
+import com.exskylab.koala.core.dtos.transport.response.ShuttleBoardingRowDto;
 import com.exskylab.koala.core.dtos.transport.response.TransportPlanDto;
 import com.exskylab.koala.core.utilities.results.ErrorResult;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
@@ -19,11 +24,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 @Tag(name = "Ulaşım planı", description = "İlanın servis/durak planı, işçinin koltuk seçimi ve ulaşım görünümü.")
@@ -110,5 +118,90 @@ public class TransportController {
             @PathVariable UUID assignmentId, @RequestBody @Valid SeatSelectionDto request) {
         return ResponseEntity.ok(new SuccessDataResult<>(transportService.selectSeat(assignmentId, request),
                 TransportMessages.SEAT_SAVED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "Servis QR kodu",
+            description = "İlan sahibi ya da şirket yetkilisi servisin HMAC QR token'ını alır. "
+                    + "static=true süre dolmayan sabit QR üretir; tarama STATIC_QR bayrağı taşır. "
+                    + "Yetkisiz kullanıcı 404 alır ve servisin varlığı sızmaz.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "QR token döndürüldü"),
+            @ApiResponse(responseCode = "404", description = "Servis bulunamadı ya da yetki yok",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @GetMapping("/shuttles/{shuttleId}/qr")
+    public ResponseEntity<SuccessDataResult<BoardingQrDto>> issueShuttleQr(
+            @PathVariable UUID shuttleId,
+            @RequestParam(name = "static", defaultValue = "false") boolean staticQr) {
+        return ResponseEntity.ok(new SuccessDataResult<>(transportService.issueShuttleQr(shuttleId, staticQr),
+                TransportMessages.QR_ISSUED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "İşçi biniş QR kodu",
+            description = "İşçinin koltuk seçtiği servis için HMAC QR token'ı. Yalnız atamanın işçisi; "
+                    + "işveren ya da taraf olmayan 404 alır. Koltuk yoksa 409.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "QR token döndürüldü"),
+            @ApiResponse(responseCode = "404", description = "Atama bulunamadı ya da taraf değilsiniz",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "Bu atamada koltuk seçilmemiş",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @GetMapping("/job-assignments/{assignmentId}/transport/qr")
+    public ResponseEntity<SuccessDataResult<BoardingQrDto>> issueWorkerQr(@PathVariable UUID assignmentId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(transportService.issueWorkerQr(assignmentId),
+                TransportMessages.QR_ISSUED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "Servis QR ile biniş",
+            description = "İşçi servis QR'ını tarar. Token bu servise ait değilse ya da işçinin koltuğu yoksa 404; "
+                    + "süresi dolmuş token 400. Aynı gün ikinci biniş aynı gövdeyle idempotent, farklı gövde 409.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Biniş kaydedildi"),
+            @ApiResponse(responseCode = "400", description = "Token süresi doldu ya da doğrulama hatası",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "Servis bulunamadı, koltuk yok ya da token bu servise ait değil",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "Bu gün zaten binildi ya da idempotency çakışması",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @PostMapping("/shuttles/{shuttleId}/boardings")
+    public ResponseEntity<SuccessDataResult<BoardingEventDto>> boardOnShuttle(
+            @PathVariable UUID shuttleId, @RequestBody @Valid ShuttleBoardingDto request) {
+        return ResponseEntity.ok(new SuccessDataResult<>(transportService.boardOnShuttle(shuttleId, request),
+                TransportMessages.BOARDING_RECORDED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "Koltuk binişi (işveren)",
+            description = "İşveren işçinin QR'ını tarar (token) ya da biniş/gelmedi işaretler. "
+                    + "Yetkisiz 404; süresi dolmuş token 400.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Biniş kaydedildi"),
+            @ApiResponse(responseCode = "400", description = "Token süresi doldu ya da doğrulama hatası",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "404", description = "Koltuk bulunamadı ya da yetki yok",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "409", description = "Bu gün zaten binildi ya da idempotency çakışması",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @PostMapping("/seat-assignments/{seatAssignmentId}/boardings")
+    public ResponseEntity<SuccessDataResult<BoardingEventDto>> markSeatBoarding(
+            @PathVariable UUID seatAssignmentId, @RequestBody @Valid SeatBoardingDto request) {
+        return ResponseEntity.ok(new SuccessDataResult<>(transportService.markSeatBoarding(seatAssignmentId, request),
+                TransportMessages.BOARDING_RECORDED, HttpStatus.OK));
+    }
+
+    @Operation(summary = "Servis biniş listesi",
+            description = "İlan sahibi ya da şirket yetkilisi; her koltuk için son olay ve boarded bayrağı. "
+                    + "Yetkisiz 404.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Biniş listesi döndürüldü"),
+            @ApiResponse(responseCode = "404", description = "Servis bulunamadı ya da yetki yok",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @GetMapping("/shuttles/{shuttleId}/boardings")
+    public ResponseEntity<SuccessDataResult<List<ShuttleBoardingRowDto>>> listBoardings(@PathVariable UUID shuttleId) {
+        return ResponseEntity.ok(new SuccessDataResult<>(transportService.listBoardings(shuttleId),
+                TransportMessages.BOARDINGS_RETRIEVED, HttpStatus.OK));
     }
 }

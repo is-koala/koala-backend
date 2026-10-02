@@ -4,18 +4,25 @@ import com.exskylab.koala.business.abstracts.AddressService;
 import com.exskylab.koala.business.abstracts.NotificationService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.TransportService;
+import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.constants.JobAssignmentMessages;
 import com.exskylab.koala.core.constants.JobMessages;
 import com.exskylab.koala.core.constants.TransportMessages;
+import com.exskylab.koala.core.dtos.jobAssignment.response.AdminTimelineEventDto;
 import com.exskylab.koala.core.dtos.notification.request.SendInAppDto;
 import com.exskylab.koala.core.dtos.notification.request.SendPushToUserDto;
+import com.exskylab.koala.core.dtos.transport.request.SeatBoardingDto;
 import com.exskylab.koala.core.dtos.transport.request.SeatSelectionDto;
+import com.exskylab.koala.core.dtos.transport.request.ShuttleBoardingDto;
 import com.exskylab.koala.core.dtos.transport.request.ShuttleStopWriteDto;
 import com.exskylab.koala.core.dtos.transport.request.ShuttleWriteDto;
 import com.exskylab.koala.core.dtos.transport.request.TransportPlanWriteDto;
 import com.exskylab.koala.core.dtos.transport.response.AssignmentTransportDto;
+import com.exskylab.koala.core.dtos.transport.response.BoardingEventDto;
+import com.exskylab.koala.core.dtos.transport.response.BoardingQrDto;
 import com.exskylab.koala.core.dtos.transport.response.JobTransportDto;
 import com.exskylab.koala.core.dtos.transport.response.PublicShuttleDto;
+import com.exskylab.koala.core.dtos.transport.response.ShuttleBoardingRowDto;
 import com.exskylab.koala.core.dtos.transport.response.ShuttleDto;
 import com.exskylab.koala.core.dtos.transport.response.ShuttleStopDto;
 import com.exskylab.koala.core.dtos.transport.response.TransportPlanDto;
@@ -23,20 +30,30 @@ import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
+import com.exskylab.koala.core.helpers.BoardingTokens;
 import com.exskylab.koala.core.helpers.Concealment;
 import com.exskylab.koala.core.helpers.ConstraintViolations;
+import com.exskylab.koala.core.helpers.DisplayNames;
+import com.exskylab.koala.core.helpers.GeoDistance;
 import com.exskylab.koala.core.helpers.JobAddressVisibility;
 import com.exskylab.koala.core.helpers.JobEditors;
 import com.exskylab.koala.core.helpers.MessageResolver;
+import com.exskylab.koala.core.helpers.TimesheetEventPolicy;
 import com.exskylab.koala.core.mappers.TransportMapper;
+import com.exskylab.koala.core.properties.TransportBoardingProperties;
 import com.exskylab.koala.core.properties.TransportReminderProperties;
+import com.exskylab.koala.dataAccess.BoardingEventDao;
 import com.exskylab.koala.dataAccess.JobAssignmentDao;
 import com.exskylab.koala.dataAccess.JobDao;
 import com.exskylab.koala.dataAccess.SeatAssignmentDao;
 import com.exskylab.koala.dataAccess.ShuttleDao;
 import com.exskylab.koala.dataAccess.ShuttleStopDao;
 import com.exskylab.koala.dataAccess.TransportPlanDao;
+import com.exskylab.koala.entities.Address;
 import com.exskylab.koala.entities.AssignmentStatus;
+import com.exskylab.koala.entities.BoardingEvent;
+import com.exskylab.koala.entities.BoardingKind;
+import com.exskylab.koala.entities.BoardingSource;
 import com.exskylab.koala.entities.CancellationParty;
 import com.exskylab.koala.entities.DispatchPriority;
 import com.exskylab.koala.entities.Job;
@@ -46,6 +63,8 @@ import com.exskylab.koala.entities.NotificationTargetType;
 import com.exskylab.koala.entities.SeatAssignment;
 import com.exskylab.koala.entities.Shuttle;
 import com.exskylab.koala.entities.ShuttleStop;
+import com.exskylab.koala.entities.TimesheetPlausibilityFlag;
+import com.exskylab.koala.entities.TransportDirection;
 import com.exskylab.koala.entities.TransportMethod;
 import com.exskylab.koala.entities.TransportPlan;
 import com.exskylab.koala.entities.User;
@@ -55,7 +74,10 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.security.SecureRandom;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -64,6 +86,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -71,9 +94,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -113,6 +138,11 @@ public class TransportManager implements TransportService {
     private final MessageResolver messageResolver;
     private final TransportMapper transportMapper;
     private final TransportReminderProperties reminderProperties;
+    private final BoardingEventDao boardingEventDao;
+    private final UserService userService;
+    private final Clock clock;
+    private final TimesheetEventPolicy timesheetEventPolicy;
+    private final TransportBoardingProperties boardingProperties;
     private final JobAddressVisibility addressVisibility = new JobAddressVisibility();
 
     public TransportManager(TransportPlanDao transportPlanDao, ShuttleDao shuttleDao, ShuttleStopDao shuttleStopDao,
@@ -120,7 +150,9 @@ public class TransportManager implements TransportService {
                             SecurityService securityService, JobEditors jobEditors,
                             AddressService addressService, AssignmentParticipants participants,
                             NotificationService notificationService, MessageResolver messageResolver,
-                            TransportMapper transportMapper, TransportReminderProperties reminderProperties) {
+                            TransportMapper transportMapper, TransportReminderProperties reminderProperties,
+                            BoardingEventDao boardingEventDao, UserService userService, Clock clock,
+                            TimesheetEventPolicy timesheetEventPolicy, TransportBoardingProperties boardingProperties) {
         this.transportPlanDao = transportPlanDao;
         this.shuttleDao = shuttleDao;
         this.shuttleStopDao = shuttleStopDao;
@@ -135,6 +167,11 @@ public class TransportManager implements TransportService {
         this.messageResolver = messageResolver;
         this.transportMapper = transportMapper;
         this.reminderProperties = reminderProperties;
+        this.boardingEventDao = boardingEventDao;
+        this.userService = userService;
+        this.clock = clock;
+        this.timesheetEventPolicy = timesheetEventPolicy;
+        this.boardingProperties = boardingProperties;
     }
 
     @Override
@@ -306,6 +343,8 @@ public class TransportManager implements TransportService {
         seats.forEach(seat -> {
             seat.setEveningReminderSentAt(null);
             seat.setDepartureReminderSentAt(null);
+            seat.setBoardingReminderSentAt(null);
+            seat.setNotBoardedNoticeSentAt(null);
         });
         seatAssignmentDao.saveAll(seats);
     }
@@ -384,6 +423,8 @@ public class TransportManager implements TransportService {
         if (changed) {
             seat.setEveningReminderSentAt(null);
             seat.setDepartureReminderSentAt(null);
+            seat.setBoardingReminderSentAt(null);
+            seat.setNotBoardedNoticeSentAt(null);
         }
         try {
             seatAssignmentDao.saveAndFlush(seat);
@@ -463,6 +504,150 @@ public class TransportManager implements TransportService {
 
     @Override
     @Transactional(readOnly = true)
+    public BoardingQrDto issueShuttleQr(UUID shuttleId, boolean staticQr) {
+        Shuttle shuttle = requireShuttleEditor(shuttleId);
+        Instant now = clock.instant();
+        Duration ttl = boardingProperties.getTokenTtl();
+        String token = BoardingTokens.mintShuttle(shuttle.getQrSecret(), shuttle.getId(), now, ttl, staticQr);
+        Instant expiresAt = staticQr ? null : rotatingWindowEnd(now, ttl);
+        return new BoardingQrDto(token, staticQr, expiresAt, "koala://boarding/" + shuttle.getId() + "?token=" + token);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BoardingQrDto issueWorkerQr(UUID assignmentId) {
+        JobAssignment assignment = requireParty(assignmentId);
+        UUID actorId = securityService.getAuthenticatedUserId();
+        if (!assignment.getWorker().getId().equals(actorId)) {
+            throw Concealment.notFound(JobAssignmentMessages.NOT_FOUND, actorId, assignmentId,
+                    "only the worker may issue a boarding QR");
+        }
+        List<SeatAssignment> seats = seatAssignmentDao.findAllByJobAssignmentIdIn(List.of(assignmentId));
+        if (seats.isEmpty()) {
+            throw new ConflictException(TransportMessages.SEAT_NOT_SELECTED);
+        }
+        SeatAssignment chosen = seats.stream()
+                .filter(candidate -> candidate.getDirection() == TransportDirection.OUTBOUND)
+                .findFirst()
+                .orElse(seats.getFirst());
+        SeatAssignment seat = seatAssignmentDao.findWithDetailsById(chosen.getId())
+                .orElseThrow(() -> new ConflictException(TransportMessages.SEAT_NOT_SELECTED));
+        Instant now = clock.instant();
+        Duration ttl = boardingProperties.getTokenTtl();
+        String token = BoardingTokens.mintWorker(seat.getShuttle().getQrSecret(), seat.getId(), now, ttl);
+        return new BoardingQrDto(token, false, rotatingWindowEnd(now, ttl),
+                "koala://boarding/seat/" + seat.getId() + "?token=" + token);
+    }
+
+    @Override
+    @Transactional
+    public BoardingEventDto boardOnShuttle(UUID shuttleId, ShuttleBoardingDto request) {
+        UUID actorId = securityService.getAuthenticatedUserId();
+        SeatAssignment seat = requireWorkerSeatOnShuttle(shuttleId, actorId);
+        if (!SEAT_STATUSES.contains(seat.getJobAssignment().getStatus())) {
+            throw new ConflictException(TransportMessages.ASSIGNMENT_NOT_ACTIVE);
+        }
+        BoardingTokens.Verified verified;
+        try {
+            verified = BoardingTokens.verifyShuttle(seat.getShuttle().getQrSecret(), shuttleId, request.getToken(),
+                    clock.instant(), boardingProperties.getTokenTtl());
+        } catch (BoardingTokens.InvalidToken exception) {
+            throw Concealment.notFound(TransportMessages.SHUTTLE_NOT_FOUND, actorId, shuttleId,
+                    "boarding token is not valid for this shuttle");
+        } catch (BoardingTokens.ExpiredToken exception) {
+            throw new ValidationException(TransportMessages.TOKEN_EXPIRED);
+        }
+        return recordBoarding(seat, BoardingKind.BOARDED, BoardingSource.WORKER_SCANNED_SHUTTLE_QR,
+                request.getCapturedAt(), request.getLatitude(), request.getLongitude(), request.getClientEventId(),
+                verified.staticQr(), actorId);
+    }
+
+    @Override
+    @Transactional
+    public BoardingEventDto markSeatBoarding(UUID seatAssignmentId, SeatBoardingDto request) {
+        SeatAssignment seat = requireSeatEditor(seatAssignmentId);
+        UUID actorId = securityService.getAuthenticatedUserId();
+        if (!SEAT_STATUSES.contains(seat.getJobAssignment().getStatus())) {
+            throw new ConflictException(TransportMessages.ASSIGNMENT_NOT_ACTIVE);
+        }
+        BoardingKind kind = request.getKind() == null ? BoardingKind.BOARDED : request.getKind();
+        BoardingSource source = BoardingSource.EMPLOYER_MARKED;
+        boolean staticQr = false;
+        if (request.getToken() != null && !request.getToken().isBlank()) {
+            try {
+                BoardingTokens.verifyWorker(seat.getShuttle().getQrSecret(), seat.getId(), request.getToken(),
+                        clock.instant(), boardingProperties.getTokenTtl());
+            } catch (BoardingTokens.InvalidToken exception) {
+                throw Concealment.notFound(TransportMessages.SEAT_ASSIGNMENT_NOT_FOUND, actorId, seatAssignmentId,
+                        "worker boarding token is not valid for this seat");
+            } catch (BoardingTokens.ExpiredToken exception) {
+                throw new ValidationException(TransportMessages.TOKEN_EXPIRED);
+            }
+            kind = BoardingKind.BOARDED;
+            source = BoardingSource.EMPLOYER_SCANNED_WORKER_QR;
+        }
+        Instant capturedAt = request.getCapturedAt() == null ? clock.instant() : request.getCapturedAt();
+        return recordBoarding(seat, kind, source, capturedAt, request.getLatitude(), request.getLongitude(),
+                request.getClientEventId(), staticQr, actorId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ShuttleBoardingRowDto> listBoardings(UUID shuttleId) {
+        requireShuttleEditor(shuttleId);
+        List<SeatAssignment> seats = seatAssignmentDao.findAllWithAssignmentByShuttleId(shuttleId);
+        if (seats.isEmpty()) {
+            return List.of();
+        }
+        List<UUID> seatIds = seats.stream().map(SeatAssignment::getId).toList();
+        Map<UUID, BoardingEvent> lastBySeat = new LinkedHashMap<>();
+        for (BoardingEvent event : boardingEventDao.findAllBySeatAssignmentIdInOrderByOccurredAtDescIdDesc(seatIds)) {
+            lastBySeat.putIfAbsent(event.getSeatAssignment().getId(), event);
+        }
+        List<UUID> workerIds = seats.stream()
+                .map(seat -> seat.getJobAssignment().getWorker().getId())
+                .distinct()
+                .toList();
+        Map<UUID, User> workers = userService.getAllByIdIn(workerIds).stream()
+                .collect(Collectors.toMap(User::getId, Function.identity()));
+        List<ShuttleBoardingRowDto> rows = new ArrayList<>();
+        for (SeatAssignment seat : seats) {
+            UUID workerId = seat.getJobAssignment().getWorker().getId();
+            User worker = workers.get(workerId);
+            BoardingEvent last = lastBySeat.get(seat.getId());
+            BoardingEventDto lastDto = last == null ? null
+                    : transportMapper.toBoardingEventDto(last, seat.getShuttle().getId());
+            rows.add(transportMapper.toShuttleBoardingRowDto(seat, workerId,
+                    worker == null ? null : worker.getFirstName(),
+                    worker == null ? null : worker.getLastName(),
+                    lastDto, last != null && last.getKind() == BoardingKind.BOARDED));
+        }
+        return rows;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AdminTimelineEventDto> timelineForStaff(UUID assignmentId) {
+        List<SeatAssignment> seats = seatAssignmentDao.findAllByJobAssignmentIdIn(List.of(assignmentId));
+        Map<UUID, UUID> shuttleBySeat = seats.stream()
+                .collect(Collectors.toMap(SeatAssignment::getId, seat -> seat.getShuttle().getId()));
+        List<AdminTimelineEventDto> events = new ArrayList<>();
+        for (SeatAssignment seat : seats) {
+            events.add(transportMapper.toSeatTimelineEvent(seat));
+        }
+        for (BoardingEvent event : boardingEventDao.findAllBySeatAssignment_JobAssignment_IdOrderByOccurredAtAsc(
+                assignmentId)) {
+            events.add(transportMapper.toBoardingTimelineEvent(event,
+                    shuttleBySeat.get(event.getSeatAssignment().getId())));
+        }
+        events.sort(Comparator.comparing(AdminTimelineEventDto::at)
+                .thenComparing(AdminTimelineEventDto::type)
+                .thenComparing(event -> event.id().toString()));
+        return events;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<UUID> findEveningReminderDueIds(Instant now) {
         ZonedDateTime local = now.atZone(reminderProperties.getZoneId());
         if (local.toLocalTime().isBefore(reminderProperties.getEveningAt())) {
@@ -490,7 +675,8 @@ public class TransportManager implements TransportService {
         if (seat == null || seat.getEveningReminderSentAt() != null) {
             return false;
         }
-        String body = reminderBody(seat, TransportMessages.REMINDER_EVENING);
+        String body = reminderBody(seat, TransportMessages.REMINDER_EVENING,
+                reminderProperties.getDepartureLeadMinutes());
         notifyWorker(seat.getJobAssignment(), body, reminderPayload(seat, "SHUTTLE_REMINDER_EVENING"));
         seat.setEveningReminderSentAt(now);
         seatAssignmentDao.save(seat);
@@ -504,20 +690,80 @@ public class TransportManager implements TransportService {
         if (seat == null || seat.getDepartureReminderSentAt() != null) {
             return false;
         }
-        String body = reminderBody(seat, TransportMessages.REMINDER_DEPARTURE);
+        String body = reminderBody(seat, TransportMessages.REMINDER_DEPARTURE,
+                reminderProperties.getDepartureLeadMinutes());
         notifyWorker(seat.getJobAssignment(), body, reminderPayload(seat, "SHUTTLE_REMINDER_DEPARTURE"));
         seat.setDepartureReminderSentAt(now);
         seatAssignmentDao.save(seat);
         return true;
     }
 
-    private String reminderBody(SeatAssignment seat, String key) {
+    @Override
+    @Transactional(readOnly = true)
+    public List<UUID> findBoardingReminderDueIds(Instant now) {
+        Instant from = now;
+        Instant to = now.plus(Duration.ofMinutes(reminderProperties.getBoardingLeadMinutes()));
+        return seatAssignmentDao.findBoardingReminderDueIds(from, to, SEAT_STATUSES,
+                PageRequest.of(0, reminderProperties.getBatchSize()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UUID> findNotBoardedNoticeDueIds(Instant now) {
+        Instant cutoff = now.minus(Duration.ofMinutes(reminderProperties.getNotBoardedAfterMinutes()));
+        return seatAssignmentDao.findNotBoardedNoticeDueIds(cutoff, SEAT_STATUSES, BoardingKind.BOARDED,
+                PageRequest.of(0, reminderProperties.getBatchSize()));
+    }
+
+    @Override
+    @Transactional
+    public boolean sendBoardingReminder(UUID seatId, Instant now) {
+        SeatAssignment seat = seatAssignmentDao.findWithDetailsById(seatId).orElse(null);
+        if (seat == null || seat.getBoardingReminderSentAt() != null) {
+            return false;
+        }
+        if (alreadyBoarded(seat, boardingDayOf(seat))) {
+            seat.setBoardingReminderSentAt(now);
+            seatAssignmentDao.save(seat);
+            return false;
+        }
+        String body = reminderBody(seat, TransportMessages.REMINDER_BOARDING,
+                reminderProperties.getBoardingLeadMinutes());
+        notifyWorker(seat.getJobAssignment(), body, reminderPayload(seat, "SHUTTLE_REMINDER_BOARDING"));
+        seat.setBoardingReminderSentAt(now);
+        seatAssignmentDao.save(seat);
+        return true;
+    }
+
+    @Override
+    @Transactional
+    public boolean sendNotBoardedNotice(UUID seatId, Instant now) {
+        SeatAssignment seat = seatAssignmentDao.findWithDetailsById(seatId).orElse(null);
+        if (seat == null || seat.getNotBoardedNoticeSentAt() != null) {
+            return false;
+        }
+        if (alreadyBoarded(seat, boardingDayOf(seat))) {
+            seat.setNotBoardedNoticeSentAt(now);
+            seatAssignmentDao.save(seat);
+            return false;
+        }
+        JobAssignment assignment = seat.getJobAssignment();
+        User employer = userService.getReference(assignment.getJob().getCreator().getId());
+        String workerName = DisplayNames.of(assignment.getWorker().getFirstName(),
+                assignment.getWorker().getLastName());
+        String body = messageResolver.format(TransportMessages.NOTICE_NOT_BOARDED, REMINDER_LOCALE, workerName);
+        notifyUser(employer, assignment, body, reminderPayload(seat, "SHUTTLE_NOTICE_NOT_BOARDED"));
+        seat.setNotBoardedNoticeSentAt(now);
+        seatAssignmentDao.save(seat);
+        return true;
+    }
+
+    private String reminderBody(SeatAssignment seat, String key, int leadMinutes) {
         ShuttleStop stop = seat.getStop();
         String time = WALL_TIME.format(stop.getScheduledAt().atZone(reminderProperties.getZoneId()));
         String stopName = stop.getLabel() != null ? stop.getLabel()
                 : stop.getAddress().getDistrict() != null ? stop.getAddress().getDistrict().getName() : "";
-        String body = messageResolver.format(key, REMINDER_LOCALE, time, stopName,
-                reminderProperties.getDepartureLeadMinutes());
+        String body = messageResolver.format(key, REMINDER_LOCALE, time, stopName, leadMinutes);
         String plate = seat.getShuttle().getPlate();
         return plate == null ? body : body + " (" + plate + ")";
     }
@@ -556,11 +802,14 @@ public class TransportManager implements TransportService {
     }
 
     private void notifyWorker(JobAssignment assignment, String body, Map<String, String> data) {
-        User worker = assignment.getWorker();
+        notifyUser(assignment.getWorker(), assignment, body, data);
+    }
+
+    private void notifyUser(User recipient, JobAssignment assignment, String body, Map<String, String> data) {
         String title = assignment.getJob().getTitle();
         try {
             SendInAppDto inApp = new SendInAppDto();
-            inApp.setRecipient(worker);
+            inApp.setRecipient(recipient);
             inApp.setCategory(NotificationCategory.TRANSPORT);
             inApp.setSubject(title);
             inApp.setBody(body);
@@ -568,21 +817,135 @@ public class TransportManager implements TransportService {
             inApp.setTargetId(assignment.getId());
             notificationService.sendInApp(inApp);
         } catch (Exception exception) {
-            log.warn("Transport in-app notice could not be recorded for worker {} on assignment {}: {}",
-                    worker.getId(), assignment.getId(), exception.getMessage());
+            log.warn("Transport in-app notice could not be recorded for user {} on assignment {}: {}",
+                    recipient.getId(), assignment.getId(), exception.getMessage());
         }
         try {
             SendPushToUserDto push = new SendPushToUserDto();
-            push.setRecipient(worker);
+            push.setRecipient(recipient);
             push.setCategory(NotificationCategory.TRANSPORT);
             push.setTitle(title);
             push.setBody(body);
             push.setDataPayload(data);
             notificationService.sendPushToUser(push, DispatchPriority.NORMAL, true);
         } catch (Exception exception) {
-            log.warn("Transport push could not be queued for worker {} on assignment {}: {}",
-                    worker.getId(), assignment.getId(), exception.getMessage());
+            log.warn("Transport push could not be queued for user {} on assignment {}: {}",
+                    recipient.getId(), assignment.getId(), exception.getMessage());
         }
+    }
+
+    private BoardingEventDto recordBoarding(SeatAssignment seat, BoardingKind kind, BoardingSource source,
+                                            Instant capturedAt, BigDecimal latitude, BigDecimal longitude,
+                                            UUID clientEventId, boolean staticQr, UUID actorId) {
+        BigDecimal lat = normalizeCoordinate(latitude);
+        BigDecimal lng = normalizeCoordinate(longitude);
+        if (clientEventId != null) {
+            Optional<BoardingEvent> existing = boardingEventDao.findByClientEventId(clientEventId);
+            if (existing.isPresent()) {
+                BoardingEvent stored = existing.get();
+                requireMatchingPayload(stored, kind, capturedAt, lat, lng);
+                return transportMapper.toBoardingEventDto(stored, seat.getShuttle().getId());
+            }
+        }
+        LocalDate boardingDay = boardingDayOf(seat);
+        Optional<BoardingEvent> boarded = boardingEventDao
+                .findFirstBySeatAssignmentIdAndKindAndBoardingDayOrderByOccurredAtAsc(
+                        seat.getId(), BoardingKind.BOARDED, boardingDay);
+        if (kind == BoardingKind.BOARDED && boarded.isPresent()) {
+            BoardingEvent stored = boarded.get();
+            requireMatchingPayload(stored, kind, capturedAt, lat, lng);
+            return transportMapper.toBoardingEventDto(stored, seat.getShuttle().getId());
+        }
+        if (kind == BoardingKind.NO_SHOW && boarded.isPresent()) {
+            throw new ConflictException(TransportMessages.ALREADY_BOARDED);
+        }
+        Instant now = clock.instant();
+        JobAssignment assignment = seat.getJobAssignment();
+        TimesheetEventPolicy.Outcome outcome = timesheetEventPolicy.reconcile(capturedAt, now,
+                assignment.getJob().getStartDateTime(), assignment.getJob().getEndDateTime(), null);
+        EnumSet<TimesheetPlausibilityFlag> flags = EnumSet.noneOf(TimesheetPlausibilityFlag.class);
+        flags.addAll(outcome.flags());
+        Address stopAddress = seat.getStop().getAddress();
+        if (lat != null && lng != null && stopAddress.getLatitude() != null && stopAddress.getLongitude() != null
+                && GeoDistance.metersBetween(lat, lng, stopAddress.getLatitude(), stopAddress.getLongitude())
+                > boardingProperties.getFarFromStopMeters()) {
+            flags.add(TimesheetPlausibilityFlag.FAR_FROM_STOP);
+        }
+        if (staticQr) {
+            flags.add(TimesheetPlausibilityFlag.STATIC_QR);
+        }
+        BoardingEvent event = new BoardingEvent();
+        event.setSeatAssignment(seat);
+        event.setKind(kind);
+        event.setSource(source);
+        event.setOccurredAt(capturedAt == null ? now : outcome.effectiveAt());
+        event.setCapturedAt(capturedAt);
+        event.setBoardingDay(boardingDay);
+        event.setLatitude(lat);
+        event.setLongitude(lng);
+        event.setFlags(flags);
+        event.setClientEventId(clientEventId);
+        event.setRecordedBy(userService.getReference(actorId));
+        try {
+            return transportMapper.toBoardingEventDto(boardingEventDao.saveAndFlush(event),
+                    seat.getShuttle().getId());
+        } catch (DataIntegrityViolationException exception) {
+            if (ConstraintViolations.named(exception, "uk_boarding_events_client_event_active")) {
+                BoardingEvent stored = boardingEventDao.findByClientEventId(clientEventId)
+                        .orElseThrow(() -> exception);
+                requireMatchingPayload(stored, kind, capturedAt, lat, lng);
+                return transportMapper.toBoardingEventDto(stored, seat.getShuttle().getId());
+            }
+            if (ConstraintViolations.named(exception, "uk_boarding_events_boarded_seat_day")) {
+                BoardingEvent stored = boardingEventDao
+                        .findFirstBySeatAssignmentIdAndKindAndBoardingDayOrderByOccurredAtAsc(
+                                seat.getId(), BoardingKind.BOARDED, boardingDay)
+                        .orElseThrow(() -> exception);
+                requireMatchingPayload(stored, kind, capturedAt, lat, lng);
+                return transportMapper.toBoardingEventDto(stored, seat.getShuttle().getId());
+            }
+            throw exception;
+        }
+    }
+
+    private void requireMatchingPayload(BoardingEvent stored, BoardingKind kind, Instant capturedAt,
+                                       BigDecimal latitude, BigDecimal longitude) {
+        if (stored.getKind() != kind || !Objects.equals(stored.getCapturedAt(), capturedAt)
+                || !coordinatesEqual(stored.getLatitude(), latitude)
+                || !coordinatesEqual(stored.getLongitude(), longitude)) {
+            throw new ConflictException(clientEventConflict(stored) ? TransportMessages.IDEMPOTENCY_CONFLICT
+                    : TransportMessages.ALREADY_BOARDED);
+        }
+    }
+
+    private static boolean clientEventConflict(BoardingEvent stored) {
+        return stored.getClientEventId() != null;
+    }
+
+    private static boolean coordinatesEqual(BigDecimal left, BigDecimal right) {
+        if (left == null || right == null) {
+            return left == right;
+        }
+        return left.compareTo(right) == 0;
+    }
+
+    private static BigDecimal normalizeCoordinate(BigDecimal value) {
+        return value == null ? null : value.setScale(6, RoundingMode.HALF_UP);
+    }
+
+    private LocalDate boardingDayOf(SeatAssignment seat) {
+        return seat.getStop().getScheduledAt().atZone(reminderProperties.getZoneId()).toLocalDate();
+    }
+
+    private boolean alreadyBoarded(SeatAssignment seat, LocalDate boardingDay) {
+        return boardingEventDao.findFirstBySeatAssignmentIdAndKindAndBoardingDayOrderByOccurredAtAsc(
+                seat.getId(), BoardingKind.BOARDED, boardingDay).isPresent();
+    }
+
+    private static Instant rotatingWindowEnd(Instant now, Duration ttl) {
+        long seconds = Math.max(1L, ttl.toSeconds());
+        long window = Math.floorDiv(now.getEpochSecond(), seconds);
+        return Instant.ofEpochSecond(Math.multiplyExact(window + 1, seconds));
     }
 
     private TransportPlan requirePlan(UUID jobId) {
@@ -625,6 +988,38 @@ public class TransportManager implements TransportService {
                     "not a party of the assignment");
         }
         return assignment;
+    }
+
+    private Shuttle requireShuttleEditor(UUID shuttleId) {
+        UUID actorId = securityService.getAuthenticatedUserId();
+        Shuttle shuttle = shuttleDao.findWithPlanJobById(shuttleId).orElse(null);
+        if (shuttle == null || !jobEditors.isEditor(shuttle.getPlan().getJob(), actorId)) {
+            throw Concealment.notFound(TransportMessages.SHUTTLE_NOT_FOUND, actorId, shuttleId,
+                    "shuttle is missing or caller is not the employer");
+        }
+        return shuttle;
+    }
+
+    private SeatAssignment requireSeatEditor(UUID seatAssignmentId) {
+        UUID actorId = securityService.getAuthenticatedUserId();
+        SeatAssignment seat = seatAssignmentDao.findWithDetailsById(seatAssignmentId).orElse(null);
+        if (seat == null || !jobEditors.isEditor(seat.getJobAssignment().getJob(), actorId)) {
+            throw Concealment.notFound(TransportMessages.SEAT_ASSIGNMENT_NOT_FOUND, actorId, seatAssignmentId,
+                    "seat assignment is missing or caller is not the employer");
+        }
+        return seat;
+    }
+
+    private SeatAssignment requireWorkerSeatOnShuttle(UUID shuttleId, UUID workerId) {
+        List<SeatAssignment> seats = seatAssignmentDao.findAllByShuttleIdAndJobAssignment_Worker_Id(
+                shuttleId, workerId);
+        if (seats.isEmpty()) {
+            throw Concealment.notFound(TransportMessages.SHUTTLE_NOT_FOUND, workerId, shuttleId,
+                    "worker has no seat on this shuttle");
+        }
+        return seatAssignmentDao.findWithDetailsById(seats.getFirst().getId())
+                .orElseThrow(() -> Concealment.notFound(TransportMessages.SHUTTLE_NOT_FOUND, workerId, shuttleId,
+                        "worker seat could not be loaded"));
     }
 
     private TransportPlanDto planDto(TransportPlan plan) {

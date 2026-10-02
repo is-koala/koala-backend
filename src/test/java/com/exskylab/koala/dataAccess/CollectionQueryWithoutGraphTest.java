@@ -152,6 +152,14 @@ class CollectionQueryWithoutGraphTest {
             // Reminder scheduler id lists; each seat is then loaded with its own graph (#297).
             "SeatAssignmentDao.findEveningReminderDueIds",
             "SeatAssignmentDao.findDepartureReminderDueIds",
+            "SeatAssignmentDao.findBoardingReminderDueIds",
+            "SeatAssignmentDao.findNotBoardedNoticeDueIds",
+            // Worker seat check on a shuttle: ids only, then the chosen row is loaded with its own graph (#298).
+            "SeatAssignmentDao.findAllByShuttleIdAndJobAssignment_Worker_Id",
+            // Last-event batch for the boarding list: mapper reads seatAssignment.id and recordedBy.id (proxy identifiers).
+            "BoardingEventDao.findAllBySeatAssignmentIdInOrderByOccurredAtDescIdDesc",
+            // Assignment timeline boarding rows: no graph; shuttle id comes from the already-loaded seats map (#298).
+            "BoardingEventDao.findAllBySeatAssignment_JobAssignment_IdOrderByOccurredAtAsc",
             // Job ids whose plan uses a shuttle, for the JobSummaryDto.hasShuttle badge (#297).
             "TransportPlanDao.findJobIdsWithMethod",
             // Staff payout detail renders the task row only; payment/jobAssignment proxies are never touched (#255).
