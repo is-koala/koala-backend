@@ -32,9 +32,8 @@ public class RatingSummaryManager implements RatingSummaryService {
     @Transactional(readOnly = true)
     public RatingFigures figuresOf(UUID userId) {
         return ratingSummaryDao.findByUserId(userId)
-                .map(summary -> new RatingFigures(
-                        summary.getAverageRating() == null ? BigDecimal.ZERO : summary.getAverageRating(),
-                        summary.getReviewCount()))
+                .filter(summary -> summary.getAverageRating() != null)
+                .map(summary -> new RatingFigures(summary.getAverageRating(), summary.getReviewCount()))
                 .orElse(RatingFigures.UNRATED);
     }
 

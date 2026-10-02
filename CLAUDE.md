@@ -1264,9 +1264,15 @@ kopya ya da `UserManager → ReviewService` bağımlılığı gerekecekti; ikinc
 yalnız `RatingSummaryDao`'ya bağlı, hiçbir servise değil; yani her yerden döngüsüz çağrılır. Üç işi var:
 `record(subject, rating)` (değerlendirme yazılınca biriktirir, `ReviewManager` çağırır), `findFor(userId)` (ham özet —
 `/users/{id}/rating-summary` özet yoksa `null` döner, rozet kuralı eşiği buradan okur) ve `figuresOf(userId)`
-(`RatingFigures(averageRating, reviewCount)`, özet yoksa ya da ortalama boşsa `0`/`0`). **Profil biçimi yalnız
-`figuresOf`'tan okunur**: `PublicProfileDto`, `EmployerStatsDto` ve `UserMeResponseDto` aynı metottan geçtiği için
-rakamlar birbirinden ayrışamaz. Yan kazanç: `BadgeManager→RatingSummaryDao` muafiyeti (§2ae) düştü — gerekçesi
+(`RatingFigures(averageRating, reviewCount)`; özet yoksa **ya da satırda ortalama boşsa** `UNRATED` = `0`/`0` —
+`average_rating` nullable sütun ve "sayı 2, ortalama 0" sahte bir sıfır yıldız olurdu). **Profil biçimi yalnız
+`figuresOf`'tan okunur**: `PublicProfileDto`, `EmployerStatsDto` ve `UserMeResponseDto` aynı metottan geçer.
+**Bu bir uzlaşma değil, test:** `RatingFiguresSingleSourceTest` (`AggregateBoundaryTest` kalıbı) `src/main` altında
+ham `getAverageRating`/`getReviewCount` okuyan ya da `RatingSummary`'yi eşleme kaynağı alan her sınıfı bulur ve
+gerekçeli üç yerle sınırlar: `RatingSummaryManager` (sahip), `BadgeManager` (rozet eşiği ham özete bakar, 0/0 orada
+yanlış cevap olurdu) ve `ReviewMapper` (`/rating-summary` ham özeti döndürür; MapStruct alanları üretilen kodda okur,
+kaynakta `RatingSummary` parametresi görünür). Yeni bir okuyucu listeye gerekçesiz eklenemez, bayat izin kırmızıya
+döner. Yan kazanç: `BadgeManager→RatingSummaryDao` muafiyeti (§2ae) düştü — gerekçesi
 "`ReviewManager` `BadgeService`'e bağlı" idi ve özet artık `ReviewManager`'da değil.
 
 **Anonim değerlendirme kararı ve gizlemenin mapper'da tek yerde oluşu §2am'de** ("Anonim değerlendirme — karar tersine döndü" ve devamı); aşağıdaki iki paragraf onun üzerine kurulu.
@@ -1510,9 +1516,13 @@ bırakıp anlatıyı silmek tutarsız olurdu. `storage_key` ve `checksum_sha256`
 `GET /reference/universities`, `/universities/{id}/faculties`, `/faculties/{id}/departments` — eğitim seçimi için referans veri, herkese açık.
 
 `GET /users/me` (ve `PATCH /users/me` yanıtındaki `user`) `averageRating`/`reviewCount` taşır (#329) — `PublicProfileDto`
-ile aynı sözleşme: özet yoksa `0`/`0`, istemci `reviewCount == 0` iken yıldız çizmez. Rakamlar
-`RatingSummaryService.figuresOf`'tan gelir (§2o), yani `/users/{id}` ve `/users/{id}/rating-summary` ile ayrışamaz;
-mobil "Profilim" ekranı ayrı `rating-summary` çağrısını bırakabilir. Uca tek bir `rating_summaries` okuması eklendi.
+ile aynı sözleşme: özet yoksa `0`/`0`, istemci `reviewCount == 0` iken yıldız çizmez. Dört uç **aynı
+`rating_summaries` satırını** okur; özet yokken biçimleri farklıdır: `/users/me`, `/users/{id}` ve
+`/users/{id}/employer-stats` `figuresOf` ile `0`/`0` döner, `/users/{id}/rating-summary` ise `findFor` ile ham satırı
+döndürür ve özet yokken `null`'dur (ortalaması boş bir satırda ham sayıyı ve `null` ortalamayı gösterir, profil
+biçimleri `0`/`0`). `PublicProfileIT` dördünü özet varken, yokken ve ortalaması boşken yan yana ölçüyor; `PATCH
+/users/me` yanıtı da aynı rakamları taşır. Mobil "Profilim" ekranı ayrı `rating-summary` çağrısını bırakabilir. Uca
+tek bir `rating_summaries` okuması eklendi.
 
 ## 2s. Kendi verim uçları ve yönetim
 
