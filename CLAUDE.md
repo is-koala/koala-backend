@@ -1460,7 +1460,20 @@ dosyayı okumak hâlâ meşru.
 **Adet sınırı satır kilidinin arkasında.** `attachEvidence` `findByIdForUpdate` ile uyuşmazlık satırını kilitliyor,
 sayımı ondan sonra yapıyor. Eşzamanlı iki yükleme sıraya giriyor; sınır `upload.max-evidence-per-dispute` (5).
 Boyut `upload.max-evidence-size-mb` (10), uzantı beyaz listesi `upload.evidence-extensions`
-(`pdf,png,jpg,jpeg,webp`).
+(`pdf,png,jpg,jpeg`).
+
+**WebP kabul edilmiyor; listedeki her görsel türünü sunucu hem okuyabilmeli hem yazabilmeli (#348).** İki liste
+(`upload.image-extensions`, `upload.evidence-extensions`) `webp` taşıyordu ama JDK 25'in `ImageIO`'su WebP okuyamıyor
+(yalnız jpg/png/gif/bmp/tiff/wbmp): her gerçek WebP `rejectOversizedCanvas`'ta `STORAGE_UNSUPPORTED_TYPE` alıyordu —
+liste bir şey vaat ediyor, kapı başka bir şey yapıyordu. Okuyucu eklemek (TwelveMonkeys) tek başına yetmez: görsel
+yolları metadata'yı **yeniden kodlayarak** siliyor (`ImageManager.removeMetadata`, aynı biçime yazar) ve WebP yazıcısı
+yok; WebP'yi kabul etmek onu JPEG/PNG'ye dönüştürmek demek, o ayrı bir ürün kararı. Kural artık testte:
+`UploadValidatorTest.everyImageTypeOnTheDefaultListsCanBeDecodedAndReEncoded` varsayılan listelerdeki her görsel
+uzantısı için `ImageIO`'da hem okuyucu hem yazıcı arar; listeye okuyamadığımız bir tür (HEIC, AVIF) eklenirse kırmızı.
+Hata kodu değişmedi (`STORAGE_UNSUPPORTED_TYPE`, istemciler buna bağlı); metni kabul edilen görsel türlerini söylüyor,
+OpenAPI'deki görsel uçlarının 400 açıklamaları `UploadDocs.IMAGE_TYPES` / `EVIDENCE_TYPES` sabitinden geliyor. Liste
+`upload.*` ayarıyla yine genişletilebilir, ama okuyucusu olmayan tür kapıda yine reddedilir. İstemci tarafı (mobil
+`EvidenceFormat`/`IdentityImageFormat`, web accept listesi) ayrı PR'larda.
 
 **İçerik tipi istemciden alınmıyor.** `Content-Type` başlığı sahtelenebilir (§2ab); saklanan tip uzantıdan
 `MediaTypeFactory` ile türetiliyor. Ayrıca `UploadValidator` kanıt için **baytlara bakıyor**: `pdf` iddia eden

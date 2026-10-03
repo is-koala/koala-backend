@@ -429,6 +429,30 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void imageUploadsDocumentThatOnlyPngAndJpegAreAccepted() throws Exception {
+        String imageTypes = "Görsel yalnız PNG ya da JPEG olabilir (png, jpg, jpeg); WebP, HEIC ve GIF";
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath("$.paths['/images'].post.responses.400.description")
+                        .value(containsString(imageTypes)))
+                .andExpect(jsonPath("$.paths['/users/me/profile-picture'].put.responses.400.description")
+                        .value(containsString(imageTypes)))
+                .andExpect(jsonPath("$.paths['/users/me/identity-documents'].post.responses.400.description")
+                        .value(containsString(imageTypes)))
+                .andExpect(jsonPath("$.paths['/companies'].post.responses.400.description")
+                        .value(containsString(imageTypes)))
+                .andExpect(jsonPath("$.paths['/companies/{companyId}/logo'].put.responses.400.description")
+                        .value(containsString(imageTypes)))
+                .andExpect(jsonPath("$.paths['/companies/{companyId}/images'].post.responses.400.description")
+                        .value(containsString(imageTypes)))
+                .andExpect(jsonPath("$.paths['/jobs/{jobId}/images'].post.responses.400.description")
+                        .value(containsString(imageTypes)))
+                .andExpect(jsonPath("$.paths['/admin/badges/{badgeId}/icon'].put.responses.400.description")
+                        .value(containsString(imageTypes)))
+                .andExpect(jsonPath("$.paths['/disputes/{disputeId}/evidence'].post.responses.400.description")
+                        .value(containsString("Kanıt PDF, PNG ya da JPEG olabilir (pdf, png, jpg, jpeg); WebP")));
+    }
+
+    @Test
     void addressWritesExposeOnlyTheCanonicalV2Contract() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(jsonPath("$.components.schemas.AddressWriteV2.properties.countryId").exists())

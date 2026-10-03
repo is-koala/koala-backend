@@ -15,6 +15,7 @@ import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.dtos.identity.response.IdentityReviewDto;
 import com.exskylab.koala.core.constants.JobMessages;
+import com.exskylab.koala.core.constants.UploadDocs;
 import com.exskylab.koala.core.constants.UserMessages;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
@@ -180,7 +181,7 @@ public class UsersController {
             description = "Görsel metadata temizlenerek depoya yazılır. İzin verilen uzantılar ve boyut sınırı upload ayarlarından gelir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Fotoğraf güncellendi"),
-            @ApiResponse(responseCode = "400", description = "Dosya boş ya da desteklenmeyen türde",
+            @ApiResponse(responseCode = "400", description = "Dosya boş ya da desteklenmeyen türde. " + UploadDocs.IMAGE_TYPES,
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "413", description = "Tek dosya 10 MiB ya da toplam multipart gövdesi 42 MiB sınırını aşıyor",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
@@ -233,7 +234,8 @@ public class UsersController {
                     + "kuyruğuna düşer. Çip kanıtı bu uçta yoktur; kimlik personel onayından sonra damgalanır.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "İnceleme kuyruğa alındı"),
-            @ApiResponse(responseCode = "400", description = "Dosya eksik, zaten doğrulanmış ya da bekleyen inceleme var",
+            @ApiResponse(responseCode = "400", description = "Dosya eksik ya da desteklenmeyen türde, zaten doğrulanmış "
+                    + "ya da bekleyen inceleme var. " + UploadDocs.IMAGE_TYPES,
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "413", description = "Tek dosya 10 MiB ya da toplam multipart gövdesi 42 MiB sınırını aşıyor",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))

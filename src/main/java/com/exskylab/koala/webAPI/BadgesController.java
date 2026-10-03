@@ -14,6 +14,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import com.exskylab.koala.business.abstracts.BadgeService;
 import com.exskylab.koala.core.constants.BadgeMessages;
+import com.exskylab.koala.core.constants.UploadDocs;
 import com.exskylab.koala.core.dtos.badge.request.SaveBadgeDto;
 import com.exskylab.koala.core.dtos.badge.response.BadgeAdminDto;
 import com.exskylab.koala.core.dtos.badge.response.BadgeDto;
@@ -124,7 +125,7 @@ public class BadgesController {
             description = "Görsel depoya yazılır ve yanıtlarda iconUrl olarak döner.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Görsel güncellendi"),
-            @ApiResponse(responseCode = "400", description = "Dosya desteklenmeyen türde",
+            @ApiResponse(responseCode = "400", description = "Dosya desteklenmeyen türde. " + UploadDocs.IMAGE_TYPES,
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "404", description = "Rozet bulunamadı",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),

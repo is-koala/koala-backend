@@ -26,6 +26,7 @@ import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
 import com.exskylab.koala.core.dtos.job.response.CompanyJobDto;
 import com.exskylab.koala.core.dtos.companyContact.response.CompanyContactDto;
 import com.exskylab.koala.core.constants.GalleryMessages;
+import com.exskylab.koala.core.constants.UploadDocs;
 import com.exskylab.koala.core.dtos.gallery.request.UpdateGalleryDto;
 import com.exskylab.koala.core.dtos.gallery.response.GalleryImageDto;
 import com.exskylab.koala.core.mappers.CompanyContactInvitationMapper;
@@ -75,7 +76,8 @@ public class CompaniesController {
             description = "Talebi oluşturan kullanıcı şirketin ADMIN yetkilisi olur. Şirket onaylanana kadar ilan yayınlayamaz. Kullanıcının kimliği doğrulanmış olmalıdır.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Şirket oluşturuldu, onay bekliyor"),
-            @ApiResponse(responseCode = "400", description = "Kimlik doğrulanmamış ya da alan doğrulaması başarısız",
+            @ApiResponse(responseCode = "400", description = "Kimlik doğrulanmamış, alan doğrulaması başarısız ya da logo "
+                    + "desteklenmeyen türde. " + UploadDocs.IMAGE_TYPES,
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "413", description = "Tek dosya 10 MiB ya da toplam multipart gövdesi 42 MiB sınırını aşıyor",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
@@ -240,7 +242,7 @@ public class CompaniesController {
             @ApiResponse(responseCode = "200", description = "Logo güncellendi"),
             @ApiResponse(responseCode = "404", description = "Şirket bulunamadı ya da yetki yok",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
-            @ApiResponse(responseCode = "400", description = "Dosya boş ya da desteklenmeyen türde",
+            @ApiResponse(responseCode = "400", description = "Dosya boş ya da desteklenmeyen türde. " + UploadDocs.IMAGE_TYPES,
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "413", description = "Tek dosya 10 MiB ya da toplam multipart gövdesi 42 MiB sınırını aşıyor",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
@@ -310,7 +312,8 @@ public class CompaniesController {
             description = "Yalnızca şirketin ADMIN yetkilisi ekleyebilir. İlk görsel kendiliğinden kapak olur.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Görsel eklendi"),
-            @ApiResponse(responseCode = "400", description = "Dosya boş, çok büyük ya da desteklenmeyen türde",
+            @ApiResponse(responseCode = "400", description = "Dosya boş, çok büyük ya da desteklenmeyen türde. "
+                    + UploadDocs.IMAGE_TYPES,
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "404", description = "Şirket bulunamadı ya da yetki yok",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
