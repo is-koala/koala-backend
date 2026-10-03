@@ -189,6 +189,9 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.components.schemas.PublicProfileDto.properties.completedJobCount").exists())
                 .andExpect(jsonPath("$.components.schemas.PublicProfileDto.properties.averageRating").exists())
                 .andExpect(jsonPath("$.components.schemas.PublicProfileDto.properties.reviewCount").exists())
+                .andExpect(jsonPath("$.components.schemas.UserMeResponseDto.properties.averageRating.description")
+                        .value(containsString("PublicProfileDto")))
+                .andExpect(jsonPath("$.components.schemas.UserMeResponseDto.properties.reviewCount").exists())
                 .andExpect(jsonPath("$.components.schemas.PublicProfileDto.properties.badges.items.$ref")
                         .value(containsString("BadgeDto")));
     }

@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
+import com.exskylab.koala.business.abstracts.RatingSummaryService;
 import com.exskylab.koala.business.abstracts.ReviewService;
 import com.exskylab.koala.core.constants.ReviewMessages;
 import com.exskylab.koala.core.dtos.common.PageDto;
@@ -34,10 +35,13 @@ import java.util.UUID;
 public class ReviewsController {
 
     private final ReviewService reviewService;
+    private final RatingSummaryService ratingSummaryService;
     private final ReviewMapper reviewMapper;
 
-    public ReviewsController(ReviewService reviewService, ReviewMapper reviewMapper) {
+    public ReviewsController(ReviewService reviewService, RatingSummaryService ratingSummaryService,
+                             ReviewMapper reviewMapper) {
         this.reviewService = reviewService;
+        this.ratingSummaryService = ratingSummaryService;
         this.reviewMapper = reviewMapper;
     }
 
@@ -92,7 +96,7 @@ public class ReviewsController {
     @GetMapping("/users/{userId}/rating-summary")
     public ResponseEntity<SuccessDataResult<RatingSummaryDto>> summary(@PathVariable UUID userId) {
         return ResponseEntity.ok(new SuccessDataResult<>(
-                reviewService.getSummaryFor(userId).map(reviewMapper::toRatingSummaryDto).orElse(null),
+                ratingSummaryService.findFor(userId).map(reviewMapper::toRatingSummaryDto).orElse(null),
                 ReviewMessages.LISTED, HttpStatus.OK));
     }
 }

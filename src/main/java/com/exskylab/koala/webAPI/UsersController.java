@@ -113,7 +113,7 @@ public class UsersController {
     }
 
     @Operation(summary = "Oturum sahibinin profili",
-            description = "İstemcinin yönlendirme kararı için gerekenleri taşır: employer, emailVerified, phoneVerified, identityVerified, roles, companies, educations, experiences, badges, maskedIban ve cvUrl. IBAN tam hâliyle dönmez.")
+            description = "İstemcinin yönlendirme kararı için gerekenleri taşır: employer, emailVerified, phoneVerified, identityVerified, roles, companies, educations, experiences, badges, maskedIban ve cvUrl. IBAN tam hâliyle dönmez. averageRating ve reviewCount kullanıcı hakkındaki değerlendirmelerin ortalaması ve sayısıdır; GET /users/{id} ve GET /users/{id}/employer-stats ile aynı kaynaktan okunur, değerlendirme yoksa 0/0 döner ve istemci reviewCount 0 iken puan çizmez.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Profil döndürüldü")
     })

@@ -71,7 +71,8 @@ class IdentityVerificationRulesTest {
                 identityProperties, trustStore, identityChallengeService,
                 mock(PhoneVerificationService.class), badgeService, mock(BadgeMapper.class),
                 new com.exskylab.koala.core.helpers.PageableSanitizer(), notifications,
-                mock(com.exskylab.koala.business.abstracts.PasswordResetTokenService.class));
+                mock(com.exskylab.koala.business.abstracts.PasswordResetTokenService.class),
+                mock(com.exskylab.koala.business.abstracts.RatingSummaryService.class));
 
         when(userDao.save(any())).thenAnswer(i -> i.getArgument(0));
     }

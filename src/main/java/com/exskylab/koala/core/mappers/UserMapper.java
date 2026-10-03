@@ -6,6 +6,7 @@ import com.exskylab.koala.core.dtos.user.response.UserMeResponseDto;
 import com.exskylab.koala.entities.CompanyContact;
 import com.exskylab.koala.entities.User;
 import com.exskylab.koala.core.helpers.MediaUrlResolver;
+import com.exskylab.koala.core.helpers.RatingFigures;
 import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -26,7 +27,10 @@ public interface UserMapper {
     @Mapping(target = "maskedTcIdentityNumber",
              expression = "java(com.exskylab.koala.core.helpers.LogMasks.maskedIdentityNumber(user.getTcIdentityNumber()))")
     @Mapping(target = "badges", source = "badges")
-    UserMeResponseDto toUserMeResponseDto(User user, String maskedIban, java.util.List<com.exskylab.koala.core.dtos.badge.response.BadgeDto> badges);
+    @Mapping(target = "averageRating", source = "rating.averageRating")
+    @Mapping(target = "reviewCount", source = "rating.reviewCount")
+    UserMeResponseDto toUserMeResponseDto(User user, String maskedIban, java.util.List<com.exskylab.koala.core.dtos.badge.response.BadgeDto> badges,
+                                          RatingFigures rating);
 
     @Mapping(target = "companyId", source = "company.id")
     @Mapping(target = "companyName", source = "company.name")

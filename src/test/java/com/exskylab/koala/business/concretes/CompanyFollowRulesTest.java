@@ -3,13 +3,13 @@ package com.exskylab.koala.business.concretes;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.JobService;
 import com.exskylab.koala.business.abstracts.NotificationService;
-import com.exskylab.koala.business.abstracts.ReviewService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.dtos.statistics.response.EmployerStatsDto;
 import com.exskylab.koala.core.helpers.MediaUrlResolver;
 import com.exskylab.koala.core.helpers.StorageUrlResolver;
 import com.exskylab.koala.core.properties.CompanyFollowProperties;
 import com.exskylab.koala.dataAccess.CompanyFollowDao;
+import com.exskylab.koala.dataAccess.RatingSummaryDao;
 import com.exskylab.koala.entities.Company;
 import com.exskylab.koala.entities.CompanyFollow;
 import com.exskylab.koala.entities.Job;
@@ -128,7 +128,7 @@ class CompanyFollowRulesTest {
     void employerStatisticsFallBackToZeroWithoutReviews() {
         JobService jobService = mock(JobService.class);
         JobAssignmentService jobAssignmentService = mock(JobAssignmentService.class);
-        ReviewService reviewService = mock(ReviewService.class);
+        RatingSummaryDao ratingSummaryDao = mock(RatingSummaryDao.class);
         UserService userService = mock(UserService.class);
 
         UUID employerId = UUID.randomUUID();
@@ -139,10 +139,10 @@ class CompanyFollowRulesTest {
         when(userService.getById(employerId)).thenReturn(employer);
         when(jobService.countJobsCreatedBy(employerId)).thenReturn(7L);
         when(jobAssignmentService.countCompletedForEmployer(employerId)).thenReturn(4L);
-        when(reviewService.getSummaryFor(employerId)).thenReturn(Optional.empty());
+        when(ratingSummaryDao.findByUserId(employerId)).thenReturn(Optional.empty());
 
         EmployerStatsDto stats = new StatisticsManager(jobService, jobAssignmentService,
-                reviewService, userService).getEmployerStats(employerId);
+                new RatingSummaryManager(ratingSummaryDao), userService).getEmployerStats(employerId);
 
         assertEquals(7L, stats.jobsPosted());
         assertEquals(4L, stats.completedJobs());
@@ -155,7 +155,7 @@ class CompanyFollowRulesTest {
     void employerStatisticsReadTheRatingSummaryWhenThereIsOne() {
         JobService jobService = mock(JobService.class);
         JobAssignmentService jobAssignmentService = mock(JobAssignmentService.class);
-        ReviewService reviewService = mock(ReviewService.class);
+        RatingSummaryDao ratingSummaryDao = mock(RatingSummaryDao.class);
         UserService userService = mock(UserService.class);
 
         UUID employerId = UUID.randomUUID();
@@ -164,10 +164,10 @@ class CompanyFollowRulesTest {
         RatingSummary summary = new RatingSummary();
         summary.setAverageRating(new BigDecimal("4.75"));
         summary.setReviewCount(12);
-        when(reviewService.getSummaryFor(employerId)).thenReturn(Optional.of(summary));
+        when(ratingSummaryDao.findByUserId(employerId)).thenReturn(Optional.of(summary));
 
         EmployerStatsDto stats = new StatisticsManager(jobService, jobAssignmentService,
-                reviewService, userService).getEmployerStats(employerId);
+                new RatingSummaryManager(ratingSummaryDao), userService).getEmployerStats(employerId);
 
         assertEquals(new BigDecimal("4.75"), stats.averageRating());
         assertEquals(12, stats.reviewCount());

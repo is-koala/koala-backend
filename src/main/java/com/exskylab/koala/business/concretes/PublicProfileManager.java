@@ -4,21 +4,19 @@ import com.exskylab.koala.business.abstracts.BadgeService;
 import com.exskylab.koala.business.abstracts.JobApplicationService;
 import com.exskylab.koala.business.abstracts.JobAssignmentService;
 import com.exskylab.koala.business.abstracts.PublicProfileService;
-import com.exskylab.koala.business.abstracts.ReviewService;
+import com.exskylab.koala.business.abstracts.RatingSummaryService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.business.abstracts.UserService;
 import com.exskylab.koala.core.dtos.user.response.PublicProfileDto;
 import com.exskylab.koala.core.helpers.MediaUrlResolver;
+import com.exskylab.koala.core.helpers.RatingFigures;
 import com.exskylab.koala.core.mappers.BadgeMapper;
 import com.exskylab.koala.entities.Address;
-import com.exskylab.koala.entities.RatingSummary;
 import com.exskylab.koala.entities.User;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -30,20 +28,20 @@ public class PublicProfileManager implements PublicProfileService {
     private final SecurityService securityService;
     private final MediaUrlResolver mediaUrlResolver;
     private final JobAssignmentService jobAssignmentService;
-    private final ReviewService reviewService;
+    private final RatingSummaryService ratingSummaryService;
     private final BadgeService badgeService;
     private final BadgeMapper badgeMapper;
 
     public PublicProfileManager(UserService userService, JobApplicationService jobApplicationService,
                                 SecurityService securityService, MediaUrlResolver mediaUrlResolver,
-                                JobAssignmentService jobAssignmentService, ReviewService reviewService,
+                                JobAssignmentService jobAssignmentService, RatingSummaryService ratingSummaryService,
                                 BadgeService badgeService, BadgeMapper badgeMapper) {
         this.userService = userService;
         this.jobApplicationService = jobApplicationService;
         this.securityService = securityService;
         this.mediaUrlResolver = mediaUrlResolver;
         this.jobAssignmentService = jobAssignmentService;
-        this.reviewService = reviewService;
+        this.ratingSummaryService = ratingSummaryService;
         this.badgeService = badgeService;
         this.badgeMapper = badgeMapper;
     }
@@ -55,7 +53,7 @@ public class PublicProfileManager implements PublicProfileService {
 
         User user = userService.getById(userId);
         Address address = user.getAddress();
-        Optional<RatingSummary> summary = reviewService.getSummaryFor(userId);
+        RatingFigures rating = ratingSummaryService.figuresOf(userId);
 
         return new PublicProfileDto(
                 user.getId(),
@@ -69,8 +67,8 @@ public class PublicProfileManager implements PublicProfileService {
                 address == null || address.getDistrict() == null ? null : address.getDistrict().getName(),
                 visibleCvUrl(user),
                 jobAssignmentService.countCompletedForWorker(userId),
-                summary.map(RatingSummary::getAverageRating).orElse(BigDecimal.ZERO),
-                summary.map(RatingSummary::getReviewCount).orElse(0),
+                rating.averageRating(),
+                rating.reviewCount(),
                 badgeMapper.toBadgeDtoList(badgeService.getBadgesOf(userId)));
     }
 

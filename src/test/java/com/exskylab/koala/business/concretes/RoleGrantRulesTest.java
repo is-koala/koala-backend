@@ -70,7 +70,8 @@ class RoleGrantRulesTest {
                 mock(IdentityChallengeService.class),
                 mock(PhoneVerificationService.class), mock(BadgeService.class), mock(BadgeMapper.class),
                 new PageableSanitizer(), mock(ActivityNotificationService.class),
-                mock(PasswordResetTokenService.class));
+                mock(PasswordResetTokenService.class),
+                mock(com.exskylab.koala.business.abstracts.RatingSummaryService.class));
 
         when(userDao.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(securityService.getAuthenticatedUserId()).thenReturn(actingAdminId);

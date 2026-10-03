@@ -5,6 +5,7 @@ import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.business.abstracts.BadgeService;
 import com.exskylab.koala.business.abstracts.ImageService;
+import com.exskylab.koala.business.abstracts.RatingSummaryService;
 import com.exskylab.koala.core.constants.BadgeMessages;
 import com.exskylab.koala.core.dtos.badge.request.SaveBadgeDto;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
@@ -27,17 +28,17 @@ public class BadgeManager implements BadgeService {
     private final UserBadgeDao userBadgeDao;
     private final UserDao userDao;
     private final JobAssignmentDao jobAssignmentDao;
-    private final RatingSummaryDao ratingSummaryDao;
+    private final RatingSummaryService ratingSummaryService;
     private final ImageService imageService;
 
     public BadgeManager(BadgeDao badgeDao, UserBadgeDao userBadgeDao, UserDao userDao,
-                        JobAssignmentDao jobAssignmentDao, RatingSummaryDao ratingSummaryDao,
+                        JobAssignmentDao jobAssignmentDao, RatingSummaryService ratingSummaryService,
                         ImageService imageService) {
         this.badgeDao = badgeDao;
         this.userBadgeDao = userBadgeDao;
         this.userDao = userDao;
         this.jobAssignmentDao = jobAssignmentDao;
-        this.ratingSummaryDao = ratingSummaryDao;
+        this.ratingSummaryService = ratingSummaryService;
         this.imageService = imageService;
     }
 
@@ -179,7 +180,7 @@ public class BadgeManager implements BadgeService {
             return false;
         }
 
-        return ratingSummaryDao.findByUserId(userId)
+        return ratingSummaryService.findFor(userId)
                 .filter(summary -> summary.getReviewCount() >= minReviews)
                 .filter(summary -> summary.getAverageRating() != null)
                 .filter(summary -> summary.getAverageRating().compareTo(minAverage) >= 0)

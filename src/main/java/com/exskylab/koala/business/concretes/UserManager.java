@@ -77,6 +77,7 @@ public class UserManager implements UserService {
     private final BadgeMapper badgeMapper;
     private final ActivityNotificationService activityNotificationService;
     private final PasswordResetTokenService passwordResetTokenService;
+    private final RatingSummaryService ratingSummaryService;
 
     public UserManager(UserDao userDao,
                        EmailVerificationService emailVerificationService,
@@ -95,7 +96,8 @@ public class UserManager implements UserService {
                        BadgeService badgeService, BadgeMapper badgeMapper,
                        PageableSanitizer pageableSanitizer,
                        ActivityNotificationService activityNotificationService,
-                       PasswordResetTokenService passwordResetTokenService) {
+                       PasswordResetTokenService passwordResetTokenService,
+                       RatingSummaryService ratingSummaryService) {
         this.userDao = userDao;
         this.emailVerificationService = emailVerificationService;
         this.userMapper = userMapper;
@@ -116,6 +118,7 @@ public class UserManager implements UserService {
         this.pageableSanitizer = pageableSanitizer;
         this.activityNotificationService = activityNotificationService;
         this.passwordResetTokenService = passwordResetTokenService;
+        this.ratingSummaryService = ratingSummaryService;
     }
 
     @Override
@@ -540,7 +543,8 @@ public class UserManager implements UserService {
                 .map(LogMasks::iban)
                 .orElse(null);
         return userMapper.toUserMeResponseDto(user, maskedIban,
-                badgeMapper.toBadgeDtoList(badgeService.getBadgesOf(user.getId())));
+                badgeMapper.toBadgeDtoList(badgeService.getBadgesOf(user.getId())),
+                ratingSummaryService.figuresOf(user.getId()));
     }
 
     private String capitalizeFirstLetter(String input) {

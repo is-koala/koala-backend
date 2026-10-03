@@ -8,6 +8,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -15,8 +16,10 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -61,6 +64,7 @@ class PublicProfileIT extends AbstractIntegrationTest {
 
     @AfterEach
     void tearDown() {
+        jdbc.update("delete from user_profile_sync_outbox where user_id in (?, ?)", viewerId, workerId);
         jdbc.update("delete from user_badges where id = ?", userBadgeId);
         jdbc.update("delete from rating_summaries where id = ?", summaryId);
         jdbc.update("delete from job_assignments where id in (?, ?)", completedAssignmentId, cancelledAssignmentId);
@@ -107,6 +111,84 @@ class PublicProfileIT extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data", hasSize(1)))
                 .andExpect(jsonPath("$.data[0].code").value("GEZGIN_SILVER"));
+    }
+
+    @Test
+    void theOwnProfileReportsZeroRatingLikeThePublicProfileWhenNobodyReviewedYet() throws Exception {
+        mockMvc.perform(get("/users/me").with(user(principal(workerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(workerId.toString()))
+                .andExpect(jsonPath("$.data.averageRating").value(0))
+                .andExpect(jsonPath("$.data.reviewCount").value(0));
+        mockMvc.perform(get("/users/{userId}/employer-stats", workerId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.averageRating").value(0))
+                .andExpect(jsonPath("$.data.reviewCount").value(0));
+    }
+
+    @Test
+    void aSummaryWithoutAnAverageIsZeroOnEveryProfileShapeAndRawOnTheRatingSummary() throws Exception {
+        jdbc.update("insert into rating_summaries (id, created_at, is_deleted, user_id, review_count, rating_sum, "
+                        + "average_rating) values (?, now(), false, ?, 2, 8, null)",
+                summaryId, workerId);
+
+        mockMvc.perform(get("/users/me").with(user(principal(workerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.averageRating").value(0))
+                .andExpect(jsonPath("$.data.reviewCount").value(0));
+        mockMvc.perform(get("/users/{userId}", workerId).with(user(principal(viewerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.averageRating").value(0))
+                .andExpect(jsonPath("$.data.reviewCount").value(0));
+        mockMvc.perform(get("/users/{userId}/employer-stats", workerId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.averageRating").value(0))
+                .andExpect(jsonPath("$.data.reviewCount").value(0));
+        mockMvc.perform(get("/users/{userId}/rating-summary", workerId).with(user(principal(viewerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reviewCount").value(2))
+                .andExpect(jsonPath("$.data.averageRating").value(nullValue()));
+    }
+
+    @Test
+    void theProfileUpdateAnswerCarriesTheSameRatingFigures() throws Exception {
+        jdbc.update("insert into rating_summaries (id, created_at, is_deleted, user_id, review_count, rating_sum, "
+                        + "average_rating) values (?, now(), false, ?, 3, 13, 4.33)",
+                summaryId, workerId);
+
+        mockMvc.perform(patch("/users/me").with(user(principal(workerId)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"about\":\"Profil testi\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.user.id").value(workerId.toString()))
+                .andExpect(jsonPath("$.data.user.about").value("Profil testi"))
+                .andExpect(jsonPath("$.data.user.averageRating").value(4.33))
+                .andExpect(jsonPath("$.data.user.reviewCount").value(3));
+    }
+
+    @Test
+    void theOwnProfileCarriesTheSameRatingFiguresAsThePublicProfileAndTheSummary() throws Exception {
+        jdbc.update("insert into rating_summaries (id, created_at, is_deleted, user_id, review_count, rating_sum, "
+                        + "average_rating) values (?, now(), false, ?, 3, 13, 4.33)",
+                summaryId, workerId);
+
+        mockMvc.perform(get("/users/me").with(user(principal(workerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(workerId.toString()))
+                .andExpect(jsonPath("$.data.averageRating").value(4.33))
+                .andExpect(jsonPath("$.data.reviewCount").value(3));
+        mockMvc.perform(get("/users/{userId}", workerId).with(user(principal(viewerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.averageRating").value(4.33))
+                .andExpect(jsonPath("$.data.reviewCount").value(3));
+        mockMvc.perform(get("/users/{userId}/rating-summary", workerId).with(user(principal(viewerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.averageRating").value(4.33))
+                .andExpect(jsonPath("$.data.reviewCount").value(3));
+        mockMvc.perform(get("/users/{userId}/employer-stats", workerId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.averageRating").value(4.33))
+                .andExpect(jsonPath("$.data.reviewCount").value(3));
     }
 
     private void insertAssignment(UUID id, String status, String paymentStatus) {
