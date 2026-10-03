@@ -3,6 +3,7 @@ package com.exskylab.koala.webAPI;
 import com.exskylab.koala.core.helpers.AuditScope;
 import com.exskylab.koala.core.helpers.AuditSubjectSource;
 import com.exskylab.koala.core.security.RequiresPermission;
+import com.exskylab.koala.entities.StaffPermission;
 import com.exskylab.koala.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,12 +29,14 @@ class AuditSubjectCoverageIT extends AbstractIntegrationTest {
     private static final String ADMIN_PREFIX = "/admin";
     private static final String AUTHENTICATION_PREFIX = "/admin/auth/";
     private static final String PROBE = "probe";
+    private static final Set<RequestMethod> READ_VERBS =
+            EnumSet.of(RequestMethod.GET, RequestMethod.HEAD, RequestMethod.OPTIONS);
 
     @Autowired
     @Qualifier("requestMappingHandlerMapping")
     private RequestMappingHandlerMapping handlerMapping;
 
-    private record SubjectMapping(String verb, String pattern, HandlerMethod handler, boolean mutating) {
+    private record SubjectMapping(String verb, String pattern, HandlerMethod handler, boolean write) {
 
         String resourceType() {
             return AuditScope.resourceTypeOf(pattern);
@@ -67,14 +70,20 @@ class AuditSubjectCoverageIT extends AbstractIntegrationTest {
                     continue;
                 }
                 for (RequestMethod method : methods) {
-                    boolean mutating = AuditScope.isMutating(method.name(), required.value());
-                    if (AuditScope.carriesASubject(mutating, AuditScope.sensitivityOf(required.value()))) {
-                        mappings.add(new SubjectMapping(method.name(), pattern, entry.getValue(), mutating));
+                    if (scanned(method, required.value())) {
+                        mappings.add(new SubjectMapping(method.name(), pattern, entry.getValue(),
+                                !READ_VERBS.contains(method)));
                     }
                 }
             }
         }
         return mappings;
+    }
+
+    static boolean scanned(RequestMethod method, StaffPermission[] permissions) {
+        boolean mutating = AuditScope.isMutating(method.name(), permissions);
+        return !READ_VERBS.contains(method)
+                || AuditScope.carriesASubject(mutating, AuditScope.sensitivityOf(permissions));
     }
 
     static Set<RequestMethod> verbsOf(Set<RequestMethod> declared) {
@@ -83,7 +92,7 @@ class AuditSubjectCoverageIT extends AbstractIntegrationTest {
 
     private List<SubjectMapping> mappingsThatNeedASource() {
         return subjectMappings().stream()
-                .filter(mapping -> mapping.mutating() || mapping.targetsARecord())
+                .filter(mapping -> mapping.write() || mapping.targetsARecord())
                 .toList();
     }
 
@@ -98,9 +107,9 @@ class AuditSubjectCoverageIT extends AbstractIntegrationTest {
     @Test
     void thereAreStaffDecisionsAndSensitiveReadsToCover() {
         List<SubjectMapping> mappings = mappingsThatNeedASource();
-        assertTrue(mappings.stream().filter(SubjectMapping::mutating).count() >= 20,
+        assertTrue(mappings.stream().filter(SubjectMapping::write).count() >= 20,
                 "En az 20 personel yazma ucu bekleniyordu, tarama boşa koşuyor: " + mappings);
-        assertTrue(mappings.stream().anyMatch(mapping -> !mapping.mutating()),
+        assertTrue(mappings.stream().anyMatch(mapping -> !mapping.write()),
                 "Kayda yönelik hassas okuma ucu bekleniyordu, tarama boşa koşuyor: " + mappings);
     }
 
@@ -109,6 +118,15 @@ class AuditSubjectCoverageIT extends AbstractIntegrationTest {
         assertEquals(EnumSet.allOf(RequestMethod.class), verbsOf(Set.of()),
                 "Yöntemsiz bir @RequestMapping her fiille çağrılabilir; tarama onu yazma olarak da saymalı.");
         assertEquals(Set.of(RequestMethod.POST), verbsOf(Set.of(RequestMethod.POST)));
+    }
+
+    @Test
+    void everyWriteIsScannedWhateverItsPermissionAndAReadOnlyWhenItIsSensitive() {
+        assertTrue(scanned(RequestMethod.POST, new StaffPermission[0]),
+                "Gövdeye bağlı izinli bir yazma ucu da konusunu söylemeli.");
+        assertTrue(scanned(RequestMethod.DELETE, new StaffPermission[]{StaffPermission.USER_READ}));
+        assertTrue(scanned(RequestMethod.GET, new StaffPermission[]{StaffPermission.USER_READ_PII}));
+        assertTrue(!scanned(RequestMethod.GET, new StaffPermission[]{StaffPermission.USER_READ}));
     }
 
     @Test
@@ -128,7 +146,7 @@ class AuditSubjectCoverageIT extends AbstractIntegrationTest {
                 continue;
             }
             if (!mapping.targetsARecord()) {
-                if (mapping.mutating()) {
+                if (mapping.write()) {
                     failures.add(mapping + " → " + declared + " konuyu '{" + declared.getVariable()
                             + "}' yol değişkeninden çözer ama bu yazma ucunun yol değişkeni yok.");
                 }

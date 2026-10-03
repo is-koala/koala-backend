@@ -35,10 +35,11 @@ public record AuditEntryDto(
                 + "işvereni, o da yoksa şikayet edilen görselin sahibi), not/işarette hedefin kendisi ya da tarafı. "
                 + "subjectType ile aynı kurala göre null olabilir.")
         UUID subjectId,
-        @Schema(description = "Karşı tarafın türü (USER ya da COMPANY); yalnız atama ve uyuşmazlık işlemlerinde "
-                + "dolar, diğer satırlarda null.")
+        @Schema(description = "Karşı tarafın türü (USER ya da COMPANY); iki taraflı satırlarda dolar — atama "
+                + "işlemleri, uyuşmazlık çözümü, ödeme okuması ve atama/uyuşmazlık üzerine yazılan personel notu ya da "
+                + "işareti. Diğer satırlarda null.")
         AuditSubjectType relatedSubjectType,
-        @Schema(description = "Karşı taraf: atama ve uyuşmazlık işlemlerinde işveren — şirket ilanında şirket, "
-                + "bireysel ilanda ilanı açan kullanıcı. Diğer satırlarda null.")
+        @Schema(description = "Karşı taraf: iki taraflı satırlarda işveren — şirket ilanında şirket, bireysel ilanda "
+                + "ilanı açan kullanıcı. Diğer satırlarda null.")
         UUID relatedSubjectId) {
 }
