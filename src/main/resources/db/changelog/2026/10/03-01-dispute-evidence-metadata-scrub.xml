@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-10-03-01-dispute-evidence-metadata-scrub" author="koala">
+        <addColumn tableName="dispute_evidence">
+            <column name="metadata_scrubbed_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="metadata_scrubbed_by_staff_id" type="UUID">
+                <constraints nullable="true"
+                             foreignKeyName="fk_dispute_evidence_scrubbed_by_staff"
+                             references="staff_members(id)"/>
+            </column>
+            <column name="metadata_scrub_error" type="VARCHAR(32)"/>
+            <column name="pre_scrub_file_size" type="BIGINT"/>
+            <column name="pre_scrub_checksum_sha256" type="VARCHAR(64)"/>
+        </addColumn>
+
+        <sql>
+            CREATE INDEX idx_dispute_evidence_scrub_candidates ON dispute_evidence (created_at)
+                WHERE is_deleted = false AND metadata_scrubbed_at IS NULL AND storage_key IS NOT NULL;
+        </sql>
+
+        <rollback>
+            <sql>DROP INDEX IF EXISTS idx_dispute_evidence_scrub_candidates;</sql>
+            <dropColumn tableName="dispute_evidence" columnName="pre_scrub_checksum_sha256"/>
+            <dropColumn tableName="dispute_evidence" columnName="pre_scrub_file_size"/>
+            <dropColumn tableName="dispute_evidence" columnName="metadata_scrub_error"/>
+            <dropColumn tableName="dispute_evidence" columnName="metadata_scrubbed_by_staff_id"/>
+            <dropColumn tableName="dispute_evidence" columnName="metadata_scrubbed_at"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

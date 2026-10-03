@@ -1510,13 +1510,66 @@ Yapılan şey tür, boyut, adet, sihirli bayt kontrolü, adın anahtara girmemes
 bir servis (S3 tetikli tarayıcı ya da ICAP ağ geçidi) ve satırda bir karantina durumu ister; kendi issue'sunu
 hak ediyor. Ayrıntı `docs/runbooks/dispute-evidence.md`'de.
 
-**KVKK silmesi yeni bir mekanizma kurmadı, ADR-0012'nin yoluna bağlandı.** `PostgresAccountAnonymizer.removeMedia`
-artık `dispute_evidence` anahtarlarını da toplayıp **aynı** `PersonalMediaDeletionOutbox`'a yazıyor: tek sorgu
-kümesi, tek `enqueue`, commit sonrası tek `process`. Açık uyuşmazlık zaten anonimleştirmeyi bloke ediyor
-(ADR-0012), yani zamanlayıcı koştuğunda vaka kapalı. Silinen kapsam **hem kullanıcının yüklediği kanıt hem
-kullanıcının taraf olduğu atamanın uyuşmazlıklarındaki kanıt** — `disputes.reason`'ın bugünkü davranışının
-aynısı. Gerekçe: aynı satırdaki serbest metin iki taraf için de zaten siliniyor; daha tanımlayıcı olan dosyayı
-bırakıp anlatıyı silmek tutarsız olurdu. `storage_key` ve `checksum_sha256` bu yüzden nullable.
+**KVKK silmesi yeni bir mekanizma kurmadı, ADR-0012'nin yoluna bağlandı.** `PostgresAccountAnonymizer.removeMedia` artık
+`dispute_evidence` anahtarlarını da toplayıp **aynı** `PersonalMediaDeletionOutbox`'a yazıyor: tek sorgu kümesi, tek
+`enqueue`, commit sonrası tek `process`. Açık uyuşmazlık zaten anonimleştirmeyi bloke ediyor (ADR-0012), yani
+zamanlayıcı koştuğunda vaka kapalı. Silinen kapsam **hem kullanıcının yüklediği kanıt hem kullanıcının taraf olduğu
+atamanın uyuşmazlıklarındaki kanıt** — `disputes.reason`'ın bugünkü davranışının aynısı. Gerekçe: aynı satırdaki serbest
+metin iki taraf için de zaten siliniyor; daha tanımlayıcı olan dosyayı bırakıp anlatıyı silmek tutarsız olurdu.
+`storage_key` ve `checksum_sha256` bu yüzden nullable. Aynı cümle #347'nin `pre_scrub_checksum_sha256` ve
+`pre_scrub_file_size` kolonlarını da boşaltır — temizlik öncesi fotoğrafın özeti hesaptan uzun yaşamasın
+(`DisputeEvidenceIT.anonymizingTheUploaderAlsoErasesTheChecksumOfThePhotoBeforeItWasScrubbed`).
+
+**Görsel kanıt metadata'sız saklanır (#347).** `attachEvidence` dosyayı olduğu gibi saklıyordu (`file.getBytes()` →
+`uploadFile`, sha256 ham baytlarda): bir işçinin galeriden seçtiği ev fotoğrafı, uyuşmazlığın ortasında karşı tarafa GPS
+konumu ve cihaz seri numaralarıyla (`BodySerialNumber`, `LensSerialNumber`, `ImageUniqueID`) iniyordu — bir kullanıcının
+ham EXIF'inin başka bir kullanıcıya ulaştığı ilk yol, ve herkese açık görseller (logo, galeri, profil) #328'den beri
+`ImageManager.removeMetadata`'dan geçerken. Temizleyici artık tek yerde, `core/helpers/ImageMetadataStripper`: EXIF yönü
+piksellere uygulanır (`ExifOrientation`), görsel `ImageIO` ile yeniden kodlanır — yazıcı yalnız pikselleri yazar, yani
+EXIF/XMP APP segmentleri ve PNG `tEXt`/`zTXt`/`iTXt`/`eXIf` parçaları düşer. `ImageManager` de aynı sınıfı çağırır. İki
+küçük düzeltme yanında geldi: `ImageIO.write`'ın `false` dönüşü artık `IOException` (önceden boş bayt dizisi
+saklanabiliyordu) ve JPEG'e yazılacak saydam görsel beyaz zemine düzleştirilir (ImageIO JPEG yazıcısı alfa kabul etmez,
+düzleştirmeden `false` döner). Kanıtta PDF dışındaki her tür bu yoldan geçer; biçimi yazılamayan tür (bugün
+`image/webp`) fail-closed `STORAGE_UNSUPPORTED_TYPE` alır, çözülemeyen görsel de. Boyut ve sha256 **saklanan**
+baytlardan hesaplanır; yükleme anında temizlenen satıra `metadata_scrubbed_at` yazılır. JPEG yeniden kodlaması
+kayıplıdır (ImageIO varsayılan kalitesi) — kanıtın bütünlüğü yükleme anından itibaren sunucunun `createdAt` + sha256
+kaydıyla kurulur, orijinal baytlarla değil; KVKK m.4/2-ç ölçülülük ilkesi orijinali tutmamayı gerektiriyor.
+
+**`DateTimeOriginal` okunmuyor, bilinçli.** Issue bunu isteğe bağlı bırakmıştı. Alınmadı: değer cihazın saatinden gelir
+ve EXIF'te düzenlenebilir, çoğu dosyada dilim bilgisi (`OffsetTimeOriginal`) yoktur — personele sunucunun kanıtladığı
+alanların (`createdAt`, sha256) yanında gösterilirse uyuşmazlıkta olduğundan güvenilir sanılır; ayrıca galeriden seçilen
+bir fotoğrafın çekim anı kişinin nerede ne zaman olduğuna dair kişisel veridir ve bu PR'ın amacı tam olarak böyle
+verileri saklamamak. Personel "fotoğraf işten önce mi çekilmiş" sorusuna ihtiyaç duyarsa ayrı bir ürün kararıyla, dilim
+sorunu çözülerek eklenir.
+
+**Eski görsel kanıtlar personel tetikli, sürdürülebilir bir backfill ile temizlenir.** `POST
+/admin/disputes/evidence/metadata-scrub?limit=25&retryFailed=false` (`user.deletion.manage` — KVKK işlemlerinin izni,
+`TRUST_LEAD`/`OWNER`; denetim eylemi `dispute.evidence.scrub`, satıra aday/temizlenen/başarısız id'leri ve kalan sayı
+yazılır) `DisputeEvidenceScrubManager`'dan geçer. Aday: silinmemiş, `storage_key`'i olan, `image/jpeg`/`image/png`
+içerikli, `metadata_scrubbed_at` boş ve (retryFailed değilse) `metadata_scrub_error` boş satır, en eskiden. Her satır
+**kendi transaction'ında** ve `select … for update` kilidiyle işlenir: nesne okunur → kayıtlı sha256 ile karşılaştırılır
+(tutmazsa `CHECKSUM_MISMATCH`, satıra ve nesneye dokunulmaz) → temizlenir (çözülemezse `IMAGE_UNREADABLE`) → **yeni
+anahtara** yazılır (`StorageRollbackCleanup.deleteOnRollback` ile) → geri okunup özeti doğrulanır (tutmazsa istisna,
+transaction geri alınır, yeni nesne silinir, satır `REWRITE_FAILED`) → satır yeni nesneye çevrilir; önceki boyut ve özet
+`pre_scrub_file_size`/`pre_scrub_checksum_sha256`'da kalır, `metadata_scrubbed_at` ve `metadata_scrubbed_by_staff_id`
+yazılır → eski anahtar **aynı transaction'da** `PersonalMediaDeletionOutbox`'a girer (ADR-0012'nin silme kuyruğu). Kanıt
+kaybolamaz: eski nesne yalnız satır doğrulanmış yeni nesneyi gösterdikten ve commit olduktan sonra, kuyruğun yeniden
+denenen silmesiyle gider; commit olmazsa kuyruk satırı da yoktur. Okunamayan nesne `OBJECT_UNREADABLE`. İdempotent:
+temizlenmiş satır aday değildir ve kilit altında yeniden kontrol edilir; iki personelin eşzamanlı çağrısı aynı satırı
+iki kez yazamaz. Sürdürülebilir: bir çağrının yarıda kalması bir sonrakinin kaldığı yerden devam etmesidir; yeni nesne
+yazılıp JVM commit'ten önce ölürse yalnız temizlenmiş bir yetim nesne kalır, kanıt eski nesnede durur. Başarısız satır
+bir sonraki çağrıda yeniden denenmez (`remaining` sıfıra inebilsin diye); düzeltildikten sonra `retryFailed=true` ile
+denenir. **İnsan adımı:** canlıya çıktıktan sonra güven lideri uç `remaining=0` dönene kadar çağırır, `failed`
+listesindeki satırları incelemeye alır — `docs/runbooks/dispute-evidence.md`. Personel listesi
+(`StaffDisputeEvidenceDto`) `metadataScrubbedAt` ve `preScrubChecksumSha256` taşır: karşı tarafın daha önce indirip
+özetini not ettiği dosyanın neden farklı özetle durduğu satırın kendisinden okunur. Kullanıcı DTO'su değişmedi.
+
+**PDF kanıt bugün de olduğu gibi saklanıyor — bilinen sınır.** PDF'in Info sözlüğü (`/Author`, `/Creator`, `/Producer`,
+tarihler) ve XMP akışı yazarın adını ve cihaz/yazılım bilgisini taşıyabilir; telefonla "PDF'e tara" çıktıları içine
+gömülü JPEG'leri **kendi EXIF'leriyle** taşır. Temizlemek PDF'i ayrıştırıp yeniden yazmak demek (PDFBox ya da benzeri
+bir bağımlılık, gömülü görselleri de yeniden kodlama) ve imzalı PDF'lerin imzasını bozar; bu PR'da yapılmadı.
+`DisputeEvidenceIT.aPdfIsStoredByteForByteBecauseOnlyImagesAreReEncoded` bugünkü davranışı sabitliyor (PDF görsel
+temizleyicisine gönderilirse reddedilirdi). Takip ayrı bir issue.
 
 ## 2r. Profil uçları
 

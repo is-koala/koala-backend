@@ -58,6 +58,8 @@ class CollectionQueryWithoutGraphTest {
             "ConversationDao.findParticipantRows",
             // Deletion blockers: id + party projection rows, not entities (#283).
             "DisputeDao.findActiveLinksForUsers",
+            // Evidence ids due for the metadata scrub backfill; each row is then locked and loaded on its own (#347).
+            "DisputeEvidenceDao.findScrubCandidateIds",
             // Staff payment list reads only status, resolution, id and jobAssignment.id (proxy identifier, no
             // query) to attribute a refund to a dispute; nothing of the dispute is drawn (#301).
             "DisputeDao.findAllByJobAssignmentIdInOrderByCreatedAtDesc",
