@@ -17,6 +17,7 @@ import java.util.UUID;
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -159,6 +160,36 @@ class RateLimitBucketTest {
 
         assertEquals(2, passing("POST", "/users/me/realtime-credential", "10.0.0.13", 5));
         assertEquals(5, passing("POST", "/reports", "10.0.0.13", 5));
+    }
+
+    @Test
+    void boardingWritesHaveTheirOwnAllowanceAndReadsStayUnlimited() throws Exception {
+        properties.getBoarding().setMaxAttempts(2);
+        properties.getWrite().setMaxAttempts(50);
+
+        UUID shuttleId = UUID.randomUUID();
+        UUID seatId = UUID.randomUUID();
+        assertEquals(2, passing("POST", "/shuttles/" + shuttleId + "/boardings", "10.0.0.16", 6));
+        assertEquals(0, passing("POST", "/seat-assignments/" + seatId + "/boardings", "10.0.0.16", 1));
+        assertEquals(50, passing("POST", "/reports", "10.0.0.16", 50));
+        assertEquals(200, passing("GET", "/shuttles/" + shuttleId + "/boardings", "10.0.0.16", 200));
+        assertEquals(200, passing("GET", "/shuttles/" + shuttleId + "/qr", "10.0.0.16", 200));
+        assertEquals(200, passing("GET", "/job-assignments/" + UUID.randomUUID() + "/transport/qr",
+                "10.0.0.16", 200));
+    }
+
+    @Test
+    void aFullShuttleScannedFromOnePhoneFitsTheDefaultBoardingAllowanceWithoutDrainingWrites() throws Exception {
+        int busiestShuttle = 100;
+        assertTrue(properties.getBoarding().getMaxAttempts() >= properties.getWrite().getMaxAttempts(),
+                "binis kovasi genel yazmadan siki olamaz: tek telefondan dolu servis taranir");
+
+        for (int seat = 0; seat < busiestShuttle; seat++) {
+            assertEquals(1, passing("POST", "/seat-assignments/" + UUID.randomUUID() + "/boardings",
+                    "10.0.0.17", 1), "seat " + seat + " was refused");
+        }
+        assertEquals(properties.getWrite().getMaxAttempts(),
+                passing("POST", "/reports", "10.0.0.17", properties.getWrite().getMaxAttempts()));
     }
 
     @Test

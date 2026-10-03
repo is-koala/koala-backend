@@ -152,6 +152,19 @@ class CollectionQueryWithoutGraphTest {
             // Reminder scheduler id lists; each seat is then loaded with its own graph (#297).
             "SeatAssignmentDao.findEveningReminderDueIds",
             "SeatAssignmentDao.findDepartureReminderDueIds",
+            "SeatAssignmentDao.findBoardingReminderDueIds",
+            // Departures (stop ids) due for the aggregated not-boarded notice; each is then handled on its own (#298).
+            "ShuttleStopDao.findNotBoardedDueStopIds",
+            // Projection rows (seat, shuttle, direction, assignment status) of one worker on one job; no entity is
+            // loaded, so the chosen seat is read fresh after its row lock (#298).
+            "SeatAssignmentDao.findWorkerSeatsOnJob",
+            // Boarding events of a page of seats; the mapper reads seatAssignment/jobAssignment/shuttle/recordedBy ids
+            // only (proxy identifiers, no query) (#298).
+            "BoardingEventDao.findAllBySeatAssignmentIdInOrderByCreatedAtAscIdAsc",
+            // One seat's events on one shuttle departure for the idempotency decision; ids only (#298).
+            "BoardingEventDao.findAllBySeatAssignmentIdAndShuttleIdAndBoardingDayOrderByCreatedAtAscIdAsc",
+            // Staff timeline boarding rows of one assignment; ids only, no relation is drawn (#298).
+            "BoardingEventDao.findAllByJobAssignmentIdOrderByOccurredAtAscIdAsc",
             // Job ids whose plan uses a shuttle, for the JobSummaryDto.hasShuttle badge (#297).
             "TransportPlanDao.findJobIdsWithMethod",
             // Staff payout detail renders the task row only; payment/jobAssignment proxies are never touched (#255).

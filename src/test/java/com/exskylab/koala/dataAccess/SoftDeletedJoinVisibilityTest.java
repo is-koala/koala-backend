@@ -124,6 +124,7 @@ class SoftDeletedJoinVisibilityTest {
             "SeatAssignmentDao.findWithDetailsById#stop",
             "SeatAssignmentDao.findWithDetailsById#stop.address",
             "SeatAssignmentDao.findWithDetailsById#stop.address.district",
+            "SeatAssignmentDao.findBoardingRowsByShuttleId#stop",
             "ShuttleStopDao.findAllByShuttleIdInOrderBySortOrderAsc#address",
             "ShuttleStopDao.findAllByShuttleIdInOrderBySortOrderAsc#address.city",
             "ShuttleStopDao.findAllByShuttleIdInOrderBySortOrderAsc#address.city.country",

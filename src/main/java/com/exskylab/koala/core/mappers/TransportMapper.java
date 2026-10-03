@@ -1,13 +1,18 @@
 package com.exskylab.koala.core.mappers;
 
+import com.exskylab.koala.core.dtos.jobAssignment.response.AdminTimelineEventDto;
 import com.exskylab.koala.core.dtos.transport.response.AssignmentTransportDto;
+import com.exskylab.koala.core.dtos.transport.response.BoardingEventDto;
 import com.exskylab.koala.core.dtos.transport.response.JobTransportDto;
 import com.exskylab.koala.core.dtos.transport.response.PublicShuttleDto;
 import com.exskylab.koala.core.dtos.transport.response.PublicStopDto;
 import com.exskylab.koala.core.dtos.transport.response.SeatAssignmentDto;
+import com.exskylab.koala.core.dtos.transport.response.ShuttleBoardingRowDto;
 import com.exskylab.koala.core.dtos.transport.response.ShuttleDto;
 import com.exskylab.koala.core.dtos.transport.response.ShuttleStopDto;
 import com.exskylab.koala.core.dtos.transport.response.TransportPlanDto;
+import com.exskylab.koala.entities.BoardingEvent;
+import com.exskylab.koala.entities.BoardingRecorderRole;
 import com.exskylab.koala.entities.SeatAssignment;
 import com.exskylab.koala.entities.Shuttle;
 import com.exskylab.koala.entities.ShuttleStop;
@@ -15,6 +20,8 @@ import com.exskylab.koala.entities.TransportPlan;
 import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+
+import java.util.UUID;
 
 @Mapper(componentModel = "spring", uses = {AddressMapper.class}, injectionStrategy = InjectionStrategy.CONSTRUCTOR)
 public interface TransportMapper {
@@ -47,5 +54,66 @@ public interface TransportMapper {
 
     @Mapping(target = "shuttleId", source = "shuttle.id")
     @Mapping(target = "stopId", source = "stop.id")
+    @Mapping(target = "boarding", ignore = true)
     SeatAssignmentDto toSeatAssignmentDto(SeatAssignment seat);
+
+    @Mapping(target = "seatAssignmentId", source = "seatAssignment.id")
+    @Mapping(target = "jobAssignmentId", source = "jobAssignment.id")
+    @Mapping(target = "shuttleId", source = "shuttle.id")
+    @Mapping(target = "stopId", source = "stop.id")
+    @Mapping(target = "recordedById", source = "recordedBy.id")
+    @Mapping(target = "replayed", ignore = true)
+    BoardingEventDto toBoardingEventDto(BoardingEvent event);
+
+    @Mapping(target = "seatAssignmentId", source = "seat.id")
+    @Mapping(target = "jobAssignmentId", source = "seat.jobAssignment.id")
+    @Mapping(target = "workerId", source = "workerId")
+    @Mapping(target = "firstName", source = "firstName")
+    @Mapping(target = "lastName", source = "lastName")
+    @Mapping(target = "stopId", source = "seat.stop.id")
+    @Mapping(target = "stopLabel", source = "seat.stop.label")
+    @Mapping(target = "scheduledAt", source = "seat.stop.scheduledAt")
+    @Mapping(target = "boarded", source = "boarded")
+    @Mapping(target = "event", source = "event")
+    ShuttleBoardingRowDto toShuttleBoardingRowDto(SeatAssignment seat, UUID workerId, String firstName, String lastName,
+                                                  boolean boarded, BoardingEventDto event);
+
+    @Mapping(target = "type", constant = "SEAT")
+    @Mapping(target = "at", source = "createdAt")
+    @Mapping(target = "kind", ignore = true)
+    @Mapping(target = "source", ignore = true)
+    @Mapping(target = "flags", ignore = true)
+    @Mapping(target = "recordedById", ignore = true)
+    @Mapping(target = "recorderRole", ignore = true)
+    @Mapping(target = "shuttleId", source = "shuttle.id")
+    @Mapping(target = "seatAssignmentId", source = "id")
+    @Mapping(target = "stopId", source = "stop.id")
+    @Mapping(target = "stopLabel", ignore = true)
+    @Mapping(target = "stopScheduledAt", ignore = true)
+    @Mapping(target = "capturedAt", ignore = true)
+    @Mapping(target = "receivedAt", ignore = true)
+    @Mapping(target = "latitude", ignore = true)
+    @Mapping(target = "longitude", ignore = true)
+    @Mapping(target = "distanceToStopMeters", ignore = true)
+    AdminTimelineEventDto toSeatTimelineEvent(SeatAssignment seat);
+
+    @Mapping(target = "type", constant = "BOARDING")
+    @Mapping(target = "at", source = "event.occurredAt")
+    @Mapping(target = "id", source = "event.id")
+    @Mapping(target = "kind", source = "event.kind")
+    @Mapping(target = "source", source = "event.source")
+    @Mapping(target = "flags", source = "event.flags")
+    @Mapping(target = "recordedById", source = "event.recordedBy.id")
+    @Mapping(target = "recorderRole", source = "recorderRole")
+    @Mapping(target = "shuttleId", source = "event.shuttle.id")
+    @Mapping(target = "seatAssignmentId", source = "event.seatAssignment.id")
+    @Mapping(target = "stopId", source = "event.stop.id")
+    @Mapping(target = "stopLabel", source = "event.stopLabel")
+    @Mapping(target = "stopScheduledAt", source = "event.stopScheduledAt")
+    @Mapping(target = "capturedAt", source = "event.capturedAt")
+    @Mapping(target = "receivedAt", source = "event.createdAt")
+    @Mapping(target = "latitude", source = "event.latitude")
+    @Mapping(target = "longitude", source = "event.longitude")
+    @Mapping(target = "distanceToStopMeters", source = "event.distanceToStopMeters")
+    AdminTimelineEventDto toBoardingTimelineEvent(BoardingEvent event, BoardingRecorderRole recorderRole);
 }

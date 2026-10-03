@@ -39,4 +39,23 @@ public class TransportMessages {
     public static final String PLAN_UPDATED_NOTICE = "{transport.plan.updated.notice}";
     public static final String REMINDER_EVENING = "{transport.reminder.evening}";
     public static final String REMINDER_DEPARTURE = "{transport.reminder.departure}";
+    public static final String REMINDER_BOARDING = "{transport.reminder.boarding}";
+    public static final String NOTICE_NOT_BOARDED = "{transport.notice.not.boarded}";
+    public static final String TOKEN_EXPIRED = "{transport.token.expired}";
+    public static final String TOKEN_NOT_BLANK = "{transport.boarding.token.not.blank}";
+    public static final String CAPTURED_AT_NOT_NULL = "{transport.boarding.captured.at.not.null}";
+    public static final String BOARDING_KIND_RULE = "{transport.boarding.kind.rule}";
+    public static final String SEAT_NOT_SELECTED = "{transport.seat.not.selected}";
+    public static final String SEAT_ASSIGNMENT_NOT_FOUND = "{transport.seat.assignment.not.found}";
+    public static final String ALREADY_BOARDED = "{transport.already.boarded}";
+    public static final String IDEMPOTENCY_CONFLICT = "{transport.boarding.idempotency.conflict}";
+    public static final String BOARDING_RECORDED = "{transport.boarding.recorded}";
+    public static final String QR_ISSUED = "{transport.qr.issued}";
+    public static final String BOARDINGS_RETRIEVED = "{transport.boardings.retrieved}";
+    public static final String QR_ROTATED = "{transport.qr.rotated}";
+    public static final String BOARDING_POSITION_PAIR = "{transport.boarding.position.pair}";
+    public static final String TOKEN_MAX_LENGTH = "{transport.boarding.token.max.length}";
+    public static final String WRONG_SHUTTLE = "{transport.wrong.shuttle}";
+    public static final String BOARDING_CONCURRENT = "{transport.boarding.concurrent}";
+    public static final String NOTICE_UNNAMED_WORKER = "{transport.notice.unnamed.worker}";
 }

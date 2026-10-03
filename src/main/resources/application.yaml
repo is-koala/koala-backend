@@ -252,6 +252,9 @@ rate-limit:
   identity-reveal:
     max-attempts: ${RATE_LIMIT_IDENTITY_REVEAL_MAX_ATTEMPTS:30}
     window: ${RATE_LIMIT_IDENTITY_REVEAL_WINDOW:1h}
+  boarding:
+    max-attempts: ${RATE_LIMIT_BOARDING_MAX_ATTEMPTS:120}
+    window: ${RATE_LIMIT_BOARDING_WINDOW:1m}
   public:
     max-attempts: ${RATE_LIMIT_PUBLIC_MAX_ATTEMPTS:120}
     window: ${RATE_LIMIT_PUBLIC_WINDOW:1m}
@@ -310,8 +313,18 @@ transport:
     zone-id: ${TRANSPORT_REMINDERS_ZONE_ID:Europe/Istanbul}
     evening-at: ${TRANSPORT_REMINDERS_EVENING_AT:19:00}
     departure-lead-minutes: ${TRANSPORT_REMINDERS_DEPARTURE_LEAD_MINUTES:60}
+    boarding-lead-minutes: ${TRANSPORT_REMINDERS_BOARDING_LEAD_MINUTES:15}
+    not-boarded-after-minutes: ${TRANSPORT_REMINDERS_NOT_BOARDED_AFTER_MINUTES:10}
+    not-boarded-lookback-minutes: ${TRANSPORT_REMINDERS_NOT_BOARDED_LOOKBACK_MINUTES:60}
     batch-size: ${TRANSPORT_REMINDERS_BATCH_SIZE:200}
     cron: ${TRANSPORT_REMINDERS_CRON:0 */5 * * * *}
+  boarding:
+    notices-enabled: ${TRANSPORT_BOARDING_NOTICES_ENABLED:false}
+    token-ttl: ${TRANSPORT_BOARDING_TOKEN_TTL:PT10M}
+    far-from-stop-meters: ${TRANSPORT_BOARDING_FAR_FROM_STOP_METERS:250}
+    schedule-tolerance: ${TRANSPORT_BOARDING_SCHEDULE_TOLERANCE:PT30M}
+    clock-skew: ${TRANSPORT_BOARDING_CLOCK_SKEW:PT2M}
+    late-sync-max: ${TRANSPORT_BOARDING_LATE_SYNC_MAX:PT12H}
 
 payout:
   settlement:

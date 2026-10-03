@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-09-15-07-01-seat-boarding-stamps" author="koala">
+        <addColumn tableName="seat_assignments">
+            <column name="boarding_reminder_sent_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="not_boarded_notice_sent_at" type="TIMESTAMP WITH TIME ZONE"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="seat_assignments" columnName="boarding_reminder_sent_at"/>
+            <dropColumn tableName="seat_assignments" columnName="not_boarded_notice_sent_at"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-09-15-07-02-boarding-events" author="koala">
+        <createTable tableName="boarding_events">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="seat_assignment_id" type="UUID">
+                <constraints nullable="false" foreignKeyName="fk_boarding_events_seat"
+                             references="seat_assignments(id)"/>
+            </column>
+            <column name="job_assignment_id" type="UUID">
+                <constraints nullable="false" foreignKeyName="fk_boarding_events_job_assignment"
+                             references="job_assignments(id)"/>
+            </column>
+            <column name="shuttle_id" type="UUID">
+                <constraints nullable="false" foreignKeyName="fk_boarding_events_shuttle"
+                             references="shuttles(id)"/>
+            </column>
+            <column name="stop_id" type="UUID">
+                <constraints nullable="false" foreignKeyName="fk_boarding_events_stop"
+                             references="shuttle_stops(id)"/>
+            </column>
+            <column name="stop_label" type="VARCHAR(120)"/>
+            <column name="stop_scheduled_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="distance_to_stop_meters" type="INTEGER"/>
+            <column name="kind" type="VARCHAR(16)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="source" type="VARCHAR(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="occurred_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="captured_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="boarding_day" type="DATE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="latitude" type="DECIMAL(9,6)"/>
+            <column name="longitude" type="DECIMAL(9,6)"/>
+            <column name="flags" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="client_event_id" type="UUID"/>
+            <column name="recorded_by_id" type="UUID">
+                <constraints nullable="false" foreignKeyName="fk_boarding_events_recorded_by"
+                             references="users(id)"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="created_by_id" type="UUID"/>
+            <column name="updated_by_id" type="UUID"/>
+            <column name="is_deleted" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="deleted_by_id" type="UUID"/>
+        </createTable>
+        <sql>
+            CREATE UNIQUE INDEX uk_boarding_events_client_event_active
+                ON boarding_events (seat_assignment_id, client_event_id)
+                WHERE client_event_id IS NOT NULL AND is_deleted = false;
+            CREATE UNIQUE INDEX uk_boarding_events_boarded_seat_day
+                ON boarding_events (seat_assignment_id, shuttle_id, boarding_day)
+                WHERE kind = 'BOARDED' AND is_deleted = false;
+            CREATE INDEX idx_boarding_events_shuttle_day
+                ON boarding_events (shuttle_id, boarding_day)
+                WHERE is_deleted = false;
+            CREATE INDEX idx_boarding_events_seat
+                ON boarding_events (seat_assignment_id)
+                WHERE is_deleted = false;
+            CREATE INDEX idx_boarding_events_job_assignment
+                ON boarding_events (job_assignment_id)
+                WHERE is_deleted = false;
+        </sql>
+        <rollback>
+            <sql>
+                DROP INDEX IF EXISTS idx_boarding_events_shuttle_day;
+                DROP INDEX IF EXISTS idx_boarding_events_job_assignment;
+                DROP INDEX IF EXISTS idx_boarding_events_seat;
+                DROP INDEX IF EXISTS uk_boarding_events_boarded_seat_day;
+                DROP INDEX IF EXISTS uk_boarding_events_client_event_active;
+            </sql>
+            <dropTable tableName="boarding_events"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

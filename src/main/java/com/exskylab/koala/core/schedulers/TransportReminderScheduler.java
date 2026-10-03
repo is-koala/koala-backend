@@ -41,6 +41,10 @@ public class TransportReminderScheduler {
                 transportService::sendEveningReminder);
         sent += send("departure", transportService.findDepartureReminderDueIds(now), now,
                 transportService::sendDepartureReminder);
+        sent += send("boarding", transportService.findBoardingReminderDueIds(now), now,
+                transportService::sendBoardingReminder);
+        sent += send("not-boarded", transportService.findNotBoardedDepartureIds(now), now,
+                transportService::sendNotBoardedNotice);
         return sent;
     }
 
@@ -49,13 +53,13 @@ public class TransportReminderScheduler {
             return 0;
         }
         int sent = 0;
-        for (UUID seatId : due) {
+        for (UUID id : due) {
             try {
-                if (sender.test(seatId, now)) {
+                if (sender.test(id, now)) {
                     sent++;
                 }
             } catch (Exception exception) {
-                log.error("Transport {} reminder failed for seat {}", kind, seatId, exception);
+                log.error("Transport {} reminder failed for {}", kind, id, exception);
             }
         }
         log.info("Transport {} reminders: {} of {} candidates sent.", kind, sent, due.size());

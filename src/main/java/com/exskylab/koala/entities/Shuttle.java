@@ -53,7 +53,7 @@ public class Shuttle extends BaseEntity {
     @Column(name = "sort_order", nullable = false)
     private int sortOrder;
 
-    @Column(name = "qr_secret", nullable = false, length = 64)
+    @Column(name = "qr_secret", nullable = false, length = 64, updatable = false)
     private String qrSecret;
 
     @OneToMany(mappedBy = "shuttle", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
