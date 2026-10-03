@@ -55,8 +55,10 @@ public class AuditLogController {
                     + "(USER|COMPANY) verilirse eşleşme o türle sınırlanır, tek başına verilirse o türde konusu ya da "
                     + "karşı tarafı olan satırlar döner. Kullanıcı ve şirket zaman çizelgesi bu süzgeçle kurulur: "
                     + "personelin kimlik, silme talebi, görsel, IBAN, hakediş, atama, uyuşmazlık ve şikayet kararları "
-                    + "kendi kaynak kimliklerinin altında yazılsa da konuya göre bulunur. Konu yalnız yazma "
-                    + "satırlarında tutulur; okuma satırları bu süzgeçle dönmez. Diğer süzgeçlerle kesişir.")
+                    + "kendi kaynak kimliklerinin altında yazılsa da konuya göre bulunur. Konu yazma satırlarında ve "
+                    + "hassas (PERSONAL_DATA/FINANCIAL) okumalarda tutulur — ör. kimlik belgesi görüntüleme, iletişim "
+                    + "bilgisiyle kullanıcı detayı; mutating=true kararları, mutating=false görüntülemeleri ayırır. "
+                    + "Personel notu ve işareti yazımları da hedeflerinin konusunu taşır. Diğer süzgeçlerle kesişir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Denetim kaydı listelendi"),
             @ApiResponse(responseCode = "400", description = "Sıralama alanı tanınmıyor ya da subjectType/subjectId geçersiz",
@@ -79,12 +81,15 @@ public class AuditLogController {
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
             @RequestParam(required = false) Boolean allowed,
+            @Parameter(description = "true: yalnız yazma (karar) satırları, false: yalnız okuma satırları; verilmezse "
+                    + "ikisi de. Zaman çizelgesi kararları görüntülemelerden bununla ayırır.")
+            @RequestParam(required = false) Boolean mutating,
             @ParameterObject @PageableDefault(size = 20, sort = "occurredAt",
                     direction = Sort.Direction.DESC) Pageable pageable) {
 
         Page<AdminAuditEntry> page = staffAuditService.search(
                 actor, action, permission, resourceType, resourceId, subjectType, subjectId, from, to, allowed,
-                pageable);
+                mutating, pageable);
 
         return ResponseEntity.ok(new SuccessDataResult<>(
                 PageDto.of(page, auditEntryMapper::toAuditEntryDto),

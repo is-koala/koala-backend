@@ -72,4 +72,6 @@ public interface UserService {
     void revokeRole(StaffPrincipal actor, UUID userId, Role role);
 
     boolean bootstrapAdminRole(String email);
+
+    boolean existsIncludingDeleted(UUID id);
 }

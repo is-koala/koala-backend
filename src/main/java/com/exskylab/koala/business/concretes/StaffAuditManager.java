@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -92,7 +93,8 @@ public class StaffAuditManager implements StaffAuditService {
     @Transactional(readOnly = true)
     public Page<AdminAuditEntry> search(UUID actor, String action, String permission, String resourceType,
                                         String resourceId, AuditSubjectType subjectType, UUID subjectId,
-                                        Instant from, Instant to, Boolean allowed, Pageable pageable) {
+                                        Instant from, Instant to, Boolean allowed, Boolean mutating,
+                                        Pageable pageable) {
         pageableSanitizer.rejectUnknownSort(pageable, SORTABLE);
         Pageable page = pageableSanitizer.sanitize(pageable, SORTABLE, NEWEST_FIRST);
 
@@ -101,7 +103,8 @@ public class StaffAuditManager implements StaffAuditService {
                 blankToNull(resourceType), blankToNull(resourceId),
                 subjectType == null ? null : subjectType.name(), subjectId,
                 occurredAt.from(), occurredAt.to(),
-                allowed != null, Boolean.TRUE.equals(allowed), page);
+                allowed != null, Boolean.TRUE.equals(allowed),
+                mutating != null, Boolean.TRUE.equals(mutating), page);
     }
 
     @Override
@@ -130,7 +133,9 @@ public class StaffAuditManager implements StaffAuditService {
         if (resourceId == null || resourceId.isBlank()) {
             return 0;
         }
-        int erased = adminAuditEntryDetailDao.deleteByResourceId(resourceId);
+        int erased = personIdOf(resourceId)
+                .map(personId -> adminAuditEntryDetailDao.deleteAboutPerson(resourceId, personId))
+                .orElseGet(() -> adminAuditEntryDetailDao.deleteByResourceId(resourceId));
         if (erased > 0) {
             log.info("Audit detail rows erased on request for resource {}: {}", resourceId, erased);
         }
@@ -147,6 +152,14 @@ public class StaffAuditManager implements StaffAuditService {
         if (related != null) {
             entry.setRelatedSubjectType(related.type());
             entry.setRelatedSubjectId(related.id());
+        }
+    }
+
+    private static Optional<UUID> personIdOf(String resourceId) {
+        try {
+            return Optional.of(UUID.fromString(resourceId));
+        } catch (IllegalArgumentException notAPerson) {
+            return Optional.empty();
         }
     }
 

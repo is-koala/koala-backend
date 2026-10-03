@@ -5,41 +5,51 @@ import java.util.Optional;
 
 public enum AuditSubjectSource {
 
-    USER("users", "userId", null),
-    COMPANY("companies", "companyId", null),
-    IDENTITY_REVIEW("identity-verifications", "reviewId", null),
-    DELETION_REQUEST("account-deletions", "requestId", null),
-    IMAGE("images", "imageId", null),
-    BANK_ACCOUNT_VERIFICATION("bank-account-verifications", "reference", null),
-    ASSIGNMENT("job-assignments", "assignmentId", null),
-    PAYOUT("payouts", "payoutId", null),
-    DISPUTE("disputes", "disputeId", null),
-    REPORT("reports", "reportId", null),
-    BADGE_CATALOGUE("badges", null,
+    USER("users", Resolution.PATH, "userId", null),
+    COMPANY("companies", Resolution.PATH, "companyId", null),
+    IDENTITY_REVIEW("identity-verifications", Resolution.PATH, "reviewId", null),
+    DELETION_REQUEST("account-deletions", Resolution.PATH, "requestId", null),
+    IMAGE("images", Resolution.PATH, "imageId", null),
+    BANK_ACCOUNT_VERIFICATION("bank-account-verifications", Resolution.PATH, "reference", null),
+    JOB("jobs", Resolution.PATH, "jobId", null),
+    ASSIGNMENT("job-assignments", Resolution.PATH, "assignmentId", null),
+    PAYOUT("payouts", Resolution.PATH, "payoutId", null),
+    PAYMENT("payments", Resolution.PATH, "paymentId", null),
+    DISPUTE("disputes", Resolution.PATH, "disputeId", null),
+    REPORT("reports", Resolution.PATH, "reportId", null),
+    STAFF_NOTES("notes", Resolution.SERVICE, null,
+            "hedef istek gövdesinde/kayıtta; StaffNoteManager konuyu notun hedefinden çözüp "
+                    + "StaffAuditContext.about ile damgalar"),
+    STAFF_FLAGS("flags", Resolution.SERVICE, null,
+            "hedef istek parametresinde; StaffNoteManager konuyu işaretin hedefinden çözüp "
+                    + "StaffAuditContext.about ile damgalar"),
+    BADGE_CATALOGUE("badges", Resolution.NONE, null,
             "rozet kataloğu; karar bir kullanıcı ya da şirket hakkında değil"),
-    CATEGORY_CATALOGUE("job-categories", null,
+    CATEGORY_CATALOGUE("job-categories", Resolution.NONE, null,
             "iş kategorisi kataloğu; karar bir kullanıcı ya da şirket hakkında değil"),
-    RUNTIME_SETTINGS("settings", null,
+    RUNTIME_SETTINGS("settings", Resolution.NONE, null,
             "çalışma zamanı ayarı; tüm pazaryerini etkiler, tek bir konusu yok"),
-    STAFF_ACCOUNTS("staff", null,
+    STAFF_ACCOUNTS("staff", Resolution.NONE, null,
             "personel hesabı; konu türleri pazaryeri tarafıdır (USER|COMPANY), personel değil"),
-    STAFF_ROLES("roles", null,
-            "personel rol grafiği; konu türleri pazaryeri tarafıdır, personel değil"),
-    STAFF_NOTES("notes", null,
-            "hedef istek gövdesinde ve not kendi tablosunda resourceType/resourceId ile tutulur; "
-                    + "GET /admin/notes hedefe göre listeler"),
-    STAFF_FLAGS("flags", null,
-            "hedef istek gövdesinde/parametresinde ve işaret kendi tablosunda resourceType/resourceId ile "
-                    + "tutulur; GET /admin/flags hedefe göre listeler");
+    STAFF_ROLES("roles", Resolution.NONE, null,
+            "personel rol grafiği; konu türleri pazaryeri tarafıdır, personel değil");
+
+    public enum Resolution {
+        PATH,
+        SERVICE,
+        NONE
+    }
 
     private final String resourceType;
+    private final Resolution resolution;
     private final String variable;
-    private final String reasonWithoutSubject;
+    private final String reason;
 
-    AuditSubjectSource(String resourceType, String variable, String reasonWithoutSubject) {
+    AuditSubjectSource(String resourceType, Resolution resolution, String variable, String reason) {
         this.resourceType = resourceType;
+        this.resolution = resolution;
         this.variable = variable;
-        this.reasonWithoutSubject = reasonWithoutSubject;
+        this.reason = reason;
     }
 
     public static Optional<AuditSubjectSource> of(String resourceType) {
@@ -52,15 +62,19 @@ public enum AuditSubjectSource {
         return resourceType;
     }
 
+    public Resolution getResolution() {
+        return resolution;
+    }
+
     public String getVariable() {
         return variable;
     }
 
-    public String getReasonWithoutSubject() {
-        return reasonWithoutSubject;
+    public String getReason() {
+        return reason;
     }
 
-    public boolean resolvesASubject() {
-        return variable != null;
+    public boolean resolvesFromThePath() {
+        return resolution == Resolution.PATH;
     }
 }

@@ -456,4 +456,10 @@ public class CompanyManager implements CompanyService {
             throw new ResourceNotFoundException(CompanyMessages.USER_NOT_ASSOCIATED_WITH_COMPANY);
         }
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean existsIncludingDeleted(UUID id) {
+        return companyDao.existsIncludingDeletedById(id);
+    }
 }

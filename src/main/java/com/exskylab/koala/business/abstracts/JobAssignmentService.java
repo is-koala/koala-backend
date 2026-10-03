@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.abstracts;
 
+import com.exskylab.koala.dataAccess.AssignmentParties;
 import com.exskylab.koala.core.dtos.jobAssignment.response.AdminAssignmentDto;
 
 import com.exskylab.koala.core.dtos.common.PageDto;
@@ -71,4 +72,6 @@ public interface JobAssignmentService {
     List<PartyLink> findEscrowLinksForUsers(Collection<UUID> userIds);
 
     List<PartyLink> findActiveWorkLinksForUsers(Collection<UUID> userIds);
+
+    Optional<AssignmentParties> findAuditParties(UUID jobAssignmentId);
 }

@@ -20,32 +20,31 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AuditSubjectCoverageIT extends AbstractIntegrationTest {
 
     private static final String ADMIN_PREFIX = "/admin";
     private static final String AUTHENTICATION_PREFIX = "/admin/auth/";
+    private static final String PROBE = "probe";
 
     @Autowired
     @Qualifier("requestMappingHandlerMapping")
     private RequestMappingHandlerMapping handlerMapping;
 
-    private record WriteMapping(String verb, String pattern, HandlerMethod handler) {
+    private record SubjectMapping(String verb, String pattern, HandlerMethod handler, boolean mutating) {
 
         String resourceType() {
             return AuditScope.resourceTypeOf(pattern);
         }
 
-        Optional<String> firstVariable() {
-            int open = pattern.indexOf('{');
-            int close = open < 0 ? -1 : pattern.indexOf('}', open);
-            if (close < 0) {
-                return Optional.empty();
-            }
-            String name = pattern.substring(open + 1, close);
-            int constraint = name.indexOf(':');
-            return Optional.of(constraint < 0 ? name : name.substring(0, constraint));
+        boolean targetsARecord() {
+            return pattern.indexOf('{') >= 0;
+        }
+
+        boolean readsTheRecordFrom(String variable) {
+            return variable != null && PROBE.equals(AuditScope.resourceIdOf(pattern, Map.of(variable, PROBE)));
         }
 
         @Override
@@ -55,26 +54,37 @@ class AuditSubjectCoverageIT extends AbstractIntegrationTest {
         }
     }
 
-    private List<WriteMapping> writeMappings() {
-        List<WriteMapping> mappings = new ArrayList<>();
+    private List<SubjectMapping> subjectMappings() {
+        List<SubjectMapping> mappings = new ArrayList<>();
         for (Map.Entry<RequestMappingInfo, HandlerMethod> entry : handlerMapping.getHandlerMethods().entrySet()) {
-            if (declared(entry.getValue()) == null) {
+            RequiresPermission required = declared(entry.getValue());
+            if (required == null) {
                 continue;
             }
-            Set<RequestMethod> methods = entry.getKey().getMethodsCondition().getMethods();
+            Set<RequestMethod> methods = verbsOf(entry.getKey().getMethodsCondition().getMethods());
             for (String pattern : entry.getKey().getPathPatternsCondition().getPatternValues()) {
                 if (!pattern.startsWith(ADMIN_PREFIX) || pattern.startsWith(AUTHENTICATION_PREFIX)) {
                     continue;
                 }
                 for (RequestMethod method : methods) {
-                    if (method != RequestMethod.GET && method != RequestMethod.HEAD
-                            && method != RequestMethod.OPTIONS) {
-                        mappings.add(new WriteMapping(method.name(), pattern, entry.getValue()));
+                    boolean mutating = AuditScope.isMutating(method.name(), required.value());
+                    if (AuditScope.carriesASubject(mutating, AuditScope.sensitivityOf(required.value()))) {
+                        mappings.add(new SubjectMapping(method.name(), pattern, entry.getValue(), mutating));
                     }
                 }
             }
         }
         return mappings;
+    }
+
+    static Set<RequestMethod> verbsOf(Set<RequestMethod> declared) {
+        return declared.isEmpty() ? EnumSet.allOf(RequestMethod.class) : declared;
+    }
+
+    private List<SubjectMapping> mappingsThatNeedASource() {
+        return subjectMappings().stream()
+                .filter(mapping -> mapping.mutating() || mapping.targetsARecord())
+                .toList();
     }
 
     private static RequiresPermission declared(HandlerMethod handler) {
@@ -86,32 +96,48 @@ class AuditSubjectCoverageIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void thereAreStaffDecisionsToCover() {
-        assertTrue(writeMappings().size() >= 20,
-                "En az 20 personel yazma ucu bekleniyordu, tarama boşa koşuyor: " + writeMappings());
+    void thereAreStaffDecisionsAndSensitiveReadsToCover() {
+        List<SubjectMapping> mappings = mappingsThatNeedASource();
+        assertTrue(mappings.stream().filter(SubjectMapping::mutating).count() >= 20,
+                "En az 20 personel yazma ucu bekleniyordu, tarama boşa koşuyor: " + mappings);
+        assertTrue(mappings.stream().anyMatch(mapping -> !mapping.mutating()),
+                "Kayda yönelik hassas okuma ucu bekleniyordu, tarama boşa koşuyor: " + mappings);
     }
 
     @Test
-    void everyStaffWriteEitherResolvesAnAuditSubjectOrSaysWhyItHasNone() {
+    void aMappingThatDeclaresNoHttpMethodIsScannedForEveryVerb() {
+        assertEquals(EnumSet.allOf(RequestMethod.class), verbsOf(Set.of()),
+                "Yöntemsiz bir @RequestMapping her fiille çağrılabilir; tarama onu yazma olarak da saymalı.");
+        assertEquals(Set.of(RequestMethod.POST), verbsOf(Set.of(RequestMethod.POST)));
+    }
+
+    @Test
+    void everySubjectBearingStaffEndpointEitherResolvesItsSubjectOrSaysWhyItHasNone() {
         List<String> failures = new ArrayList<>();
 
-        for (WriteMapping mapping : writeMappings()) {
+        for (SubjectMapping mapping : mappingsThatNeedASource()) {
             Optional<AuditSubjectSource> source = AuditSubjectSource.of(mapping.resourceType());
             if (source.isEmpty()) {
                 failures.add(mapping + " → kaynak türü '" + mapping.resourceType() + "' AuditSubjectSource'ta yok. "
-                        + "Kararın konusu (USER|COMPANY) nasıl çözülüyor ya da neden yok, orada tanımlanmalı.");
+                        + "Kararın ya da hassas okumanın konusu (USER|COMPANY) nasıl çözülüyor ya da neden yok, "
+                        + "orada tanımlanmalı.");
                 continue;
             }
             AuditSubjectSource declared = source.get();
-            if (!declared.resolvesASubject()) {
+            if (!declared.resolvesFromThePath()) {
                 continue;
             }
-            String variable = mapping.firstVariable().orElse(null);
-            if (!declared.getVariable().equals(variable)) {
+            if (!mapping.targetsARecord()) {
+                if (mapping.mutating()) {
+                    failures.add(mapping + " → " + declared + " konuyu '{" + declared.getVariable()
+                            + "}' yol değişkeninden çözer ama bu yazma ucunun yol değişkeni yok.");
+                }
+                continue;
+            }
+            if (!mapping.readsTheRecordFrom(declared.getVariable())) {
                 failures.add(mapping + " → " + declared + " konuyu '{" + declared.getVariable()
-                        + "}' yol değişkeninden çözer ama bu ucun ilk yol değişkeni "
-                        + (variable == null ? "yok" : "'{" + variable + "}'")
-                        + "; denetim satırının resourceId'si o kaydın kimliği olmaz.");
+                        + "}' yol değişkeninden çözer ama AuditScope.resourceIdOf bu uçta o değişkeni okumuyor; "
+                        + "denetim satırının resourceId'si o kaydın kimliği olmaz.");
             }
         }
 
@@ -119,25 +145,36 @@ class AuditSubjectCoverageIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void everySourceWithoutASubjectCarriesAWrittenReason() {
+    void theCoverageCheckUsesTheSameParserAsTheRecorder() {
+        assertTrue(new SubjectMapping("POST", "/admin/users/{userId}/roles", null, true)
+                .readsTheRecordFrom("userId"));
+        assertTrue(new SubjectMapping("POST", "/admin/users/{userId:[0-9a-f-]+}/roles", null, true)
+                .readsTheRecordFrom("userId"));
+        assertTrue(!new SubjectMapping("DELETE", "/admin/users/{userId}/roles/{role}", null, true)
+                .readsTheRecordFrom("role"));
+    }
+
+    @Test
+    void everySourceThatDoesNotReadThePathCarriesAWrittenReason() {
         List<String> silent = new ArrayList<>();
         for (AuditSubjectSource source : AuditSubjectSource.values()) {
-            boolean hasReason = source.getReasonWithoutSubject() != null
-                    && !source.getReasonWithoutSubject().isBlank();
-            if (source.resolvesASubject() == hasReason) {
+            boolean hasReason = source.getReason() != null && !source.getReason().isBlank();
+            boolean hasVariable = source.getVariable() != null && !source.getVariable().isBlank();
+            if (source.resolvesFromThePath() == hasReason || source.resolvesFromThePath() != hasVariable) {
                 silent.add(source.name());
             }
         }
         assertTrue(silent.isEmpty(),
-                "Konu çözen kaynak gerekçe taşımaz, çözmeyen kaynak gerekçe taşımak zorunda: " + silent);
+                "Yoldan çözen kaynak bir yol değişkeni taşır ve gerekçe taşımaz; servisten damgalanan ya da "
+                        + "konusuz kalan kaynak yol değişkeni taşımaz, gerekçe taşımak zorunda: " + silent);
     }
 
     @Test
-    void everyDeclaredSourceStillGuardsAStaffWrite() {
+    void everyDeclaredSourceStillGuardsAStaffEndpoint() {
         Set<AuditSubjectSource> unused = EnumSet.allOf(AuditSubjectSource.class);
-        for (WriteMapping mapping : writeMappings()) {
+        for (SubjectMapping mapping : mappingsThatNeedASource()) {
             AuditSubjectSource.of(mapping.resourceType()).ifPresent(unused::remove);
         }
-        assertTrue(unused.isEmpty(), "Artık hiçbir personel yazma ucuna karşılık gelmeyen kaynak: " + unused);
+        assertTrue(unused.isEmpty(), "Artık hiçbir personel ucuna karşılık gelmeyen kaynak: " + unused);
     }
 }

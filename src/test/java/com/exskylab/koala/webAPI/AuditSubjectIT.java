@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -60,6 +61,8 @@ class AuditSubjectIT extends AbstractStaffIntegrationTest {
     private final UUID galleryRowId = UUID.randomUUID();
     private final UUID bankAccountId = UUID.randomUUID();
     private final String reference = "KS" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+    private final UUID imageReportId = UUID.randomUUID();
+    private final UUID paymentId = UUID.randomUUID();
 
     private String ownerToken;
 
@@ -121,13 +124,14 @@ class AuditSubjectIT extends AbstractStaffIntegrationTest {
         jdbc.update("delete from notifications where recipient_id in (?, ?)", workerId, employerId);
         jdbc.update("delete from user_profile_sync_outbox where user_id in (?, ?)", workerId, employerId);
         jdbc.update("delete from bank_accounts where id = ?", bankAccountId);
+        jdbc.update("delete from reports where id in (?, ?)", reportId, imageReportId);
         jdbc.update("delete from company_images where id = ?", galleryRowId);
         jdbc.update("delete from media where id = ?", imageId);
         jdbc.update("delete from account_deletion_requests where id = ?", deletionId);
-        jdbc.update("delete from reports where id = ?", reportId);
         jdbc.update("delete from disputes where id = ?", disputeId);
         jdbc.update("delete from refunds where payment_id in (select id from payments where job_assignment_id in "
                 + "(?, ?))", individualAssignmentId, companyAssignmentId);
+        jdbc.update("delete from payments where id = ?", paymentId);
         jdbc.update("delete from payouts where job_assignment_id in (?, ?)",
                 individualAssignmentId, companyAssignmentId);
         jdbc.update("delete from job_assignments where id in (?, ?)", individualAssignmentId, companyAssignmentId);
@@ -230,15 +234,160 @@ class AuditSubjectIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
-    void readsAndPlatformWritesCarryNoSubject() throws Exception {
-        perform(get("/admin/users/{id}", workerId)).andExpect(status().isOk());
+    void ordinaryReadsAndPlatformWritesCarryNoSubject() throws Exception {
+        String agentToken = staffAccessToken(createStaffMember(
+                STAFF_EMAIL_PREFIX + UUID.randomUUID() + "@iskoala.com", "Destek", "SUPPORT_AGENT"));
+        mockMvc.perform(get("/admin/users/{id}", workerId).header("Authorization", "Bearer " + agentToken))
+                .andExpect(status().isOk());
         perform(put("/admin/settings/" + LATE_FEE_KEY)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"value\":\"0.40\"}"))
                 .andExpect(status().isOk());
 
-        assertSubject(onlyRow("user.read_pii"), null, null);
+        assertSubject(onlyRow("user.read"), null, null);
         assertSubject(onlyRow("setting.update"), null, null);
+    }
+
+    @Test
+    void sensitiveReadsCarryTheirSubjectSoTheTimelineCanSeparateViewsFromDecisions() throws Exception {
+        jdbc.update("""
+                insert into payments (id, job_assignment_id, conversation_id, status, currency, created_at, is_deleted)
+                values (?, ?, ?, 'SUCCEEDED', 'TRY', now(), false)
+                """, paymentId, companyAssignmentId, "subject-payment-" + paymentId);
+        perform(get("/admin/users/{id}", workerId)).andExpect(status().isOk());
+        perform(get("/admin/payouts/{id}", payoutId));
+        perform(get("/admin/payments/{id}", paymentId));
+        perform(get("/admin/jobs/{id}", individualJobId));
+        perform(get("/admin/jobs/{id}", companyJobId));
+        perform(post("/admin/account-deletions/{id}/reject", deletionId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reason\":\"açık yükümlülük\"}"))
+                .andExpect(status().isOk());
+
+        Map<String, Object> piiRead = onlyRow("user.read_pii");
+        assertEquals(Boolean.FALSE, piiRead.get("mutating"));
+        assertSubject(piiRead, "USER", workerId);
+        Map<String, Object> payoutRead = onlyRow("payout.reconcile");
+        assertEquals(Boolean.FALSE, payoutRead.get("mutating"));
+        assertSubject(payoutRead, "USER", workerId);
+        Map<String, Object> paymentRead = onlyRow("payment.read");
+        assertSubject(paymentRead, "USER", workerId);
+        assertRelated(paymentRead, "COMPANY", companyId);
+        List<Map<String, Object>> jobReads = jdbc.queryForList(
+                "select * from admin_audit_entries where action = 'job.read'");
+        assertEquals(2, jobReads.size(), jobReads.toString());
+        Map<String, Object> individualJobRead = jobReads.stream()
+                .filter(row -> individualJobId.toString().equals(row.get("resource_id"))).findFirst().orElseThrow();
+        Map<String, Object> companyJobRead = jobReads.stream()
+                .filter(row -> companyJobId.toString().equals(row.get("resource_id"))).findFirst().orElseThrow();
+        assertSubject(individualJobRead, "USER", employerId);
+        assertSubject(companyJobRead, "COMPANY", companyId);
+
+        perform(get("/admin/audit-log").param("subjectId", workerId.toString()).param("mutating", "false"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[*].action",
+                        containsInAnyOrder("user.read_pii", "payout.reconcile", "payment.read")));
+        perform(get("/admin/audit-log").param("subjectId", workerId.toString()).param("mutating", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content", hasSize(1)))
+                .andExpect(jsonPath("$.data.content[0].action").value("user.deletion.reject"));
+    }
+
+    @Test
+    void notesAndFlagsCarryTheSubjectOfTheirTarget() throws Exception {
+        String noteJson = perform(post("/admin/notes")
+                        .param("resourceType", "USER").param("resourceId", workerId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"body\":\"konu notu\"}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String noteId = com.jayway.jsonpath.JsonPath.read(noteJson, "$.data.id");
+        perform(patch("/admin/notes/{id}", noteId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"body\":\"düzeltilmiş not\"}"))
+                .andExpect(status().isOk());
+        perform(delete("/admin/notes/{id}", noteId)).andExpect(status().isOk());
+        perform(put("/admin/flags").param("resourceType", "COMPANY").param("resourceId", companyId.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"kind\":\"RISK\",\"label\":\"konu\"}"))
+                .andExpect(status().isOk());
+        perform(delete("/admin/flags").param("resourceType", "COMPANY").param("resourceId", companyId.toString())
+                .param("kind", "RISK"))
+                .andExpect(status().isOk());
+        perform(post("/admin/notes")
+                .param("resourceType", "JOB_ASSIGNMENT").param("resourceId", companyAssignmentId.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"body\":\"atama notu\"}"))
+                .andExpect(status().isCreated());
+
+        List<Map<String, Object>> created = jdbc.queryForList(
+                "select * from admin_audit_entries where action = 'staff.note.create' order by occurred_at");
+        assertEquals(2, created.size(), created.toString());
+        assertSubject(created.get(0), "USER", workerId);
+        assertSubject(created.get(1), "USER", workerId);
+        assertRelated(created.get(1), "COMPANY", companyId);
+        assertSubject(onlyRow("staff.note.edit"), "USER", workerId);
+        assertSubject(onlyRow("staff.note.delete"), "USER", workerId);
+        assertSubject(onlyRow("staff.flag.set"), "COMPANY", companyId);
+        assertSubject(onlyRow("staff.flag.clear"), "COMPANY", companyId);
+
+        perform(get("/admin/audit-log").param("subjectType", "COMPANY").param("subjectId", companyId.toString())
+                .param("action", "staff.flag.clear"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content", hasSize(1)))
+                .andExpect(jsonPath("$.data.content[0].resourceType").value("flags"));
+    }
+
+    @Test
+    void aSoftDeletedCompanyOrCreatorStillNamesTheEmployerLikeTheBackfillDoes() throws Exception {
+        jdbc.update("update companies set is_deleted = true where id = ?", companyId);
+        jdbc.update("update users set is_deleted = true where id = ?", employerId);
+
+        perform(post("/admin/job-assignments/{id}/refund", companyAssignmentId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"amount\":10.00,\"reason\":\"konu testi\"}"));
+        perform(post("/admin/job-assignments/{id}/release", individualAssignmentId));
+
+        assertRelated(onlyRow("payment.refund"), "COMPANY", companyId);
+        assertRelated(onlyRow("payout.release"), "USER", employerId);
+    }
+
+    @Test
+    void aPathIdentifierIsOnlyASubjectWhenThePersonExistsEvenIfTheyDeletedTheirAccount() throws Exception {
+        UUID stranger = UUID.randomUUID();
+        jdbc.update("update users set is_deleted = true where id = ?", employerId);
+
+        perform(post("/admin/users/{id}/roles", stranger)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"role\":\"ROLE_USER\"}"));
+        perform(post("/admin/users/{id}/roles", employerId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"role\":\"ROLE_USER\"}"));
+
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "select * from admin_audit_entries where action = 'user.role.grant'");
+        assertEquals(2, rows.size(), rows.toString());
+        Map<String, Object> strangerRow = rows.stream()
+                .filter(row -> stranger.toString().equals(row.get("resource_id"))).findFirst().orElseThrow();
+        Map<String, Object> deletedRow = rows.stream()
+                .filter(row -> employerId.toString().equals(row.get("resource_id"))).findFirst().orElseThrow();
+        assertSubject(strangerRow, null, null);
+        assertSubject(deletedRow, "USER", employerId);
+    }
+
+    @Test
+    void anImageOnlyReportIsAboutTheGalleryOwnerOfTheImage() throws Exception {
+        jdbc.update("""
+                insert into reports (id, created_at, is_deleted, reporter_id, reported_user_id, image_id,
+                                     reason, description, status)
+                values (?, now(), false, ?, null, ?, 'INAPPROPRIATE_CONTENT', 'görsel', 'OPEN')
+                """, imageReportId, workerId, imageId);
+
+        perform(post("/admin/reports/{id}/review", imageReportId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"DISMISSED\",\"note\":\"konu testi\"}"));
+
+        assertSubject(onlyRow("report.review"), "COMPANY", companyId);
     }
 
     @Test
@@ -251,7 +400,8 @@ class AuditSubjectIT extends AbstractStaffIntegrationTest {
         perform(post("/admin/companies/{id}/approve", companyId)).andExpect(status().isOk());
         perform(get("/admin/users/{id}", workerId)).andExpect(status().isOk());
 
-        perform(get("/admin/audit-log").param("subjectType", "USER").param("subjectId", workerId.toString()))
+        perform(get("/admin/audit-log").param("subjectType", "USER").param("subjectId", workerId.toString())
+                        .param("mutating", "true"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content", hasSize(2)))
                 .andExpect(jsonPath("$.data.content[*].action",

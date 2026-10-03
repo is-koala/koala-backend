@@ -1,6 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
-import com.exskylab.koala.core.security.AuditSubject;
+import com.exskylab.koala.dataAccess.ReportedParty;
 import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.exceptions.ValidationException;
@@ -314,11 +314,8 @@ public class ReportManager implements ReportService {
 
     @Override
     @Transactional(readOnly = true)
-    public Optional<AuditSubject> findReportedParty(UUID reportId) {
-        return reportDao.findReportedPartyById(reportId)
-                .map(party -> party.getReportedUserId() != null
-                        ? AuditSubject.user(party.getReportedUserId())
-                        : AuditSubject.employerOf(party.getJobCompanyId(), party.getJobCreatorId()));
+    public Optional<ReportedParty> findReportedParty(UUID reportId) {
+        return reportDao.findReportedPartyById(reportId);
     }
 
     @Override

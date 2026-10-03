@@ -654,4 +654,10 @@ public class UserManager implements UserService {
             throw new ConflictException(AdminMessages.SYSTEM_USER_ROLES_PROTECTED);
         }
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean existsIncludingDeleted(UUID id) {
+        return userDao.existsIncludingDeletedById(id);
+    }
 }

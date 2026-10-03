@@ -23,15 +23,17 @@ public record AuditEntryDto(
         String userAgent,
         String before,
         String after,
-        @Schema(description = "Kararın konusu olan pazaryeri tarafının türü (USER ya da COMPANY). Yalnız yazma "
-                + "satırlarında (mutating=true) dolar; okuma satırlarında, katalog/ayar/personel uçlarında, not ve "
-                + "işaret yazımlarında ve konusu bulunamayan kayıtta null. Alan eklenmeden önceki satırlar "
+        @Schema(description = "Satırın konusu olan pazaryeri tarafının türü (USER ya da COMPANY). Yazma satırlarında "
+                + "(mutating=true; personel notu ve işareti dahil) ve hassas okumalarda (sensitivity PERSONAL_DATA ya "
+                + "da FINANCIAL) dolar; sıradan okuma satırlarında, katalog/ayar/personel uçlarında ve konusu "
+                + "bulunamayan kayıtta (var olmayan kimlik) null. Alan eklenmeden önceki yazma satırları "
                 + "türetilebildiği ölçüde geri dolduruldu, türetilemeyenler null.")
         AuditSubjectType subjectType,
         @Schema(description = "Kararın konusu: kimlik incelemesinde ve hesap silme talebinde kullanıcı, şirket "
                 + "onay/redde şirket, görselde galerinin sahibi, IBAN doğrulamasında hesap sahibi, hakedişte işçi, "
                 + "atama/uyuşmazlık işlemlerinde işçi, şikayette şikayet edilen (yoksa şikayet edilen ilanın "
-                + "işvereni). subjectType ile aynı kurala göre null olabilir.")
+                + "işvereni, o da yoksa şikayet edilen görselin sahibi), not/işarette hedefin kendisi ya da tarafı. "
+                + "subjectType ile aynı kurala göre null olabilir.")
         UUID subjectId,
         @Schema(description = "Karşı tarafın türü (USER ya da COMPANY); yalnız atama ve uyuşmazlık işlemlerinde "
                 + "dolar, diğer satırlarda null.")

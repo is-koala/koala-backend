@@ -26,6 +26,7 @@ class AuditSubjectBackfillMigrationIT extends AbstractIntegrationTest {
 
     private static final String PROBE_DATABASE = "audit_subject_backfill_probe";
     private static final String CHANGE_LOG = "classpath:/db/changelog/2026/10/03-01-audit-subject.xml";
+    private static final String SOFT_DELETE = ", is_deleted BOOLEAN not null default false";
 
     @Autowired
     private DataSource dataSource;
@@ -63,22 +64,31 @@ class AuditSubjectBackfillMigrationIT extends AbstractIntegrationTest {
                     occurred_at TIMESTAMPTZ not null,
                     resource_type VARCHAR(64) not null,
                     resource_id VARCHAR(128) not null,
-                    mutating BOOLEAN not null
+                    mutating BOOLEAN not null,
+                    sensitivity VARCHAR(32) not null
                 )
                 """);
-        probe.execute("create table users (id UUID primary key)");
-        probe.execute("create table companies (id UUID primary key)");
-        probe.execute("create table jobs (id UUID primary key, creator_id UUID, company_id UUID)");
-        probe.execute("create table job_assignments (id UUID primary key, job_id UUID not null, worker_id UUID not null)");
-        probe.execute("create table user_verifications (id UUID primary key, user_id UUID)");
-        probe.execute("create table account_deletion_requests (id UUID primary key, user_id UUID, subject_id UUID)");
-        probe.execute("create table company_images (id UUID primary key, company_id UUID not null, image_id UUID not null)");
-        probe.execute("create table job_images (id UUID primary key, job_id UUID not null, image_id UUID not null)");
+        probe.execute("create table users (id UUID primary key" + SOFT_DELETE + ")");
+        probe.execute("create table companies (id UUID primary key" + SOFT_DELETE + ")");
+        probe.execute("create table jobs (id UUID primary key, creator_id UUID, company_id UUID" + SOFT_DELETE + ")");
+        probe.execute("create table job_assignments (id UUID primary key, job_id UUID not null, "
+                + "worker_id UUID not null" + SOFT_DELETE + ")");
+        probe.execute("create table user_verifications (id UUID primary key, user_id UUID" + SOFT_DELETE + ")");
+        probe.execute("create table account_deletion_requests (id UUID primary key, user_id UUID, subject_id UUID"
+                + SOFT_DELETE + ")");
+        probe.execute("create table company_images (id UUID primary key, company_id UUID not null, "
+                + "image_id UUID not null" + SOFT_DELETE + ")");
+        probe.execute("create table job_images (id UUID primary key, job_id UUID not null, image_id UUID not null"
+                + SOFT_DELETE + ")");
         probe.execute("create table bank_accounts (id UUID primary key, user_id UUID not null, "
-                + "verification_reference VARCHAR(32))");
-        probe.execute("create table payouts (id UUID primary key, worker_id UUID not null)");
-        probe.execute("create table disputes (id UUID primary key, job_assignment_id UUID not null)");
-        probe.execute("create table reports (id UUID primary key, reported_user_id UUID, job_id UUID)");
+                + "verification_reference VARCHAR(32)" + SOFT_DELETE + ")");
+        probe.execute("create table payouts (id UUID primary key, worker_id UUID not null" + SOFT_DELETE + ")");
+        probe.execute("create table disputes (id UUID primary key, job_assignment_id UUID not null"
+                + SOFT_DELETE + ")");
+        probe.execute("create table payments (id UUID primary key, job_assignment_id UUID not null"
+                + SOFT_DELETE + ")");
+        probe.execute("create table reports (id UUID primary key, reported_user_id UUID, job_id UUID, image_id UUID"
+                + SOFT_DELETE + ")");
 
         probe.update("insert into users (id) values (?), (?), (?)", worker, creator, reportedUser);
         probe.update("insert into companies (id) values (?)", company);
@@ -139,6 +149,75 @@ class AuditSubjectBackfillMigrationIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void sensitiveReadsGetTheirSubjectWhileOrdinaryReadsStayWithoutOne() {
+        UUID payout = UUID.randomUUID();
+        UUID payment = UUID.randomUUID();
+        probe.update("insert into payouts (id, worker_id) values (?, ?)", payout, worker);
+        probe.update("insert into payments (id, job_assignment_id, is_deleted) values (?, ?, true)",
+                payment, companyAssignment);
+
+        UUID piiRead = audit("users", worker, false, "PERSONAL_DATA");
+        UUID payoutRead = audit("payouts", payout, false, "FINANCIAL");
+        UUID paymentRead = audit("payments", payment, false, "FINANCIAL");
+        UUID individualJobRead = audit("jobs", individualJob, false, "PERSONAL_DATA");
+        UUID companyJobRead = audit("jobs", companyJob, false, "PERSONAL_DATA");
+        UUID ordinaryRead = audit("users", worker, false, "NORMAL");
+
+        applyChangeLog();
+
+        assertSubject(piiRead, "USER", worker, null, null);
+        assertSubject(payoutRead, "USER", worker, null, null);
+        assertSubject(paymentRead, "USER", worker, "COMPANY", company);
+        assertSubject(individualJobRead, "USER", creator, null, null);
+        assertSubject(companyJobRead, "COMPANY", company, null, null);
+        assertSubject(ordinaryRead, null, null, null, null);
+    }
+
+    @Test
+    void softDeletedRowsStillNameThePartyLikeTheRuntimeResolverDoes() {
+        UUID removedImage = UUID.randomUUID();
+        probe.update("insert into company_images (id, company_id, image_id, is_deleted) values (?, ?, ?, true)",
+                UUID.randomUUID(), company, removedImage);
+        probe.update("update companies set is_deleted = true where id = ?", company);
+        probe.update("update users set is_deleted = true where id = ?", creator);
+        probe.update("update jobs set is_deleted = true where id in (?, ?)", individualJob, companyJob);
+
+        UUID companyRefund = audit("job-assignments", companyAssignment, true);
+        UUID individualRelease = audit("job-assignments", individualAssignment, true);
+        UUID companyDecision = audit("companies", company, true);
+        UUID imageRemoval = audit("images", removedImage, true);
+
+        applyChangeLog();
+
+        assertSubject(companyRefund, "USER", worker, "COMPANY", company);
+        assertSubject(individualRelease, "USER", worker, "USER", creator);
+        assertSubject(companyDecision, "COMPANY", company, null, null);
+        assertSubject(imageRemoval, "COMPANY", company, null, null);
+    }
+
+    @Test
+    void anImageOnlyReportFallsBackToTheGalleryOwner() {
+        UUID companyImage = UUID.randomUUID();
+        UUID jobImage = UUID.randomUUID();
+        UUID companyImageReport = UUID.randomUUID();
+        UUID jobImageReport = UUID.randomUUID();
+        probe.update("insert into company_images (id, company_id, image_id) values (?, ?, ?)",
+                UUID.randomUUID(), company, companyImage);
+        probe.update("insert into job_images (id, job_id, image_id) values (?, ?, ?)",
+                UUID.randomUUID(), individualJob, jobImage);
+        probe.update("insert into reports (id, image_id) values (?, ?), (?, ?)",
+                companyImageReport, companyImage, jobImageReport, jobImage);
+
+        UUID companyImageDecision = audit("reports", companyImageReport, true);
+        UUID jobImageDecision = audit("reports", jobImageReport, true);
+
+        applyChangeLog();
+
+        assertSubject(companyImageDecision, "COMPANY", company, null, null);
+        assertSubject(jobImageDecision, "USER", creator, null, null);
+    }
+
+    @Test
     void imagesAndBankVerificationsResolveThroughTheirOwnTables() {
         UUID companyImage = UUID.randomUUID();
         UUID jobImage = UUID.randomUUID();
@@ -178,15 +257,23 @@ class AuditSubjectBackfillMigrationIT extends AbstractIntegrationTest {
     }
 
     private UUID audit(String resourceType, UUID resourceId, boolean mutating) {
-        return auditRaw(resourceType, resourceId.toString(), mutating);
+        return audit(resourceType, resourceId, mutating, "NORMAL");
+    }
+
+    private UUID audit(String resourceType, UUID resourceId, boolean mutating, String sensitivity) {
+        return auditRaw(resourceType, resourceId.toString(), mutating, sensitivity);
     }
 
     private UUID auditRaw(String resourceType, String resourceId, boolean mutating) {
+        return auditRaw(resourceType, resourceId, mutating, "NORMAL");
+    }
+
+    private UUID auditRaw(String resourceType, String resourceId, boolean mutating, String sensitivity) {
         UUID id = UUID.randomUUID();
         probe.update("""
-                insert into admin_audit_entries (id, occurred_at, resource_type, resource_id, mutating)
-                values (?, now(), ?, ?, ?)
-                """, id, resourceType, resourceId, mutating);
+                insert into admin_audit_entries (id, occurred_at, resource_type, resource_id, mutating, sensitivity)
+                values (?, now(), ?, ?, ?, ?)
+                """, id, resourceType, resourceId, mutating, sensitivity);
         return id;
     }
 

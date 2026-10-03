@@ -9,4 +9,6 @@ public interface ReportedParty {
     UUID getJobCompanyId();
 
     UUID getJobCreatorId();
+
+    UUID getImageId();
 }

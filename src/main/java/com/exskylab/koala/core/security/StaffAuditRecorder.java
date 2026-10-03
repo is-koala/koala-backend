@@ -70,7 +70,9 @@ public class StaffAuditRecorder {
                 sensitivity,
                 clientIpResolver.resolve(request),
                 request.getHeader(USER_AGENT_HEADER),
-                mutating ? subjectsOf(resourceType, resourceId) : AuditSubjects.NONE);
+                AuditScope.carriesASubject(mutating, sensitivity)
+                        ? subjectsOf(resourceType, resourceId)
+                        : AuditSubjects.NONE);
 
         if (StaffAuditContext.pend(record)) {
             return;

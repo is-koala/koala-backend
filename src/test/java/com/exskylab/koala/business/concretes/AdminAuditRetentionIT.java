@@ -52,6 +52,25 @@ class AdminAuditRetentionIT extends AbstractIntegrationTest {
         return id;
     }
 
+    private UUID entryAbout(String resourceType, String resourceId, UUID subjectId, UUID relatedSubjectId) {
+        UUID id = agedEntry("24 months", "6 months", resourceId);
+        jdbcTemplate.update("""
+                update admin_audit_entries
+                set resource_type = ?,
+                    subject_type = case when ?::uuid is null then null else 'USER' end, subject_id = ?,
+                    related_subject_type = case when ?::uuid is null then null else 'USER' end,
+                    related_subject_id = ?
+                where id = ?
+                """, resourceType, subjectId, subjectId, relatedSubjectId, relatedSubjectId, id);
+        return id;
+    }
+
+    private boolean hasDetail(UUID entryId) {
+        return jdbcTemplate.queryForObject(
+                "select count(*) from admin_audit_entry_details where audit_entry_id = ?",
+                Integer.class, entryId) > 0;
+    }
+
     private int entries() {
         return jdbcTemplate.queryForObject("select count(*) from admin_audit_entries", Integer.class);
     }
@@ -128,6 +147,25 @@ class AdminAuditRetentionIT extends AbstractIntegrationTest {
 
         assertEquals(3, entries(), "KVKK silme talebi çekirdeği silmez.");
         assertEquals(1, details(), "Yalnızca talebi eden kişinin detayları gitmeliydi.");
+    }
+
+    @Test
+    void anErasureRequestAlsoReachesDecisionsWhoseSubjectIsThePerson() {
+        UUID person = UUID.randomUUID();
+        UUID someoneElse = UUID.randomUUID();
+        UUID onTheirAccount = entryAbout("users", person.toString(), person, null);
+        UUID onTheirPayout = entryAbout("job-assignments", UUID.randomUUID().toString(), person, someoneElse);
+        UUID asCounterparty = entryAbout("disputes", UUID.randomUUID().toString(), someoneElse, person);
+        UUID aboutSomeoneElse = entryAbout("job-assignments", UUID.randomUUID().toString(), someoneElse, null);
+
+        assertEquals(3, staffAuditService.eraseDetailsForResource(person.toString()));
+
+        assertEquals(4, entries(), "KVKK silme talebi çekirdeği silmez.");
+        assertEquals(false, hasDetail(onTheirAccount));
+        assertEquals(false, hasDetail(onTheirPayout),
+                "Kişinin ödemesi hakkındaki kararın detayı kişinin kişisel verisini taşır.");
+        assertEquals(false, hasDetail(asCounterparty));
+        assertEquals(true, hasDetail(aboutSomeoneElse), "Başkası hakkındaki kararın detayı kalmalıydı.");
     }
 
     @Test

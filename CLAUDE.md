@@ -3934,7 +3934,7 @@ Detay yabancı anahtarı `ON DELETE CASCADE`: çekirdek gidince detay da gider. 
 
 **Saklama işi `AdminAuditRetentionScheduler`'da**, günde bir. Önce detay, sonra çekirdek siliniyor; ikisi ayrı adım çünkü detayı süresi dolduğunda düşürmek çekirdeğe dokunmadan yapılmalı. Hata koşuyu düşürmez, loglanır. `audit.retention.enabled=false` ile tümüyle susturulur (testlerde kapalı). Zamanlayıcı tek örnek varsayıyor (§7, Faz 11D) ama silme idempotent olduğu için ikinci örnek zarar vermez.
 
-**KVKK silme talebi `LegalManager.requestAccountDeletion` üzerinden tetikleniyor.** Talep kabul edildiğinde o kullanıcının id'sini `resource_id` olarak taşıyan satırların **detayı** siliniyor, çekirdek kalıyor. Açık yükümlülük yüzünden reddedilen talep hiçbir şey silmiyor. **Sınırı yazılı olsun:** eşleşme `resource_id` üzerinden, yani `/admin/users/{id}/...` satırlarını yakalıyor; o kişinin adı başka bir kaydın istek gövdesinde geçiyorsa o detay bu yolla silinmez. Kapsamı genişletmek gövde içinde arama demek ve bugün gerekmedi.
+**KVKK silme talebi `LegalManager.requestAccountDeletion` üzerinden tetikleniyor.** Talep kabul edildiğinde o kişiyle ilgili satırların **detayı** siliniyor, çekirdek kalıyor: `resource_id`'si kişinin id'si olanlar (`/admin/users/{id}/...`) **ve** konusu ya da karşı tarafı o kişi olanlar (`subject_id`/`related_subject_id`, #307 — kişinin hakedişi, ödemesi, kimlik incelemesi, uyuşmazlığı hakkındaki kararlar; detayları o kişinin verisini taşır). Tek bir JPQL `delete … where d.entry.id in (select …)` (`AdminAuditEntryDetailDao.deleteAboutPerson`); kimlik UUID değilse yalnız `resource_id` eşleşmesi. Açık yükümlülük yüzünden reddedilen talep hiçbir şey silmiyor. **Sınırı yazılı olsun:** konu sütunları dolmadan önceki ve geri doldurmanın türetemediği satırlar yine yalnız `resource_id` ile yakalanır; o kişinin adı başka bir kaydın istek gövdesinde geçiyorsa o detay bu yolla silinmez. Kapsamı genişletmek gövde içinde arama demek ve bugün gerekmedi.
 
 **Önce/sonra değerleri `StaffAuditContext.capture` ile veriliyor.** İki çağıran var: `SettingsManager.update` — issue'nun şikayet ettiği `cancellation.late-fee-rate` artık iz bırakmadan değiştirilemiyor — ve `StaffAuthorizationManager`'ın dört rol grafiği yazımı (§2au). Yeni bir yazma ucunun önce/sonra taşıması isteniyorsa manager'a tek satır ekleniyor, denetim satırı zaten yazılıyor. Aynı context'in `reclassify` işlemi ise statik controller anotasyonundan daha özel, gövdeye bağlı izin/aksiyon doğduğunda kullanılır; bugün tek çağıran uyuşmazlığın para hareketi sonucudur (§2p).
 
@@ -3965,64 +3965,110 @@ saklamayı) ikiye katlardı. CHECK kısıtları tür/kimlik çiftinin birlikte d
 karşı tarafın konu olmadan yazılamamasını zorluyor. İki kısmi indeks (`(subject_id, occurred_at desc) where subject_id
 is not null` ve related eşi) "X hakkındaki kararlar, en yeni önce" sorgusu için.
 
-**Konu yalnız yazma satırlarında (`mutating=true`) çözülür.** Okuma satırları zaman çizelgesini her sayfa ziyaretiyle
-doldururdu; konu `null` kalır. Reddedilen yazma da çözülür — yetkisiz bir onay denemesi o kişinin çizelgesinde görünmeli.
+**Göç büyük tablo kalıbında (`2026/09/06-83-cancellation-refund.xml` emsali), beş changeset.** `01` sütunları ve CHECK'leri `NOT VALID`
+ekler — mevcut satırları taramaz, tabloyu yalnız katalog değişikliği kadar kilitler. `02` geri doldurmadır ve
+`<rollback/>`'i **boştur**: sütunlar `01`'in geri alınmasıyla gider, doldurulmuş değerleri tek tek `null`'a çekmenin
+anlamı yok. `03` iki kısıtı `VALIDATE CONSTRAINT` ile doğrular (`SHARE UPDATE EXCLUSIVE`, yazmayı durdurmaz). `04`/`05`
+indeksleri `runInTransaction="false"` içinde `CREATE INDEX CONCURRENTLY IF NOT EXISTS` ile kurar; yarıda kalan bir
+`CONCURRENTLY` geçersiz indeks bırakırsa `IF NOT EXISTS` onu atlar, o durumda indeks elle düşürülüp changeset yeniden
+koşulur. Geri alma `DROP INDEX CONCURRENTLY IF EXISTS`.
 
-**Çözüm tek yerde ve iki katmanlı bir yapısal koruma taşıyor.**
+**Konu karar satırlarında ve hassas okumalarda çözülür; sıradan okumada çözülmez.** Kural tek yerde:
+`AuditScope.carriesASubject(mutating, sensitivity)` — `mutating` ya da hassasiyet `NORMAL` değilse. Yani bir
+personelin bir kişinin TCKN'sine, ödemesine, hakedişine, ilanının kişisel verisine **baktığı** satır da o kişinin
+çizelgesine düşer (KVKK "kim baktı" sorusu); `user.read` gibi `NORMAL` bir okuma çizelgeyi her sayfa ziyaretiyle
+doldurmasın diye konusuz kalır. Reddedilen yazma da çözülür — yetkisiz bir onay denemesi o kişinin çizelgesinde
+görünmeli. `GET /admin/users/{userId}` yetki anında `user.read` (`NORMAL`) olarak görülür ve handler PII gördüğünde
+`user.read_pii`'ye yeniden sınıflar; o yol konuyu `StaffAuditContext.about` ile kendisi damgalar.
+
+**Çözüm tek yerde ve üç katmanlı bir yapısal koruma taşıyor.**
 
 1. `core/helpers/AuditSubjectSource` enum'u her `/admin` kaynak türünü (yolun ilk segmenti, `AuditScope.resourceTypeOf`)
-   ya konuyu çözdüğü yol değişkeniyle (`USER("users","userId")`, `ASSIGNMENT("job-assignments","assignmentId")` …) ya
-   da **yazılı bir gerekçeyle** konusuz olarak (`BADGE_CATALOGUE`, `CATEGORY_CATALOGUE`, `RUNTIME_SETTINGS`,
-   `STAFF_ACCOUNTS`, `STAFF_ROLES`, `STAFF_NOTES`, `STAFF_FLAGS`) tanımlar. Gerekçe enum'da veri olarak duruyor.
+   üç çözümden biriyle tanımlar: `PATH` — konuyu çözdüğü yol değişkeniyle (`USER("users","userId")`,
+   `ASSIGNMENT("job-assignments","assignmentId")`, `PAYMENT("payments","paymentId")`, `JOB("jobs","jobId")` …);
+   `SERVICE` — hedef yolda değil, işi yapan servis konuyu `StaffAuditContext.about` ile damgalar (`STAFF_NOTES`,
+   `STAFF_FLAGS`); `NONE` — **yazılı bir gerekçeyle** konusuz (`BADGE_CATALOGUE`, `CATEGORY_CATALOGUE`,
+   `RUNTIME_SETTINGS`, `STAFF_ACCOUNTS`, `STAFF_ROLES`). `SERVICE` ve `NONE` gerekçeyi enum'da veri olarak taşır.
 2. `business/concretes/AuditSubjectManager.resolve` o enum üzerinde **`default`'suz `switch`** — yeni bir sabit
    eklenip ele alınmazsa derleme durur.
-3. `AuditSubjectCoverageIT` her `/admin/**` yazma mapping'ini (`/admin/auth/**` hariç) handler eşlemesinden okur:
-   kaynak türü enum'da olmalı, konu çözen türde ucun **ilk yol değişkeni** enum'un adlandırdığı değişken olmalı (yoksa
-   `resourceId` o kaydın kimliği değildir), konusuz türün gerekçesi boş olamaz ve hiçbir yazma ucuna karşılık gelmeyen
-   bayat sabit kalamaz. Yeni bir personel yazma ucu bu yüzden konusu düşünülmeden eklenemez — "kural N yerde" kusur
-   sınıfının (§2d2, §2k2) bu yüzeydeki kapanışı.
+3. `AuditSubjectCoverageIT` handler eşlemesinden her `/admin/**` ucunu (`/admin/auth/**` hariç) okur ve
+   `carriesASubject`'in seçtiklerini denetler: her yazma ucu ve bir kaydı hedefleyen her hassas okuma. Fiil
+   bildirmeyen bir `@RequestMapping` her fiille çağrılabildiği için **her fiil** olarak taranır. Kaynak türü enum'da
+   olmalı; `PATH` türünde enum'un adlandırdığı değişkeni **üretimdeki ayrıştırıcının kendisi**
+   (`AuditScope.resourceIdOf`) okumalı — yoksa `resourceId` o kaydın kimliği değildir; `PATH` olmayan türün gerekçesi
+   boş olamaz ve hiçbir uca karşılık gelmeyen bayat sabit kalamaz. Yeni bir personel ucu bu yüzden konusu
+   düşünülmeden eklenemez — "kural N yerde" kusur sınıfının (§2d2, §2k2) bu yüzeydeki kapanışı. Kapsam genişleyince
+   tarama `GET /admin/payments/{paymentId}` ve `GET /admin/jobs/{jobId}` için kaynak türü bulamadı; ikisi `PAYMENT` ve
+   `JOB` olarak eklendi.
 
 **Sorgular lean ve her biri kendi aggregate'inde (§2ae).** `IdentityDocumentReviewService.findReviewedUserId`,
 `LegalService.findDeletionRequesterId` (`coalesce(subject_id, user_id)` — anonimleşmiş talep de konusunu korur),
 `GalleryService.findImageOwner` (şirket galerisi önce; yoksa ilan galerisinin işvereni), `BankAccountService.
 findOwnerIdByVerificationReference`, `PayoutService.findWorkerIdOf`, `DisputeService.findJobAssignmentIdOf`,
-`ReportService.findReportedParty` (şikayet edilen kullanıcı; yoksa şikayet edilen ilanın işvereni), atama ve uyuşmazlık
-için mevcut `JobAssignmentService.findStaffSummaries` projeksiyonu. FK okumaları (`p.worker.id`) `users`'a join
-açmıyor; silinmiş kişi konunun **kimliğini** kaybettirmiyor. "İşveren" kuralı tek yerde: `AuditSubject.employerOf`
-(şirket ilanında `COMPANY`, bireyselde ilanı açan `USER`). Konu ↔ karşı taraf: atama işlemleri (`release`, `refund`)
-ve uyuşmazlık çözümü işçi + işveren; hakediş mutabakatı yalnız işçi; diğerleri tek konu.
+`PaymentService.findJobAssignmentIdOf`, `JobService.findEmployerIds`, `JobAssignmentService.findAuditParties`,
+`ReportService.findReportedParty` (şikayet edilen kullanıcı; yoksa şikayet edilen ilanın işvereni; o da yoksa —
+yalnız görsel şikayeti — görselin galeri sahibi). "İşveren" kuralı tek yerde: `AuditSubject.employerOf` (şirket
+ilanında `COMPANY`, bireyselde ilanı açan `USER`). Konu ↔ karşı taraf: atama işlemleri (`release`, `refund`), ödeme
+okuması ve uyuşmazlık çözümü işçi + işveren; hakediş yalnız işçi; ilan okuması işveren; diğerleri tek konu.
+
+**Soft-delete tuzağı burada da vardı (§2af, "Silinmiş ilişki join tuzağı", #309).** İlk sürüm atamanın taraflarını panelin
+`findStaffSummariesByIdIn` projeksiyonundan okuyordu; o sorgu `company`'ye `left join` açıyor ve `Company`'nin
+`@SQLRestriction`'ı `ON`'a girdiği için soft-delete edilmiş şirket `null` dönüyor, `employerOf` da sessizce ilanı
+açan **kullanıcıya** düşüyordu — geri doldurma ise aynı satıra `COMPANY` yazıyordu. Şimdi taraflar
+(`JobAssignmentDao.findPartiesById`), ilan işvereni (`JobDao.findEmployerIdsById`), şikayet tarafı
+(`ReportDao.findReportedPartyById`) ve ödemenin ataması **native** FK projeksiyonlarıyla okunuyor: `jobs`/`job_assignments`/
+`reports` satırının kendi sütunları, başka tabloya join yok, `@SQLRestriction` devrede değil. İleri ve geri yön aynı
+cevabı veriyor (`AuditSubjectIT.aSoftDeletedCompanyOrCreatorStillNamesTheEmployerLikeTheBackfillDoes`,
+`AuditSubjectBackfillMigrationIT.softDeletedRowsStillNameThePartyLikeTheRuntimeResolverDoes`).
+
+**Yoldaki kimlik ancak öyle biri varsa konu olur.** `users/{userId}` ve `companies/{companyId}` uçlarında kimlik
+istemciden gelir; var olmayan bir kimliği konu yazmak, olmayan bir kişinin çizelgesini uydururdu. `UserService`/
+`CompanyService.existsIncludingDeleted` native `select exists(...)` ile bakar — **soft-delete edilmiş** kişi yine konu
+olur (hesabını silmiş kişi hakkındaki karar onun çizelgesinde kalmalı), hiç var olmamış kimlik `null` kalır. Geri
+doldurma zaten `users`/`companies`'e join'le çalışıyordu; ileri yön artık aynı.
 
 **Çözüm yetki kararında, handler'dan önce.** `StaffAuditRecorder.observe` kaydı kurarken çözüyor; `StaffAuditContext.
 reclassify` konuyu taşıyor. Handler'dan önce olması silme uçları için şart: kayıt yok edildikten sonra sahibi
 okunamaz. Çözüm patlarsa istek düşmez, `WARN` loglanır ve satır konusuz yazılır (denetim yazmasının kendi kuralıyla
-aynı yön). Her yazma isteğine birkaç küçük okuma ekler (görselde en çok üç); okuma uçlarına sıfır.
+aynı yön). Her yazma ve hassas okuma isteğine birkaç küçük okuma ekler (görselde en çok üç); sıradan okumaya sıfır.
+**İstisna — `SERVICE` türleri:** not ve işaretin hedefi istek parametresinde/kayıtta, yolda değil.
+`StaffNoteManager` oluştur/düzenle/sil/işaretle/kaldır yollarında hedefi (`StaffResourceType` + id) bildiği anda
+`AuditSubjectService.forStaffTarget` ile çözer ve `StaffAuditContext.about` ile bekleyen satıra damgalar (silmede
+silmeden önce). `USER`/`COMPANY` hedefi doğrudan (varlık kontrolüyle), `JOB_ASSIGNMENT`/`DISPUTE` işçi + işveren,
+`REPORT` şikayet tarafı, `JOB` ilanın işvereni.
 
 **Yazıcı API'si konuyu zorunlu kılıyor:** `StaffAuditRecord` son bileşen olarak `AuditSubjects` alır ve `null`'ı
 reddeder; bootstrap satırı (`staff.bootstrap`) bilinçli olarak `AuditSubjects.NONE` geçer.
 
-**Okuma:** `GET /admin/audit-log?subjectId=&subjectType=`. `subjectId` konu **ya da** karşı taraf üzerinde eşleşir —
-işverenin çizelgesi kendi ilanındaki emanet kararlarını da gösterir; `subjectType` eşleşmeyi o türle sınırlar (tek
-başına "konusu şirket olan kararlar"). Diğer süzgeçlerle kesişir, `resourceId` süzgeci aynen duruyor. Tür parametre
-olarak HQL'e metin gidiyor (`cast(:subjectType as string)`, §2av'deki null tip çıkarımı tuzağı). Liste N+1 üretmiyor
-(`AuditSubjectIT.theTimelineIsReadWithoutAQueryPerRow`). `AuditEntryDto` dört alanı Türkçe açıklamalarla taşır.
+**Okuma:** `GET /admin/audit-log?subjectId=&subjectType=&mutating=`. `subjectId` konu **ya da** karşı taraf üzerinde
+eşleşir — işverenin çizelgesi kendi ilanındaki emanet kararlarını da gösterir; `subjectType` eşleşmeyi o türle
+sınırlar (tek başına "konusu şirket olan kararlar"). `mutating=true` yalnız kararları, `mutating=false` yalnız
+okumaları getirir; verilmezse ikisi birden — panel "kararlar" ve "kim baktı" sekmelerini bununla ayırır. Diğer
+süzgeçlerle kesişir, `resourceId` süzgeci aynen duruyor. Tür parametre olarak HQL'e metin gidiyor
+(`cast(:subjectType as string)`, §2av'deki null tip çıkarımı tuzağı); `mutating` `allowed` gibi bayrak + değer çifti.
+Liste N+1 üretmiyor (`AuditSubjectIT.theTimelineIsReadWithoutAQueryPerRow`). `AuditEntryDto` dört alanı Türkçe
+açıklamalarla taşır.
 
-**Geri doldurma yapıldı, türetilebildiği ölçüde.** Issue "backfill yok" diyordu; konu kaynak tablolardan
-kesin türetilebildiği için her `mutating` satır dolduruldu: `users`/`companies` yolun kimliğinden (kayıt hâlâ varsa), kimlik incelemesi, silme talebi,
-hakediş, atama, uyuşmazlık, şikayet kendi tablolarından, görsel şirket/ilan galerisinden (soft-delete edilmiş galeri
-satırı dahil — kaldırma onları zaten işaretliyordu), IBAN doğrulaması `verification_reference`'tan. Eşleşmeyen satır
-(kayıt fiziksel silinmiş, kimlik uydurma) `null` kalır; uydurulmadı. Kural ileri yöndeki çözümcünün aynısı; `AuditSubjectBackfillMigrationIT`
-probe veritabanında her dalı ve CHECK kısıtlarını ölçüyor.
+**Geri doldurma yapıldı, türetilebildiği ölçüde.** Issue "backfill yok" diyordu; konu kaynak tablolardan kesin
+türetilebildiği için ileri yönün konu yazacağı her satır (`mutating` ya da hassasiyeti `NORMAL` olmayan) dolduruldu:
+`users`/`companies` yolun kimliğinden (kayıt hâlâ varsa, soft-delete dahil), kimlik incelemesi, silme talebi, hakediş,
+ödeme, ilan, atama, uyuşmazlık, şikayet kendi tablolarından (yalnız görsel şikayeti galeri sahibine düşer), görsel
+şirket/ilan galerisinden (soft-delete edilmiş galeri satırı dahil — kaldırma onları zaten işaretliyordu), IBAN
+doğrulaması `verification_reference`'tan. Hiçbir `UPDATE` `is_deleted`'a bakmaz; ileri yönün native projeksiyonlarıyla
+aynı kural. Eşleşmeyen satır (kayıt fiziksel silinmiş, kimlik uydurma) `null` kalır; uydurulmadı.
+`AuditSubjectBackfillMigrationIT` probe veritabanında (soft-delete sütunlu taklit tablolarla) her dalı, hassas/sıradan
+okuma ayrımını ve CHECK kısıtlarını ölçüyor.
 
-**Bilerek konusuz kalanlar.** Not ve işaret yazımları (`/admin/notes`, `/admin/flags`): hedef istek gövdesinde/
-parametresinde ve kayıt kendi tablosunda `resourceType`/`resourceId` ile tutuluyor, panel onları hedefe göre zaten
-listeliyor (§2bd). Konuyu gövdeden okumak yetki anında mümkün değil (gövde handler okuyunca önbelleğe giriyor); gerekirse
-ayrı karar. Personel hesapları/rolleri: konu türleri pazaryeri tarafıdır.
+**Bilerek konusuz kalanlar.** Katalog ve ayar yazımları (rozet, kategori, çalışma zamanı ayarı) — kararın bir kişisi
+yok. Personel hesapları/rolleri — konu türleri pazaryeri tarafıdır, personel değil. Sıradan (`NORMAL`) okumalar —
+yukarıdaki gerekçe. Bir kaydı hedeflemeyen liste okumaları (`GET /admin/payouts?workerId=` gibi) — süzgeç bir kişiyi
+adlandırsa da satır tek bir kaydın değil bir sorgunun izidir; süzgeç `requestBody`'de durur.
 
-**Test sırasında bulunan, bu PR'da düzeltilmeyen kusur:** `DELETE /admin/images/{imageId}` personel kimliğiyle **409
-`BUSINESS_RULE_VIOLATION`** dönüyor ve hiçbir şey silmiyor: `GalleryManager.removeImageEverywhere` →
+**Test sırasında bulunan, bu PR'da düzeltilmeyen kusur (#345):** `DELETE /admin/images/{imageId}` personel kimliğiyle
+**409 `BUSINESS_RULE_VIOLATION`** dönüyor ve hiçbir şey silmiyor: `GalleryManager.removeImageEverywhere` →
 `ImageService.deleteImage` → `securityService.getAuthenticatedUser()` (§0b'nin tuzağı, iki seviye derinde —
 `AdminStaffPrincipalGuardIT`'in yazılı kör noktası). Denetim satırı yine konusuyla yazılıyor
-(`AuditSubjectIT.anImageRemovalIsAboutTheCompanyWhoseGalleryHoldsIt`). Düzeltme ayrı iş.
+(`AuditSubjectIT.anImageRemovalIsAboutTheCompanyWhoseGalleryHoldsIt`). Düzeltme #345'te.
 
 ---
 
@@ -5375,7 +5421,7 @@ Birim testlerde `CommissionCalculator` artık `FallbackSettings.commissionCalcul
 
 `AdminAuditTrailIT` on dokuz kural — gerçek HTTP üzerinden: izin verilen değişiklik aktör/izin/eylem/kayıt ile yazılır, detay gövde-IP-istemciyi taşır, `cancellation.late-fee-rate` artık iz bırakmadan değişmez, reddedilen istek `allowed = false` yazar, filtreli kullanıcı araması yazılır, filtresiz yükleme yazılmaz, sayfa çevirmek arama değildir, tek kayıt okuması yazılır, finansal satır 10 yıl normal satır 2 yıl saklanır, anonim istek tabloyu doldurmaz, köprü admini de denetlenir, denetim kaydını okumak yazılır ama kendi satırını döndürmez, ikinci okuma tek satır ekler, uç `audit.read` istiyor ve reddi de yazılıyor, çekirdek alanların hepsi dönüyor, detay silinince çekirdek dönmeye devam ediyor, beş süzgecin hepsi sunucuda daraltıyor, aktör süzgeci bir kişinin yaptıklarını buluyor, tanınmayan sıralama alanı 400 dönüyor.
 
-`AdminAuditStorageIT` bölünmeyi gerçek Postgres'te doğruluyor (çekirdek detay silinince kalır, cascade ters yönde çalışır, iki yarı kendi tarihini taşır); `AdminAuditRetentionIT` saklama ve KVKK silmesini (10 yıl / 24 ay / 6 ay damgaları, süresi dolan detay çekirdeği bırakır, süresi dolan çekirdek detayı götürür, penceredeki satıra dokunulmaz, silme talebi yalnız o kişinin detayını siler, ikinci silme zararsız). KVKK tetiği `LegalConsentTest` içinde: kabul edilen talep silme çağırır, engellenen talep hiçbir şey silmez.
+`AdminAuditStorageIT` bölünmeyi gerçek Postgres'te doğruluyor (çekirdek detay silinince kalır, cascade ters yönde çalışır, iki yarı kendi tarihini taşır); `AdminAuditRetentionIT` saklama ve KVKK silmesini (10 yıl / 24 ay / 6 ay damgaları, süresi dolan detay çekirdeği bırakır, süresi dolan çekirdek detayı götürür, penceredeki satıra dokunulmaz, silme talebi yalnız o kişinin detayını siler — konusu ya da karşı tarafı o kişi olan kararlar dahil, ikinci silme zararsız). KVKK tetiği `LegalConsentTest` içinde: kabul edilen talep silme çağırır, engellenen talep hiçbir şey silmez.
 
 **Personel girişi testleri (§2au §Personel girişi).** `StaffLoginIT` on üç kural sabitliyor — gerçek HTTP ve gerçek Postgres üzerinden: personel e-posta+parola ile girip **kendi izinleriyle** `/admin/**` kullanıyor (izni olmayan uçtan 403 alıyor), **yanlış parola ile olmayan hesap ayırt edilemiyor** (zarf birebir aynı, `errorCode` `STAFF_LOGIN_FAILED`), devre dışı hesap da ayırt edilemiyor, beş yanlış deneme hesabı kilitliyor ve doğru parola da çalışmıyor, **kilit yanıtta da iz bırakmıyor**, başarılı giriş sayacı sıfırlıyor, çıkış kendi token'ını öldürüyor, yenileme token'ı yeni erişim token'ı veriyor ve çıkıştan sonra ölüyor, ilk girişte parola değiştirilmeden `/admin/**`'ın geri kalanı (ve `/admin/me`) açılmıyor ama değişimden sonra açılıyor, parola değişimi bütün token'ları öldürüyor, mevcut parola hâlâ soruluyor, kısa parola alan adıyla 400 alıyor, anonim çıkış 401.
 

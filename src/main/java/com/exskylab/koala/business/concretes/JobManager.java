@@ -1,5 +1,7 @@
 package com.exskylab.koala.business.concretes;
 
+import java.util.Optional;
+import com.exskylab.koala.dataAccess.EmployerIds;
 import java.util.Locale;
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.exceptions.ConflictException;
@@ -653,5 +655,11 @@ public class JobManager implements JobService {
         }
         return jobDao.countByCompanyIds(companyIds).stream()
                 .collect(Collectors.toMap(JobDao.CompanyJobCount::getCompanyId, JobDao.CompanyJobCount::getTotal));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<EmployerIds> findEmployerIds(UUID jobId) {
+        return jobDao.findEmployerIdsById(jobId);
     }
 }

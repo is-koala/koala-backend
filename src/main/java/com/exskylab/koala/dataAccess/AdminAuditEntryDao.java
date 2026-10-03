@@ -33,6 +33,7 @@ public interface AdminAuditEntryDao extends JpaRepository<AdminAuditEntry, UUID>
               and e.occurredAt >= :from
               and e.occurredAt <= :to
               and (:filterByOutcome = false or e.allowed = :allowed)
+              and (:filterByMutating = false or e.mutating = :mutating)
             """,
             countQuery = """
                     select count(e) from AdminAuditEntry e
@@ -51,6 +52,7 @@ public interface AdminAuditEntryDao extends JpaRepository<AdminAuditEntry, UUID>
                       and e.occurredAt >= :from
                       and e.occurredAt <= :to
                       and (:filterByOutcome = false or e.allowed = :allowed)
+                      and (:filterByMutating = false or e.mutating = :mutating)
                     """)
     Page<AdminAuditEntry> search(@Param("actor") UUID actor,
                                  @Param("action") String action,
@@ -63,6 +65,8 @@ public interface AdminAuditEntryDao extends JpaRepository<AdminAuditEntry, UUID>
                                  @Param("to") Instant to,
                                  @Param("filterByOutcome") boolean filterByOutcome,
                                  @Param("allowed") boolean allowed,
+                                 @Param("filterByMutating") boolean filterByMutating,
+                                 @Param("mutating") boolean mutating,
                                  Pageable pageable);
 
     @Modifying

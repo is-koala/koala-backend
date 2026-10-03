@@ -21,4 +21,10 @@ public interface AdminAuditEntryDetailDao extends JpaRepository<AdminAuditEntryD
     @Query("delete from AdminAuditEntryDetail d where d.entry.id in "
             + "(select e.id from AdminAuditEntry e where e.resourceId = :resourceId)")
     int deleteByResourceId(@Param("resourceId") String resourceId);
+
+    @Modifying
+    @Query("delete from AdminAuditEntryDetail d where d.entry.id in "
+            + "(select e.id from AdminAuditEntry e where e.resourceId = :resourceId "
+            + "or e.subjectId = :personId or e.relatedSubjectId = :personId)")
+    int deleteAboutPerson(@Param("resourceId") String resourceId, @Param("personId") UUID personId);
 }

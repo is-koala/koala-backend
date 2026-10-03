@@ -1,6 +1,7 @@
 package com.exskylab.koala.business.concretes;
 
 import com.exskylab.koala.business.abstracts.StaffAccountService;
+import com.exskylab.koala.business.abstracts.AuditSubjectService;
 import com.exskylab.koala.business.abstracts.StaffNoteService;
 import com.exskylab.koala.core.constants.StaffMessages;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
@@ -39,13 +40,16 @@ public class StaffNoteManager implements StaffNoteService {
     private final StaffFlagDao staffFlagDao;
     private final StaffAccountService staffAccountService;
     private final PageableSanitizer pageableSanitizer;
+    private final AuditSubjectService auditSubjectService;
 
     public StaffNoteManager(StaffNoteDao staffNoteDao, StaffFlagDao staffFlagDao,
-                            StaffAccountService staffAccountService, PageableSanitizer pageableSanitizer) {
+                            StaffAccountService staffAccountService, PageableSanitizer pageableSanitizer,
+                            AuditSubjectService auditSubjectService) {
         this.staffNoteDao = staffNoteDao;
         this.staffFlagDao = staffFlagDao;
         this.staffAccountService = staffAccountService;
         this.pageableSanitizer = pageableSanitizer;
+        this.auditSubjectService = auditSubjectService;
     }
 
     @Override
@@ -68,6 +72,7 @@ public class StaffNoteManager implements StaffNoteService {
 
         StaffNote saved = staffNoteDao.save(note);
         StaffAuditContext.capture(null, snapshotOf(saved));
+        stampSubjectOf(resourceType, resourceId);
         log.info("Staff note {} created on {} {} by staff {}", saved.getId(), resourceType, resourceId,
                 actor.staffId());
         return saved;
@@ -84,6 +89,7 @@ public class StaffNoteManager implements StaffNoteService {
         StaffNote saved = staffNoteDao.save(note);
 
         StaffAuditContext.capture(before, snapshotOf(saved));
+        stampSubjectOf(saved.getResourceType(), saved.getResourceId());
         log.info("Staff note {} edited by staff {}", noteId, actor.staffId());
         return saved;
     }
@@ -94,6 +100,7 @@ public class StaffNoteManager implements StaffNoteService {
         StaffNote note = editableNote(actor, noteId);
 
         StaffAuditContext.capture(snapshotOf(note), null);
+        stampSubjectOf(note.getResourceType(), note.getResourceId());
         staffNoteDao.delete(note);
         log.info("Staff note {} deleted by staff {}", noteId, actor.staffId());
     }
@@ -125,6 +132,7 @@ public class StaffNoteManager implements StaffNoteService {
                 .orElseThrow(() -> new ResourceNotFoundException(StaffMessages.FLAG_NOT_FOUND));
 
         StaffAuditContext.capture(before, snapshotOf(saved));
+        stampSubjectOf(resourceType, resourceId);
         log.info("Staff flag {} {} set on {} {} by staff {}", saved.getId(), kind, resourceType, resourceId,
                 actor.staffId());
         return saved;
@@ -143,8 +151,13 @@ public class StaffNoteManager implements StaffNoteService {
         StaffFlag saved = staffFlagDao.save(flag);
 
         StaffAuditContext.capture(before, snapshotOf(saved));
+        stampSubjectOf(resourceType, resourceId);
         log.info("Staff flag {} {} cleared on {} {} by staff {}", saved.getId(), kind, resourceType, resourceId,
                 actor.staffId());
+    }
+
+    private void stampSubjectOf(StaffResourceType resourceType, UUID resourceId) {
+        StaffAuditContext.about(auditSubjectService.forStaffTarget(resourceType, resourceId));
     }
 
     private StaffNote editableNote(StaffPrincipal actor, UUID noteId) {

@@ -1,4 +1,6 @@
 package com.exskylab.koala.business.abstracts;
+import java.util.Optional;
+import com.exskylab.koala.dataAccess.EmployerIds;
 import com.exskylab.koala.core.dtos.gallery.request.UpdateGalleryDto;
 import com.exskylab.koala.core.dtos.gallery.response.GalleryImageDto;
 import org.springframework.web.multipart.MultipartFile;
@@ -71,4 +73,6 @@ public interface JobService {
     long countForCompany(UUID companyId);
 
     Map<UUID, Long> countForCompanies(Collection<UUID> companyIds);
+
+    Optional<EmployerIds> findEmployerIds(UUID jobId);
 }

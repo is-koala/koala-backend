@@ -15,7 +15,8 @@ public interface StaffAuditService {
 
     Page<AdminAuditEntry> search(UUID actor, String action, String permission, String resourceType,
                                  String resourceId, AuditSubjectType subjectType, UUID subjectId,
-                                 Instant from, Instant to, Boolean allowed, Pageable pageable);
+                                 Instant from, Instant to, Boolean allowed, Boolean mutating,
+                                 Pageable pageable);
 
     int purgeExpiredDetails();
 
