@@ -44,6 +44,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private static final PathPatternParser PARSER = PathPatternParser.defaultInstance;
     private static final int MAX_AUTH_BODY_BYTES = 16 * 1024;
+    private static final int MAX_CLIENT_AUDIT_EVENT_BODY_BYTES = 16 * 1024;
 
     private static final Set<String> AUTH_PATHS = Set.of(
             "/auth/login",
@@ -87,6 +88,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             PARSER.parse("/locations/address-candidates/reverse");
     private static final PathPattern SITEMAP_PATH = PARSER.parse("/sitemap/jobs/**");
     private static final PathPattern PAYMENT_CALLBACK_PATH = PARSER.parse("/payments/callback");
+    private static final PathPattern CLIENT_AUDIT_EVENT_PATH = PARSER.parse("/admin/audit-log/events");
 
     private static final List<PathPattern> PUBLIC_PATHS = List.of(
             PARSER.parse("/jobs"),
@@ -120,6 +122,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
         Bucket bucket = bucketOf(request);
         PreparedRequest prepared = bucket == Bucket.AUTH ? prepareAuthRequest(request)
+                : isClientAuditEvent(request) ? prepareBoundedRequest(request, MAX_CLIENT_AUDIT_EVENT_BODY_BYTES)
                 : new PreparedRequest(request, "unknown", false);
 
         if (prepared.tooLarge()) {
@@ -210,6 +213,22 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
 
         return bucket + " " + client;
+    }
+
+    private static boolean isClientAuditEvent(HttpServletRequest request) {
+        return "POST".equals(request.getMethod())
+                && CLIENT_AUDIT_EVENT_PATH.matches(PathContainer.parsePath(request.getRequestURI()));
+    }
+
+    private PreparedRequest prepareBoundedRequest(HttpServletRequest request, int maxBytes) throws IOException {
+        if (request.getContentLengthLong() > maxBytes) {
+            return new PreparedRequest(request, "unknown", true);
+        }
+        byte[] body = request.getInputStream().readNBytes(maxBytes + 1);
+        if (body.length > maxBytes) {
+            return new PreparedRequest(request, "unknown", true);
+        }
+        return new PreparedRequest(new CachedBodyRequest(request, body), "unknown", false);
     }
 
     private PreparedRequest prepareAuthRequest(HttpServletRequest request) throws IOException {

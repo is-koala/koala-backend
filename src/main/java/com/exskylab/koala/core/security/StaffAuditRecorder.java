@@ -40,6 +40,9 @@ public class StaffAuditRecorder {
 
     public void observe(HttpServletRequest request, RequiresPermission required,
                         Authentication authentication, boolean allowed) {
+        if (required.auditedByHandler()) {
+            return;
+        }
 
         StaffPermission[] permissions = required.value();
         String pattern = patternOf(request);

@@ -11,6 +11,10 @@ public class AuditMessages {
     public static final String EVENT_ROW_COUNT_RANGE = "{audit.event.row.count.range}";
     public static final String EVENT_PII_FLAG_REQUIRED = "{audit.event.pii.flag.required}";
     public static final String EVENT_SUBJECT_INCOMPLETE = "{audit.event.subject.incomplete}";
+    public static final String EVENT_RELATED_SUBJECT_INCOMPLETE = "{audit.event.related.subject.incomplete}";
+    public static final String EVENT_RELATED_SUBJECT_WITHOUT_SUBJECT = "{audit.event.related.subject.without.subject}";
+    public static final String EVENT_SUBJECT_NOT_FOUND = "{audit.event.subject.not.found}";
+    public static final String EVENT_STAFF_ONLY = "{audit.event.staff.only}";
     public static final String EVENT_LIST_PERMISSION_MISSING = "{audit.event.list.permission.missing}";
     public static final String EVENT_TOO_MANY = "{audit.event.too.many}";
 }

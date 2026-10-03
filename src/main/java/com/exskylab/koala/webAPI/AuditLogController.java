@@ -1,5 +1,6 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.business.abstracts.ClientAuditEventService;
 import com.exskylab.koala.business.abstracts.StaffAuditService;
 import com.exskylab.koala.core.constants.AuditMessages;
 import com.exskylab.koala.core.dtos.audit.request.ClientAuditEventDto;
@@ -50,50 +51,67 @@ import java.util.UUID;
 public class AuditLogController {
 
     private final StaffAuditService staffAuditService;
+    private final ClientAuditEventService clientAuditEventService;
     private final AuditEntryMapper auditEntryMapper;
     private final ClientIpResolver clientIpResolver;
 
-    public AuditLogController(StaffAuditService staffAuditService, AuditEntryMapper auditEntryMapper,
-                              ClientIpResolver clientIpResolver) {
+    public AuditLogController(StaffAuditService staffAuditService, ClientAuditEventService clientAuditEventService,
+                              AuditEntryMapper auditEntryMapper, ClientIpResolver clientIpResolver) {
         this.staffAuditService = staffAuditService;
+        this.clientAuditEventService = clientAuditEventService;
         this.auditEntryMapper = auditEntryMapper;
         this.clientIpResolver = clientIpResolver;
     }
 
     @Operation(summary = "İstemci denetim olayı kaydet (CSV dışa aktarma)",
-            description = "Yönetim paneli bir personel listesini CSV olarak dışa aktardığında bu uca bildirir; olay "
-                    + "denetim kaydına tek satır olarak yazılır ve GET /admin/audit-log?action=export ile listelenir. "
-                    + "Bugün yalnız action=EXPORT kabul edilir. Aktör her zaman token'daki personeldir; gövdede aktör "
-                    + "alanı yoktur, gönderilirse yok sayılır. Uç her personele açıktır ama kayıt, çağıranın "
-                    + "dışa aktarılan liste için taşıdığı izinle yazılır (JOB_ASSIGNMENTS payment.read, PAYOUTS "
-                    + "payout.reconcile, REPORTS content.moderate, DISPUTES dispute.resolve): izin yoksa satır "
-                    + "allowed=false olarak yazılır ve 403 döner. Satır mutating=false; hassasiyet listenin izninden "
-                    + "gelir, piiIncluded=true ise en az PERSONAL_DATA olur. resourceType kaydın kaynak türü olur "
-                    + "(job-assignments, payouts, reports, disputes), resourceId boş; filters, rowCount ve piiIncluded "
-                    + "detay satırının requestBody alanında saklanır (6 ay). subjectType/subjectId verilirse kayıt o "
-                    + "kullanıcının/şirketin zaman çizelgesinde görünür. Personel başına saatlik bütçe var (429); "
-                    + "bütçeyi aşan çağrı kayda geçmez. Panel kaydı yazamazsa indirmeyi durdurmamalı, uyarı "
-                    + "loglamalıdır.")
+            description = "Yönetim paneli bir personel listesini CSV olarak dışa aktarmadan önce bu uca bildirir. "
+                    + "Sözleşme kapalı başarısızlıktır: panel önce bu çağrıyı yapar ve dosyayı ancak 201 aldıktan "
+                    + "sonra kullanıcıya verir; 201 dışındaki her yanıtta (400, 403, 413, 429, 5xx, ağ hatası) "
+                    + "dışa aktarma reddedilir ve dosya üretilmez. Olay denetim kaydına tek satır olarak yazılır ve "
+                    + "GET /admin/audit-log?action=export ile listelenir; sorgu parametresi ya da tekrar eden "
+                    + "istek ikinci bir satır açmaz. Bugün yalnız action=EXPORT kabul edilir. Aktör her zaman "
+                    + "token'daki kayıtlı personeldir; gövdede aktör alanı yoktur, gönderilirse yok sayılır. Uç her "
+                    + "personele açıktır ama kayıt, çağıranın dışa aktarılan liste için taşıdığı izinle yazılır "
+                    + "(JOB_ASSIGNMENTS payment.read, PAYOUTS payout.reconcile, REPORTS content.moderate, DISPUTES "
+                    + "dispute.resolve): izin yoksa satır allowed=false olarak yazılır ve 403 döner. Satır "
+                    + "mutating=false; hassasiyet listenin izninden gelir, piiIncluded=true ise en az PERSONAL_DATA "
+                    + "olur. resourceType kaydın kaynak türü olur (job-assignments, payouts, reports, disputes), "
+                    + "resourceId boş. rowCount ve piiIncluded çekirdek satırda (AuditEntryDto.rowCount/piiIncluded) "
+                    + "saklanır; filters ve gövdenin tamamı detayın requestBody alanında (6 ay). Konu kuralı: liste "
+                    + "tek bir taraf süzgeciyle (workerId, reportedUserId, userId gibi) daraltıldıysa subjectType=USER "
+                    + "ve subjectId o kişi; işçi ve işveren süzgeci birlikteyse işçi subject*, işveren related*; "
+                    + "süzgeçsiz liste konusuz. Bildirilen konu ve karşı taraf var olmalıdır (soft-delete edilmiş "
+                    + "dahil). Personel başına saatlik 120 olaylık bütçe var (429); bütçeyi aşan çağrı kayda geçmez. "
+                    + "İstek gövdesi en çok 16 KiB'dır (413).")
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Olay kaydedildi"),
-            @ApiResponse(responseCode = "400", description = "Eylem/liste tanınmıyor, süzgeç özeti 1000 karakteri aşıyor "
-                    + "ya da kişisel veri taşıyor (AUDIT_EVENT_FILTERS_PERSONAL_DATA), satır sayısı 0-1000 dışında, "
-                    + "konu türü ile kimliği birlikte verilmemiş",
+            @ApiResponse(responseCode = "201", description = "Olay kaydedildi; panel dosyayı ancak şimdi verebilir"),
+            @ApiResponse(responseCode = "400", description = "Gövde doğrulanamadı: VALIDATION_FAILED ve details[].field "
+                    + "hangi kuralın bozulduğunu söyler (action, resourceType, rowCount, piiIncluded, filters — 1000 "
+                    + "karakteri aşan süzgeç özeti —, filtersFreeOfPersonalData — süzgeç özetinde e-posta, 10+ "
+                    + "rakamlık dizi ya da IBAN —, subjectComplete, relatedSubjectComplete, "
+                    + "relatedSubjectBesideASubject); tanınmayan action/resourceType REQUEST_MALFORMED; bildirilen "
+                    + "konu ya da karşı taraf yoksa AUDIT_EVENT_SUBJECT_NOT_FOUND. Hiçbiri satır yazmaz",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "403", description = "Çağıran dışa aktarılan listenin iznini taşımıyor "
-                    + "(AUDIT_EVENT_LIST_PERMISSION_MISSING); ret de denetim kaydına yazılır",
+                    + "(AUDIT_EVENT_LIST_PERMISSION_MISSING; ret de denetim kaydına yazılır) ya da kayıtlı bir "
+                    + "personel hesabı değil (AUDIT_EVENT_STAFF_ONLY; marketplace ROLE_ADMIN köprüsü dahil, satır "
+                    + "yazılmaz)",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
-            @ApiResponse(responseCode = "429", description = "Personel başına olay bütçesi doldu (AUDIT_EVENT_TOO_MANY)",
+            @ApiResponse(responseCode = "413", description = "İstek gövdesi 16 KiB'ı aşıyor (REQUEST_BODY_TOO_LARGE); "
+                    + "satır yazılmaz",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "429", description = "Personel başına olay bütçesi doldu (AUDIT_EVENT_TOO_MANY) "
+                    + "ya da personel yazma kovası doldu (TOO_MANY_REQUESTS); satır yazılmaz",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
-    @RequiresPermission(action = "audit.event.record")
+    @RequiresPermission(action = "audit.event.record", auditedByHandler = true)
     @PostMapping("/events")
     public ResponseEntity<SuccessDataResult<RecordedAuditEventDto>> recordEvent(
             @RequestBody @Valid ClientAuditEventDto request,
             @AuthenticationPrincipal StaffPrincipal actor,
             HttpServletRequest httpRequest) {
 
-        AdminAuditEntry entry = staffAuditService.recordClientEvent(actor, request,
+        AdminAuditEntry entry = clientAuditEventService.record(actor, request,
                 clientIpResolver.resolve(httpRequest), httpRequest.getHeader(HttpHeaders.USER_AGENT));
 
         return ResponseEntity.status(HttpStatus.CREATED).body(new SuccessDataResult<>(

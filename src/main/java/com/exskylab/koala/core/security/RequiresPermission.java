@@ -16,4 +16,6 @@ public @interface RequiresPermission {
     StaffPermission[] value() default {};
 
     String action() default "";
+
+    boolean auditedByHandler() default false;
 }

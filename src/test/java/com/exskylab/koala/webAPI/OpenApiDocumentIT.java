@@ -497,10 +497,21 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.paths['/admin/audit-log/events'].post.summary",
                         containsString("dışa aktarma")))
                 .andExpect(jsonPath("$.paths['/admin/audit-log/events'].post.description",
-                        containsString("token'daki personel")))
+                        containsString("token'daki kayıtlı personel")))
+                .andExpect(jsonPath("$.paths['/admin/audit-log/events'].post.description",
+                        containsString("kapalı başarısızlık")))
                 .andExpect(jsonPath("$.paths['/admin/audit-log/events'].post.responses.201").exists())
+                .andExpect(jsonPath("$.paths['/admin/audit-log/events'].post.responses.400.description",
+                        containsString("VALIDATION_FAILED")))
+                .andExpect(jsonPath("$.paths['/admin/audit-log/events'].post.responses.400.description",
+                        containsString("filtersFreeOfPersonalData")))
+                .andExpect(jsonPath("$.paths['/admin/audit-log/events'].post.responses.400.description",
+                        containsString("AUDIT_EVENT_SUBJECT_NOT_FOUND")))
                 .andExpect(jsonPath("$.paths['/admin/audit-log/events'].post.responses.403.description",
                         containsString("AUDIT_EVENT_LIST_PERMISSION_MISSING")))
+                .andExpect(jsonPath("$.paths['/admin/audit-log/events'].post.responses.403.description",
+                        containsString("AUDIT_EVENT_STAFF_ONLY")))
+                .andExpect(jsonPath("$.paths['/admin/audit-log/events'].post.responses.413").exists())
                 .andExpect(jsonPath("$.paths['/admin/audit-log/events'].post.responses.429").exists())
                 .andExpect(jsonPath("$.components.schemas.ClientAuditEventDto.properties.action.enum",
                         contains("EXPORT")))
@@ -508,8 +519,15 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
                         containsInAnyOrder("JOB_ASSIGNMENTS", "PAYOUTS", "REPORTS", "DISPUTES")))
                 .andExpect(jsonPath("$.components.schemas.ClientAuditEventDto.properties.filters.description",
                         containsString("Kişisel veri")))
+                .andExpect(jsonPath("$.components.schemas.ClientAuditEventDto.properties.piiIncluded.description",
+                        containsString("çağıranın yetkisiyle değil")))
+                .andExpect(jsonPath("$.components.schemas.ClientAuditEventDto.properties.relatedSubjectId").exists())
                 .andExpect(jsonPath("$.components.schemas.ClientAuditEventDto.properties.subjectComplete")
                         .doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.ClientAuditEventDto.properties.relatedSubjectComplete")
+                        .doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.AuditEntryDto.properties.rowCount").exists())
+                .andExpect(jsonPath("$.components.schemas.AuditEntryDto.properties.piiIncluded").exists())
                 .andExpect(jsonPath("$.components.schemas.RecordedAuditEventDto.properties.id").exists());
     }
 

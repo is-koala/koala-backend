@@ -499,4 +499,37 @@ class RequestValidationTest {
         assertEquals(Set.of("{audit.event.subject.incomplete}"), messagesFor(idOnly));
         assertTrue(isValid(both));
     }
+
+    @Test
+    void aClientAuditEventCounterpartyComesInPairsAndOnlyBesideASubject() {
+        var withBoth = exportEvent();
+        withBoth.setSubjectType(AuditSubjectType.USER);
+        withBoth.setSubjectId(UUID.randomUUID());
+        withBoth.setRelatedSubjectType(AuditSubjectType.USER);
+        withBoth.setRelatedSubjectId(UUID.randomUUID());
+        var relatedTypeOnly = exportEvent();
+        relatedTypeOnly.setSubjectType(AuditSubjectType.USER);
+        relatedTypeOnly.setSubjectId(UUID.randomUUID());
+        relatedTypeOnly.setRelatedSubjectType(AuditSubjectType.COMPANY);
+        var relatedWithoutSubject = exportEvent();
+        relatedWithoutSubject.setRelatedSubjectType(AuditSubjectType.USER);
+        relatedWithoutSubject.setRelatedSubjectId(UUID.randomUUID());
+
+        assertTrue(isValid(withBoth));
+        assertEquals(Set.of("{audit.event.related.subject.incomplete}"), messagesFor(relatedTypeOnly));
+        assertEquals(Set.of("{audit.event.related.subject.without.subject}"), messagesFor(relatedWithoutSubject));
+    }
+
+    @Test
+    void anOversizedFilterSummaryIsRefusedForItsLengthWithoutBeingScanned() {
+        var huge = exportEvent();
+        huge.setFilters("arama=ali@example.com&" + "a".repeat(200_000));
+
+        long started = System.nanoTime();
+        Set<String> messages = messagesFor(huge);
+        long elapsedMillis = (System.nanoTime() - started) / 1_000_000;
+
+        assertEquals(Set.of("{audit.event.filters.too.long}"), messages);
+        assertTrue(elapsedMillis < 1_000, "200 bin karakterlik süzgeç özeti " + elapsedMillis + " ms sürdü");
+    }
 }

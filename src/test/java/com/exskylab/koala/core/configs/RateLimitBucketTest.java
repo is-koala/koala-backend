@@ -72,9 +72,43 @@ class RateLimitBucketTest {
 
     @Test
     void aClientAuditEventSpendsTheSharedStaffWriteBucketAndHasItsOwnPerStaffBudget() throws Exception {
-        assertEquals(60, properties.getAuditEvent().getMaxAttempts());
+        assertEquals(120, properties.getAuditEvent().getMaxAttempts());
         assertEquals(Duration.ofHours(1), properties.getAuditEvent().getWindow());
         assertEquals(60, passing("POST", "/admin/audit-log/events", "10.0.0.14", 61));
+    }
+
+    @Test
+    void aClientAuditEventBodyOverSixteenKibIsRefusedBeforeItReachesValidation() throws Exception {
+        HandlerExceptionResolver resolver = mock(HandlerExceptionResolver.class);
+        RateLimitFilter bounded = new RateLimitFilter(new RateLimiter(properties), properties, resolver,
+                new ClientIpResolver(new TrustedProxyProperties()), new ObjectMapper());
+
+        FilterChain refused = mock(FilterChain.class);
+        MockHttpServletRequest tooLarge = request("POST", "/admin/audit-log/events", "10.0.0.15");
+        tooLarge.setContentType("application/json");
+        tooLarge.setContent(new byte[16 * 1024 + 1]);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        bounded.doFilter(tooLarge, response, refused);
+
+        verify(refused, never()).doFilter(any(), any());
+        assertEquals(413, response.getStatus());
+
+        FilterChain accepted = mock(FilterChain.class);
+        MockHttpServletRequest atTheLimit = request("POST", "/admin/audit-log/events", "10.0.0.15");
+        atTheLimit.setContentType("application/json");
+        atTheLimit.setContent(new byte[16 * 1024]);
+        bounded.doFilter(atTheLimit, new MockHttpServletResponse(), accepted);
+        verify(accepted).doFilter(any(), any());
+    }
+
+    @Test
+    void anotherStaffWriteIsNotBoundedByTheClientEventCap() throws Exception {
+        FilterChain call = mock(FilterChain.class);
+        MockHttpServletRequest note = request("POST", "/admin/notes", "10.0.0.16");
+        note.setContentType("application/json");
+        note.setContent(new byte[16 * 1024 + 1]);
+        filter.doFilter(note, new MockHttpServletResponse(), call);
+        verify(call).doFilter(any(), any());
     }
 
     @Test

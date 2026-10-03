@@ -41,5 +41,14 @@ public record AuditEntryDto(
         AuditSubjectType relatedSubjectType,
         @Schema(description = "Karşı taraf: iki taraflı satırlarda işveren — şirket ilanında şirket, bireysel ilanda "
                 + "ilanı açan kullanıcı. Diğer satırlarda null.")
-        UUID relatedSubjectId) {
+        UUID relatedSubjectId,
+        @Schema(types = {"integer", "null"},
+                description = "İstemci denetim olayında (action=export) dosyaya yazılan satır sayısı; çekirdek "
+                        + "satırda durur, detay silinse de kalır. Diğer satırlarda null.")
+        Integer rowCount,
+        @Schema(types = {"boolean", "null"},
+                description = "İstemci denetim olayında (action=export) dosyanın kişiler hakkında kişisel veri "
+                        + "sütunu ya da serbest metin taşıyıp taşımadığı beyanı; çekirdek satırda durur. Diğer "
+                        + "satırlarda null.")
+        Boolean piiIncluded) {
 }

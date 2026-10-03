@@ -37,8 +37,8 @@ class AdminPermissionMappingIT extends AbstractIntegrationTest {
     private static final Map<String, String> BODY_DEPENDENT_PERMISSION_WRITES = Map.of(
             "POST /admin/audit-log/events",
             "istemci denetim olayı: gereken izin gövdedeki listeden gelir (dışa aktarılan listenin izni) ve "
-                    + "StaffAuditManager.recordClientEvent onu token'daki personelin izinlerinde arar; ret de "
-                    + "denetim satırı yazar");
+                    + "ClientAuditEventManager.record onu token'daki personelin izinlerinde arar; ret de denetim "
+                    + "satırı yazar, satırı yetki kararı değil handler yazar (auditedByHandler)");
 
     private static final List<String> MONEY_MOVING_CALLS = List.of(
             "staffPayoutService.releaseToWorker(",
@@ -199,6 +199,28 @@ class AdminPermissionMappingIT extends AbstractIntegrationTest {
                 "Artık var olmayan gövdeye bağlı izin muafiyeti listede duruyor: " + BODY_DEPENDENT_PERMISSION_WRITES.keySet());
         assertTrue(BODY_DEPENDENT_PERMISSION_WRITES.values().stream().noneMatch(String::isBlank),
                 "Gerekçesiz muafiyet: " + BODY_DEPENDENT_PERMISSION_WRITES);
+    }
+
+    @Test
+    void onlyABodyDependentPermissionWriteMayLeaveItsAuditRowToTheHandler() {
+        List<String> problems = new ArrayList<>();
+        Set<String> handlerAudited = new LinkedHashSet<>();
+
+        for (AdminMapping mapping : adminMappings()) {
+            RequiresPermission declared = mapping.declared();
+            boolean auditedByHandler = declared != null && declared.auditedByHandler();
+            if (auditedByHandler) {
+                handlerAudited.add(mapping.verb() + " " + mapping.pattern());
+            }
+            if (auditedByHandler != isBodyDependentPermissionWrite(mapping)) {
+                problems.add(mapping + " → auditedByHandler=" + auditedByHandler);
+            }
+        }
+
+        assertTrue(problems.isEmpty(), "Yetki anındaki denetim kaydını yalnız gövdeye bağlı izinli yazma ucu "
+                + "handler'a bırakabilir; bırakan uç kendi satırını tek yerde yazar: " + problems);
+        assertTrue(handlerAudited.containsAll(BODY_DEPENDENT_PERMISSION_WRITES.keySet()),
+                "Gövdeye bağlı izinli uç denetim satırını handler'a bırakmıyor: " + handlerAudited);
     }
 
     private static boolean isBodyDependentPermissionWrite(AdminMapping mapping) {

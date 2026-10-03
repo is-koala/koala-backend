@@ -4096,57 +4096,113 @@ adlandırsa da satır tek bir kaydın değil bir sorgunun izidir; süzgeç `requ
 
 Panelin dört "CSV indir" rotası (koala-admin#110: atamalar, hakedişler, şikayetler, uyuşmazlıklar; ilk 1000 satır)
 dışa aktarmayı yalnız süreç günlüğüne yazıyordu; liste GET'inin kendi denetim satırı "sayfa mı dışa aktarma mı"
-ayırmıyordu. Panel artık dosyayı ürettikten sonra olayı bildirir.
+ayırmıyordu. Panel artık dosyayı vermeden **önce** olayı bildirir.
 
-**Sözleşme: `POST /admin/audit-log/events`** (201, `SuccessDataResult<RecordedAuditEventDto {id, action,
-resourceType, occurredAt}>`). Gövde `ClientAuditEventDto`:
+**Sözleşme kapalı başarısızlıktır (fail closed).** Panel önce `POST /admin/audit-log/events` çağırır ve dosyayı
+**yalnız 201 aldıktan sonra** kullanıcıya verir; 201 dışındaki her yanıtta (400, 403, 413, 429, 5xx, ağ hatası)
+dışa aktarma reddedilir, dosya üretilmez. Gerekçe: kişisel veri taşıyan bir dosya denetim izi olmadan masaüstüne
+düşmemeli; "kayıt yazılamazsa yine indir" seçeneği izi en çok gereken anda (veritabanı sorunu, bütçe aşımı)
+kaybettirirdi. Bütçe bu yüzden personel başına saatte **120** (`rate-limit.audit-event`, `RATE_LIMIT_AUDIT_EVENT_*`):
+sıkı bir bütçe artık meşru işi durdurur.
+
+**Yanıt:** 201, `SuccessDataResult<RecordedAuditEventDto {id, action, resourceType, occurredAt}>`. Gövde
+`ClientAuditEventDto`:
 
 | Alan | Kural |
 |---|---|
 | `action` | zorunlu, `ClientAuditAction` — bugün yalnız `EXPORT`; tanınmayan değer 400 `REQUEST_MALFORMED` |
-| `resourceType` | zorunlu, `StaffExportList`: `JOB_ASSIGNMENTS` / `PAYOUTS` / `REPORTS` / `DISPUTES`; tanınmayan 400 |
-| `filters` | isteğe bağlı metin, ≤1000 karakter; e-posta, 10+ haneli sayı dizisi (telefon/TCKN; UUID ve ISO tarih hariç) ve IBAN içerirse 400 (`details[].field=filtersFreeOfPersonalData`, `{audit.event.filters.personal.data}`) — arama metni gönderilecekse panel onu çıkarır |
-| `rowCount` | zorunlu, 0–1000 |
-| `piiIncluded` | zorunlu boolean |
-| `subjectType`/`subjectId` | isteğe bağlı, ikisi birlikte (`USER|COMPANY` + uuid) — dışa aktarma tek bir kişinin/şirketin listesiyse (#307 zaman çizelgesi) |
+| `resourceType` | zorunlu, `StaffExportList`: `JOB_ASSIGNMENTS` / `PAYOUTS` / `REPORTS` / `DISPUTES`; tanınmayan 400 `REQUEST_MALFORMED` |
+| `filters` | isteğe bağlı metin, ≤1000 karakter; kişisel veri taşırsa 400 `VALIDATION_FAILED`, `details[].field=filtersFreeOfPersonalData` (aşağıda) |
+| `rowCount` | zorunlu, 0–1000; **çekirdek satırda** |
+| `piiIncluded` | zorunlu boolean, **dosyanın içeriği hakkında beyan**; **çekirdek satırda** (aşağıda) |
+| `subjectType`/`subjectId` | isteğe bağlı çift (`USER|COMPANY` + uuid) |
+| `relatedSubjectType`/`relatedSubjectId` | isteğe bağlı çift, yalnız bir konuyla birlikte |
 
-**Aktör yalnız token'dan.** Gövdede aktör alanı yok; gönderilen `actorStaffId`, `allowed`, `permission` gibi alanlar
-Jackson tarafından yok sayılır (`ClientAuditEventIT.theActorComesFromTheTokenAndActorFieldsInTheBodyAreIgnored`).
+**Konu kuralı (panelin dört liste sayfası için).** Liste tek bir taraf süzgeciyle daraltıldıysa (`workerId`,
+`reportedUserId`, `userId` gibi) `subjectType=USER` + o kişi; işçi **ve** işveren süzgeci birlikteyse işçi
+`subject*`, işveren `related*` (şirket işvereni ise `COMPANY`); süzgeçsiz liste konusuz. `COMPANY` konu olarak kabul
+edilir ama bugünkü dört sayfa onu kullanmaz. Bildirilen konu ve karşı taraf **var olmalı** — soft-delete edilmiş kişi
+dahil (`AuditSubjectService.exists` → `UserService`/`CompanyService.existsIncludingDeleted`, #307'nin varlık kuralı);
+yoksa **400 `AUDIT_EVENT_SUBJECT_NOT_FOUND`** ve satır yazılmaz. Çift kuralları DTO'da (`@AssertTrue`, §2ah):
+`subjectComplete`, `relatedSubjectComplete`, `relatedSubjectBesideASubject` → `VALIDATION_FAILED` + alan adı.
 
-**İzin gövdeye bağlı, uç her personele açık.** `@RequiresPermission(action = "audit.event.record")` izin
-adlandırmıyor (zincir yalnız kayıtlı ve parolasını değiştirmiş personeli geçirir); kayıt **dışa aktarılan listenin
-izniyle** yazılır ve izin `StaffAuditManager.recordClientEvent` içinde token'daki personelin izinlerinde aranır:
-`JOB_ASSIGNMENTS` → `payment.read`, `PAYOUTS` → `payout.reconcile`, `REPORTS` → `content.moderate`, `DISPUTES` →
-`dispute.resolve` — panel rotalarının ve `GET /admin/<liste>` uçlarının kapısıyla aynı (eşleme `StaffExportList`'te tek
-yerde; `ClientAuditEventIT.everyExportableListNamesThePermissionThatGuardsItsStaffList` her sabiti ilgili GET
-mapping'inin `@RequiresPermission`'ına bağlıyor). İzni olmayan personel **403 `AUDIT_EVENT_LIST_PERMISSION_MISSING`**
-alır ve ret de `allowed=false` satırı yazar (§2av kural 1; metot `@Transactional(noRollbackFor =
-ForbiddenException.class)`). Bu, `AdminPermissionMappingIT`'in iki kuralına (izin adı vermeyen anotasyon yalnız
-`/admin/me`'de; yazma ucu mutating bir izinle korunur) **adlandırılmış bir muafiyet** açtı:
-`BODY_DEPENDENT_PERMISSION_WRITES` gerekçesiyle `POST /admin/audit-log/events`'i tutar ve yeni test
-(`everyBodyDependentPermissionWriteNamesNoPermissionAndHandsTheStaffActorToTheService`) muaf ucun izin
-adlandırmadığını, `StaffPrincipal` aldığını ve onu servise geçirdiğini, bayat muafiyet kalmadığını doğrular. Yeni
-bir blanket izin (`audit.event.write`) elendi: her role tohumlanacak, her rolü sayan testleri değiştirecek ve gerçek
-kapıyı (listenin izni) zaten ikinci kez soracak bir izin olurdu.
+**`piiIncluded` = dosya kişiler hakkında kişisel veri sütunu ya da serbest metin taşıyor mu.** Ad soyad, e-posta,
+telefon, TCKN, IBAN, adres, doğum tarihi sütunu ya da şikayet/uyuşmazlık açıklaması, personel notu gibi kişiler
+hakkında serbest metin varsa `true`; yalnız kimlik (UUID), durum, tutar, tarih ve sayı sütunlarıysa `false`.
+**Personelin `user.read_pii` taşıyıp taşımaması bu alanı belirlemez** — beyan dosyanın içeriği hakkındadır, çağıranın
+yetkisi hakkında değil. `true` ise satır en az `PERSONAL_DATA` hassasiyetinde saklanır (`FINANCIAL` düşürülmez).
 
-**Satır:** `action = "export"` (eylem sözlüğü küçük harf; `GET /admin/audit-log?action=export`), `permission` listenin
-izni, `resourceType` listenin denetim kaynak türü (`job-assignments`, `payouts`, `reports`, `disputes` — aynı listenin
-GET satırlarıyla `resourceType` süzgecinde yan yana durur), `resourceId` boş, `mutating=false` (iş verisi değişmedi),
-hassasiyet listenin izninden; `piiIncluded=true` ise en az `PERSONAL_DATA` (FINANCIAL düşürülmez) — saklama süresi
-buna göre (§2av). Gövde (filters, rowCount, piiIncluded, konu) detayın `requestBody`'sinde JSON olarak durur, yani
-6 ay sonra ya da KVKK silmesinde gider; çekirdek kim/ne zaman/hangi liste/izin/sonuç/konu bilgisini tutar. Yetki
-anında satır açılmaz (anotasyon izin adlandırmadığı için `AuditScope.isAuditable` false), tek satırı manager yazar;
-#307'nin kapsam taraması bu yüzden `audit-log` türünü `CLIENT_EVENTS` olarak konusuz tanır, konuyu gövdeden manager
-verir.
+**`rowCount` ve `piiIncluded` çekirdek satırda (`admin_audit_entries.row_count`, `.pii_included`;
+`2026/10/03-02-audit-client-event.xml`).** İkisi de kişisel veri değil ve "kim, ne zaman, kaç satır, kişisel veriyle
+mi" sorusunun cevabı 6 aylık detay silindiğinde kaybolmamalı; `AuditEntryDto.rowCount`/`piiIncluded` olarak döner,
+diğer satırlarda `null`. `filters` ve gövdenin tamamı detayın `requestBody`'sinde (6 ay / KVKK silmesi). Kolonlar
+nullable ve varsayılansız, yani ekleme yalnız katalog değişikliği.
+
+**Aktör yalnız token'dan.** Gövdede aktör alanı yok; gönderilen `actorStaffId`, `allowed`, `permission` Jackson
+tarafından yok sayılır. **Kayıtlı personel değilse 403 `AUDIT_EVENT_STAFF_ONLY`**, deterministik: `actor == null`
+(marketplace `ROLE_ADMIN` köprüsü, `STAFF_MARKETPLACE_BRIDGE_OPEN=true` ile geri açılırsa) ve kayıtsız `StaffPrincipal`
+aynı yanıtı alır, satır yazılmaz (personel kimliği olmayan bir dışa aktarmayı kime yazacağımız yok), `WARN` loglanır.
+
+**İzin gövdeye bağlı, uç her personele açık.** `@RequiresPermission(action = "audit.event.record", auditedByHandler =
+true)` izin adlandırmıyor; kayıt **dışa aktarılan listenin izniyle** yazılır ve izin `ClientAuditEventManager.record`
+içinde token'daki personelin izinlerinde aranır: `JOB_ASSIGNMENTS` → `payment.read`, `PAYOUTS` → `payout.reconcile`,
+`REPORTS` → `content.moderate`, `DISPUTES` → `dispute.resolve` — panel rotalarının ve `GET /admin/<liste>` uçlarının
+kapısıyla aynı (eşleme `StaffExportList`'te tek yerde; `ClientAuditEventIT.everyExportableListNamesThePermissionThat
+GuardsItsStaffList` her sabiti ilgili GET mapping'inin `@RequiresPermission`'ına bağlıyor). İzni olmayan personel **403
+`AUDIT_EVENT_LIST_PERMISSION_MISSING`** alır ve ret de `allowed=false` satırı yazar (§2av kural 1; metot
+`@Transactional(noRollbackFor = ForbiddenException.class)`). `AdminPermissionMappingIT`'in iki kuralına (izin adı
+vermeyen anotasyon yalnız `/admin/me`'de; yazma ucu mutating bir izinle korunur) **adlandırılmış bir muafiyet**:
+`BODY_DEPENDENT_PERMISSION_WRITES` gerekçesiyle bu ucu tutar; muaf ucun izin adlandırmadığı, `StaffPrincipal` alıp
+servise geçirdiği ve bayat muafiyet kalmadığı ayrı testlerde.
+
+**Satır tam bir kez yazılır: `auditedByHandler`.** İlk sürümde `?x=1` gibi herhangi bir sorgu parametresi
+`AuditScope.hasFilter`'ı doğru yapıyor, yetki anındaki `StaffAuditRecorder` "süzgeçli arama" (§2av kural 5) diye
+**ikinci** bir `allowed=true` satırı kuyruğa alıyordu — 403 ve 429 alan çağrı bile izin verilmiş görünüyordu.
+`RequiresPermission.auditedByHandler()` artık recorder'ı o eşlemede tümüyle atlatıyor; satırı yalnız handler yazar.
+Bayrak yalnız gövdeye bağlı izinli yazma ucunda olabilir: `AdminPermissionMappingIT.onlyABodyDependentPermission
+WriteMayLeaveItsAuditRowToTheHandler` bayrağı taşıyan kümeyi muafiyet listesine **eşitliyor** — başka bir uç yetki
+anındaki kaydı kapatamaz. Kanıt: sorgu parametreli 403/403/201 → tam üç `export` satırı
+(`ClientAuditEventIT.aQueryParameterNeverAddsASecondRow…`), sorgu parametreli 201/201/429 → iki satır
+(`ClientAuditEventRateLimitIT`).
+
+**Bileşim `ClientAuditEventManager`'da, `StaffAuditManager`'da değil — bir bean döngüsü yüzünden.** Konunun varlığı
+`AuditSubjectService`'e soruluyor ve `AuditSubjectManager → LegalService → StaffAuditService` zinciri var; varlık
+kontrolü `StaffAuditManager`'a konsaydı `StaffAuditManager → AuditSubjectService → … → StaffAuditService` döngüsü
+olurdu (§1: döngü çözülür, gizlenmez). Orkestratör hiçbir DAO'ya uzanmaz; satırı
+`StaffAuditService.recordClientEvent(record, requestBody, rowCount, piiIncluded)` yazar (aynı `newEntry` kurulumu,
+üstüne iki çekirdek alan). Sıra: aktör → bütçe → konu varlığı → izin → kayıt → (izin yoksa) 403.
+
+**Satır:** `action = "export"` (`GET /admin/audit-log?action=export`), `permission` listenin izni, `resourceType`
+listenin denetim kaynak türü (`job-assignments`, `payouts`, `reports`, `disputes` — aynı listenin GET satırlarıyla
+`resourceType` süzgecinde yan yana durur), `resourceId` boş, `mutating=false` (iş verisi değişmedi), hassasiyet
+listenin izninden. #307'nin kapsam taraması `audit-log` türünü `CLIENT_EVENTS` (`Resolution.SERVICE`) olarak tanır:
+konuyu yol değil gövde verir ve varlığını manager doğrular.
+
+**Süzgeç özetinde kişisel veri — doğrusal tarama ve gevşek çözme.** `PersonalDataPatterns.containsPersonalData`:
+UUID ve ISO tarih/zaman değerleri silinir, sonra e-posta (`yerel@alan.uzantı`), 10+ rakamlık dizi (rakamlar arasında
+en çok iki boşluk/nokta/parantez/tire — telefon, TCKN) ve TR IBAN aranır. Değer önce olduğu gibi, sonra **gevşekçe
+çözülerek** (`%XX` → bayt, `+` → boşluk; geçersiz `%` olduğu gibi kalır, UTF-8; en çok **üç tur**) yeniden taranır:
+`ali%40example.com`, `0532%20123%2045%2067`, `0532+123+45+67` reddedilir, dört kat kodlama bilerek çözülmez. **ReDoS
+(H1):** e-posta deseni `[^\s@&=]+@[^\s@&=]+\.[^\s@&=]+` uzun bir ayırıcısız dizide her başlangıçta tüm diziyi
+geri izliyordu (O(n²); 200 bin karakter dakikalar); e-posta artık elle yazılmış doğrusal bir tarama (her `@` için
+solda bir karakter, sağda ayırıcıya kadar noktalı alan), diğer iki desen sınırlı (`{10}`/`{9}` — `find` için eşik
+yeter) ve iyelikli niceleyici taşıyor. Üç katman: (a) DTO `filters.length() > 1000` ise taramadan dönüp yalnız
+`@Size`'ın raporlamasına bırakır, (b) tarama doğrusal (`PersonalDataPatternsTest` 1 MB'lık on bir düşmanca girdiyi
+2 sn sınırında koşuyor), (c) `RateLimitFilter` bu ucun JSON gövdesini **16 KiB**'da keser → 413
+`REQUEST_BODY_TOO_LARGE` (`prepareAuthRequest` kalıbı, `CachedBodyRequest`; kesim yalnız bu uçta — `/admin/**`'ın
+geri kalanında uzun gövdeli meşru yazmalar var, kör bir sınır onları kırardı). **Bilinen yanlış pozitif:** kimlik
+ya da tarih olmayan 10+ rakamlık her sayı reddedilir — epoch milisaniye (`1727740800000`), uzun sipariş numarası;
+panel tarihleri ISO biçiminde göndermeli. Arama metni gönderilecekse panel onu çıkarır.
 
 **Hız sınırı iki katman.** İstek filtrede mevcut `WRITE` kovasına düşer (personel yazmalarıyla aynı, IP başına
-60/dk); ayrıca manager içinde personel başına `rate-limit.audit-event` bütçesi (varsayılan 60 / 1 saat,
-`RATE_LIMIT_AUDIT_EVENT_*`) — `identity-reveal` kalıbı (§2j). Bütçe izin kontrolünden **önce** düşülür, yani reddedilen
-denemeler de harcar ve sel tabloyu dolduramaz; 429 `AUDIT_EVENT_TOO_MANY` alan çağrı kayda geçmez.
+60/dk); ayrıca manager içinde personel başına `rate-limit.audit-event` bütçesi (120 / 1 saat) — `identity-reveal`
+kalıbı (§2j). Bütçe konu ve izin kontrolünden **önce** düşülür, yani reddedilen denemeler de harcar ve sel tabloyu
+dolduramaz; 429 `AUDIT_EVENT_TOO_MANY` alan çağrı kayda geçmez.
 
-**Panel tarafı (koala-admin#110):** `csv-export.ts` `logExport` yerine bu uca yazar; başarısızlıkta indirme yine sürer,
-uyarı loglanır. Panel liste adını eşler (`assignments` → `JOB_ASSIGNMENTS` …), `filters`'tan arama metnini çıkarır ve
-kullanıcı/şirket sayfasından yapılan dışa aktarmada `subjectType`/`subjectId` gönderir.
+**Panel tarafı (koala-admin#110):** `csv-export.ts` dosyayı üretmeden önce bu uca yazar ve 201 dışında indirmeyi
+iptal edip kullanıcıya nedenini gösterir; liste adını eşler (`assignments` → `JOB_ASSIGNMENTS` …), `filters`'tan
+arama metnini çıkarır, tarihleri ISO gönderir, konu kuralına göre `subject*`/`related*` doldurur ve `piiIncluded`'ı
+dosyanın sütunlarına göre (personelin iznine göre değil) belirler.
 
 ---
 

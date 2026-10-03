@@ -24,7 +24,7 @@ public class RateLimitProperties {
     private Bucket realtimeCredential = new Bucket(10, Duration.ofMinutes(1));
     private Bucket identityReveal = new Bucket(30, Duration.ofHours(1));
     private Bucket boarding = new Bucket(120, Duration.ofMinutes(1));
-    private Bucket auditEvent = new Bucket(60, Duration.ofHours(1));
+    private Bucket auditEvent = new Bucket(120, Duration.ofHours(1));
 
     public static class Bucket {
 

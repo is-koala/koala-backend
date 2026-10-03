@@ -26,7 +26,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @TestPropertySource(properties = {
         "rate-limit.enabled=true",
         "rate-limit.identity-reveal.max-attempts=2",
-        "rate-limit.identity-reveal.window=1h"
+        "rate-limit.identity-reveal.window=1h",
+        "rate-limit.audit-event.max-attempts=2",
+        "rate-limit.audit-event.window=1h"
 })
 class WorkerIdentityRevealRateLimitIT extends AbstractIntegrationTest {
 

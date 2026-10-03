@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-10-03-02-01-admin-audit-client-event-columns" author="koala">
+        <addColumn tableName="admin_audit_entries">
+            <column name="row_count" type="INTEGER"/>
+            <column name="pii_included" type="BOOLEAN"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="admin_audit_entries" columnName="pii_included"/>
+            <dropColumn tableName="admin_audit_entries" columnName="row_count"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

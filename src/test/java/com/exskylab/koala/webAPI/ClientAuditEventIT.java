@@ -50,6 +50,9 @@ class ClientAuditEventIT extends AbstractStaffIntegrationTest {
     @Qualifier("requestMappingHandlerMapping")
     private RequestMappingHandlerMapping handlerMapping;
 
+    private final UUID workerId = UUID.randomUUID();
+    private final UUID employerId = UUID.randomUUID();
+
     @BeforeEach
     void clearTheTrail() {
         jdbc.update("delete from admin_audit_entries");
@@ -58,6 +61,7 @@ class ClientAuditEventIT extends AbstractStaffIntegrationTest {
     @AfterEach
     void tearDown() {
         jdbc.update("delete from admin_audit_entries");
+        jdbc.update("delete from users where id in (?, ?)", workerId, employerId);
         deleteStaffMembersLike(STAFF_EMAIL_PREFIX + "%");
     }
 
@@ -86,6 +90,8 @@ class ClientAuditEventIT extends AbstractStaffIntegrationTest {
         assertEquals(Boolean.TRUE, row.get("allowed"));
         assertEquals(Boolean.FALSE, row.get("mutating"));
         assertEquals("FINANCIAL", row.get("sensitivity"));
+        assertEquals(437, row.get("row_count"));
+        assertEquals(Boolean.FALSE, row.get("pii_included"));
         String body = (String) row.get("request_body");
         assertTrue(body.contains("\"rowCount\":437") && body.contains("durum=CONFIRMED")
                 && body.contains("\"piiIncluded\":false"), body);
@@ -183,26 +189,146 @@ class ClientAuditEventIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
-    void anExportScopedToOneUserAppearsOnThatUsersTimelineAndPersonalDataRaisesTheSensitivity() throws Exception {
-        UUID lead = staff("Güven Lideri", "TRUST_LEAD");
-        UUID user = UUID.randomUUID();
+    void anExportFilteredByAWorkerAndAnEmployerLandsOnBothTimelinesWithItsFiguresInTheCoreRow() throws Exception {
+        UUID analyst = staff("Finans Analisti", "FINANCE_ANALYST");
+        insertUser(workerId);
+        insertUser(employerId);
 
-        record(lead, """
-                {"action":"EXPORT","resourceType":"DISPUTES","rowCount":4,"piiIncluded":true,
-                 "subjectType":"USER","subjectId":"%s"}
-                """.formatted(user))
+        record(analyst, """
+                {"action":"EXPORT","resourceType":"JOB_ASSIGNMENTS","rowCount":4,"piiIncluded":true,
+                 "subjectType":"USER","subjectId":"%s","relatedSubjectType":"USER","relatedSubjectId":"%s"}
+                """.formatted(workerId, employerId))
                 .andExpect(status().isCreated());
 
         Map<String, Object> row = onlyExportRow();
         assertEquals("USER", row.get("subject_type"));
-        assertEquals(user, row.get("subject_id"));
-        assertEquals("PERSONAL_DATA", row.get("sensitivity"));
+        assertEquals(workerId, row.get("subject_id"));
+        assertEquals("USER", row.get("related_subject_type"));
+        assertEquals(employerId, row.get("related_subject_id"));
+        assertEquals(4, row.get("row_count"));
+        assertEquals(Boolean.TRUE, row.get("pii_included"));
+        assertEquals("FINANCIAL", row.get("sensitivity"));
 
-        mockMvc.perform(get("/admin/audit-log").param("subjectType", "USER").param("subjectId", user.toString())
-                        .header("Authorization", "Bearer " + staffAccessToken(staff("Sahip", "OWNER"))))
+        jdbc.update("delete from admin_audit_entry_details");
+        String owner = staffAccessToken(staff("Sahip", "OWNER"));
+        mockMvc.perform(get("/admin/audit-log").param("action", "export").param("subjectId", employerId.toString())
+                        .header("Authorization", "Bearer " + owner))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.content[0].action").value("export"))
-                .andExpect(jsonPath("$.data.content[0].resourceType").value("disputes"));
+                .andExpect(jsonPath("$.data.content[0].resourceType").value("job-assignments"))
+                .andExpect(jsonPath("$.data.content[0].relatedSubjectId").value(employerId.toString()))
+                .andExpect(jsonPath("$.data.content[0].rowCount").value(4))
+                .andExpect(jsonPath("$.data.content[0].piiIncluded").value(true))
+                .andExpect(jsonPath("$.data.content[0].requestBody").doesNotExist());
+    }
+
+    @Test
+    void aPersonalDataExportOfANormalListIsKeptAsPersonalData() throws Exception {
+        UUID lead = staff("Güven Lideri", "TRUST_LEAD");
+
+        record(lead, """
+                {"action":"EXPORT","resourceType":"DISPUTES","rowCount":4,"piiIncluded":true}
+                """)
+                .andExpect(status().isCreated());
+
+        assertEquals("PERSONAL_DATA", onlyExportRow().get("sensitivity"));
+    }
+
+    @Test
+    void aSubjectThatDoesNotExistIsRefusedButOneWhoDeletedTheirAccountIsAccepted() throws Exception {
+        UUID analyst = staff("Finans Analisti", "FINANCE_ANALYST");
+        insertUser(workerId);
+        jdbc.update("update users set is_deleted = true where id = ?", workerId);
+
+        record(analyst, """
+                {"action":"EXPORT","resourceType":"JOB_ASSIGNMENTS","rowCount":1,"piiIncluded":false,
+                 "subjectType":"USER","subjectId":"%s"}
+                """.formatted(UUID.randomUUID()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("AUDIT_EVENT_SUBJECT_NOT_FOUND"));
+        record(analyst, """
+                {"action":"EXPORT","resourceType":"JOB_ASSIGNMENTS","rowCount":1,"piiIncluded":false,
+                 "subjectType":"USER","subjectId":"%s","relatedSubjectType":"COMPANY","relatedSubjectId":"%s"}
+                """.formatted(workerId, UUID.randomUUID()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("AUDIT_EVENT_SUBJECT_NOT_FOUND"));
+        assertEquals(0, exportRows().size());
+
+        record(analyst, """
+                {"action":"EXPORT","resourceType":"JOB_ASSIGNMENTS","rowCount":1,"piiIncluded":false,
+                 "subjectType":"USER","subjectId":"%s"}
+                """.formatted(workerId))
+                .andExpect(status().isCreated());
+        assertEquals(workerId, onlyExportRow().get("subject_id"));
+    }
+
+    @Test
+    void aQueryParameterNeverAddsASecondRowWhetherTheEventIsAcceptedOrRefused() throws Exception {
+        UUID analyst = staff("Finans Analisti", "FINANCE_ANALYST");
+        UUID agent = staff("Destek", "SUPPORT_AGENT");
+
+        mockMvc.perform(post(EVENTS).param("x", "1")
+                        .header("Authorization", "Bearer " + staffAccessToken(analyst))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"action\":\"EXPORT\",\"resourceType\":\"PAYOUTS\",\"rowCount\":1,"
+                                + "\"piiIncluded\":false}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post(EVENTS).param("x", "1")
+                        .header("Authorization", "Bearer " + staffAccessToken(agent))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"action\":\"EXPORT\",\"resourceType\":\"PAYOUTS\",\"rowCount\":1,"
+                                + "\"piiIncluded\":false}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post(EVENTS).param("x", "1")
+                        .header("Authorization", "Bearer " + staffAccessToken(analyst))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"action\":\"EXPORT\",\"resourceType\":\"JOB_ASSIGNMENTS\",\"rowCount\":1,"
+                                + "\"piiIncluded\":false}"))
+                .andExpect(status().isCreated());
+
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "select action, allowed, resource_type from admin_audit_entries order by occurred_at");
+        assertEquals(3, rows.size(), rows.toString());
+        assertTrue(rows.stream().allMatch(row -> "export".equals(row.get("action"))), rows.toString());
+        assertEquals(List.of(false, false, true), rows.stream().map(row -> row.get("allowed")).toList());
+    }
+
+    @Test
+    void encodedPersonalDataInTheFilterSummaryIsRefusedToo() throws Exception {
+        UUID moderator = staff("Moderatör", "MODERATOR");
+
+        for (String filters : List.of("arama=ali%40example.com", "telefon=0532%20123%2045%2067",
+                "telefon=0532+123+45+67")) {
+            record(moderator, """
+                    {"action":"EXPORT","resourceType":"REPORTS","filters":"%s","rowCount":2,"piiIncluded":false}
+                    """.formatted(filters))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.details[0].field").value("filtersFreeOfPersonalData"));
+        }
+
+        assertEquals(0, exportRows().size());
+    }
+
+    @Test
+    void anOversizedBodyIsRefusedBeforeItIsParsedAndALongSummaryOnlyForItsLength() throws Exception {
+        UUID moderator = staff("Moderatör", "MODERATOR");
+
+        record(moderator, """
+                {"action":"EXPORT","resourceType":"REPORTS","filters":"%s","rowCount":2,"piiIncluded":false}
+                """.formatted("a".repeat(200_000)))
+                .andExpect(status().isPayloadTooLarge())
+                .andExpect(jsonPath("$.errorCode").value("REQUEST_BODY_TOO_LARGE"));
+
+        long started = System.nanoTime();
+        record(moderator, """
+                {"action":"EXPORT","resourceType":"REPORTS","filters":"%s","rowCount":2,"piiIncluded":false}
+                """.formatted("ali@example.com&" + "a".repeat(15_000)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details.length()").value(1))
+                .andExpect(jsonPath("$.details[0].field").value("filters"));
+        long elapsedMillis = (System.nanoTime() - started) / 1_000_000;
+
+        assertTrue(elapsedMillis < 3_000, "15 bin karakterlik süzgeç özeti " + elapsedMillis + " ms sürdü");
+        assertEquals(0, exportRows().size());
     }
 
     @Test
@@ -244,6 +370,13 @@ class ClientAuditEventIT extends AbstractStaffIntegrationTest {
                 .header("User-Agent", "koala-admin/1.0")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body));
+    }
+
+    private void insertUser(UUID id) {
+        jdbc.update("insert into users (id, created_at, is_deleted, email, password, is_employer, "
+                        + "email_verified, phone_verified, identity_verified, first_name, last_name) "
+                        + "values (?, now(), false, ?, 'test', true, true, false, false, 'Konu', 'Kişi')",
+                id, id + "@example.com");
     }
 
     private UUID staff(String displayName, String role) {
