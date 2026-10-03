@@ -37,8 +37,9 @@ public class BoardingEventDto {
 
     private BoardingSource source;
 
-    @Schema(description = "Biniş anı: capturedAt; cihaz saati makul değilse ya da token penceresinin dışındaysa "
-            + "sunucu saatine/pencereye çekilir ve DEVICE_TIME_IMPLAUSIBLE bayrağı düşer. İlan saatine kırpılmaz.")
+    @Schema(description = "Biniş anı: capturedAt; cihaz saati makul değilse ya da token'ın kabul aralığının (mint "
+            + "penceresinin başından expiresAt'e) dışındaysa sunucu saatine/aralık sınırına çekilir ve "
+            + "DEVICE_TIME_IMPLAUSIBLE bayrağı düşer. İlan saatine kırpılmaz.")
     private Instant occurredAt;
 
     @Schema(types = {"string", "null"}, format = "date-time",

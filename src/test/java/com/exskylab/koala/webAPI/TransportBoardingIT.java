@@ -1,6 +1,7 @@
 package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.business.abstracts.TransportService;
+import com.exskylab.koala.core.configs.BoardingLateSyncGuard;
 import com.exskylab.koala.core.dtos.transport.request.SeatBoardingDto;
 import com.exskylab.koala.core.dtos.transport.request.ShuttleBoardingDto;
 import com.exskylab.koala.core.dtos.transport.response.BoardingEventDto;
@@ -16,6 +17,8 @@ import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.entities.Shuttle;
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
 import com.exskylab.koala.support.OverlappingWrites;
+import com.exskylab.koala.support.TestLatches;
+import com.zaxxer.hikari.HikariDataSource;
 import jakarta.persistence.EntityManagerFactory;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
@@ -24,6 +27,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.ApplicationContext;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -36,8 +40,14 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import javax.sql.DataSource;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -112,6 +122,12 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
     @Autowired
     private EntityManagerFactory entityManagerFactory;
 
+    @Autowired
+    private ApplicationContext applicationContext;
+
+    @Autowired
+    private DataSource dataSource;
+
     private final UUID employerId = UUID.randomUUID();
     private final UUID contactId = UUID.randomUUID();
     private final UUID formerContactId = UUID.randomUUID();
@@ -136,6 +152,7 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
     private final Instant returnDeparture = departure.plus(Duration.ofHours(9));
     private final List<UUID> extraUsers = new ArrayList<>();
     private boolean noticesWereEnabled;
+    private Duration tokenTtlBefore;
 
     private UUID shuttleA;
     private UUID shuttleB;
@@ -145,6 +162,7 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
     void setUp() throws Exception {
         noticesWereEnabled = boardingProperties.isNoticesEnabled();
         boardingProperties.setNoticesEnabled(true);
+        tokenTtlBefore = boardingProperties.getTokenTtl();
         insertUser(employerId, "İşveren", "Bir");
         insertUser(contactId, "Yetkili", "İki");
         insertUser(formerContactId, "Eski", "Yetkili");
@@ -195,6 +213,7 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
     @AfterEach
     void tearDown() {
         boardingProperties.setNoticesEnabled(noticesWereEnabled);
+        boardingProperties.setTokenTtl(tokenTtlBefore);
         dropTrigger("delay_boarding_event_insert");
         dropTrigger("duplicate_boarding_event_insert");
         List<UUID> stopAddresses = jdbc.queryForList("select st.address_id from shuttle_stops st "
@@ -315,7 +334,9 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
         assertEquals(Set.of("LATE_SYNC"), flagsOf(event));
         assertEquals(scannedAt, Instant.parse(event.get("occurredAt").asText()));
 
-        scan(secondWorkerId, shuttleA, offline, Instant.now(), null, null, UUID.randomUUID())
+        String longGone = BoardingTokens.mintShuttle(secretOf(shuttleA), shuttleA,
+                Instant.now().minus(Duration.ofMinutes(40)), boardingProperties.getTokenTtl(), false);
+        scan(secondWorkerId, shuttleA, longGone, Instant.now(), null, null, UUID.randomUUID())
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("TRANSPORT_TOKEN_EXPIRED"));
         Instant tooLate = Instant.now().minus(boardingProperties.getLateSyncMax()).minus(Duration.ofMinutes(5));
@@ -324,6 +345,87 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
         scan(secondWorkerId, shuttleA, yesterday, tooLate, null, null, UUID.randomUUID())
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("TRANSPORT_TOKEN_EXPIRED"));
+        assertEquals(1, boardingRows());
+    }
+
+    @Test
+    void aPreviousWindowTokenProvesTheBoardingUntilItsExpiresAtOnlineAndOffline() throws Exception {
+        Duration ttl = tokenTtlWithTheCurrentWindowAged(Duration.ofMinutes(8), Duration.ofMinutes(2));
+        boardingProperties.setTokenTtl(ttl);
+        pickSeat(workerId, assignmentId, shuttleA);
+        pickSeat(secondWorkerId, secondAssignmentId, shuttleA);
+        Instant currentWindow = BoardingTokens.refreshAt(Instant.now(), ttl).minus(ttl);
+        Instant previousWindow = currentWindow.minus(ttl);
+        Instant twoWindowsBack = previousWindow.minus(ttl);
+
+        String stillOnTheTablet = BoardingTokens.mintShuttle(secretOf(shuttleA), shuttleA, previousWindow, ttl, false);
+        Instant scannedOnline = BoardingTokens.refreshAt(previousWindow, ttl).plus(Duration.ofMinutes(5));
+        JsonNode online = data(scan(workerId, shuttleA, stillOnTheTablet, scannedOnline, null, null, UUID.randomUUID())
+                .andExpect(status().isOk()));
+        assertEquals(scannedOnline, Instant.parse(online.get("occurredAt").asText()),
+                "a token that still scans proves the boarding up to its expiresAt, not its refreshAt");
+        assertFalse(flagsOf(online).contains("DEVICE_TIME_IMPLAUSIBLE"), online.toString());
+        assertFalse(flagsOf(online).contains("LATE_SYNC"), online.toString());
+
+        String scannedThenUploadedLater = BoardingTokens.mintShuttle(secretOf(shuttleA), shuttleA, twoWindowsBack, ttl,
+                false);
+        Instant scannedOffline = BoardingTokens.refreshAt(twoWindowsBack, ttl).plus(Duration.ofMinutes(5));
+        assertTrue(Instant.now().isAfter(BoardingTokens.acceptedUntil(twoWindowsBack, ttl)),
+                "the upload must arrive after the token's expiresAt");
+        JsonNode offline = data(scan(secondWorkerId, shuttleA, scannedThenUploadedLater, scannedOffline, null, null,
+                UUID.randomUUID()).andExpect(status().isOk()));
+        assertEquals(scannedOffline, Instant.parse(offline.get("occurredAt").asText()),
+                "the same scan uploaded late keeps the time the online scan would have kept");
+        assertTrue(flagsOf(offline).contains("LATE_SYNC"), offline.toString());
+        assertFalse(flagsOf(offline).contains("DEVICE_TIME_IMPLAUSIBLE"), offline.toString());
+        assertEquals(2, boardingRows());
+    }
+
+    @Test
+    void aSeatMovedOffTheScannedShuttleWhileTheScanWaitsForItsLockIsConcealed() throws Exception {
+        UUID seatId = pickSeat(workerId, assignmentId, shuttleB);
+        String onB = data(scan(workerId, shuttleB, shuttleToken(shuttleB, false), Instant.now(), null, null,
+                UUID.randomUUID()).andExpect(status().isOk())).get("id").asText();
+        assertEquals(seatId, pickSeat(employerId, assignmentId, shuttleA));
+        String tokenOfA = shuttleToken(shuttleA, false);
+        UUID stopOfB = stopOf(shuttleB);
+
+        HikariDataSource pool = (HikariDataSource) dataSource;
+        try (Connection mover = DriverManager.getConnection(pool.getJdbcUrl(), pool.getUsername(), pool.getPassword());
+             Connection observer = DriverManager.getConnection(pool.getJdbcUrl(), pool.getUsername(),
+                     pool.getPassword())) {
+            mover.setAutoCommit(false);
+            try (PreparedStatement move = mover.prepareStatement(
+                    "update seat_assignments set shuttle_id = ?, stop_id = ? where id = ?")) {
+                move.setObject(1, shuttleB);
+                move.setObject(2, stopOfB);
+                move.setObject(3, seatId);
+                assertEquals(1, move.executeUpdate());
+            }
+            CompletableFuture<String> scanner = CompletableFuture.supplyAsync(() -> {
+                String[] outcome = new String[1];
+                try {
+                    asUser(workerId, () -> {
+                        BoardingEventDto event = transportService.boardOnShuttle(shuttleA,
+                                new ShuttleBoardingDto(tokenOfA, Instant.now(), null, null, UUID.randomUUID()));
+                        outcome[0] = "EVENT " + event.getId() + " replayed=" + event.isReplayed();
+                        return event;
+                    });
+                } catch (RuntimeException refused) {
+                    outcome[0] = refused.getClass().getSimpleName() + ": " + refused.getMessage();
+                }
+                return outcome[0];
+            });
+            try {
+                awaitAScanQueuedOnTheSeatLock(observer);
+            } finally {
+                mover.commit();
+            }
+            String outcome = TestLatches.getProgress(scanner);
+
+            assertTrue(outcome.startsWith("ResourceNotFoundException"),
+                    "the seat now rides shuttle B; scanning A must not answer with B's boarding " + onB + ": " + outcome);
+        }
         assertEquals(1, boardingRows());
     }
 
@@ -835,6 +937,33 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
+    void theLateSyncGuardIsWiredIntoTheRunningApplication() {
+        assertEquals(1, applicationContext.getBeansOfType(BoardingLateSyncGuard.class).size());
+    }
+
+    @Test
+    void deletingTheJobCreatorsAccountScrubsTheBoardingLocationsOfTheJob() throws Exception {
+        UUID seatId = pickSeat(workerId, assignmentId, shuttleA);
+        UUID otherSeat = pickSeat(secondWorkerId, secondAssignmentId, shuttleA);
+        scan(workerId, shuttleA, shuttleToken(shuttleA, false), Instant.now(), NEAR_LAT, NEAR_LNG, UUID.randomUUID())
+                .andExpect(status().isOk());
+        mark(contactId, otherSeat, "{\"kind\":\"NO_SHOW\",\"latitude\":" + FAR_LAT + ",\"longitude\":" + FAR_LNG + "}")
+                .andExpect(status().isOk());
+
+        anonymize(employerId);
+        for (UUID seat : List.of(seatId, otherSeat)) {
+            assertNull(jdbc.queryForObject("select latitude from boarding_events where seat_assignment_id = ?",
+                    Object.class, seat), "the creator's job carries the creator's boarding records");
+            assertNull(jdbc.queryForObject("select longitude from boarding_events where seat_assignment_id = ?",
+                    Object.class, seat));
+            assertNull(jdbc.queryForObject(
+                    "select distance_to_stop_meters from boarding_events where seat_assignment_id = ?", Object.class,
+                    seat));
+        }
+        assertEquals(2, boardingRows(), "the boarding evidence itself stays");
+    }
+
+    @Test
     void theBoardingReminderGoesFifteenMinutesBeforeAnOutboundDepartureToSeatsNotYetSettled() throws Exception {
         pickSeat(workerId, assignmentId, shuttleA);
         UUID waitingSeat = pickSeat(secondWorkerId, secondAssignmentId, shuttleA);
@@ -1036,6 +1165,41 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
             call.run();
         } finally {
             SecurityContextHolder.clearContext();
+        }
+    }
+
+    private static Duration tokenTtlWithTheCurrentWindowAged(Duration atLeast, Duration headroom) {
+        long now = Instant.now().getEpochSecond();
+        for (long minutes = 10; minutes <= 120; minutes++) {
+            long window = minutes * 60;
+            long elapsed = Math.floorMod(now, window);
+            if (elapsed >= atLeast.toSeconds() && window - elapsed >= headroom.toSeconds()) {
+                return Duration.ofMinutes(minutes);
+            }
+        }
+        throw new IllegalStateException("no token window of 10-120 minutes is " + atLeast + " old right now");
+    }
+
+    private static void awaitAScanQueuedOnTheSeatLock(Connection observer) throws Exception {
+        long deadline = System.nanoTime() + TestLatches.progressTimeout().toNanos();
+        while (true) {
+            try (Statement statement = observer.createStatement();
+                 ResultSet waiting = statement.executeQuery("""
+                         select count(*) from pg_stat_activity
+                         where datname = current_database()
+                           and pid <> pg_backend_pid()
+                           and wait_event_type = 'Lock'
+                           and query ilike '%seat_assignments%'
+                         """)) {
+                waiting.next();
+                if (waiting.getInt(1) > 0) {
+                    return;
+                }
+            }
+            if (System.nanoTime() > deadline) {
+                throw new IllegalStateException("the scan never queued behind the seat lock");
+            }
+            Thread.sleep(20);
         }
     }
 

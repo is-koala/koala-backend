@@ -4647,7 +4647,8 @@ servisinin anahtarıyla imzalanır. **Deep link `{appScheme}://board?t={token}`*
 yanlıştı: şema ortamdan bağımsız sabitti (staging uygulaması prod linkini açar) ve host'tan sonra yol taşıyordu;
 türü ve kimliği token zaten taşıdığı için yola gerek yok. Token base64url ve noktadan ibaret, URL'de kaçışsız taşınır.
 Biçim ve pencere hesabı tek yerde, `core/helpers/BoardingTokens`; doğrulama istisna değil **sonuç tipi** döner:
-`sealed interface Verdict permits Valid(staticQr, windowStart, windowEnd), Expired(windowStart, windowEnd), Invalid`.
+`sealed interface Verdict permits Valid(staticQr, windowStart, acceptedUntil), Expired(windowStart, acceptedUntil), Invalid`;
+`acceptedUntil = windowStart(w + 2)`, mint yanıtındaki `expiresAt` ile aynı an.
 Çağıran `switch` ile dallanır (`TransportManager.checkToken`); `Expired` pencereyi taşıdığı için geç senkron kararı
 token'ı yeniden ayrıştırmadan verilir. Pencere `transport.boarding.token-ttl` (10 dk) uzunluğunda ve epoch'a hizalı;
 **sunucu saatiyle** içinde bulunulan ve bir önceki pencere `Valid`, MAC'i doğru başka her pencere `Expired`.
@@ -4668,27 +4669,32 @@ servis yüklendikten sonra bekletip araya yenilemeyi sokuyor.
 **Zaman: biniş anı ilan penceresine değil token penceresine bağlı.** `TimesheetEventPolicy.reconcile` ilan penceresi
 verilmeden çağrılır (gidiş binişi tanım gereği işten önce olduğu için ilan penceresi her binişe `OUTSIDE_JOB_WINDOW`
 düşürüyordu); yalnız cihaz saati kuralı kalır (72 saatten eski / 5 dk'dan ileri → sunucu saati,
-`DEVICE_TIME_IMPLAUSIBLE`). Ardından `occurredAt` **sunulan token'ın penceresine ± `clock-skew`** (2 dk,
-`TRANSPORT_BOARDING_CLOCK_SKEW`) kırpılır: daha erkense pencere başına, daha geçse pencere sonuna çekilir ve
-`DEVICE_TIME_IMPLAUSIBLE` eklenir. Gerekçe: token fiziksel varlığı yalnız kendi penceresi için kanıtlar; pencere dışı
-`capturedAt` doğrulanamayan bir cihaz saati iddiasıdır ve kanıt, token'ın kanıtladığı aralığın dışına taşmamalı. Token'sız
-işveren işaretlemesi ve sabit QR'da pencere yok, kırpma da yok.
+`DEVICE_TIME_IMPLAUSIBLE`). Ardından `occurredAt` **sunulan token'ın kabul aralığına ± `clock-skew`** (2 dk,
+`TRANSPORT_BOARDING_CLOCK_SKEW`) kırpılır. Kabul aralığı mint penceresinin başından `expiresAt`'e
+(`windowStart(w)` … `windowStart(w + 2)`) uzanır, çünkü sunucu bir önceki pencereyi de `Valid` sayar: daha erkense
+pencere başına, `expiresAt + skew`'den geçse `expiresAt`'e çekilir ve `DEVICE_TIME_IMPLAUSIBLE` eklenir. Üst sınır önce
+mint penceresinin sonuydu (`refreshAt`); o zaman `refreshAt`'ten sonra, sunucunun hâlâ kabul ettiği önceki pencerenin
+QR'ını çevrimiçi okutan dürüst işçinin zamanı geri çekilip bayrak yiyordu. Gerekçe: token fiziksel varlığı yalnız kabul
+aralığı için kanıtlar; aralık dışı `capturedAt` doğrulanamayan bir cihaz saati iddiasıdır ve kanıt, token'ın kanıtladığı
+aralığın dışına taşmamalı. Token'sız işveren işaretlemesi ve sabit QR'da pencere yok, kırpma da yok.
 
 **Çevrimdışı geç yükleme kabul edilir, ama yalnız token okutma anında geçerliyse.** `Expired` hükmü `LATE_SYNC` ile
-kabul edilir ve `occurredAt = capturedAt` kalır, dört koşulun hepsi tutuyorsa: `capturedAt` token penceresi ± skew
-içinde, `capturedAt ≤ now + skew`, `now − capturedAt ≤ late-sync-max` (`TRANSPORT_BOARDING_LATE_SYNC_MAX`, varsayılan
-`PT12H`, pozitif olmak zorunda). Biri tutmazsa 400 `TRANSPORT_TOKEN_EXPIRED`. Bu, ilk sürümün "token yalnız sunucu
-saatiyle doğrulanır, geç yükleme 400 alır" kararını **geri alıyor**: o karar şantiyede çekmeyen telefonun binişini
-kaybettiriyordu. Geri almanın güvencesi pencere bağı: iletilen bir QR fotoğrafı yine yalnız kendi 10 dakikalık
-penceresine düşen bir `capturedAt` ile işe yarar, geriye tarihleme penceresiyle, yükleme gecikmesi `late-sync-max` ile
-sınırlı ve her geç kayıt bayrakla görünür.
+kabul edilir ve `occurredAt = capturedAt` kalır, üç koşulun hepsi tutuyorsa: `capturedAt` token'ın kabul aralığı
+(`windowStart(w)` … `expiresAt`) ± skew içinde, `capturedAt ≤ now + skew`, `now − capturedAt ≤ late-sync-max`
+(`TRANSPORT_BOARDING_LATE_SYNC_MAX`, varsayılan `PT12H`, pozitif ve `timesheet.max-offline-age`'i aşamaz). Biri
+tutmazsa 400 `TRANSPORT_TOKEN_EXPIRED`. Bu, ilk sürümün "token yalnız sunucu saatiyle doğrulanır, geç yükleme 400 alır"
+kararını **geri alıyor**: o karar şantiyede çekmeyen telefonun binişini
+kaybettiriyordu. Geri almanın güvencesi aralık bağı: iletilen bir QR fotoğrafı yine yalnız mint ile `expiresAt`
+arasına (en çok iki pencere, 20 dk) düşen bir `capturedAt` ile işe yarar — çevrimiçi okutma zaten aynı aralıkta `Valid`,
+geç senkron ona yeni bir süre eklemez, yalnız `expiresAt`'ten sonra **yüklenen** okutmayı kabul eder. Geriye tarihleme
+aralıkla, yükleme gecikmesi `late-sync-max` ile sınırlı ve her geç kayıt bayrakla görünür.
 
 **Gidiş/dönüş ayrımı — `OFF_SCHEDULE`, `FAR_FROM_STOP`, −15 dk hatırlatması ve "henüz binmedi" bildirimi yalnız
 `OUTBOUND`.** Durak bir **alış** noktasıdır; dönüşte işçi işyerinden biner ve durak indiği yerdir, yani "duraktan uzak"
 ve "durak saatinden sapma" dönüşte anlamsız. Dönüş binişi bayraksız kaydedilir; `distance_to_stop_meters` yine iki
 yönde de anlık görüntü olarak yazılır. Dönüşün kendi anlamı (iniş, bırakma noktası, dönüş hatırlatmaları) **T3'e
 devir**; `BoardingKind` bu yüzden yalnız `BOARDED`/`NO_SHOW` — ilk sürümdeki `ALIGHTED` enumdan çıkarıldı (gizlemek
-yerine), T3 anlamıyla birlikte ekler. `WORKER_SELF` OpenAPI'de görünmüyor.
+yerine), T3 anlamıyla birlikte ekler.
 
 **Olay, kaydedildiği anın anlık görüntüsünü taşır.** `job_assignment_id`, `shuttle_id`, `stop_id`, `stop_label`
 (120), `stop_scheduled_at`, `distance_to_stop_meters`. Koltuk satırı aynı yönde başka servise geçince yerinde
@@ -4700,7 +4706,11 @@ kolonundan okur (`findAllByJobAssignmentIdOrderByOccurredAtAscIdAsc`), durak bil
 1. `SeatAssignmentDao.lockById` (`select … for update`, yoksa gizli 404) — koltuk satırı kilitlenir;
 2. `findWithDetailsById` — koltuk **kilitten sonra** taze okunur (kilitten önce yüklenmiş bir entity başka bir
    transaction'ın servis değişikliğini görmezdi);
-3. kapı: işçi yolunda taraf + biniş yapılabilir atama, işveren yolunda `JobEditors` + biniş yapılabilir atama;
+3. kapı: işçi yolunda taraf + koltuk **hâlâ okutulan serviste** + biniş yapılabilir atama, işveren yolunda
+   `JobEditors` + biniş yapılabilir atama. Servis eşleşmesi kilitten önceki projeksiyonda da bakılıyor ama yetmez:
+   koltuk projeksiyonla kilit arasında başka servise taşınabilir. Kilit sonrası kapı olmasa tekrar kontrolü (4) token'dan
+   önce koştuğu için A'yı okutan işçiye koltuğun yeni servisi B'deki kaydı `replayed=true` ile dönerdi; kapı onu gizli
+   404 yapar;
 4. **tekrar mı** (`replayOf`) — **token'a bakmadan**;
 5. token kontrolü, zaman kırpması, bayraklar, yazma.
 
@@ -4778,7 +4788,14 @@ değil), `captured_at`/`occurred_at` kanıt zamanı, `recorded_by_id` anonimleş
 dokunmuyor — T2 kapsamı dışında, ayrı karar.
 
 **Ayarlar doğrulanır.** `TransportBoardingProperties` (`@Validated`): `token-ttl` ≥ 1 sn, `far-from-stop-meters` ≥ 0,
-`schedule-tolerance` ve `clock-skew` negatif değil, `late-sync-max` pozitif. `TransportReminderProperties`
+`schedule-tolerance` ve `clock-skew` negatif değil, `late-sync-max` pozitif ve `timesheet.max-offline-age`'den
+(`TIMESHEET_MAX_OFFLINE_AGE`, 72h) uzun değil. Son kural iki ayrı properties sınıfını karşılaştırdığı için `@AssertTrue`
+değil, `core/configs/BoardingLateSyncGuard` (açılışta `InitializingBean`). Sebep: `reconcile` `max-offline-age`'den eski
+`capturedAt`'i sunucu saatine çekip `DEVICE_TIME_IMPLAUSIBLE` basar; geç senkron daha uzun olsaydı aynı okutmayı yine
+kabul eder, `occurredAt`'i `expiresAt`'e kırpar ve kayıt hem `LATE_SYNC` hem `DEVICE_TIME_IMPLAUSIBLE` taşırdı — kendi
+kendisiyle çelişen bir kanıt. Muhafız bir bileşen olduğu için `@Component` düşerse sessizce susar;
+`TransportBoardingIT.theLateSyncGuardIsWiredIntoTheRunningApplication` onu çalışan uygulamada arar.
+`TransportReminderProperties`
 (`@Validated`): `boarding-lead-minutes` ≥ 1, `not-boarded-after-minutes` ≥ 0, `not-boarded-lookback-minutes` ≥ 1.
 Yanlış değerde uygulama açılmaz (`TransportBoardingConfigurationTest`, `ApplicationContextRunner`; yaml varsayılanları
 ve ortam değişkenleri de orada).
@@ -4793,35 +4810,47 @@ okumaları ve liste sınırsız okuma, rotate `WRITE`'ta. Kullanıcı başına a
 zincirinden önce koşar ve principal'ı görmez; kötüye kullanım yüzeyi zaten dar (kalkış başına en çok bir BOARDED,
 NO_SHOW idempotent).
 
-**Sabitleyen testler.** `TransportBoardingIT` (gerçek Postgres, 26 kural): gidiş binişi işten önce olduğu halde zamanı
+**Sabitleyen testler.** `TransportBoardingIT` (gerçek Postgres, 30 kural): gidiş binişi işten önce olduğu halde zamanı
 korunur, bayraksız, `uri = {appScheme}://board?t=`, `issuedAt` ve `expiresAt = refreshAt + ttl`; uzak ve saatinden sapan
 gidiş binişi iki bayrakla; pencere dışı `capturedAt` pencereye çekilip `DEVICE_TIME_IMPLAUSIBLE`; 21 dk önce okutulan
-token `LATE_SYNC` ile kabul, okutma anı pencere dışında ya da `late-sync-max`'tan eski → 400; kayıtlı olayın tekrarı
+token `LATE_SYNC` ile kabul, okutma anı kabul aralığı dışında ya da `late-sync-max`'tan eski → 400; önceki pencerenin
+token'ı `refreshAt + 5 dk`'da çevrimiçi okutulunca zamanı korunur ve bayraksız, aynı biçimde okutulup `expiresAt`'ten
+sonra yüklenen okutma `LATE_SYNC` ile 200 ve zamanı korunur (token süresi geçici olarak öyle seçilir ki şimdiki pencere
+en az 8 dk yaşlı ve 2 dk pay kalsın); kilidi beklerken koltuğu okutulan servisten taşınan işçi gizli 404 alır (taşıyan
+ham bir JDBC bağlantısı satır kilidini tutar ve ayrı bir gözlemci bağlantı `pg_stat_activity`'de okutmanın kilit
+bekleyişini görene kadar commit etmez; IT havuzu 2 bağlantı olduğu için kilidi tutan ve gözleyen havuzdan alınırsa
+okutma, taşıyan ve gözlemci birbirini aç bırakır ve sınıfın geri kalanı zaman aşımına düşer); kayıtlı olayın tekrarı
 süresi dolmuş ve çöp token'la `replayed=true` döner; işveren işçi QR'ını iki yönde okutur; bayat token 400, başka servis
 `WRONG_SHUTTLE`, koltuksuz taraf `SEAT_NOT_SELECTED`, iptal atama `ASSIGNMENT_NOT_ACTIVE`, yabancı/çöp/başka servisin
 token'ı olmayan servisle aynı zarf; tekrarlar aynı olay; `clientEventId` koltuk başına; aynı gün başka servise taşınan
 işçi orada kendi kaydını açar ve `seats[].boarding` yeni servisi gösterir; NO_SHOW tekrarı ve geç BOARDED; tamamlanmış
 atama biner ve dönüş binişi bayraksız; liste canlı koltuklar + durak adı/saati; liste N+1'siz; sabit QR ve anahtar
 yenileme; plan kaydı yenilemeyle yarışınca eski anahtarı geri yazamaz; kilit arkasındaki ihlal 409; DTO kuralları 400;
-zaman çizelgesi alanları; anonimleştirme konumları siler; −15 dk hatırlatması payload'la, yalnız gidişe; bildirimler
-bayrak kapalıyken susar, T1 sürer; "henüz binmedi" kalkış başına, güncel düzenleyicilere, adı olmayan işçiyle; eski
-kalkış ve hiç okutulmamış kalkış bildirim üretmez; okutma–işaretleme yarışı tek satır. `BoardingTokensTest` (sonuç
-tipi, pencere sınırları, önek yeniden etiketleme, link), `TransportBoardingConfigurationTest` (6), `OpenApiDocumentIT`
+zaman çizelgesi alanları; anonimleştirme konumları siler (işçi, kaydeden yetkili ve ilan sahibi dalı ayrı ayrı); −15 dk
+hatırlatması payload'la, yalnız gidişe; bildirimler bayrak kapalıyken susar, T1 sürer; "henüz binmedi" kalkış başına,
+güncel düzenleyicilere, adı olmayan işçiyle; eski kalkış ve hiç okutulmamış kalkış bildirim üretmez; okutma–işaretleme
+yarışı tek satır. `BoardingTokensTest` (sonuç tipi, pencere sınırları, önek yeniden etiketleme, link),
+`TransportBoardingConfigurationTest` (7, `late-sync-max` > `max-offline-age` açılışı düşürür), `OpenApiDocumentIT`
 (uçlar, enum'lar, daraltılmış bayrak şemaları, `issuedAt`/`replayed`/`seats[].boarding`).
 
-**Mutasyon kanıtı.** İlk tur 23 mutasyon. İnceleme turunda 32 mutasyonun 32'si de hedef testini kırmızıya çevirdi
-(dört birim, 28 IT; her biri tek başına koşuldu, dosyalar `cp` yedeğinden geri alındı). Anonimleştirme cümlesi silinince
-konum kalır, `recorded_by_id` dalı silinince işaretleyen yetkilinin konumu kalır; bildirim bayrağı kaldırılınca kapalıyken
-push gider; şema sabit `koala` olunca `koala-staging` linki tutmaz; token tekrardan önce sorulunca kayıtlı olayın tekrarı
-400 alır; kalkış süzgecinden servis çıkınca taşınan işçi listede "binmiş" görünür, tekrar eski servisin olayını döner ve
-eski indeks taşımayı 409'la reddeder; `updatable = false` kalkınca bayat entity iptal edilmiş anahtarı geri yazar; ihlal
-çevirisi kalkınca 500; kilit kalkınca yarışta bir yazar 409 alır; pencere kırpması kalkınca 50 dk önceki `capturedAt`
-saklanır; geç senkron kapanınca 21 dk önceki okutma 400, üst sınır kalkınca 12 saatten eski okutma 200; `COMPLETED`
-çıkınca 409; yön süzgeci kalkınca dönüş binişi bayrak, dönüş koltuğu hatırlatma alır; yanlış servis gizlenince taraf
-404, yabancı süzgeci kalkınca yabancı 409 öğrenir; işçinin kendi durum alanı boş kalır; hiç okutulmamış kalkışa bildirim
-gider; ters kaydeden rolü, boş `receivedAt`, payload'dan düşen `direction`, boş `issuedAt`, `replayed=false` ve satırdan
-düşen `stopLabel` ayrı ayrı yakalanır; adsız işçi düşürülünce sayı ile adlar ayrışır; MAC önekten bağımsız olunca
-yeniden etiketlenen token geçer; `@Validated` kalkınca sıfır/negatif değerler açılışı düşürmez. Mutasyonla
+**Mutasyon kanıtı.** İlk tur 23 mutasyon. İnceleme turunda 32 mutasyonun 32'si de hedef testini kırmızıya çevirdi (dört
+birim, 28 IT; her biri tek başına koşuldu, dosyalar `cp` yedeğinden geri alındı). Anonimleştirme cümlesi silinince konum
+kalır, `recorded_by_id` dalı silinince işaretleyen yetkilinin konumu kalır; bildirim bayrağı kaldırılınca kapalıyken
+push gider; şema sabit `koala` olunca `koala-staging` linki tutmaz; token tekrardan önce sorulunca kayıtlı olayın
+tekrarı 400 alır; kalkış süzgecinden servis çıkınca taşınan işçi listede "binmiş" görünür, tekrar eski servisin olayını
+döner ve eski indeks taşımayı 409'la reddeder; `updatable = false` kalkınca bayat entity iptal edilmiş anahtarı geri
+yazar; ihlal çevirisi kalkınca 500; kilit kalkınca yarışta bir yazar 409 alır; pencere kırpması kalkınca 50 dk önceki
+`capturedAt` saklanır; geç senkron kapanınca 21 dk önceki okutma 400, üst sınır kalkınca 12 saatten eski okutma 200;
+`COMPLETED` çıkınca 409; yön süzgeci kalkınca dönüş binişi bayrak, dönüş koltuğu hatırlatma alır; yanlış servis
+gizlenince taraf 404, yabancı süzgeci kalkınca yabancı 409 öğrenir; işçinin kendi durum alanı boş kalır; hiç okutulmamış
+kalkışa bildirim gider; ters kaydeden rolü, boş `receivedAt`, payload'dan düşen `direction`, boş `issuedAt`,
+`replayed=false` ve satırdan düşen `stopLabel` ayrı ayrı yakalanır; adsız işçi düşürülünce sayı ile adlar ayrışır; MAC
+önekten bağımsız olunca yeniden etiketlenen token geçer; `@Validated` kalkınca sıfır/negatif değerler açılışı düşürmez.
+Doğrulama turunda 8 mutasyonun 8'i de kırmızı: kabul sonu yeniden `refreshAt` olunca önceki pencerenin çevrimiçi
+okutması `expiresAt` yerine `refreshAt`'e çekilir (IT) ve üç birim testi düşer; yalnız kırpma sınırı `refreshAt` olunca
+çevrimiçi yarı, yalnız geç senkron sınırı `refreshAt` olunca çevrimdışı yarı 400 alır; kilit sonrası servis kapısı
+kalkınca A'yı okutan işçiye B'deki kayıt `replayed=true` ile döner; `creator_id` dalı kalkınca ilan sahibinin ilanındaki
+konum kalır; muhafız susunca 73 saatlik geç senkron açılır, `@Component` düşünce muhafız uygulamada yoktur. Mutasyonla
 kanıtlanmayan tek madde atomik damgalar (yukarıda).
 
 **Kapsam dışı.** Dönüş/iniş anlamı, `ALIGHTED`, dönüş hatırlatmaları ve taksi parası (T3); canlı konum (T4); işverenin

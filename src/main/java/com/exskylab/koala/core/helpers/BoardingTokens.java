@@ -24,10 +24,10 @@ public final class BoardingTokens {
     public sealed interface Verdict permits Valid, Expired, Invalid {
     }
 
-    public record Valid(boolean staticQr, Instant windowStart, Instant windowEnd) implements Verdict {
+    public record Valid(boolean staticQr, Instant windowStart, Instant acceptedUntil) implements Verdict {
     }
 
-    public record Expired(Instant windowStart, Instant windowEnd) implements Verdict {
+    public record Expired(Instant windowStart, Instant acceptedUntil) implements Verdict {
     }
 
     public record Invalid() implements Verdict {
@@ -91,7 +91,7 @@ public final class BoardingTokens {
             return new Invalid();
         }
         Instant start = windowStart(presented, ttl);
-        Instant end = windowStart(presented + 1, ttl);
+        Instant end = windowStart(presented + 2, ttl);
         long current = windowOf(now, ttl);
         if (presented == current || presented == current - 1) {
             return new Valid(false, start, end);

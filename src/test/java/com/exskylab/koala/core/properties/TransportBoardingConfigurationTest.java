@@ -1,10 +1,12 @@
 package com.exskylab.koala.core.properties;
 
+import com.exskylab.koala.core.configs.BoardingLateSyncGuard;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.env.YamlPropertySourceLoader;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.core.env.PropertySource;
 import org.springframework.core.io.ClassPathResource;
 
@@ -109,8 +111,25 @@ class TransportBoardingConfigurationTest {
                 .run(context -> assertNotNull(context.getStartupFailure()));
     }
 
+    @Test
+    void aLateSyncWindowLongerThanTheOfflineAgeOfATimesheetEventFailsStartup() {
+        contextRunner.withPropertyValues("transport.boarding.late-sync-max=PT73H")
+                .run(context -> assertNotNull(context.getStartupFailure(),
+                        "an upload older than timesheet.max-offline-age is clocked to the server time; "
+                                + "late sync could never keep its capture time"));
+        contextRunner.withPropertyValues("transport.boarding.late-sync-max=PT6H", "timesheet.max-offline-age=PT5H")
+                .run(context -> assertNotNull(context.getStartupFailure()));
+        contextRunner.withPropertyValues("transport.boarding.late-sync-max=PT72H")
+                .run(context -> assertNull(context.getStartupFailure(), "equal windows are fine"));
+        wiredRunner.withPropertyValues("TIMESHEET_MAX_OFFLINE_AGE=PT10H")
+                .run(context -> assertNotNull(context.getStartupFailure(),
+                        "the shipped twelve hours outgrow a ten-hour offline age"));
+    }
+
     @Configuration(proxyBeanMethods = false)
-    @EnableConfigurationProperties({TransportBoardingProperties.class, TransportReminderProperties.class})
+    @EnableConfigurationProperties({TransportBoardingProperties.class, TransportReminderProperties.class,
+            TimesheetProperties.class})
+    @Import(BoardingLateSyncGuard.class)
     static class BoardingConfiguration {
     }
 }

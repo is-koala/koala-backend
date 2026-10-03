@@ -580,7 +580,12 @@ public class TransportManager implements TransportService {
             throw refusalWithoutSeat(shuttle, seats, request.getToken(), mark.capturedAt(), actorId, concealed);
         }
         return recordBoarding(own.get().getSeatId(), mark, actorId,
-                TransportManager::requireBoardable,
+                seat -> {
+                    if (!seat.getShuttle().getId().equals(shuttleId)) {
+                        throw concealed.get();
+                    }
+                    requireBoardable(seat);
+                },
                 (seat, now) -> checkToken(BoardingTokens.verifyShuttle(seat.getShuttle().getQrSecret(), shuttleId,
                         request.getToken(), now, boardingProperties.getTokenTtl()), mark.capturedAt(), now, concealed),
                 concealed);
@@ -892,7 +897,7 @@ public class TransportManager implements TransportService {
                         BigDecimal longitude, UUID clientEventId) {
     }
 
-    private record TokenCheck(Instant windowStart, Instant windowEnd, Set<TimesheetPlausibilityFlag> flags) {
+    private record TokenCheck(Instant windowStart, Instant acceptedUntil, Set<TimesheetPlausibilityFlag> flags) {
 
         private static final TokenCheck NONE = new TokenCheck(null, null, Set.of());
     }
@@ -930,8 +935,8 @@ public class TransportManager implements TransportService {
             if (occurredAt.isBefore(token.windowStart().minus(skew))) {
                 occurredAt = token.windowStart();
                 flags.add(TimesheetPlausibilityFlag.DEVICE_TIME_IMPLAUSIBLE);
-            } else if (occurredAt.isAfter(token.windowEnd().plus(skew))) {
-                occurredAt = token.windowEnd();
+            } else if (occurredAt.isAfter(token.acceptedUntil().plus(skew))) {
+                occurredAt = token.acceptedUntil();
                 flags.add(TimesheetPlausibilityFlag.DEVICE_TIME_IMPLAUSIBLE);
             }
         }
@@ -1036,12 +1041,12 @@ public class TransportManager implements TransportService {
             case BoardingTokens.Invalid invalid -> throw concealed.get();
             case BoardingTokens.Valid valid when valid.staticQr() ->
                     new TokenCheck(null, null, EnumSet.of(TimesheetPlausibilityFlag.STATIC_QR));
-            case BoardingTokens.Valid valid -> new TokenCheck(valid.windowStart(), valid.windowEnd(), Set.of());
+            case BoardingTokens.Valid valid -> new TokenCheck(valid.windowStart(), valid.acceptedUntil(), Set.of());
             case BoardingTokens.Expired expired -> {
                 if (!lateSyncAllowed(expired, capturedAt, now)) {
                     throw new ValidationException(TransportMessages.TOKEN_EXPIRED);
                 }
-                yield new TokenCheck(expired.windowStart(), expired.windowEnd(),
+                yield new TokenCheck(expired.windowStart(), expired.acceptedUntil(),
                         EnumSet.of(TimesheetPlausibilityFlag.LATE_SYNC));
             }
         };
@@ -1053,7 +1058,7 @@ public class TransportManager implements TransportService {
         }
         Duration skew = boardingProperties.getClockSkew();
         return !capturedAt.isBefore(expired.windowStart().minus(skew))
-                && !capturedAt.isAfter(expired.windowEnd().plus(skew))
+                && !capturedAt.isAfter(expired.acceptedUntil().plus(skew))
                 && !capturedAt.isAfter(now.plus(skew))
                 && Duration.between(capturedAt, now).compareTo(boardingProperties.getLateSyncMax()) <= 0;
     }

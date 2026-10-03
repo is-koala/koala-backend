@@ -26,7 +26,9 @@ class BoardingTokensTest {
 
         assertEquals(false, valid.staticQr());
         assertEquals(NOW, valid.windowStart());
-        assertEquals(NOW.plus(TTL), valid.windowEnd());
+        assertEquals(NOW.plus(TTL).plus(TTL), valid.acceptedUntil(),
+                "the token is accepted through the next window, so that is where its proof ends");
+        assertEquals(BoardingTokens.acceptedUntil(NOW.plusSeconds(37), TTL), valid.acceptedUntil());
         assertTrue(token.startsWith("s1." + shuttleId + "."));
         assertEquals(4, token.split("\\.").length);
     }
@@ -38,7 +40,10 @@ class BoardingTokensTest {
 
         BoardingTokens.Valid valid = assertInstanceOf(BoardingTokens.Valid.class,
                 BoardingTokens.verifyShuttle(SECRET, shuttleId, token, NOW, TTL));
-        assertEquals(NOW, valid.windowEnd());
+        assertEquals(NOW.minus(TTL), valid.windowStart());
+        assertEquals(NOW.plus(TTL), valid.acceptedUntil(),
+                "a previous-window token still scans online, so its proof reaches its expiresAt, not its refreshAt");
+        assertEquals(BoardingTokens.acceptedUntil(NOW.minusSeconds(1), TTL), valid.acceptedUntil());
     }
 
     @Test
@@ -49,7 +54,7 @@ class BoardingTokensTest {
         BoardingTokens.Expired expired = assertInstanceOf(BoardingTokens.Expired.class,
                 BoardingTokens.verifyShuttle(SECRET, shuttleId, token, NOW, TTL));
         assertEquals(NOW.minus(Duration.ofMinutes(30)), expired.windowStart());
-        assertEquals(NOW.minus(Duration.ofMinutes(20)), expired.windowEnd());
+        assertEquals(NOW.minus(Duration.ofMinutes(10)), expired.acceptedUntil());
     }
 
     @Test

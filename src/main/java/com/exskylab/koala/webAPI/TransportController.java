@@ -185,7 +185,8 @@ public class TransportController {
                     + "İlanın tarafı olmayan, bozuk ya da anahtarı yenilenmiş token 404 ve olmayan servisle aynı zarf. İlanın "
                     + "işçisi başka servisin QR'ını okutursa 409 TRANSPORT_WRONG_SHUTTLE, koltuk seçmemişse 409 "
                     + "TRANSPORT_SEAT_NOT_SELECTED. Token sunucu saatiyle geçerli olmalı; değilse okutulduğu an (capturedAt) "
-                    + "token penceresinin içindeyse ve gönderim late-sync süresi içindeyse LATE_SYNC bayrağıyla kabul edilir, "
+                    + "token'ın kabul aralığındaysa (mint penceresinin başından expiresAt'e) ve gönderim late-sync süresi "
+                    + "içindeyse LATE_SYNC bayrağıyla kabul edilir, "
                     + "aksi 400 TRANSPORT_TOKEN_EXPIRED. İdempotent: aynı koltukta aynı clientEventId ya da o kalkış için "
                     + "kayıtlı BOARDED, token'a bakılmadan kayıtlı olayı replayed=true ile 200 döndürür; aynı clientEventId "
                     + "farklı gövdeyle 409. Konum ve saat yalnız bayrak üretir, binişi reddetmez.")
