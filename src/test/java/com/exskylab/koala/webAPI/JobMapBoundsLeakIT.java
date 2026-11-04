@@ -18,6 +18,7 @@ import java.util.UUID;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -132,6 +133,36 @@ class JobMapBoundsLeakIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.content[?(@.id == '" + hiddenCompany + "')].distanceKm", contains(0.0)))
                 .andExpect(jsonPath("$.data.content[?(@.id == '" + individual + "')].distanceKm", contains(0.0)))
                 .andExpect(jsonPath("$.data.content[?(@.id == '" + publicCompany + "')].distanceKm", contains(0.6)));
+    }
+
+    @Test
+    void anOutOfRangeOrOverlongBoundIsA400NotANumericOverflow() throws Exception {
+        searchWithin("1E+1000", "40.999999", "29.025000", "29.035000")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCategory").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.details[?(@.field == 'minLatitude')].message",
+                        hasItem("Enlem -90 ile 90 arasında olmalıdır.")));
+
+        searchWithin("40.985000", "90.000001", "29.025000", "29.035000")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details[*].field", contains("maxLatitude")));
+
+        searchWithin("40.985000", "40.999999", "-180.5", "29.035000")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details[?(@.field == 'minLongitude')].message",
+                        hasItem("Boylam -180 dahil ile 180 hariç arasında olmalıdır.")));
+
+        searchWithin("40.985000", "40.999999", "29.025000", "29.0350000000000000000000001")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details[*].field", contains("maxLongitude")));
+    }
+
+    @Test
+    void aRawDoubleBoundFromAMapRegionIsAccepted() throws Exception {
+        searchWithin("40.98876543210123", "40.99123456789012", "29.02512345678901", "180")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[*].id",
+                        containsInAnyOrder(individual.toString(), hiddenCompany.toString())));
     }
 
     private ResultActions searchWithin(String minLat, String maxLat, String minLng, String maxLng) throws Exception {
