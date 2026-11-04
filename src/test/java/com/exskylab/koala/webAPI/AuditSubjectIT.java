@@ -63,6 +63,7 @@ class AuditSubjectIT extends AbstractStaffIntegrationTest {
     private final UUID bankAccountId = UUID.randomUUID();
     private final String reference = "KS" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
     private final UUID imageReportId = UUID.randomUUID();
+    private final UUID jobGalleryRowId = UUID.randomUUID();
     private final UUID paymentId = UUID.randomUUID();
     private final UUID identityReviewId = UUID.randomUUID();
 
@@ -128,6 +129,7 @@ class AuditSubjectIT extends AbstractStaffIntegrationTest {
         jdbc.update("delete from bank_accounts where id = ?", bankAccountId);
         jdbc.update("delete from user_verifications where id = ?", identityReviewId);
         jdbc.update("delete from reports where id in (?, ?)", reportId, imageReportId);
+        jdbc.update("delete from job_images where id = ?", jobGalleryRowId);
         jdbc.update("delete from company_images where id = ?", galleryRowId);
         jdbc.update("delete from media where id = ?", imageId);
         jdbc.update("delete from account_deletion_requests where id = ?", deletionId);
@@ -413,6 +415,38 @@ class AuditSubjectIT extends AbstractStaffIntegrationTest {
                 .content("{\"status\":\"DISMISSED\",\"note\":\"konu testi\"}"));
 
         assertSubject(onlyRow("report.review"), "COMPANY", companyId);
+    }
+
+    @Test
+    void anImageRemovedFromTheCompanyGalleryStillNamesTheCompanyLikeTheBackfillDoes() throws Exception {
+        jdbc.update("update company_images set is_deleted = true, deleted_at = now() where id = ?", galleryRowId);
+        reviewTheImageOnlyReport();
+
+        assertSubject(onlyRow("report.review"), "COMPANY", companyId);
+    }
+
+    @Test
+    void anImageRemovedFromAnIndividualJobGalleryStillNamesTheEmployerLikeTheBackfillDoes() throws Exception {
+        jdbc.update("delete from company_images where id = ?", galleryRowId);
+        jdbc.update("""
+                insert into job_images (id, job_id, image_id, sort_order, is_cover, created_at, is_deleted, deleted_at)
+                values (?, ?, ?, 0, true, now(), true, now())
+                """, jobGalleryRowId, individualJobId, imageId);
+        reviewTheImageOnlyReport();
+
+        assertSubject(onlyRow("report.review"), "USER", employerId);
+    }
+
+    private void reviewTheImageOnlyReport() throws Exception {
+        jdbc.update("""
+                insert into reports (id, created_at, is_deleted, reporter_id, reported_user_id, image_id,
+                                     reason, description, status)
+                values (?, now(), false, ?, null, ?, 'INAPPROPRIATE_CONTENT', 'görsel', 'OPEN')
+                """, imageReportId, workerId, imageId);
+
+        perform(post("/admin/reports/{id}/review", imageReportId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"DISMISSED\",\"note\":\"konu testi\"}"));
     }
 
     @Test

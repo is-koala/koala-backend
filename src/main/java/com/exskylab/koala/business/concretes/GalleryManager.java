@@ -263,18 +263,12 @@ public class GalleryManager implements GalleryService {
     @Override
     @Transactional(readOnly = true)
     public Optional<AuditSubject> findImageOwner(UUID imageId) {
-        Optional<AuditSubject> company = companyImageDao.findAllByImageId(imageId).stream()
-                .findFirst()
-                .map(entry -> AuditSubject.company(entry.getCompany().getId()));
-        if (company.isPresent()) {
-            return company;
+        Optional<UUID> companyId = companyImageDao.findCompanyIdIncludingDeletedByImageId(imageId);
+        if (companyId.isPresent()) {
+            return companyId.map(AuditSubject::company);
         }
-        return jobImageDao.findAllByImageId(imageId).stream()
-                .findFirst()
-                .map(JobImage::getJob)
-                .map(job -> AuditSubject.employerOf(
-                        job.getCompany() == null ? null : job.getCompany().getId(),
-                        job.getCreator() == null ? null : job.getCreator().getId()));
+        return jobImageDao.findEmployerIncludingDeletedByImageId(imageId)
+                .map(employer -> AuditSubject.employerOf(employer.getCompanyId(), employer.getCreatorId()));
     }
 
     @Override
