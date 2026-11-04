@@ -137,7 +137,7 @@ public class StaffAuditManager implements StaffAuditService {
                 .map(personId -> adminAuditEntryDetailDao.deleteAboutPerson(resourceId, personId))
                 .orElseGet(() -> adminAuditEntryDetailDao.deleteByResourceId(resourceId));
         if (erased > 0) {
-            log.info("Audit detail rows erased on request for resource {}: {}", resourceId, erased);
+            log.info("Audit detail rows erased on anonymization for resource {}: {}", resourceId, erased);
         }
         return erased;
     }
