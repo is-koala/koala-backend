@@ -21,6 +21,7 @@ import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicantDto;
 import com.exskylab.koala.core.dtos.jobApplication.response.JobApplicationDto;
 import com.exskylab.koala.core.mappers.JobApplicationMapper;
 import com.exskylab.koala.core.constants.JobMessages;
+import com.exskylab.koala.core.constants.UploadDocs;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.job.request.CancelJobDto;
 import com.exskylab.koala.core.dtos.job.request.JobSearchCriteriaDto;
@@ -159,7 +160,8 @@ public class JobsController {
             description = "İlk yüklenen görsel kendiliğinden kapak olur. İlan başına azami görsel sayısı upload ayarlarından gelir.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Görsel eklendi"),
-            @ApiResponse(responseCode = "400", description = "Dosya boş, çok büyük ya da desteklenmeyen türde",
+            @ApiResponse(responseCode = "400", description = "Dosya boş, çok büyük ya da desteklenmeyen türde. "
+                    + UploadDocs.IMAGE_TYPES,
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "404", description = "İlan bulunamadı ya da yetki yok",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),

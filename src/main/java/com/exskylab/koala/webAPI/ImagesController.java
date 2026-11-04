@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import com.exskylab.koala.business.abstracts.ImageService;
 import com.exskylab.koala.core.constants.ImageMessages;
+import com.exskylab.koala.core.constants.UploadDocs;
 import com.exskylab.koala.core.dtos.images.response.UploadImageResponseDto;
 import com.exskylab.koala.core.mappers.ImageMapper;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
@@ -42,7 +43,7 @@ public class ImagesController {
             description = "Metadata temizlenerek depoya yazılır. Kimliği doğrulanmış her kullanıcıya açıktır.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Görsel yüklendi"),
-            @ApiResponse(responseCode = "400", description = "Dosya boş ya da desteklenmeyen türde",
+            @ApiResponse(responseCode = "400", description = "Dosya boş ya da desteklenmeyen türde. " + UploadDocs.IMAGE_TYPES,
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "413", description = "Tek dosya 10 MiB ya da toplam multipart gövdesi 42 MiB sınırını aşıyor",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))

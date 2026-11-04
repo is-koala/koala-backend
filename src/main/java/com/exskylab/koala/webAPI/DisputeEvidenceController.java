@@ -2,6 +2,7 @@ package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.business.abstracts.DisputeService;
 import com.exskylab.koala.core.constants.DisputeMessages;
+import com.exskylab.koala.core.constants.UploadDocs;
 import com.exskylab.koala.core.dtos.dispute.response.DisputeEvidenceDto;
 import com.exskylab.koala.core.helpers.SignedFileResponses;
 import com.exskylab.koala.core.mappers.DisputeMapper;
@@ -48,7 +49,8 @@ public class DisputeEvidenceController {
             description = "Yalnızca atamanın tarafları ve yalnızca sonuçlanmamış uyuşmazlığa ekleyebilir. Tür uzantı beyaz listesinden, boyut ve uyuşmazlık başına adet sınırı upload.* ayarlarından gelir. Dosya adı depo anahtarına girmez; nesne özel kalır ve yanıt kalıcı adres taşımaz.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Kanıt eklendi"),
-            @ApiResponse(responseCode = "400", description = "Dosya boş, çok büyük ya da türü kabul edilmiyor",
+            @ApiResponse(responseCode = "400", description = "Dosya boş, çok büyük ya da türü kabul edilmiyor. "
+                    + UploadDocs.EVIDENCE_TYPES,
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "404", description = "Uyuşmazlık bulunamadı ya da tarafı değilsiniz",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),

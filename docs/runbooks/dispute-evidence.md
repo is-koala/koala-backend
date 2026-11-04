@@ -12,7 +12,7 @@ addressable by a permanent URL, and is reachable only through an authorization c
 | Object ACL | private; `storage.public-url` is never used for this prefix |
 | Signed GET lifetime | `storage.signed-url-minutes` (default 3 minutes) |
 | Content-Disposition | `attachment`, stamped on the object at upload time (S3) and on the streamed response (local) |
-| Accepted extensions | `upload.evidence-extensions` (default `pdf,png,jpg,jpeg,webp`) |
+| Accepted extensions | `upload.evidence-extensions` (default `pdf,png,jpg,jpeg`; WebP, HEIC and GIF are refused with `STORAGE_UNSUPPORTED_TYPE` — see CLAUDE.md, #348) |
 | Size cap | `upload.max-evidence-size-mb` (default 10) |
 | Count cap | `upload.max-evidence-per-dispute` (default 5) |
 

@@ -18,10 +18,12 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -38,6 +40,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class DisputeEvidenceIT extends AbstractStaffIntegrationTest {
 
     private static final byte[] PNG = png();
+
+    private static final byte[] WEBP = Base64.getDecoder().decode("UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA");
 
     @Autowired
     private MockMvc mockMvc;
@@ -211,6 +215,27 @@ class DisputeEvidenceIT extends AbstractStaffIntegrationTest {
                                 new byte[]{0x4D, 0x5A, 0x00}))
                         .with(user(principal(workerId, Role.ROLE_USER))))
                 .andExpect(status().isBadRequest());
+
+        assertEquals(0, jdbc.queryForObject(
+                "select count(*) from dispute_evidence where dispute_id = ?", Integer.class, disputeId));
+    }
+
+    @Test
+    void aWebPPhotoIsRefusedWithAnUnsupportedTypeErrorThatNamesTheAcceptedFormats() throws Exception {
+        mockMvc.perform(multipart("/disputes/{id}/evidence", disputeId)
+                        .file(new MockMultipartFile("file", "kanit.webp", "image/webp", WEBP))
+                        .with(user(principal(workerId, Role.ROLE_USER))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("STORAGE_UNSUPPORTED_TYPE"))
+                .andExpect(jsonPath("$.message").value(containsString("PNG ya da JPEG")))
+                .andExpect(jsonPath("$.message").value(containsString("WebP")));
+
+        mockMvc.perform(multipart("/images")
+                        .file(new MockMultipartFile("image", "foto.webp", "image/webp", WEBP))
+                        .with(user(principal(workerId, Role.ROLE_USER))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("STORAGE_UNSUPPORTED_TYPE"))
+                .andExpect(jsonPath("$.message").value(containsString("PNG ya da JPEG")));
 
         assertEquals(0, jdbc.queryForObject(
                 "select count(*) from dispute_evidence where dispute_id = ?", Integer.class, disputeId));
