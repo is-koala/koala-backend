@@ -164,7 +164,10 @@ public class AdminController {
                     + "veridir; uç payment.read ile korunur. Konumlar kişisel veridir: personel user.read_pii "
                     + "taşımıyorsa workSessions[].checkIn/checkOut enlem-boylamı ve timeline[] biniş satırlarının "
                     + "latitude/longitude alanı null döner; durağa uzaklık (distanceToStopMeters) ve yön (direction) "
-                    + "türetilmiş, kişisel olmayan alanlar olarak kalır.")
+                    + "türetilmiş, kişisel olmayan alanlar olarak kalır. Gizlenen konum \"hiç alınmamış\" konumdan "
+                    + "ayrılsın diye timeline[].locationWithheld ve workSessions[].checkInLocationWithheld / "
+                    + "checkOutLocationWithheld yalnız kayıtlı bir koordinat maskelendiğinde true olur. Koordinat "
+                    + "dönen izinli okuma denetim kaydına user.read_pii olarak yazılır.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Atama detayı döndürüldü"),
             @ApiResponse(responseCode = "404", description = "Atama bulunamadı",

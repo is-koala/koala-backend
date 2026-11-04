@@ -94,6 +94,7 @@ public interface TransportMapper {
     @Mapping(target = "receivedAt", ignore = true)
     @Mapping(target = "latitude", ignore = true)
     @Mapping(target = "longitude", ignore = true)
+    @Mapping(target = "locationWithheld", constant = "false")
     @Mapping(target = "distanceToStopMeters", ignore = true)
     AdminTimelineEventDto toSeatTimelineEvent(SeatAssignment seat);
 
@@ -115,6 +116,7 @@ public interface TransportMapper {
     @Mapping(target = "receivedAt", source = "event.createdAt")
     @Mapping(target = "latitude", source = "event.latitude")
     @Mapping(target = "longitude", source = "event.longitude")
+    @Mapping(target = "locationWithheld", constant = "false")
     @Mapping(target = "distanceToStopMeters", source = "event.distanceToStopMeters")
     AdminTimelineEventDto toBoardingTimelineEvent(BoardingEvent event, BoardingRecorderRole recorderRole);
 }

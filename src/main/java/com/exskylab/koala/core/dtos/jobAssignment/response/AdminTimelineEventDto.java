@@ -58,12 +58,9 @@ public record AdminTimelineEventDto(
         @Schema(types = {"number", "null"}, description = "Yalnız BOARDING: okutma/işaretleme konumu. Personel "
                 + "user.read_pii taşımıyorsa ve hesap silinince null.")
         BigDecimal longitude,
+        @Schema(description = "Konum gizlendi: olayın konumu kayıtlı ama personel user.read_pii taşımadığı için "
+                + "latitude/longitude null döndü. Konum hiç alınmamışsa ya da gösteriliyorsa false.")
+        boolean locationWithheld,
         @Schema(types = {"integer", "null"}, description = "Yalnız BOARDING: konumun durak pinine metre cinsinden uzaklığı.")
         Integer distanceToStopMeters) {
-
-    public AdminTimelineEventDto withoutLocation() {
-        return new AdminTimelineEventDto(type, direction, at, id, kind, source, flags, recordedById, recorderRole,
-                shuttleId, seatAssignmentId, stopId, stopLabel, stopScheduledAt, capturedAt, receivedAt, null, null,
-                distanceToStopMeters);
-    }
 }

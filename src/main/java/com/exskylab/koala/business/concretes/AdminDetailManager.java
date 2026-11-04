@@ -36,6 +36,7 @@ import com.exskylab.koala.core.dtos.user.response.AdminUserCountsDto;
 import com.exskylab.koala.core.dtos.user.response.AdminUserDetailDto;
 import com.exskylab.koala.core.mappers.AdminDetailMapper;
 import com.exskylab.koala.core.mappers.BankAccountMapper;
+import com.exskylab.koala.core.mappers.LocationPrivacyMapper;
 import com.exskylab.koala.core.mappers.TimesheetMapper;
 import com.exskylab.koala.core.mappers.CompanyMapper;
 import com.exskylab.koala.core.mappers.LegalMapper;
@@ -110,6 +111,7 @@ public class AdminDetailManager implements AdminDetailService {
     private final LegalMapper legalMapper;
     private final BankAccountMapper bankAccountMapper;
     private final TimesheetMapper timesheetMapper;
+    private final LocationPrivacyMapper locationPrivacyMapper;
     private final MessageResolver messageResolver;
 
     public AdminDetailManager(JobAssignmentService jobAssignmentService, PaymentService paymentService,
@@ -125,7 +127,7 @@ public class AdminDetailManager implements AdminDetailService {
                               SessionService sessionService, AdminDetailMapper adminDetailMapper,
                               CompanyMapper companyMapper, LegalMapper legalMapper,
                               BankAccountMapper bankAccountMapper, TimesheetMapper timesheetMapper,
-                              MessageResolver messageResolver) {
+                              LocationPrivacyMapper locationPrivacyMapper, MessageResolver messageResolver) {
         this.jobAssignmentService = jobAssignmentService;
         this.paymentService = paymentService;
         this.payoutService = payoutService;
@@ -151,6 +153,7 @@ public class AdminDetailManager implements AdminDetailService {
         this.legalMapper = legalMapper;
         this.bankAccountMapper = bankAccountMapper;
         this.timesheetMapper = timesheetMapper;
+        this.locationPrivacyMapper = locationPrivacyMapper;
         this.messageResolver = messageResolver;
     }
 
@@ -278,8 +281,11 @@ public class AdminDetailManager implements AdminDetailService {
         List<WorkSessionDto> workSessions = timesheetMapper.toWorkSessionDtoList(
                 timesheetService.getSessionsForStaff(assignmentId));
         if (!readsPersonalData(actor)) {
-            timeline = timeline.stream().map(AdminTimelineEventDto::withoutLocation).toList();
-            workSessions = workSessions.stream().map(WorkSessionDto::withoutLocation).toList();
+            timeline = timeline.stream().map(locationPrivacyMapper::withoutLocation).toList();
+            workSessions = workSessions.stream().map(locationPrivacyMapper::withoutLocation).toList();
+        } else if (carriesLocation(timeline, workSessions)) {
+            StaffAuditContext.reclassify(StaffPermission.USER_READ_PII, StaffPermission.USER_READ_PII.getCode(), true);
+            log.info("Staff {} reads assignment {} with locations", actor.staffId(), assignmentId);
         }
 
         return adminDetailMapper.toAdminAssignmentDetailDto(assignment,
@@ -309,6 +315,13 @@ public class AdminDetailManager implements AdminDetailService {
         JobAssignment assignment = payment.getJobAssignment();
         return paymentDtos(List.of(payment),
                 Map.of(assignment.getId(), LoadedAssignmentSummary.of(assignment)), peopleOf(assignment)).getFirst();
+    }
+
+    private static boolean carriesLocation(List<AdminTimelineEventDto> timeline, List<WorkSessionDto> workSessions) {
+        return timeline.stream().anyMatch(event -> event.latitude() != null || event.longitude() != null)
+                || workSessions.stream().anyMatch(session -> session.checkInLatitude() != null
+                || session.checkInLongitude() != null || session.checkOutLatitude() != null
+                || session.checkOutLongitude() != null);
     }
 
     private static boolean readsPersonalData(StaffPrincipal actor) {

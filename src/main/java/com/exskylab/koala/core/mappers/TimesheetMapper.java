@@ -12,6 +12,8 @@ import java.util.List;
 public interface TimesheetMapper {
 
     @Mapping(target = "jobAssignmentId", source = "jobAssignment.id")
+    @Mapping(target = "checkInLocationWithheld", constant = "false")
+    @Mapping(target = "checkOutLocationWithheld", constant = "false")
     WorkSessionDto toWorkSessionDto(WorkSession session);
 
     List<WorkSessionDto> toWorkSessionDtoList(List<WorkSession> sessions);

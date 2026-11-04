@@ -921,9 +921,17 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
 
     @Test
     void staffWithoutThePiiPermissionGetTheSameAssignmentDetailWithEveryLocationBlanked() throws Exception {
+        String owner = staffTokenFor("boarding-staff-" + UUID.randomUUID() + "@iskoala.com", "Sahip", "OWNER");
+        String analyst = staffTokenFor("boarding-staff-" + UUID.randomUUID() + "@iskoala.com", "Analist",
+                "FINANCE_ANALYST");
+        mockMvc.perform(get("/admin/job-assignments/{id}", assignmentId).header("Authorization", "Bearer " + owner))
+                .andExpect(status().isOk());
+
         pickSeat(workerId, assignmentId, shuttleA);
         scan(workerId, shuttleA, shuttleToken(shuttleA, false), Instant.now().truncatedTo(ChronoUnit.MILLIS),
                 NEAR_LAT, NEAR_LNG, UUID.randomUUID()).andExpect(status().isOk());
+        UUID located = UUID.randomUUID();
+        UUID checkInOnly = UUID.randomUUID();
         jdbc.update("""
                 insert into work_sessions (id, created_at, is_deleted, job_assignment_id, check_in_at, check_out_at,
                                            check_in_latitude, check_in_longitude, check_out_latitude,
@@ -931,10 +939,14 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
                                            check_out_plausibility_flags, minutes)
                 values (?, now(), false, ?, now() - interval '9 hours', now() - interval '1 hour',
                         41.048100, 29.009100, 41.060000, 29.030000, '', '', 480)
-                """, UUID.randomUUID(), assignmentId);
-        String owner = staffTokenFor("boarding-staff-" + UUID.randomUUID() + "@iskoala.com", "Sahip", "OWNER");
-        String analyst = staffTokenFor("boarding-staff-" + UUID.randomUUID() + "@iskoala.com", "Analist",
-                "FINANCE_ANALYST");
+                """, located, assignmentId);
+        jdbc.update("""
+                insert into work_sessions (id, created_at, is_deleted, job_assignment_id, check_in_at, check_out_at,
+                                           check_in_latitude, check_in_longitude, check_in_plausibility_flags,
+                                           check_out_plausibility_flags, minutes)
+                values (?, now(), false, ?, now() - interval '30 hours', now() - interval '26 hours',
+                        41.048100, 29.009100, '', '', 240)
+                """, checkInOnly, assignmentId);
 
         JsonNode permitted = data(mockMvc.perform(get("/admin/job-assignments/{id}", assignmentId)
                 .header("Authorization", "Bearer " + owner)).andExpect(status().isOk()));
@@ -942,12 +954,24 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
                 .header("Authorization", "Bearer " + analyst)).andExpect(status().isOk()));
 
         JsonNode boarding = boardingOf(permitted);
-        JsonNode session = permitted.get("workSessions").get(0);
+        JsonNode session = sessionOf(permitted, located);
         assertEquals(new BigDecimal(NEAR_LAT), boarding.get("latitude").decimalValue().setScale(6));
         assertEquals(new BigDecimal(FAR_LNG), session.get("checkOutLongitude").decimalValue().setScale(6));
+        for (JsonNode event : permitted.get("timeline")) {
+            assertFalse(event.get("locationWithheld").asBoolean(), "nothing is withheld when permitted: " + event);
+        }
+        for (JsonNode row : permitted.get("workSessions")) {
+            assertFalse(row.get("checkInLocationWithheld").asBoolean(), "nothing is withheld when permitted: " + row);
+            assertFalse(row.get("checkOutLocationWithheld").asBoolean(), "nothing is withheld when permitted: " + row);
+            for (String flags : List.of("checkInPlausibilityFlags", "checkOutPlausibilityFlags")) {
+                assertTrue(row.get(flags).isArray() && row.get(flags).isEmpty(),
+                        "an empty flag column reads back as an empty set: " + row);
+            }
+        }
+        assertTrue(sessionOf(permitted, checkInOnly).get("checkOutLatitude").isNull());
 
         JsonNode blankedBoarding = boardingOf(withoutPii);
-        JsonNode blankedSession = withoutPii.get("workSessions").get(0);
+        JsonNode blankedSession = sessionOf(withoutPii, located);
         for (String field : List.of("latitude", "longitude")) {
             assertTrue(blankedBoarding.get(field).isNull(), "boarding " + field + " leaked: " + blankedBoarding);
         }
@@ -959,10 +983,35 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
         assertFalse(blankedBoarding.get("distanceToStopMeters").isNull());
 
         ObjectNode expected = (ObjectNode) permitted.deepCopy();
-        ((ObjectNode) boardingOf(expected)).putNull("latitude").putNull("longitude");
-        ((ObjectNode) expected.get("workSessions").get(0)).putNull("checkInLatitude").putNull("checkInLongitude")
-                .putNull("checkOutLatitude").putNull("checkOutLongitude");
-        assertEquals(expected, withoutPii, "only the coordinates may differ between the two views");
+        ((ObjectNode) boardingOf(expected)).putNull("latitude").putNull("longitude").put("locationWithheld", true);
+        ((ObjectNode) sessionOf(expected, located)).putNull("checkInLatitude").putNull("checkInLongitude")
+                .putNull("checkOutLatitude").putNull("checkOutLongitude")
+                .put("checkInLocationWithheld", true).put("checkOutLocationWithheld", true);
+        ((ObjectNode) sessionOf(expected, checkInOnly)).putNull("checkInLatitude").putNull("checkInLongitude")
+                .put("checkInLocationWithheld", true);
+        assertEquals(expected, withoutPii, "only the coordinates and the withheld flags may differ, and a flag is "
+                + "raised only where a coordinate was really there (the SEAT row and the missing check-out stay "
+                + "false)");
+
+        List<Map<String, Object>> audit = jdbc.queryForList("select permission, sensitivity from admin_audit_entries "
+                + "where resource_id = ? order by occurred_at", assignmentId.toString());
+        assertEquals(List.of(
+                        Map.of("permission", "payment.read", "sensitivity", "FINANCIAL"),
+                        Map.of("permission", "user.read_pii", "sensitivity", "FINANCIAL"),
+                        Map.of("permission", "payment.read", "sensitivity", "FINANCIAL")),
+                audit.stream().map(row -> Map.of("permission", row.get("permission"),
+                        "sensitivity", row.get("sensitivity"))).toList(),
+                "only the read that returned coordinates is audited as user.read_pii, and it keeps the "
+                        + "financial retention of payment.read");
+    }
+
+    private static JsonNode sessionOf(JsonNode detail, UUID sessionId) {
+        for (JsonNode session : detail.get("workSessions")) {
+            if (sessionId.toString().equals(session.get("id").asText())) {
+                return session;
+            }
+        }
+        throw new AssertionError("no work session " + sessionId + " in " + detail.get("workSessions"));
     }
 
     private static JsonNode boardingOf(JsonNode detail) {

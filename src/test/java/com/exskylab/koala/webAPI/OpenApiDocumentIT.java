@@ -647,6 +647,16 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.components.schemas.AdminTimelineEventDto.properties.direction.enum")
                         .value(containsInAnyOrder("OUTBOUND", "RETURN")))
                 .andExpect(jsonPath("$.components.schemas.WorkSessionDto.properties.checkInLatitude.description")
-                        .value(containsString("user.read_pii")));
+                        .value(containsString("user.read_pii")))
+                .andExpect(jsonPath("$.components.schemas.AdminTimelineEventDto.properties.locationWithheld.type")
+                        .value("boolean"))
+                .andExpect(jsonPath("$.components.schemas.AdminTimelineEventDto.properties.locationWithheld"
+                        + ".description").value(containsString("user.read_pii")))
+                .andExpect(jsonPath("$.components.schemas.WorkSessionDto.properties.checkInLocationWithheld.type")
+                        .value("boolean"))
+                .andExpect(jsonPath("$.components.schemas.WorkSessionDto.properties.checkOutLocationWithheld"
+                        + ".description").value(containsString("user.read_pii")))
+                .andExpect(jsonPath("$.paths['/admin/job-assignments/{assignmentId}'].get.description")
+                        .value(containsString("locationWithheld")));
     }
 }
