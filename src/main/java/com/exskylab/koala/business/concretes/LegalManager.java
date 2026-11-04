@@ -167,9 +167,7 @@ public class LegalManager implements LegalService {
         request.setNextAttemptAt(blockedReason == null ? null : Instant.now().plus(DELETION_RETRY_DELAY));
 
         AccountDeletionRequest saved = accountDeletionRequestDao.save(request);
-        int erased = staffAuditService.eraseDetailsForResource(user.getId().toString());
-        log.info("Account deletion requested for user id: {}, {} audit detail rows erased.",
-                user.getId(), erased);
+        log.info("Account deletion requested for user id: {}", user.getId());
         return saved;
     }
 
@@ -241,7 +239,10 @@ public class LegalManager implements LegalService {
             return false;
         }
 
-        accountAnonymizer.anonymize(request.getUser().getId(), request.getId());
+        UUID userId = request.getUser().getId();
+        accountAnonymizer.anonymize(userId, request.getId());
+        int erased = staffAuditService.eraseDetailsForResource(userId.toString());
+        log.info("Account deletion request {} anonymized, {} audit detail rows erased.", request.getId(), erased);
         request.setStatus(AccountDeletionStatus.ANONYMIZED);
         request.setUser(null);
         request.setReason(null);

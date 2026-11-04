@@ -9,6 +9,7 @@ import com.exskylab.koala.core.utilities.iys.IysConsentRequest;
 import com.exskylab.koala.core.utilities.iys.IysPermissionResult;
 import com.exskylab.koala.core.utilities.iys.IysProviderClient;
 import com.exskylab.koala.entities.NotificationChannel;
+import com.exskylab.koala.entities.User;
 import com.exskylab.koala.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -420,5 +421,112 @@ class AccountDeletionLifecycleIT extends AbstractIntegrationTest {
                 Instant.now().minus(java.time.Duration.ofDays(30)), Instant.now(), PageRequest.of(0, 1));
 
         assertEquals(java.util.List.of(readyRequestId), due);
+    }
+
+    @Test
+    void anonymizationErasesTheAuditDetailAboutThePersonIncludingRowsWrittenAfterTheRequest() {
+        UUID userId = UUID.randomUUID();
+        UUID someoneElse = UUID.randomUUID();
+        UUID requestId = UUID.randomUUID();
+        jdbcTemplate.update("""
+                insert into users
+                    (id, first_name, username, email, email_verified, phone_verified,
+                     identity_verified, is_employer, created_at, is_deleted)
+                values (?, 'Silinecek', ?, ?, false, false, false, false, now(), false),
+                       (?, 'Başkası', ?, ?, false, false, false, true, now(), false)
+                """, userId, "erased-" + userId, "erased-" + userId + "@example.test",
+                someoneElse, "other-" + someoneElse, "other-" + someoneElse + "@example.test");
+        jdbcTemplate.update("""
+                insert into account_deletion_requests
+                    (id, user_id, subject_id, status, requested_at, created_at, is_deleted)
+                values (?, ?, ?, 'REQUESTED', now() - interval '31 days', now(), false)
+                """, requestId, userId, userId);
+        UUID onTheirAccount = auditEntryAbout(userId.toString(), null, null);
+        UUID onTheirPayout = auditEntryAbout(UUID.randomUUID().toString(), userId, someoneElse);
+        UUID asCounterparty = auditEntryAbout(UUID.randomUUID().toString(), someoneElse, userId);
+        UUID aboutSomeoneElse = auditEntryAbout(UUID.randomUUID().toString(), someoneElse, null);
+
+        assertTrue(legalService.processDeletionRequest(requestId));
+
+        assertFalse(hasAuditDetail(onTheirAccount),
+                "Talepten sonra yazilan, kisinin kendi kaydi hakkindaki satirin detayi anonimlestirmede silinmeli.");
+        assertFalse(hasAuditDetail(onTheirPayout), "Konusu kisi olan kararin detayi silinmeli.");
+        assertFalse(hasAuditDetail(asCounterparty), "Karsi tarafi kisi olan kararin detayi silinmeli.");
+        assertTrue(hasAuditDetail(aboutSomeoneElse), "Baskasi hakkindaki kararin detayi kalmali.");
+        assertEquals(4, jdbcTemplate.queryForObject(
+                "select count(*) from admin_audit_entries where id in (?, ?, ?, ?)", Integer.class,
+                onTheirAccount, onTheirPayout, asCounterparty, aboutSomeoneElse),
+                "KVKK silmesi denetim cekirdegini birakir.");
+    }
+
+    @Test
+    void aBlockedThenRejectedErasureRequestErasesNoAuditDetail() {
+        UUID userId = UUID.randomUUID();
+        UUID employerId = UUID.randomUUID();
+        UUID jobId = UUID.randomUUID();
+        UUID assignmentId = UUID.randomUUID();
+        UUID paymentId = UUID.randomUUID();
+        jdbcTemplate.update("""
+                insert into users
+                    (id, first_name, username, email, email_verified, phone_verified,
+                     identity_verified, is_employer, created_at, is_deleted)
+                values (?, 'Çalışan', ?, ?, false, false, false, false, now(), false),
+                       (?, 'İşveren', ?, ?, false, false, false, true, now(), false)
+                """, userId, "kept-worker-" + userId, "kept-worker-" + userId + "@example.test",
+                employerId, "kept-employer-" + employerId, "kept-employer-" + employerId + "@example.test");
+        jdbcTemplate.update("insert into jobs (id, creator_id, title, created_at, is_deleted) values (?, ?, 'Açık ödeme', now(), false)",
+                jobId, employerId);
+        jdbcTemplate.update("""
+                insert into job_assignments
+                    (id, job_id, worker_id, status, payment_status, created_at, is_deleted)
+                values (?, ?, ?, 'COMPLETED', 'PENDING_COLLECTION', now(), false)
+                """, assignmentId, jobId, userId);
+        jdbcTemplate.update("""
+                insert into payments
+                    (id, job_assignment_id, conversation_id, status, currency, created_at, is_deleted)
+                values (?, ?, ?, 'INITIATED', 'TRY', now(), false)
+                """, paymentId, assignmentId, "kept-" + paymentId);
+        UUID beforeRequest = auditEntryAbout(userId.toString(), userId, null);
+
+        var request = legalService.requestAccountDeletion(entityManager.find(User.class, userId), "kvkk");
+        UUID afterRequest = auditEntryAbout(UUID.randomUUID().toString(), employerId, userId);
+
+        assertEquals(LegalMessages.DELETION_BLOCKED_BY_PENDING_PAYMENT, request.getBlockedReason());
+        assertTrue(hasAuditDetail(beforeRequest), "Talep ani hicbir sey silmez.");
+
+        assertFalse(legalService.processDeletionRequest(request.getId()));
+        assertTrue(hasAuditDetail(beforeRequest), "Acik yukumluluk yuzunden bekleyen talep hicbir sey silmez.");
+        assertTrue(hasAuditDetail(afterRequest));
+
+        legalService.rejectDeletionRequest(null, request.getId(), "Yasal inceleme sürüyor.");
+        assertTrue(hasAuditDetail(beforeRequest), "Reddedilen talep hicbir sey silmez.");
+        assertTrue(hasAuditDetail(afterRequest));
+    }
+
+    private UUID auditEntryAbout(String resourceId, UUID subjectId, UUID relatedSubjectId) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update("""
+                insert into admin_audit_entries (id, occurred_at, actor_staff_id, actor_display_name,
+                                                 permission, action, resource_type, resource_id,
+                                                 allowed, mutating, sensitivity, retain_until,
+                                                 subject_type, subject_id,
+                                                 related_subject_type, related_subject_id)
+                values (?, now(), ?, 'Silme Denemesi', 'payout.release', 'payout.release', 'job-assignments', ?,
+                        true, true, 'FINANCIAL', now() + interval '10 years',
+                        case when ?::uuid is null then null else 'USER' end, ?,
+                        case when ?::uuid is null then null else 'USER' end, ?)
+                """, id, UUID.randomUUID(), resourceId,
+                subjectId, subjectId, relatedSubjectId, relatedSubjectId);
+        jdbcTemplate.update("""
+                insert into admin_audit_entry_details (audit_entry_id, request_body, ip, user_agent, purge_after)
+                values (?, '{"note":"kisisel"}', '203.0.113.9', 'koala-admin/1.0', now() + interval '6 months')
+                """, id);
+        return id;
+    }
+
+    private boolean hasAuditDetail(UUID entryId) {
+        return jdbcTemplate.queryForObject(
+                "select count(*) from admin_audit_entry_details where audit_entry_id = ?",
+                Integer.class, entryId) > 0;
     }
 }
