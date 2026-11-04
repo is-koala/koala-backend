@@ -7,11 +7,10 @@ import com.exskylab.koala.dataAccess.UserDao;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.entities.User;
 import com.exskylab.koala.support.AbstractIntegrationTest;
+import com.exskylab.koala.support.QueryCounter;
 import com.exskylab.koala.support.RunbookSql;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
-import org.hibernate.SessionFactory;
-import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -260,39 +259,37 @@ class SessionDetailIT extends AbstractIntegrationTest {
         String email = newUser("nplus1");
         Client phone = Client.phone("nplus1-device-00000001", DeviceHints.of("iPhone15,3", "iOS 18.1", "1.1.0"));
         Login single = login(email, PASSWORD, phone);
-        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
-        boolean wasEnabled = statistics.isStatisticsEnabled();
-        statistics.setStatisticsEnabled(true);
+        QueryCounter queries = QueryCounter.start(entityManagerFactory);
         try {
             settle();
-            statistics.clear();
+            queries.clear();
             mockMvc.perform(with(get("/users/me/sessions/{id}", single.sessionId()), phone, single.token()))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.loginHistory", hasSize(1)));
-            long statementsForOne = statistics.getPrepareStatementCount();
+            long statementsForOne = queries.getPrepareStatementCount();
 
             attemptLogin(email, "yanlis-parola", phone).andExpect(status().isUnauthorized());
             login(email, PASSWORD, phone);
             Login latest = login(email, PASSWORD, phone);
 
             settle();
-            statistics.clear();
+            queries.clear();
             mockMvc.perform(with(get("/users/me/sessions/{id}", latest.sessionId()), phone, latest.token()))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.loginHistory", hasSize(4)))
                     .andExpect(jsonPath("$.data.logins").value(3));
 
-            assertEquals(statementsForOne, statistics.getPrepareStatementCount(),
+            assertEquals(statementsForOne, queries.getPrepareStatementCount(),
                     "oturum detayı giriş geçmişiyle büyüyen sorgu atıyor (N+1)");
-            assertEquals(0, statistics.getEntityFetchCount(), "oturum detayı satır başına lazy entity yüklüyor");
+            assertEquals(0, queries.getEntityFetchCount(), "oturum detayı satır başına lazy entity yüklüyor");
 
             settle();
-            statistics.clear();
+            queries.clear();
             mockMvc.perform(with(get("/users/me/sessions"), phone, latest.token()))
                     .andExpect(status().isOk());
-            assertEquals(0, statistics.getEntityFetchCount(), "oturum listesi satır başına lazy entity yüklüyor");
+            assertEquals(0, queries.getEntityFetchCount(), "oturum listesi satır başına lazy entity yüklüyor");
         } finally {
-            statistics.setStatisticsEnabled(wasEnabled);
+            queries.close();
         }
     }
 

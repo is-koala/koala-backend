@@ -12,9 +12,8 @@ import com.exskylab.koala.core.privacy.AccountAnonymizer;
 import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
+import com.exskylab.koala.support.QueryCounter;
 import jakarta.persistence.EntityManagerFactory;
-import org.hibernate.SessionFactory;
-import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -367,20 +366,18 @@ class PayoutQueueIT extends AbstractStaffIntegrationTest {
                     "now() - interval '" + (i + 3) + " days'");
         }
 
-        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
-        boolean wasEnabled = statistics.isStatisticsEnabled();
-        statistics.setStatisticsEnabled(true);
+        QueryCounter queries = QueryCounter.start(entityManagerFactory);
         try {
             UUID lone = seedProcessingPayout("Zeynep", "Deneme", "TR560006200000000000000012", "iyz-transaction-4713");
-            statistics.clear();
+            queries.clear();
             List<PayoutDto> oneRow = transactionTemplate.execute(status ->
                     payoutMapper.toPayoutDtoList(payoutService.getPayoutsForWorker(lone)));
-            long statementsForOneRow = statistics.getPrepareStatementCount();
+            long statementsForOneRow = queries.getPrepareStatementCount();
 
-            statistics.clear();
+            queries.clear();
             List<PayoutDto> fiveRows = transactionTemplate.execute(status ->
                     payoutMapper.toPayoutDtoList(payoutService.getPayoutsForWorker(worker)));
-            long statementsForFiveRows = statistics.getPrepareStatementCount();
+            long statementsForFiveRows = queries.getPrepareStatementCount();
 
             assertEquals(1, oneRow.size());
             assertEquals(5, fiveRows.size());
@@ -388,12 +385,12 @@ class PayoutQueueIT extends AbstractStaffIntegrationTest {
                     "her satir kendi hesabinin maskeli IBAN'ini tasimali");
             assertFalse(fiveRows.stream().map(PayoutDto::getProviderReference).toList().contains(null),
                     "her satir kendi saglayici referansini tasimali");
-            assertEquals(0, statistics.getEntityFetchCount(),
+            assertEquals(0, queries.getEntityFetchCount(),
                     "banka hesabi, atama ya da ilan satir basina ayri sorguyla yuklendi");
             assertEquals(statementsForOneRow, statementsForFiveRows,
                     "Sorgu sayisi satir sayisiyla buyumemeli: isci listesi grafikle tek SELECT kurmali.");
         } finally {
-            statistics.setStatisticsEnabled(wasEnabled);
+            queries.close();
         }
     }
 
@@ -466,19 +463,17 @@ class PayoutQueueIT extends AbstractStaffIntegrationTest {
         seedProcessingPayout("Elif", "Deneme", "TR450006200000000000000078", "iyz-transaction-4715");
         seedProcessingPayout("Can", "Deneme", "TR780006200000000000000091", "iyz-transaction-4716");
 
-        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
-        boolean wasEnabled = statistics.isStatisticsEnabled();
-        statistics.setStatisticsEnabled(true);
+        QueryCounter queries = QueryCounter.start(entityManagerFactory);
         try {
-            statistics.clear();
+            queries.clear();
             List<StaffPayoutDto> oneRow = transactionTemplate.execute(status ->
                     payoutService.listForStaff(null, null, null, CreatedAtRange.ANY, PageRequest.of(0, 1)).content());
-            long statementsForOneRow = statistics.getPrepareStatementCount();
+            long statementsForOneRow = queries.getPrepareStatementCount();
 
-            statistics.clear();
+            queries.clear();
             List<StaffPayoutDto> fiveRows = transactionTemplate.execute(status ->
                     payoutService.listForStaff(null, null, null, CreatedAtRange.ANY, PageRequest.of(0, 5)).content());
-            long statementsForFiveRows = statistics.getPrepareStatementCount();
+            long statementsForFiveRows = queries.getPrepareStatementCount();
 
             assertEquals(1, oneRow.size());
             assertEquals(5, fiveRows.size());
@@ -486,7 +481,7 @@ class PayoutQueueIT extends AbstractStaffIntegrationTest {
                     "her satir kendi hesabinin maskeli IBAN'ini tasimali");
             assertFalse(fiveRows.stream().map(StaffPayoutDto::recipient).toList().contains(null),
                     "her satir kendi alicisini tasimali");
-            assertEquals(0, statistics.getEntityFetchCount(),
+            assertEquals(0, queries.getEntityFetchCount(),
                     "alici ya da banka hesabi satir basina ayri sorguyla yuklendi");
             assertEquals(statementsForOneRow, statementsForFiveRows,
                     "Sorgu sayisi satir sayisiyla buyumemeli. Iki sayfa da dolu (6 tohum satir, size=1 ve "
@@ -494,7 +489,7 @@ class PayoutQueueIT extends AbstractStaffIntegrationTest {
                             + "count sorgusu ve alicilarin tek toplu SELECT'i olmak uzere 3 statement kurmali; "
                             + "sayfa dolmasaydi count atlanir ve sayi 2 olurdu.");
         } finally {
-            statistics.setStatisticsEnabled(wasEnabled);
+            queries.close();
         }
     }
 }

@@ -16,12 +16,11 @@ import com.exskylab.koala.dataAccess.ShuttleDao;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.entities.Shuttle;
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
+import com.exskylab.koala.support.QueryCounter;
 import com.exskylab.koala.support.OverlappingWrites;
 import com.exskylab.koala.support.TestLatches;
 import com.zaxxer.hikari.HikariDataSource;
 import jakarta.persistence.EntityManagerFactory;
-import org.hibernate.SessionFactory;
-import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -729,29 +728,27 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
         mark(employerId, seatOf(assignmentId, "OUTBOUND"), "{\"kind\":\"BOARDED\"}").andExpect(status().isOk());
         mark(employerId, seatOf(secondAssignmentId, "OUTBOUND"), "{\"kind\":\"NO_SHOW\"}").andExpect(status().isOk());
 
-        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
-        boolean wasEnabled = statistics.isStatisticsEnabled();
-        statistics.setStatisticsEnabled(true);
+        QueryCounter queries = QueryCounter.start(entityManagerFactory);
         try {
-            statistics.clear();
+            queries.clear();
             mockMvc.perform(get("/shuttles/{id}/boardings", shuttleA).with(user(principal(employerId))))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data", hasSize(1)));
-            long statementsForOneSeat = statistics.getPrepareStatementCount();
+            long statementsForOneSeat = queries.getPrepareStatementCount();
 
             pickSeat(secondWorkerId, secondAssignmentId, shuttleA);
             mark(employerId, seatOf(secondAssignmentId, "OUTBOUND"), "{\"kind\":\"NO_SHOW\"}")
                     .andExpect(status().isOk());
-            statistics.clear();
+            queries.clear();
             mockMvc.perform(get("/shuttles/{id}/boardings", shuttleA).with(user(principal(employerId))))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data", hasSize(2)));
 
-            assertEquals(statementsForOneSeat, statistics.getPrepareStatementCount(),
+            assertEquals(statementsForOneSeat, queries.getPrepareStatementCount(),
                     "biniş listesi koltuk sayısıyla büyüyen sorgu atıyor (N+1)");
-            assertEquals(0, statistics.getEntityFetchCount(), "biniş listesi koltuk başına lazy entity yüklüyor");
+            assertEquals(0, queries.getEntityFetchCount(), "biniş listesi koltuk başına lazy entity yüklüyor");
         } finally {
-            statistics.setStatisticsEnabled(wasEnabled);
+            queries.close();
         }
     }
 

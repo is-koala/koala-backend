@@ -3,9 +3,8 @@ package com.exskylab.koala.webAPI;
 import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.support.AbstractIntegrationTest;
+import com.exskylab.koala.support.QueryCounter;
 import jakarta.persistence.EntityManagerFactory;
-import org.hibernate.SessionFactory;
-import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -328,20 +327,18 @@ class ReceivedApplicationsIT extends AbstractIntegrationTest {
 
     @Test
     void theNumberOfStatementsDoesNotGrowWithTheNumberOfRows() throws Exception {
-        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
-        boolean wasEnabled = statistics.isStatisticsEnabled();
-        statistics.setStatisticsEnabled(true);
+        QueryCounter queries = QueryCounter.start(entityManagerFactory);
         try {
-            statistics.clear();
+            queries.clear();
             inboxAs(employerA, INBOX + "?size=1").andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.content.length()").value(1));
-            long oneRow = statistics.getPrepareStatementCount();
+            long oneRow = queries.getPrepareStatementCount();
 
-            statistics.clear();
+            queries.clear();
             inboxAs(employerA, INBOX + "?size=5").andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.content.length()").value(5))
                     .andExpect(jsonPath("$.data.content[*].applicant.profilePictureUrl").isArray());
-            long fiveRows = statistics.getPrepareStatementCount();
+            long fiveRows = queries.getPrepareStatementCount();
 
             assertEquals(oneRow, fiveRows,
                     "bir satırlık sayfa " + oneRow + " sorgu, beş satırlık sayfa " + fiveRows + " sorgu attı");
@@ -350,7 +347,7 @@ class ReceivedApplicationsIT extends AbstractIntegrationTest {
                     + "sayım). Sayım yalnız dolu sayfada koşar, bu yüzden iki istek de tam olarak sayfa "
                     + "boyutu kadar satır döndürmeli");
         } finally {
-            statistics.setStatisticsEnabled(wasEnabled);
+            queries.close();
         }
     }
 

@@ -7,10 +7,9 @@ import com.exskylab.koala.core.schedulers.TransportReminderScheduler;
 import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
+import com.exskylab.koala.support.QueryCounter;
 import com.exskylab.koala.support.OverlappingWrites;
 import jakarta.persistence.EntityManagerFactory;
-import org.hibernate.SessionFactory;
-import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -607,32 +606,30 @@ class TransportPlanIT extends AbstractStaffIntegrationTest {
         selectSeat(workerId, assignmentId, shuttleId, stopId).andExpect(status().isOk());
         selectSeat(secondWorkerId, secondAssignmentId, shuttleId, stopId).andExpect(status().isOk());
 
-        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
-        boolean wasEnabled = statistics.isStatisticsEnabled();
-        statistics.setStatisticsEnabled(true);
+        QueryCounter queries = QueryCounter.start(entityManagerFactory);
         try {
-            statistics.clear();
+            queries.clear();
             mockMvc.perform(get("/jobs/{jobId}/assignments", jobId).param("size", "1")
                             .with(user(principal(employerId))))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.content[0].transport.seats", hasSize(1)));
-            long statementsForOneRow = statistics.getPrepareStatementCount();
-            long fetchesForOneRow = statistics.getEntityFetchCount();
+            long statementsForOneRow = queries.getPrepareStatementCount();
+            long fetchesForOneRow = queries.getEntityFetchCount();
 
-            statistics.clear();
+            queries.clear();
             mockMvc.perform(get("/jobs/{jobId}/assignments", jobId).param("size", "2")
                             .with(user(principal(employerId))))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.content", hasSize(2)))
                     .andExpect(jsonPath("$.data.content[1].transport.shuttles[0].plate").value(PLATE));
-            long statementsForTwoRows = statistics.getPrepareStatementCount();
+            long statementsForTwoRows = queries.getPrepareStatementCount();
 
             assertEquals(statementsForOneRow, statementsForTwoRows,
                     "ulaşım görünümü satır sayısıyla büyüyen sorgu atıyor (N+1)");
             assertEquals(0, fetchesForOneRow, "ulaşım görünümü satır başına lazy entity yüklüyor");
-            assertEquals(0, statistics.getEntityFetchCount(), "ulaşım görünümü satır başına lazy entity yüklüyor");
+            assertEquals(0, queries.getEntityFetchCount(), "ulaşım görünümü satır başına lazy entity yüklüyor");
         } finally {
-            statistics.setStatisticsEnabled(wasEnabled);
+            queries.close();
         }
     }
 

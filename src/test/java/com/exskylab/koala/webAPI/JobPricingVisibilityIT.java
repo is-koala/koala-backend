@@ -3,9 +3,8 @@ package com.exskylab.koala.webAPI;
 import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.support.AbstractIntegrationTest;
+import com.exskylab.koala.support.QueryCounter;
 import jakarta.persistence.EntityManagerFactory;
-import org.hibernate.SessionFactory;
-import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -180,26 +179,24 @@ class JobPricingVisibilityIT extends AbstractIntegrationTest {
     }
 
     private void assertNoQueryPerRow(PagedRequest request, String message) throws Exception {
-        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
-        boolean wasEnabled = statistics.isStatisticsEnabled();
-        statistics.setStatisticsEnabled(true);
+        QueryCounter queries = QueryCounter.start(entityManagerFactory);
         try {
-            statistics.clear();
+            queries.clear();
             request.perform(1).andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.content", hasSize(1)));
-            long statementsForOneRow = statistics.getPrepareStatementCount();
+            long statementsForOneRow = queries.getPrepareStatementCount();
 
-            statistics.clear();
+            queries.clear();
             request.perform(2).andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.content", hasSize(2)))
                     .andExpect(jsonPath("$.data.content[0].pricing.workerPayout").value("1000.00"))
                     .andExpect(jsonPath("$.data.content[1].pricing.workerPayout").value("1000.00"));
 
-            assertEquals(statementsForOneRow, statistics.getPrepareStatementCount(), message);
-            assertEquals(0, statistics.getEntityFetchCount(),
+            assertEquals(statementsForOneRow, queries.getPrepareStatementCount(), message);
+            assertEquals(0, queries.getEntityFetchCount(),
                     "ilan listesi fiyat görünümü için satır başına lazy entity yüklüyor");
         } finally {
-            statistics.setStatisticsEnabled(wasEnabled);
+            queries.close();
         }
     }
 
