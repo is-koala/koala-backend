@@ -70,7 +70,8 @@ public class AuditLogController {
                     + "dışa aktarma reddedilir ve dosya üretilmez. Olay denetim kaydına tek satır olarak yazılır ve "
                     + "GET /admin/audit-log?action=export ile listelenir (gövdedeki action enum adıdır, bugün yalnız "
                     + "EXPORT kabul edilir; satıra ve süzgece eylem kodu küçük harfle, export olarak yazılır); sorgu "
-                    + "parametresi ya da tekrar eden istek ikinci bir satır açmaz. Aktör her zaman "
+                    + "parametresi ikinci bir satır açmaz; uçta idempotency yoktur, tekrar eden her istek kendi "
+                    + "satırını yazar. Aktör her zaman "
                     + "token'daki kayıtlı personeldir; gövdede aktör alanı yoktur, gönderilirse yok sayılır. Uç her "
                     + "personele açıktır ama kayıt, çağıranın dışa aktarılan liste için taşıdığı izinle yazılır "
                     + "(JOB_ASSIGNMENTS payment.read, PAYOUTS payout.reconcile, REPORTS content.moderate, DISPUTES "
@@ -94,9 +95,10 @@ public class AuditLogController {
                     + "konu ya da karşı taraf yoksa AUDIT_EVENT_SUBJECT_NOT_FOUND. Hiçbiri satır yazmaz",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "403", description = "Çağıran dışa aktarılan listenin iznini taşımıyor "
-                    + "(AUDIT_EVENT_LIST_PERMISSION_MISSING; ret de denetim kaydına yazılır) ya da kayıtlı bir "
-                    + "personel hesabı değil (AUDIT_EVENT_STAFF_ONLY; marketplace ROLE_ADMIN köprüsü dahil, satır "
-                    + "yazılmaz)",
+                    + "(AUDIT_EVENT_LIST_PERMISSION_MISSING; ret de denetim kaydına yazılır), yetki katmanı çağrıyı "
+                    + "reddediyor (ACCESS_DENIED: kayıtsız ya da parolasını değiştirmesi gereken personel, köprü "
+                    + "kapalıyken marketplace hesabı; ret allowed=false satırı yazar) ya da köprü açıkken marketplace "
+                    + "ROLE_ADMIN (AUDIT_EVENT_STAFF_ONLY; satır yazılmaz)",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
             @ApiResponse(responseCode = "413", description = "İstek gövdesi 16 KiB'ı aşıyor (REQUEST_BODY_TOO_LARGE); "
                     + "satır yazılmaz",

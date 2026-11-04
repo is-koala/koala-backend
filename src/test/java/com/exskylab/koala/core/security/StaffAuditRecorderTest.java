@@ -41,11 +41,17 @@ class StaffAuditRecorderTest {
     }
 
     @Test
-    void aMappingAuditedByItsHandlerIsNeverRecordedAtAuthorization() throws Exception {
+    void aMappingAuditedByItsHandlerIsNotRecordedAgainAtAuthorizationWhenTheCallIsAllowed() throws Exception {
         recorder.observe(eventWithAQueryParameter(), annotationOf("recordedByTheHandler"), staff(), true);
-        recorder.observe(eventWithAQueryParameter(), annotationOf("recordedByTheHandler"), staff(), false);
 
         verify(staffAuditService, never()).record(any(), any(), any(), any());
+    }
+
+    @Test
+    void aCallRefusedAtAuthorizationIsRecordedEvenWhenItsHandlerAuditsTheMapping() throws Exception {
+        recorder.observe(eventWithAQueryParameter(), annotationOf("recordedByTheHandler"), staff(), false);
+
+        verify(staffAuditService, times(1)).record(any(), any(), any(), any());
     }
 
     private static MockHttpServletRequest eventWithAQueryParameter() {

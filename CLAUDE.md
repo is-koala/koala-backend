@@ -4143,6 +4143,8 @@ nullable ve varsayılansız, yani ekleme yalnız katalog değişikliği.
 tarafından yok sayılır. **Kayıtlı personel değilse 403 `AUDIT_EVENT_STAFF_ONLY`**, deterministik: `actor == null`
 (marketplace `ROLE_ADMIN` köprüsü, `STAFF_MARKETPLACE_BRIDGE_OPEN=true` ile geri açılırsa) ve kayıtsız `StaffPrincipal`
 aynı yanıtı alır, satır yazılmaz (personel kimliği olmayan bir dışa aktarmayı kime yazacağımız yok), `WARN` loglanır.
+Bugün kayıtsız `StaffPrincipal` (ve `mustChangePassword` personel, köprü kapalıyken marketplace hesabı) bu kurala hiç
+varmaz: yetki katmanı 403 `ACCESS_DENIED` döner ve reddi recorder `allowed=false` satırı olarak yazar (aşağıda).
 
 **İzin gövdeye bağlı, uç her personele açık.** `@RequiresPermission(action = "audit.event.record", auditedByHandler =
 true)` izin adlandırmıyor; kayıt **dışa aktarılan listenin izniyle** yazılır ve izin `ClientAuditEventManager.record`
@@ -4159,7 +4161,10 @@ servise geçirdiği ve bayat muafiyet kalmadığı ayrı testlerde.
 **Satır tam bir kez yazılır: `auditedByHandler`.** İlk sürümde `?x=1` gibi herhangi bir sorgu parametresi
 `AuditScope.hasFilter`'ı doğru yapıyor, yetki anındaki `StaffAuditRecorder` "süzgeçli arama" (§2av kural 5) diye
 **ikinci** bir `allowed=true` satırı kuyruğa alıyordu — 403 ve 429 alan çağrı bile izin verilmiş görünüyordu.
-`RequiresPermission.auditedByHandler()` artık recorder'ı o eşlemede tümüyle atlatıyor; satırı yalnız handler yazar.
+`RequiresPermission.auditedByHandler()` artık recorder'ı o eşlemede **yetkiden geçen** çağrı için atlatıyor; o satırı
+yalnız handler yazar. Yetki katmanının reddettiği çağrı (`mustChangePassword` personel, kayıtsız `StaffPrincipal`,
+köprü kapalıyken `ROLE_ADMIN`/`UserPrincipal`) handler'a hiç ulaşmaz; onun `allowed=false` satırını recorder yazar
+(§2av kural 1; `StaffAuditRecorderTest.aCallRefusedAtAuthorizationIsRecordedEvenWhenItsHandlerAuditsTheMapping`).
 Bayrak yalnız gövdeye bağlı izinli yazma ucunda olabilir: `AdminPermissionMappingIT.onlyABodyDependentPermission
 WriteMayLeaveItsAuditRowToTheHandler` bayrağı taşıyan kümeyi muafiyet listesine **eşitliyor** — başka bir uç yetki
 anındaki kaydı kapatamaz. Kanıt: sorgu parametreli 403/403/201 → tam üç `export` satırı
