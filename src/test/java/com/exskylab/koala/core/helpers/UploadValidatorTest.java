@@ -11,6 +11,8 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -62,6 +64,20 @@ class UploadValidatorTest {
                 new byte[]{1, 2, 3});
 
         assertDoesNotThrow(() -> validator.validate(document, FolderType.FILE, "{e}", "{s}"));
+    }
+
+    @Test
+    void everyImageTypeOnTheDefaultListsCanBeDecodedAndReEncoded() {
+        UploadProperties defaults = new UploadProperties();
+        Set<String> imageTypes = new LinkedHashSet<>(defaults.getImageExtensions());
+        defaults.getEvidenceExtensions().stream().filter(extension -> !"pdf".equals(extension)).forEach(imageTypes::add);
+
+        for (String extension : imageTypes) {
+            assertTrue(ImageIO.getImageReadersBySuffix(extension).hasNext(),
+                    extension + " is accepted but no ImageIO reader can open it, so every real upload is refused");
+            assertTrue(ImageIO.getImageWritersBySuffix(extension).hasNext(),
+                    extension + " is accepted but no ImageIO writer can re-encode it to drop its metadata");
+        }
     }
 
     @Test
