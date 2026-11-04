@@ -159,7 +159,7 @@ public class IdentityVerificationManager implements IdentityDocumentReviewServic
     @Override
     @Transactional(readOnly = true)
     public Optional<UUID> findReviewedUserId(UUID reviewId) {
-        return identityVerificationDao.findUserIdById(reviewId);
+        return identityVerificationDao.findUserIdIncludingDeletedById(reviewId);
     }
 
     @Override

@@ -320,7 +320,6 @@ public class BankAccountManager implements BankAccountService {
     @Override
     @Transactional(readOnly = true)
     public Optional<UUID> findOwnerIdByVerificationReference(String reference) {
-        return bankAccountDao.findByVerificationReferenceAndActiveTrue(reference)
-                .map(account -> account.getUser().getId());
+        return bankAccountDao.findOwnerIdIncludingInactiveByVerificationReference(reference);
     }
 }

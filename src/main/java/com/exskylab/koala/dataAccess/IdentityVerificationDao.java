@@ -21,8 +21,9 @@ public interface IdentityVerificationDao extends JpaRepository<IdentityVerificat
     @Override
     Optional<IdentityVerification> findById(UUID id);
 
-    @Query("select v.user.id from IdentityVerification v where v.id = :id")
-    Optional<UUID> findUserIdById(@Param("id") UUID id);
+    @Query(value = "select user_id from user_verifications where id = :id and verification_type = 'IDENTITY'",
+            nativeQuery = true)
+    Optional<UUID> findUserIdIncludingDeletedById(@Param("id") UUID id);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select v from IdentityVerification v where v.id = :id")

@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -60,9 +61,10 @@ class AuditSubjectIT extends AbstractStaffIntegrationTest {
     private final UUID imageId = UUID.randomUUID();
     private final UUID galleryRowId = UUID.randomUUID();
     private final UUID bankAccountId = UUID.randomUUID();
-    private final String reference = "KS" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+    private final String reference = "KS" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
     private final UUID imageReportId = UUID.randomUUID();
     private final UUID paymentId = UUID.randomUUID();
+    private final UUID identityReviewId = UUID.randomUUID();
 
     private String ownerToken;
 
@@ -124,6 +126,7 @@ class AuditSubjectIT extends AbstractStaffIntegrationTest {
         jdbc.update("delete from notifications where recipient_id in (?, ?)", workerId, employerId);
         jdbc.update("delete from user_profile_sync_outbox where user_id in (?, ?)", workerId, employerId);
         jdbc.update("delete from bank_accounts where id = ?", bankAccountId);
+        jdbc.update("delete from user_verifications where id = ?", identityReviewId);
         jdbc.update("delete from reports where id in (?, ?)", reportId, imageReportId);
         jdbc.update("delete from company_images where id = ?", galleryRowId);
         jdbc.update("delete from media where id = ?", imageId);
@@ -230,6 +233,28 @@ class AuditSubjectIT extends AbstractStaffIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"senderIban\":\"TR330006100519786457841326\",\"amount\":1.00}"));
 
+        assertSubject(onlyRow("bank.account.verify"), "USER", workerId);
+    }
+
+    @Test
+    void anAnonymizedPersonsIdentityReviewAndIbanDecisionStillNameThemLikeTheBackfillDoes() throws Exception {
+        jdbc.update("""
+                insert into user_verifications (id, verification_type, created_at, is_deleted, deleted_at,
+                                                is_verified, user_id)
+                values (?, 'IDENTITY', now(), true, now(), false, ?)
+                """, identityReviewId, workerId);
+        jdbc.update("update bank_accounts set is_active = false, is_primary = false, is_deleted = true, "
+                + "deleted_at = now() where id = ?", bankAccountId);
+        jdbc.update("update users set is_deleted = true, deleted_at = now() where id = ?", workerId);
+
+        perform(post("/admin/identity-verifications/{id}/reject", identityReviewId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reason\":\"konu testi\"}"));
+        perform(post("/admin/bank-account-verifications/{reference}/confirm", reference)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"senderIban\":\"TR330006100519786457841326\",\"amount\":1.00}"));
+
+        assertSubject(onlyRow("identity.reject"), "USER", workerId);
         assertSubject(onlyRow("bank.account.verify"), "USER", workerId);
     }
 

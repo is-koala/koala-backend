@@ -4020,6 +4020,13 @@ açan **kullanıcıya** düşüyordu — geri doldurma ise aynı satıra `COMPAN
 `reports` satırının kendi sütunları, başka tabloya join yok, `@SQLRestriction` devrede değil. İleri ve geri yön aynı
 cevabı veriyor (`AuditSubjectIT.aSoftDeletedCompanyOrCreatorStillNamesTheEmployerLikeTheBackfillDoes`,
 `AuditSubjectBackfillMigrationIT.softDeletedRowsStillNameThePartyLikeTheRuntimeResolverDoes`).
+Kimlik incelemesi ve IBAN doğrulaması da aynı kalıpta: ilk sürüm JPQL `select v.user.id from IdentityVerification v`
+(`UserVerification`'ın `@SQLRestriction`'ı uygulanıyor) ve `findByVerificationReferenceAndActiveTrue` ile okuyordu.
+Anonimleştirme kişinin `user_verifications` satırını soft-delete ediyor, `bank_accounts` satırını hem pasif hem silinmiş
+yapıyor; yani anonimleşmiş (ya da IBAN'ını kaldırmış) kişinin incelemesi/IBAN kararı çalışma anında **konusuz**
+yazılıyordu, geri doldurma ise aynı satıra konu yazıyordu. Şimdi `IdentityVerificationDao.findUserIdIncludingDeletedById`
+ve `BankAccountDao.findOwnerIdIncludingInactiveByVerificationReference` native, `is_deleted`/`is_active`'e bakmıyor
+(`AuditSubjectIT.anAnonymizedPersonsIdentityReviewAndIbanDecisionStillNameThemLikeTheBackfillDoes`).
 
 **Yoldaki kimlik ancak öyle biri varsa konu olur.** `users/{userId}` ve `companies/{companyId}` uçlarında kimlik
 istemciden gelir; var olmayan bir kimliği konu yazmak, olmayan bir kişinin çizelgesini uydururdu. `UserService`/
