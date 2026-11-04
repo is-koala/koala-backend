@@ -39,13 +39,18 @@ public class JobSearchCriteriaDto {
     private Boolean insuranceRequired;
     private Boolean experienceRequired;
 
-    private Double minLatitude;
+    @Parameter(description = "Harita kutusunun güney sınırı (dahil). Kutu ilanın herkese açık koordinatına uygulanır: "
+            + "adresi herkese açık şirket ilanında kesin, diğer ilanlarda iki ondalığa yuvarlanmış koordinat.")
+    private BigDecimal minLatitude;
 
-    private Double maxLatitude;
+    @Parameter(description = "Harita kutusunun kuzey sınırı (dahil); herkese açık koordinata uygulanır.")
+    private BigDecimal maxLatitude;
 
-    private Double minLongitude;
+    @Parameter(description = "Harita kutusunun batı sınırı (dahil); herkese açık koordinata uygulanır.")
+    private BigDecimal minLongitude;
 
-    private Double maxLongitude;
+    @Parameter(description = "Harita kutusunun doğu sınırı (dahil); herkese açık koordinata uygulanır.")
+    private BigDecimal maxLongitude;
 
     @Parameter(description = "Başlangıç aralığının alt sınırı (dahil). Dilimli ISO-8601 an, örn. 2026-09-20T21:00:00Z "
             + "veya 2026-09-21T00:00:00+03:00; job-search.zone-id (Europe/Istanbul) duvar saatine çevrilip ilanın "

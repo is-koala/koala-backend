@@ -46,6 +46,17 @@ public interface JobDao extends JpaRepository<Job, UUID> {
         Double getDistance();
     }
 
+    String WITHIN_PUBLIC_BOUNDS = """
+              and (:minLatitude is null or (""" + PUBLIC_LATITUDE + """
+            ) >= :minLatitude)
+              and (:maxLatitude is null or (""" + PUBLIC_LATITUDE + """
+            ) <= :maxLatitude)
+              and (:minLongitude is null or (""" + PUBLIC_LONGITUDE + """
+            ) >= :minLongitude)
+              and (:maxLongitude is null or (""" + PUBLIC_LONGITUDE + """
+            ) <= :maxLongitude)
+            """;
+
     @Query("select j.id as id, " + DISTANCE_KM + " as distance from Job j " + """
             where j.status = :status
               and (j.endDateTime is null or j.endDateTime > :activeAfter)
@@ -66,11 +77,7 @@ public interface JobDao extends JpaRepository<Job, UUID> {
               and (:maxSalary is null or j.salary <= :maxSalary)
               and (:insuranceRequired is null or j.insuranceRequired = :insuranceRequired)
               and (:experienceRequired is null or j.experienceRequired = :experienceRequired)
-              and (:minLatitude is null or j.address.latitude >= :minLatitude)
-              and (:maxLatitude is null or j.address.latitude <= :maxLatitude)
-              and (:minLongitude is null or j.address.longitude >= :minLongitude)
-              and (:maxLongitude is null or j.address.longitude <= :maxLongitude)
-            """)
+            """ + WITHIN_PUBLIC_BOUNDS)
     Page<JobSearchHit> searchIds(@Param("status") JobStatus status,
                          @Param("activeAfter") java.time.LocalDateTime activeAfter,
                          @Param("startFiltered") boolean startFiltered,
@@ -91,10 +98,10 @@ public interface JobDao extends JpaRepository<Job, UUID> {
                          @Param("maxSalary") BigDecimal maxSalary,
                          @Param("insuranceRequired") Boolean insuranceRequired,
                          @Param("experienceRequired") Boolean experienceRequired,
-                         @Param("minLatitude") Double minLatitude,
-                         @Param("maxLatitude") Double maxLatitude,
-                         @Param("minLongitude") Double minLongitude,
-                         @Param("maxLongitude") Double maxLongitude,
+                         @Param("minLatitude") BigDecimal minLatitude,
+                         @Param("maxLatitude") BigDecimal maxLatitude,
+                         @Param("minLongitude") BigDecimal minLongitude,
+                         @Param("maxLongitude") BigDecimal maxLongitude,
                          Pageable pageable);
 
     @EntityGraph(attributePaths = {"category", "creator", "company", "company.logo", "address",
