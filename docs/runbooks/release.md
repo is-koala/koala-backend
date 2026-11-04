@@ -1,23 +1,54 @@
 # Publishing koala to production
 
-Verify and the GHCR image run on Yusuf's Mac. GitHub Actions does not run
-`./mvnw verify` and does not build the image. The only GitHub job is the
-Dokploy webhook on a `v*` tag (or `workflow_dispatch`), on the org
-self-hosted runners.
+Verify and release run on GitHub-hosted runners (`ubuntu-latest`). The
+self-hosted Pi runner is gone; nothing in this repository targets
+`self-hosted`.
+
+## Workflows
+
+- `.github/workflows/verify.yml` (`koala verify`) — pull requests to `main`,
+  pushes to `main`, manual dispatch. Runs
+  `./mvnw -B -ntp verify -Dkoala.test.latch-timeout=30` (Temurin 25, unit +
+  every Failsafe execution, Testcontainers on the runner's Docker). Surefire
+  and Failsafe reports are uploaded only on failure (3-day retention).
+- `.github/workflows/release.yml` (`koala release`) — manual dispatch from
+  `main`, plus a guard on `v*` tag pushes.
 
 ## Order
 
-1. `./mvnw verify -Dkoala.test.latch-timeout=30` on this Mac (Docker open, Temurin 25).
-2. Merge the release PR to `main`.
-3. `docker login ghcr.io` (a `write:packages` token that can push `is-koala/koala`).
-4. `./scripts/publish-ghcr-image.sh --latest` — pushes `ghcr.io/is-koala/koala:<pom-version>` and `:latest` as a single `linux/amd64` manifest (`provenance` and `sbom` off, same GHCR-index trap as before).
-5. Annotated tag `v<pom-version>` on the merge commit, then `git push origin v<pom-version>`.
-6. The self-hosted job curls `DOKPLOY_DEPLOY_WEBHOOK`. Dokploy pulls `:latest`.
+1. Merge the release PR (pom version bump) to `main`.
+2. Wait for `koala verify` on the merge commit to go green. The squash merge is
+   a new SHA; the PR run does not count.
+3. `gh workflow run "koala release" --ref main` (or Actions → koala release →
+   Run workflow).
+4. The run refuses unless: it is on `main`, `koala verify` succeeded on the
+   same SHA, `v<pom-version>` does not exist yet and
+   `ghcr.io/is-koala/koala:<pom-version>` does not exist yet.
+5. It runs `scripts/publish-ghcr-image.sh --latest` — `:<pom-version>` and
+   `:latest`, a single `linux/amd64` manifest (`provenance` and `sbom` off),
+   then checks the pushed tag is not an index and both tags share a digest.
+6. Only then it creates the annotated tag `v<pom-version>` on that SHA and
+   pushes it, and curls `DOKPLOY_DEPLOY_WEBHOOK`. Dokploy pulls `:latest`.
 
-Do not push the tag before the image is on GHCR. The webhook does not wait for a digest; it only tells Dokploy to pull.
+A tag pushed with `GITHUB_TOKEN` does not start another workflow run, so the
+webhook fires once.
 
-`main` push no longer publishes `main-<sha7>`. Production is tag-only.
+## Retry and manual tags
 
-To retry the webhook without rebuilding: `gh workflow run "koala ci"` (dispatch also curls; it does not require a `v*` ref).
+- Webhook only, image and tag already there:
+  `gh workflow run "koala release" --ref main -f redeploy=true`.
+- A human-pushed `v*` tag never builds an image. If the image for that version
+  is on GHCR it deploys; otherwise the run fails and the tag must be deleted
+  (`git push --delete origin v<version>`) and the release dispatched.
+- Image pushed but tag missing (a run died between the two): the dispatch
+  refuses. Check the image digest against the intended commit, then either
+  push the tag by hand (the tag guard deploys it) or delete the GHCR version
+  and dispatch again.
 
-Do not register this Mac as an org runner. Other is-koala repos may still run verify on the same self-hosted machines; this repository only uses them for the webhook.
+## Permissions
+
+`GITHUB_TOKEN` with `packages: write` pushes `ghcr.io/is-koala/koala`: the
+package is linked to `is-koala/koala-backend`, and the same token pushed the
+`main-<sha7>` images in the self-hosted era. `contents: write` is for the tag,
+`actions: read` for the verify lookup. The only repository secret used is
+`DOKPLOY_DEPLOY_WEBHOOK`.
