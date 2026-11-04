@@ -12,103 +12,144 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.yaml.snakeyaml.Yaml;
 
 class GithubActionsWorkflowContractTest {
 
-    private static final Path WORKFLOW = Path.of(".github/workflows/ci.yml");
+    private static final Path WORKFLOWS = Path.of(".github/workflows");
+    private static final Path VERIFY = WORKFLOWS.resolve("verify.yml");
+    private static final Path RELEASE = WORKFLOWS.resolve("release.yml");
+    private static final String GATE = "./mvnw -B -ntp verify -Dkoala.test.latch-timeout=30";
+    private static final String PUBLISH_MODE = "steps.plan.outputs.mode == 'publish'";
 
     @Test
-    void githubOnlyFiresTheDokployWebhookOnVersionTags() throws IOException {
-        String workflow = workflow();
-        Map<?, ?> jobs = jobs();
-        Map<?, ?> deploy = job(jobs, "deploy");
-        Map<?, ?> trigger = stepNamed(jobs, "deploy", "Trigger Dokploy deploy");
-        Map<?, ?> concurrency = concurrency();
+    void everyWorkflowRunsOnGithubHostedRunners() throws IOException {
+        try (Stream<Path> files = Files.list(WORKFLOWS)) {
+            Set<String> names = files.map(path -> path.getFileName().toString()).collect(Collectors.toSet());
+            assertEquals(Set.of("verify.yml", "release.yml"), names);
+        }
+        for (Path workflow : List.of(VERIFY, RELEASE)) {
+            assertFalse(text(workflow).contains("self-hosted"), workflow + " uses a self-hosted runner");
+            for (Object job : jobs(workflow).values()) {
+                assertEquals("ubuntu-latest", assertInstanceOf(Map.class, job).get("runs-on"));
+            }
+        }
+    }
+
+    @Test
+    void verifyRunsTheFullGateOnPullRequestsAndMain() throws IOException {
+        Map<?, ?> root = root(VERIFY);
+        Map<?, ?> on = triggers(root);
+        Map<?, ?> verify = job(jobs(VERIFY), "verify");
+        Map<?, ?> setupJava = stepUsing(verify, "actions/setup-java@");
+        Map<?, ?> javaInputs = assertInstanceOf(Map.class, setupJava.get("with"));
+        Map<?, ?> concurrency = assertInstanceOf(Map.class, root.get("concurrency"));
+        String gate = String.valueOf(stepNamed(verify, "Verify").get("run"));
 
         assertAll(
-                () -> assertEquals(Set.of("deploy"), jobs.keySet()),
-                () -> assertEquals("self-hosted", deploy.get("runs-on")),
-                () -> assertEquals(5, deploy.get("timeout-minutes")),
-                () -> assertNull(deploy.get("needs")),
+                () -> assertEquals(Set.of("pull_request", "push", "workflow_dispatch"), on.keySet()),
+                () -> assertEquals(List.of("main"), branches(on, "pull_request")),
+                () -> assertEquals(List.of("main"), branches(on, "push")),
+                () -> assertEquals(Map.of("contents", "read"), root.get("permissions")),
+                () -> assertEquals(GATE, gate),
+                () -> assertFalse(gate.contains("skip")),
+                () -> assertFalse(gate.contains("-Dtest=")),
+                () -> assertFalse(gate.contains("-Dit.test=")),
+                () -> assertEquals("temurin", javaInputs.get("distribution")),
+                () -> assertEquals("25", javaInputs.get("java-version")),
+                () -> assertEquals("maven", javaInputs.get("cache")),
+                () -> assertTrue((Integer) verify.get("timeout-minutes") <= 60),
                 () -> assertEquals(
-                        "startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'",
-                        deploy.get("if")),
-                () -> assertEquals(
-                        "curl -fsSL -X POST \"${{ secrets.DOKPLOY_DEPLOY_WEBHOOK }}\"",
-                        trigger.get("run")),
-                () -> assertEquals(List.of(), actionReferences()),
-                () -> assertFalse(workflow.contains("ubuntu-latest")),
-                () -> assertFalse(workflow.contains("pull_request:")),
-                () -> assertFalse(workflow.contains("branches: [main]")),
-                () -> assertTrue(workflow.contains("tags: ['v*']")),
-                () -> assertTrue(workflow.contains("workflow_dispatch:")),
-                () -> assertEquals(
-                        "ci-${{ github.workflow }}-${{ github.ref }}", concurrency.get("group")),
+                        "${{ github.event_name == 'pull_request' }}", concurrency.get("cancel-in-progress")));
+    }
+
+    @Test
+    void releaseTagsOnlyAfterThePublishedImageIsCheckedAndDeploysLast() throws IOException {
+        Map<?, ?> root = root(RELEASE);
+        Map<?, ?> on = triggers(root);
+        Map<?, ?> release = job(jobs(RELEASE), "release");
+        List<String> order = stepNames(release);
+        Map<?, ?> plan = stepNamed(release, "Plan release");
+        Map<?, ?> publish = stepNamed(release, "Publish image");
+        Map<?, ?> check = stepNamed(release, "Check published image");
+        Map<?, ?> tag = stepNamed(release, "Tag release");
+        Map<?, ?> deploy = stepNamed(release, "Trigger Dokploy deploy");
+        Map<?, ?> push = assertInstanceOf(Map.class, on.get("push"));
+        Map<?, ?> concurrency = assertInstanceOf(Map.class, root.get("concurrency"));
+
+        assertAll(
+                () -> assertEquals(Set.of("workflow_dispatch", "push"), on.keySet()),
+                () -> assertEquals(List.of("v*"), push.get("tags")),
+                () -> assertNull(push.get("branches")),
+                () -> assertTrue(order.indexOf("Plan release") < order.indexOf("Publish image")),
+                () -> assertTrue(order.indexOf("Publish image") < order.indexOf("Check published image")),
+                () -> assertTrue(order.indexOf("Check published image") < order.indexOf("Tag release")),
+                () -> assertTrue(order.indexOf("Tag release") < order.indexOf("Trigger Dokploy deploy")),
+                () -> assertEquals("scripts/publish-ghcr-image.sh --latest", publish.get("run")),
+                () -> assertEquals(PUBLISH_MODE, publish.get("if")),
+                () -> assertEquals(PUBLISH_MODE, check.get("if")),
+                () -> assertEquals(PUBLISH_MODE, tag.get("if")),
+                () -> assertNull(deploy.get("if")),
+                () -> assertEquals("curl -fsSL -X POST \"$DOKPLOY_DEPLOY_WEBHOOK\"", deploy.get("run")),
+                () -> assertTrue(String.valueOf(plan.get("run")).contains("--workflow verify.yml")),
+                () -> assertTrue(String.valueOf(plan.get("run")).contains("refs/heads/main")),
+                () -> assertFalse(text(RELEASE).contains("build-push-action")),
+                () -> assertEquals("release", concurrency.get("group")),
                 () -> assertEquals(false, concurrency.get("cancel-in-progress")));
     }
 
-    @Test
-    void githubDoesNotBuildImagesOrRunMaven() throws IOException {
-        String workflow = workflow();
-        assertAll(
-                () -> assertFalse(workflow.contains("docker/")),
-                () -> assertFalse(workflow.contains("setup-java")),
-                () -> assertFalse(workflow.contains("mvnw")),
-                () -> assertFalse(workflow.contains("qemu")));
+    private static String text(Path workflow) throws IOException {
+        return Files.readString(workflow, StandardCharsets.UTF_8);
     }
 
-    private static String workflow() throws IOException {
-        return Files.readString(WORKFLOW, StandardCharsets.UTF_8);
-    }
-
-    private static List<String> actionReferences() throws IOException {
-        List<String> references = new ArrayList<>();
-        for (Object rawJob : jobs().values()) {
-            Map<?, ?> job = assertInstanceOf(Map.class, rawJob);
-            List<?> steps = assertInstanceOf(List.class, job.get("steps"));
-            for (Object rawStep : steps) {
-                Map<?, ?> step = assertInstanceOf(Map.class, rawStep);
-                if (step.get("uses") instanceof String reference) {
-                    references.add(reference);
-                }
-            }
-        }
-        return references;
-    }
-
-    private static Map<?, ?> jobs() throws IOException {
-        return assertInstanceOf(Map.class, root().get("jobs"));
-    }
-
-    private static Map<?, ?> concurrency() throws IOException {
-        return assertInstanceOf(Map.class, root().get("concurrency"));
-    }
-
-    private static Map<?, ?> root() throws IOException {
-        try (InputStream input = Files.newInputStream(WORKFLOW)) {
+    private static Map<?, ?> root(Path workflow) throws IOException {
+        try (InputStream input = Files.newInputStream(workflow)) {
             return assertInstanceOf(Map.class, new Yaml().load(input));
         }
+    }
+
+    private static Map<?, ?> triggers(Map<?, ?> root) {
+        return assertInstanceOf(Map.class, root.get(Boolean.TRUE));
+    }
+
+    private static List<?> branches(Map<?, ?> on, String event) {
+        return assertInstanceOf(List.class, assertInstanceOf(Map.class, on.get(event)).get("branches"));
+    }
+
+    private static Map<?, ?> jobs(Path workflow) throws IOException {
+        return assertInstanceOf(Map.class, root(workflow).get("jobs"));
     }
 
     private static Map<?, ?> job(Map<?, ?> jobs, String name) {
         return assertInstanceOf(Map.class, jobs.get(name));
     }
 
-    private static Map<?, ?> stepNamed(Map<?, ?> jobs, String jobName, String name) {
-        return steps(jobs, jobName).stream()
-                .map(rawStep -> assertInstanceOf(Map.class, rawStep))
-                .filter(step -> name.equals(step.get("name")))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError(jobName + " job has no " + name + " step"));
+    private static List<Map<?, ?>> steps(Map<?, ?> job) {
+        List<?> steps = assertInstanceOf(List.class, job.get("steps"));
+        return steps.stream().<Map<?, ?>>map(step -> assertInstanceOf(Map.class, step)).toList();
     }
 
-    private static List<?> steps(Map<?, ?> jobs, String jobName) {
-        return assertInstanceOf(List.class, job(jobs, jobName).get("steps"));
+    private static List<String> stepNames(Map<?, ?> job) {
+        return steps(job).stream().map(step -> String.valueOf(step.get("name"))).toList();
+    }
+
+    private static Map<?, ?> stepNamed(Map<?, ?> job, String name) {
+        return steps(job).stream()
+                .filter(step -> name.equals(step.get("name")))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no step named " + name));
+    }
+
+    private static Map<?, ?> stepUsing(Map<?, ?> job, String prefix) {
+        return steps(job).stream()
+                .filter(step -> step.get("uses") instanceof String uses && uses.startsWith(prefix))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no step uses " + prefix));
     }
 }

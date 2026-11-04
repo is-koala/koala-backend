@@ -18,7 +18,7 @@ Bu dosya projeyi konu konu anlatır: mimari, alınmış kararlar ve gerekçeleri
 - Koda **yorum satırı yazma** (bkz. §1). Gerekçe buraya yazılır.
 - Her değişiklikten sonra test yazılır; düzeltmeden **önce** kırmızıya döndüğü görülür.
 - Ana kodda imza değiştirdiysen `rm -rf target/test-classes` — Maven bayat test sınıfını yeniden derlemez, `NoSuchMethodError` alırsın.
-- Ajanın kapısı bu Mac: Docker, Temurin 25, `./mvnw verify -Dkoala.test.latch-timeout=30`. GitHub kuyruğunu bekleme. Mac org runner değil. Üretim imajı `scripts/publish-ghcr-image.sh --latest` → `ghcr.io/is-koala/koala`. GitHub yalnız `v*` etikette (veya workflow_dispatch) org self-hosted runner'da Dokploy webhook atar.
+- Kapı GitHub'ın kendi runner'ında: `koala verify` (`.github/workflows/verify.yml`) PR'da ve `main`'de `./mvnw -B -ntp verify -Dkoala.test.latch-timeout=30` koşar (Temurin 25, Testcontainers). Yayın `koala release` workflow_dispatch'i: yeşil verify → GHCR imajı → `v<pom>` tag'i → Dokploy webhook (§6).
 
 **Prod durumu (30.08.2026):** Dokploy üzerinde Postgres 17, RabbitMQ ve uygulama ayakta. `api.iskoala.com`. Son etiket `v0.4.9` — kimlik doğrulama, SMS/push tüketicileri, sürüm kapısı ve çip doğrulaması dahil. Ayrıntı §9'da.
 
@@ -5443,14 +5443,14 @@ cp .env.example .env
 
 ## 6. Deployment ve sürümleme
 
-Doğrulama ve GHCR imajı Yusuf'un Mac'inde. GitHub Actions `./mvnw verify`
-koşmaz ve imaj basmaz. `v*` etikette (veya `workflow_dispatch`) tek iş org
-self-hosted runner üzerinde Dokploy webhook'udur. Sıra
-`docs/runbooks/self-hosted-runner.md`.
+Kapı ve yayın GitHub'ın kendi runner'larında (`ubuntu-latest`); self-hosted Pi
+runner kaldırıldı. İki workflow var, sıra `docs/runbooks/release.md`.
 
-1. **verify** — `./mvnw verify -Dkoala.test.latch-timeout=30` (Docker, Temurin 25).
-2. **image** — `scripts/publish-ghcr-image.sh --latest` → `ghcr.io/is-koala/koala:<pom>` ve `:latest`, tek `linux/amd64` manifest (`provenance`/`sbom` kapalı).
-3. **deploy** — annotated `v*` etiket push'u GitHub'dan webhook atar. İmaj GHCR'de yokken etiket basılmaz.
+1. **verify** — `.github/workflows/verify.yml` (`koala verify`): PR (main'e), `main` push'u ve `workflow_dispatch`'te `./mvnw -B -ntp verify -Dkoala.test.latch-timeout=30` (Temurin 25, Testcontainers runner'ın Docker'ında). Kapsam daraltılmaz: unit + bütün IT execution'ları tek job'da. `main` push'u yayın kanıtı için koşar — squash merge yeni SHA üretir, PR koşusu onu görmez.
+2. **image** — `.github/workflows/release.yml` (`koala release`), yalnız `main`'den `workflow_dispatch`: aynı SHA'da yeşil `koala verify` koşusu, `v<pom>` tag'inin ve `ghcr.io/is-koala/koala:<pom>` imajının **yokluğu** şart. Sonra `scripts/publish-ghcr-image.sh --latest` → `:<pom>` ve `:latest`, tek `linux/amd64` manifest (`provenance`/`sbom` kapalı); workflow indeks olmadığını ve iki etiketin aynı digest'i gösterdiğini denetler.
+3. **tag + deploy** — imaj doğrulandıktan sonra aynı koşu annotated `v<pom>` tag'ini atar ve Dokploy webhook'unu çağırır. **İmajı olmayan tag basılmaz:** tag'i imajdan sonra workflow kendisi atıyor. GITHUB_TOKEN ile atılan tag ikinci bir koşu tetiklemez. Elle push'lanan `v*` tag'i imaj derlemez: imaj GHCR'de varsa deploy eder, yoksa kırmızıya düşer. `redeploy=true` imaja ve tag'e dokunmadan yalnız webhook'u yeniden atar.
+
+`GITHUB_TOKEN` `packages: write` ile `ghcr.io/is-koala/koala`'ya yazabiliyor: paket `is-koala/koala-backend`'e bağlı ve Pi döneminde aynı token `main-<sha7>` etiketlerini bastı.
 
 Sürümleme: `v1.2.3` tag'i Dokploy'un çektiği `:latest` ile aynı digest'i varsayar. `main` push imaj basmaz. Maven `pom.xml` sürümü git tag'iyle aynı semver'dir (`0.9.31` ↔ `v0.9.31`); `build-info` ve `info.app.version` / ECS `SERVICE_VERSION` (boşsa) buradan okunur. Dokploy'da `SERVICE_VERSION` hâlâ `0.0.1` ise o satır imaj varsayılanını ezer — boşaltın veya tag'le eşleyin.
 
@@ -5607,7 +5607,7 @@ Bunlar backend işi değil, Yakup'a devredilecek liste:
 
 **Portlar dışarı açılmaz.** Ne 5432 ne 5672 ne 15672. Yönetim arayüzüne SSH tüneliyle bakılır.
 
-**Sürümleme etiketle.** Mac `ghcr.io/is-koala/koala:1.2.3` ve `:latest` basar; `v1.2.3` push'u Dokploy webhook'unu tetikler. `main` push imaj basmaz.
+**Sürümleme etiketle.** `koala release` (workflow_dispatch) `ghcr.io/is-koala/koala:1.2.3` ve `:latest` basar, ardından `v1.2.3` tag'ini atıp Dokploy webhook'unu tetikler (§6). `main` push imaj basmaz.
 
 **İlk production geçişi deploy değildir.** `docs/runbooks/launch-cutover.md`, mevcut
 pre-production kaynaklarını temiz production'a çeviren bir defalık insan yordamıdır;
