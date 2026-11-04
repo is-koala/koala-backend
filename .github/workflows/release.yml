@@ -1,0 +1,154 @@
+name: koala release
+
+# Sıra: verify (aynı SHA'da yeşil `koala verify`) → imaj → annotated tag → Dokploy.
+# İmajı olmayan tag basılmaz: tag'i bu workflow imaj GHCR'de doğrulandıktan
+# sonra kendisi atıyor. GITHUB_TOKEN ile atılan tag yeni workflow tetiklemez,
+# yani deploy yalnız bu koşuda bir kez gider.
+#
+# workflow_dispatch (main): yayın. redeploy=true imaj ve tag'e dokunmadan
+#   yalnız webhook'u yeniden atar (ikisi de zaten varsa).
+# push v* (elle atılan tag): imaj derlemez. İmaj GHCR'de varsa deploy eder,
+#   yoksa kırmızıya düşer — imajsız tag'in deploy'u hiç tetiklenmez.
+on:
+  workflow_dispatch:
+    inputs:
+      redeploy:
+        description: Yalnız Dokploy webhook'unu yeniden at (v<pom> tag'i ve imajı zaten var)
+        type: boolean
+        default: false
+  push:
+    tags: ['v*']
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      packages: write
+      actions: read
+    env:
+      IMAGE: ghcr.io/is-koala/koala
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Plan release
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REDEPLOY: ${{ inputs.redeploy }}
+          DOKPLOY_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_DEPLOY_WEBHOOK }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+
+          [ -n "$DOKPLOY_DEPLOY_WEBHOOK" ] || fail "DOKPLOY_DEPLOY_WEBHOOK secret'ı tanımlı değil."
+
+          version="$(sed -n '/<artifactId>koala<\/artifactId>/,/<version>/s/.*<version>\([^<]*\)<\/version>.*/\1/p' pom.xml | head -1)"
+          [ -n "$version" ] || fail "pom.xml sürümü okunamadı."
+          tag="v${version}"
+
+          if inspect="$(docker buildx imagetools inspect "$IMAGE:$version" 2>&1)"; then
+            image_exists=true
+          elif grep -qiE 'not found|manifest unknown' <<<"$inspect"; then
+            image_exists=false
+          else
+            echo "$inspect"
+            fail "GHCR sorgulanamadı: $IMAGE:$version"
+          fi
+
+          rc=0
+          git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null || rc=$?
+          case "$rc" in
+            0) tag_exists=true ;;
+            2) tag_exists=false ;;
+            *) fail "origin tag'leri okunamadı (git ls-remote çıkış kodu $rc)." ;;
+          esac
+
+          case "$GITHUB_EVENT_NAME" in
+            push)
+              [ "$GITHUB_REF_NAME" = "$tag" ] || fail "$GITHUB_REF_NAME pom sürümüyle ($version) eşleşmiyor."
+              [ "$image_exists" = true ] || fail "İmajsız tag: $IMAGE:$version yok. Tag'i sil (git push --delete origin $tag) ve 'koala release' workflow_dispatch ile yayınla."
+              mode=deploy
+              ;;
+            workflow_dispatch)
+              [ "$GITHUB_REF" = refs/heads/main ] || fail "Yayın yalnız main'den dispatch edilir."
+              if [ "$REDEPLOY" = true ]; then
+                [ "$tag_exists" = true ] && [ "$image_exists" = true ] || fail "redeploy için $tag ve $IMAGE:$version birlikte var olmalı."
+                mode=deploy
+              else
+                [ "$tag_exists" = false ] || fail "$tag zaten var. pom sürümünü yükselt ya da redeploy=true ile yeniden dağıt."
+                [ "$image_exists" = false ] || fail "$IMAGE:$version zaten var ama $tag yok. Yarım kalmış yayını elle incele."
+                green="$(gh run list -R "$GITHUB_REPOSITORY" --workflow verify.yml --commit "$GITHUB_SHA" --status success --json databaseId --jq length)"
+                [ "$green" -gt 0 ] || fail "$GITHUB_SHA için yeşil 'koala verify' koşusu yok. main push'unun verify'ını bekle."
+                mode=publish
+              fi
+              ;;
+            *)
+              fail "Beklenmeyen olay: $GITHUB_EVENT_NAME"
+              ;;
+          esac
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "Sürüm $version, tag $tag, mod $mode"
+
+      - name: Set up Buildx
+        if: steps.plan.outputs.mode == 'publish'
+        uses: docker/setup-buildx-action@v4
+
+      - name: Publish image
+        if: steps.plan.outputs.mode == 'publish'
+        run: scripts/publish-ghcr-image.sh --latest
+
+      # Tek amd64 manifest olmalı; indeks GHCR'de Dokploy'a çekilemez (CLAUDE.md §6).
+      - name: Check published image
+        if: steps.plan.outputs.mode == 'publish'
+        env:
+          VERSION: ${{ steps.plan.outputs.version }}
+        run: |
+          set -euo pipefail
+          versioned="$(docker buildx imagetools inspect "$IMAGE:$VERSION")"
+          latest="$(docker buildx imagetools inspect "$IMAGE:latest")"
+          echo "$versioned"
+          if grep -qiE 'MediaType:.*(index|manifest\.list)' <<<"$versioned"; then
+            echo "::error::$IMAGE:$VERSION bir indeks; tek manifest bekleniyordu."
+            exit 1
+          fi
+          digest() { awk '/^Digest:/{print $2; exit}' <<<"$1"; }
+          [ "$(digest "$versioned")" = "$(digest "$latest")" ] || {
+            echo "::error::$IMAGE:latest ile $IMAGE:$VERSION aynı digest'i göstermiyor."
+            exit 1
+          }
+
+      - name: Tag release
+        if: steps.plan.outputs.mode == 'publish'
+        env:
+          TAG: ${{ steps.plan.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG"
+
+      - name: Trigger Dokploy deploy
+        env:
+          DOKPLOY_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_DEPLOY_WEBHOOK }}
+        run: curl -fsSL -X POST "$DOKPLOY_DEPLOY_WEBHOOK"
