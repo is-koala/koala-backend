@@ -3,6 +3,7 @@ package com.exskylab.koala.webAPI;
 import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.support.AbstractIntegrationTest;
+import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -11,11 +12,13 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
@@ -28,8 +31,10 @@ import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -222,6 +227,65 @@ class JobLocationRuleIT extends AbstractIntegrationTest {
                     .andExpect(jsonPath("$.data.job.addressPrecision").value("EXACT"))
                     .andExpect(jsonPath("$.data.job.latitude").value(EXACT_LAT));
         }
+    }
+
+    @Test
+    void aCompanyJobPostedWithoutTheFieldPublishesItsLocation() throws Exception {
+        LocalDateTime start = LocalDateTime.now().plusDays(2).withNano(0);
+        String body = """
+                {
+                  "categoryId": "%s",
+                  "title": "%s",
+                  "description": "Açıklama",
+                  "position": "Pozisyon",
+                  "address": {
+                    "countryId": "%s",
+                    "cityId": "%s",
+                    "districtId": "%s",
+                    "components": {
+                      "neighborhood": "Moda",
+                      "thoroughfare": "Caferağa Sokak",
+                      "buildingNumber": "12",
+                      "floor": "3",
+                      "unitNumber": "4",
+                      "postalCode": "34710"
+                    },
+                    "position": {
+                      "latitude": %s,
+                      "longitude": %s,
+                      "source": "USER_CONFIRMED_PIN"
+                    }
+                  },
+                  "type": "ONE_TIME",
+                  "salaryType": "HOURLY",
+                  "salary": 100,
+                  "startDateTime": "%s",
+                  "endDateTime": "%s",
+                  "minAge": 18,
+                  "maxAge": 65,
+                  "experienceRequired": false,
+                  "insuranceRequired": false
+                }
+                """.formatted(categoryId, title, countryId, cityId, districtId, EXACT_LAT, EXACT_LNG,
+                start, start.plusHours(8));
+
+        String created = mockMvc.perform(post("/companies/{companyId}/jobs", companyId)
+                        .with(user(principal(ownerId)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.addressPublic").value(true))
+                .andReturn().getResponse().getContentAsString();
+        UUID jobId = UUID.fromString(JsonPath.read(created, "$.data.id"));
+        addressIds.add(jdbc.queryForObject("select address_id from jobs where id = ?", UUID.class, jobId));
+
+        assertEquals(Boolean.TRUE,
+                jdbc.queryForObject("select address_public from jobs where id = ?", Boolean.class, jobId));
+        mockMvc.perform(get("/jobs/{jobId}", jobId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.addressPrecision").value("EXACT"))
+                .andExpect(jsonPath("$.data.address.position.latitude").value(EXACT_LAT))
+                .andExpect(jsonPath("$.data.address.components.floor").doesNotExist());
     }
 
     private MockHttpServletRequestBuilder as(Viewer viewer, MockHttpServletRequestBuilder request) {
