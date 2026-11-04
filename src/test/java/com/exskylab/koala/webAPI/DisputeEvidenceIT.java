@@ -344,7 +344,7 @@ class DisputeEvidenceIT extends AbstractStaffIntegrationTest {
         String rawKey = storageKeyOf(evidenceId);
         UUID staffId = createStaffMember("evidence-" + UUID.randomUUID() + "@iskoala.com", "Güven Lideri", "TRUST_LEAD");
 
-        JsonNode report = data(mockMvc.perform(post("/admin/disputes/evidence/metadata-scrub")
+        JsonNode report = data(mockMvc.perform(post("/admin/dispute-evidence/metadata-scrub")
                         .param("limit", "100")
                         .header("Authorization", "Bearer " + staffAccessToken(staffId)))
                 .andExpect(status().isOk()));
@@ -381,7 +381,7 @@ class DisputeEvidenceIT extends AbstractStaffIntegrationTest {
         assertEquals(1, jdbc.queryForObject("select count(*) from admin_audit_entries "
                 + "where action = 'dispute.evidence.scrub' and allowed = true", Integer.class));
 
-        data(mockMvc.perform(post("/admin/disputes/evidence/metadata-scrub")
+        data(mockMvc.perform(post("/admin/dispute-evidence/metadata-scrub")
                         .param("limit", "100")
                         .header("Authorization", "Bearer " + staffAccessToken(staffId)))
                 .andExpect(status().isOk()));
@@ -396,7 +396,7 @@ class DisputeEvidenceIT extends AbstractStaffIntegrationTest {
         String rawKey = storageKeyOf(evidenceId);
         String token = staffTokenFor("evidence-" + UUID.randomUUID() + "@iskoala.com", "Güven Lideri", "TRUST_LEAD");
 
-        JsonNode report = data(mockMvc.perform(post("/admin/disputes/evidence/metadata-scrub")
+        JsonNode report = data(mockMvc.perform(post("/admin/dispute-evidence/metadata-scrub")
                         .param("limit", "100").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk()));
         assertTrue(report.get("failed").toString().contains(evidenceId + "\",\"reason\":\"CHECKSUM_MISMATCH"),
@@ -409,12 +409,12 @@ class DisputeEvidenceIT extends AbstractStaffIntegrationTest {
         assertEquals("CHECKSUM_MISMATCH", row.get("metadata_scrub_error"));
         assertArrayEquals(raw, storageService.readFile(rawKey));
 
-        JsonNode again = data(mockMvc.perform(post("/admin/disputes/evidence/metadata-scrub")
+        JsonNode again = data(mockMvc.perform(post("/admin/dispute-evidence/metadata-scrub")
                         .param("limit", "100").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk()));
         assertFalse(again.get("failed").toString().contains(evidenceId.toString()),
                 "a failed photo is not retried unless asked: " + again);
-        JsonNode retried = data(mockMvc.perform(post("/admin/disputes/evidence/metadata-scrub")
+        JsonNode retried = data(mockMvc.perform(post("/admin/dispute-evidence/metadata-scrub")
                         .param("limit", "100").param("retryFailed", "true").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk()));
         assertTrue(retried.get("failed").toString().contains(evidenceId.toString()), retried.toString());
@@ -424,7 +424,7 @@ class DisputeEvidenceIT extends AbstractStaffIntegrationTest {
     void anonymizingTheUploaderAlsoErasesTheChecksumOfThePhotoBeforeItWasScrubbed() throws Exception {
         byte[] raw = jpegWithLocationAndSerials(40, 30);
         UUID evidenceId = storeRawEvidence(raw, Checksums.sha256Hex(raw));
-        mockMvc.perform(post("/admin/disputes/evidence/metadata-scrub").param("limit", "100")
+        mockMvc.perform(post("/admin/dispute-evidence/metadata-scrub").param("limit", "100")
                         .header("Authorization", "Bearer " + staffTokenFor(
                                 "evidence-" + UUID.randomUUID() + "@iskoala.com", "Güven Lideri", "TRUST_LEAD")))
                 .andExpect(status().isOk());
@@ -447,12 +447,29 @@ class DisputeEvidenceIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
+    void aBatchSizeOutsideOneToAHundredIsRefusedInsteadOfQuietlyClamped() throws Exception {
+        byte[] raw = jpegWithLocationAndSerials(40, 30);
+        UUID evidenceId = storeRawEvidence(raw, Checksums.sha256Hex(raw));
+        String rawKey = storageKeyOf(evidenceId);
+        String token = staffTokenFor("evidence-" + UUID.randomUUID() + "@iskoala.com", "Güven Lideri", "TRUST_LEAD");
+
+        for (String limit : new String[]{"0", "101"}) {
+            mockMvc.perform(post("/admin/dispute-evidence/metadata-scrub").param("limit", limit)
+                            .header("Authorization", "Bearer " + token))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.details[0].field").value("limit"))
+                    .andExpect(jsonPath("$.details[0].message").value("limit 1 ile 100 arasında olmalı."));
+        }
+        assertEquals(rawKey, storageKeyOf(evidenceId));
+    }
+
+    @Test
     void onlyTheDeletionPermissionMayRunTheBackfill() throws Exception {
         byte[] raw = jpegWithLocationAndSerials(40, 30);
         UUID evidenceId = storeRawEvidence(raw, Checksums.sha256Hex(raw));
         String rawKey = storageKeyOf(evidenceId);
 
-        mockMvc.perform(post("/admin/disputes/evidence/metadata-scrub")
+        mockMvc.perform(post("/admin/dispute-evidence/metadata-scrub")
                         .header("Authorization", "Bearer " + staffTokenFor(
                                 "evidence-" + UUID.randomUUID() + "@iskoala.com", "Uyuşmazlık Uzmanı", "DISPUTE_HANDLER")))
                 .andExpect(status().isForbidden());

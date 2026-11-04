@@ -122,7 +122,7 @@ public class AuditSubjectManager implements AuditSubjectService {
             case DISPUTE -> byId(resourceId, this::partiesOfDispute);
             case REPORT -> byId(resourceId, this::reportedPartyOf);
             case STAFF_NOTES, STAFF_FLAGS, BADGE_CATALOGUE, CATEGORY_CATALOGUE, RUNTIME_SETTINGS, STAFF_ACCOUNTS,
-                 STAFF_ROLES, CLIENT_EVENTS -> AuditSubjects.NONE;
+                 STAFF_ROLES, CLIENT_EVENTS, DISPUTE_EVIDENCE_SCRUB -> AuditSubjects.NONE;
         };
     }
 

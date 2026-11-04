@@ -12,14 +12,12 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
-import com.exskylab.koala.business.abstracts.DisputeEvidenceScrubService;
 import com.exskylab.koala.business.abstracts.DisputeService;
 import com.exskylab.koala.core.constants.DisputeMessages;
 import com.exskylab.koala.core.dtos.admin.request.CreatedAtRangeDto;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.dtos.dispute.request.ResolveDisputeDto;
 import com.exskylab.koala.core.dtos.dispute.response.DisputeDto;
-import com.exskylab.koala.core.dtos.dispute.response.EvidenceScrubReportDto;
 import com.exskylab.koala.core.dtos.dispute.response.StaffDisputeEvidenceDto;
 import com.exskylab.koala.core.helpers.SignedFileResponses;
 import com.exskylab.koala.core.mappers.DisputeMapper;
@@ -43,14 +41,12 @@ import java.util.UUID;
 public class DisputesController {
 
     private final DisputeService disputeService;
-    private final DisputeEvidenceScrubService disputeEvidenceScrubService;
     private final DisputeMapper disputeMapper;
     private final SignedFileResponses signedFileResponses;
 
-    public DisputesController(DisputeService disputeService, DisputeEvidenceScrubService disputeEvidenceScrubService,
-                              DisputeMapper disputeMapper, SignedFileResponses signedFileResponses) {
+    public DisputesController(DisputeService disputeService, DisputeMapper disputeMapper,
+                              SignedFileResponses signedFileResponses) {
         this.disputeService = disputeService;
-        this.disputeEvidenceScrubService = disputeEvidenceScrubService;
         this.disputeMapper = disputeMapper;
         this.signedFileResponses = signedFileResponses;
     }
@@ -153,29 +149,5 @@ public class DisputesController {
     public ResponseEntity<?> downloadEvidence(@PathVariable UUID disputeId, @PathVariable UUID evidenceId) {
         DisputeEvidence evidence = disputeService.getEvidenceForStaffDownload(disputeId, evidenceId);
         return signedFileResponses.attachment(evidence.getStorageKey(), evidence.getOriginalFileName());
-    }
-
-    @Operation(summary = "Saklanan görsel kanıtların metadata'sını temizle",
-            description = "Bu sürümden önce yüklenmiş PNG/JPEG kanıtları EXIF/GPS, cihaz seri numarası ve metin parçalarıyla "
-                    + "saklanıyordu. Uç en fazla limit (1-100, varsayılan 25) kanıtı tek tek işler: nesneyi okur, kayıtlı "
-                    + "SHA-256 ile karşılaştırır, metadata'sız yeniden kodlar, yeni nesneye yazıp geri okuyarak doğrular, "
-                    + "satırı yeni nesneye çevirir (önceki boyut ve özet satırda kalır) ve eski nesneyi silme kuyruğuna "
-                    + "alır. Özeti tutmayan, okunamayan ya da çözülemeyen kanıta dokunulmaz ve failed listesinde döner; "
-                    + "retryFailed=true onları yeniden dener. İdempotenttir: temizlenmiş kanıt bir daha işlenmez. "
-                    + "remaining sıfır olana kadar yeniden çağrılır. PDF kanıtlar kapsam dışıdır.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Parti işlendi"),
-            @ApiResponse(responseCode = "400", description = "limit ya da retryFailed sayı/mantıksal değer değil",
-                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
-    })
-    @RequiresPermission(value = StaffPermission.USER_DELETION_MANAGE, action = "dispute.evidence.scrub")
-    @PostMapping("/evidence/metadata-scrub")
-    public ResponseEntity<SuccessDataResult<EvidenceScrubReportDto>> scrubEvidenceMetadata(
-            @AuthenticationPrincipal StaffPrincipal actor,
-            @RequestParam(defaultValue = "25") int limit,
-            @RequestParam(defaultValue = "false") boolean retryFailed) {
-        return ResponseEntity.ok(new SuccessDataResult<>(
-                disputeEvidenceScrubService.scrubStoredEvidence(actor, limit, retryFailed),
-                DisputeMessages.EVIDENCE_SCRUBBED, HttpStatus.OK));
     }
 }

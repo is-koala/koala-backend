@@ -5,7 +5,7 @@
         xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
 
-    <changeSet id="2026-10-03-01-dispute-evidence-metadata-scrub" author="koala">
+    <changeSet id="2026-10-03-04-01-dispute-evidence-metadata-scrub" author="koala">
         <addColumn tableName="dispute_evidence">
             <column name="metadata_scrubbed_at" type="TIMESTAMP WITH TIME ZONE"/>
             <column name="metadata_scrubbed_by_staff_id" type="UUID">

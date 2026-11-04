@@ -17,7 +17,11 @@ addressable by a permanent URL, and is reachable only through an authorization c
 | Count cap | `upload.max-evidence-per-dispute` (default 5) |
 
 The row in `dispute_evidence` carries the dispute, the uploader, the storage key, the original filename, the
-derived content type, the byte size and a SHA-256 checksum of the stored bytes.
+derived content type, the byte size and a SHA-256 checksum of the stored bytes. The API response carries
+everything except the storage key. The staff list uses a separate response contract with a derived
+`uploaderSide`: the assignment worker is `WORKER`; the job creator and an authorised contact of the job's company
+are `EMPLOYER`. Attachment authorization establishes that invariant at write time, so a former company contact's
+historical evidence remains `EMPLOYER` after the contact is removed. The user-facing response contract is unchanged.
 
 ## Image metadata
 
@@ -40,10 +44,10 @@ Image evidence uploaded before this change still carries its metadata. After the
 `user.deletion.manage` (`TRUST_LEAD` or `OWNER`) runs:
 
 ```
-POST /admin/disputes/evidence/metadata-scrub?limit=25
+POST /admin/dispute-evidence/metadata-scrub?limit=25
 ```
 
-repeatedly until the response shows `remaining: 0`. Each call handles at most `limit` (1–100) rows, one
+repeatedly until the response shows `remaining: 0`. Each call handles at most `limit` (1–100; anything else is a 400) rows, one
 transaction per row, and writes one admin audit row (`dispute.evidence.scrub`) with the ids it touched. Per row:
 
 1. the row is locked and skipped if it is already scrubbed;
@@ -69,11 +73,7 @@ from dispute_evidence
 where is_deleted = false and storage_key is not null
   and content_type in ('image/jpeg', 'image/png') and metadata_scrubbed_at is null
 group by metadata_scrub_error;
-``` The API response carries
-everything except the storage key. The staff list uses a separate response contract with a derived
-`uploaderSide`: the assignment worker is `WORKER`; the job creator and an authorised contact of the job's company
-are `EMPLOYER`. Attachment authorization establishes that invariant at write time, so a former company contact's
-historical evidence remains `EMPLOYER` after the contact is removed. The user-facing response contract is unchanged.
+```
 
 ## Access
 

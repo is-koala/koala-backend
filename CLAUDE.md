@@ -1529,8 +1529,8 @@ piksellere uygulanır (`ExifOrientation`), görsel `ImageIO` ile yeniden kodlan�
 EXIF/XMP APP segmentleri ve PNG `tEXt`/`zTXt`/`iTXt`/`eXIf` parçaları düşer. `ImageManager` de aynı sınıfı çağırır. İki
 küçük düzeltme yanında geldi: `ImageIO.write`'ın `false` dönüşü artık `IOException` (önceden boş bayt dizisi
 saklanabiliyordu) ve JPEG'e yazılacak saydam görsel beyaz zemine düzleştirilir (ImageIO JPEG yazıcısı alfa kabul etmez,
-düzleştirmeden `false` döner). Kanıtta PDF dışındaki her tür bu yoldan geçer; biçimi yazılamayan tür (bugün
-`image/webp`) fail-closed `STORAGE_UNSUPPORTED_TYPE` alır, çözülemeyen görsel de. Boyut ve sha256 **saklanan**
+düzleştirmeden `false` döner). Kanıtta PDF dışındaki her tür bu yoldan geçer; ImageIO'nun yazamadığı ya da
+çözemediği görsel (ör. CMYK JPEG) fail-closed `STORAGE_UNSUPPORTED_TYPE` alır. Boyut ve sha256 **saklanan**
 baytlardan hesaplanır; yükleme anında temizlenen satıra `metadata_scrubbed_at` yazılır. JPEG yeniden kodlaması
 kayıplıdır (ImageIO varsayılan kalitesi) — kanıtın bütünlüğü yükleme anından itibaren sunucunun `createdAt` + sha256
 kaydıyla kurulur, orijinal baytlarla değil; KVKK m.4/2-ç ölçülülük ilkesi orijinali tutmamayı gerektiriyor.
@@ -1543,7 +1543,7 @@ verileri saklamamak. Personel "fotoğraf işten önce mi çekilmiş" sorusuna ih
 sorunu çözülerek eklenir.
 
 **Eski görsel kanıtlar personel tetikli, sürdürülebilir bir backfill ile temizlenir.** `POST
-/admin/disputes/evidence/metadata-scrub?limit=25&retryFailed=false` (`user.deletion.manage` — KVKK işlemlerinin izni,
+/admin/dispute-evidence/metadata-scrub?limit=25&retryFailed=false` (`user.deletion.manage` — KVKK işlemlerinin izni,
 `TRUST_LEAD`/`OWNER`; denetim eylemi `dispute.evidence.scrub`, satıra aday/temizlenen/başarısız id'leri ve kalan sayı
 yazılır) `DisputeEvidenceScrubManager`'dan geçer. Aday: silinmemiş, `storage_key`'i olan, `image/jpeg`/`image/png`
 içerikli, `metadata_scrubbed_at` boş ve (retryFailed değilse) `metadata_scrub_error` boş satır, en eskiden. Her satır
@@ -1563,6 +1563,14 @@ denenir. **İnsan adımı:** canlıya çıktıktan sonra güven lideri uç `rema
 listesindeki satırları incelemeye alır — `docs/runbooks/dispute-evidence.md`. Personel listesi
 (`StaffDisputeEvidenceDto`) `metadataScrubbedAt` ve `preScrubChecksumSha256` taşır: karşı tarafın daha önce indirip
 özetini not ettiği dosyanın neden farklı özetle durduğu satırın kendisinden okunur. Kullanıcı DTO'su değişmedi.
+
+**Uç kendi kaynağında: `/admin/dispute-evidence`, `/admin/disputes` altında değil.** Denetim konusu yolun ilk
+değişkeninden çözülür (§2av, `AuditSubjectSource`); `disputes` kaynağı `disputeId` değişkeni bekler ve
+`/admin/disputes/evidence/metadata-scrub` onu taşımadığı için `AuditSubjectCoverageIT` ucu reddeder. Toplu iş tek bir
+uyuşmazlık hakkında değil, bir partide birden çok kişinin kanıtını işler; bu yüzden ayrı kaynak türü
+(`DISPUTE_EVIDENCE_SCRUB`, `NONE`, gerekçeli) aldı. İşlenen satır id'leri zaten denetim detayında. `limit` istek DTO'sunda
+`@Min(1)`/`@Max(100)` (`EvidenceScrubRequestDto`), aralık dışı değer 400 `dispute.evidence.scrub.limit.range`; sessizce
+sıkıştırılmaz.
 
 **PDF kanıt bugün de olduğu gibi saklanıyor — bilinen sınır.** PDF'in Info sözlüğü (`/Author`, `/Creator`, `/Producer`,
 tarihler) ve XMP akışı yazarın adını ve cihaz/yazılım bilgisini taşıyabilir; telefonla "PDF'e tara" çıktıları içine

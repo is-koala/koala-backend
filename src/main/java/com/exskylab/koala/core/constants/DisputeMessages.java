@@ -23,4 +23,5 @@ public class DisputeMessages {
     public static final String EVIDENCE_ATTACHED = "{dispute.evidence.attached}";
     public static final String EVIDENCE_LISTED = "{dispute.evidence.listed}";
     public static final String EVIDENCE_SCRUBBED = "{dispute.evidence.scrubbed}";
+    public static final String EVIDENCE_SCRUB_LIMIT_RANGE = "{dispute.evidence.scrub.limit.range}";
 }
