@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -96,11 +97,16 @@ class ClientAuditEventIT extends AbstractStaffIntegrationTest {
         assertTrue(body.contains("\"rowCount\":437") && body.contains("durum=CONFIRMED")
                 && body.contains("\"piiIncluded\":false"), body);
 
+        String ownerToken = staffAccessToken(staff("Sahip", "OWNER"));
         mockMvc.perform(get("/admin/audit-log").param("action", "export")
-                        .header("Authorization", "Bearer " + staffAccessToken(staff("Sahip", "OWNER"))))
+                        .header("Authorization", "Bearer " + ownerToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content[*].id", hasItem(id)))
                 .andExpect(jsonPath("$.data.content[?(@.id == '" + id + "')].permission").value(hasItem("payment.read")));
+        mockMvc.perform(get("/admin/audit-log").param("action", "EXPORT")
+                        .header("Authorization", "Bearer " + ownerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[*].id", not(hasItem(id))));
     }
 
     @Test

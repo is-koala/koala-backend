@@ -4178,7 +4178,12 @@ birine kişinin var olup olmadığını söylerdi. Ret satırına konu yalnız v
 çizelgesine düşmesin); yanıt iki durumda da aynı
 (`ClientAuditEventRulesTest.aStaffMemberWithoutTheListPermissionGetsTheSameRefusalAndRowWhetherOrNotTheSubjectExists`).
 
-**Satır:** `action = "export"` (`GET /admin/audit-log?action=export`), `permission` listenin izni, `resourceType`
+**Satır:** `action = "export"` (`GET /admin/audit-log?action=export`). Gövdedeki `action` enum adıdır (`EXPORT`),
+satıra ve süzgece ise eylem **kodu** yazılır — her denetim eylemi gibi küçük harf (`payout.release`, `audit.read`,
+`export`); `action` süzgeci tam eşleşmedir ve büyük/küçük harf duyarlıdır, yani `?action=EXPORT` boş döner, tıpkı
+`?action=PAYOUT.RELEASE` gibi. Süzgeç sözleşmesi değiştirilmedi; panel süzgeçte kodu (`export`) göndermeli
+(`ClientAuditEventIT.anAssignmentExportIsRecordedUnderThePermissionOfTheListAndListedAsAnExport` iki yazımı da
+sabitliyor). `permission` listenin izni, `resourceType`
 listenin denetim kaynak türü (`job-assignments`, `payouts`, `reports`, `disputes` — aynı listenin GET satırlarıyla
 `resourceType` süzgecinde yan yana durur), `resourceId` boş, `mutating=false` (iş verisi değişmedi), hassasiyet
 listenin izninden. #307'nin kapsam taraması `audit-log` türünü `CLIENT_EVENTS` (`Resolution.SERVICE`) olarak tanır:

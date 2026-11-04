@@ -68,8 +68,9 @@ public class AuditLogController {
                     + "Sözleşme kapalı başarısızlıktır: panel önce bu çağrıyı yapar ve dosyayı ancak 201 aldıktan "
                     + "sonra kullanıcıya verir; 201 dışındaki her yanıtta (400, 403, 413, 429, 5xx, ağ hatası) "
                     + "dışa aktarma reddedilir ve dosya üretilmez. Olay denetim kaydına tek satır olarak yazılır ve "
-                    + "GET /admin/audit-log?action=export ile listelenir; sorgu parametresi ya da tekrar eden "
-                    + "istek ikinci bir satır açmaz. Bugün yalnız action=EXPORT kabul edilir. Aktör her zaman "
+                    + "GET /admin/audit-log?action=export ile listelenir (gövdedeki action enum adıdır, bugün yalnız "
+                    + "EXPORT kabul edilir; satıra ve süzgece eylem kodu küçük harfle, export olarak yazılır); sorgu "
+                    + "parametresi ya da tekrar eden istek ikinci bir satır açmaz. Aktör her zaman "
                     + "token'daki kayıtlı personeldir; gövdede aktör alanı yoktur, gönderilirse yok sayılır. Uç her "
                     + "personele açıktır ama kayıt, çağıranın dışa aktarılan liste için taşıdığı izinle yazılır "
                     + "(JOB_ASSIGNMENTS payment.read, PAYOUTS payout.reconcile, REPORTS content.moderate, DISPUTES "
@@ -139,6 +140,8 @@ public class AuditLogController {
     @GetMapping
     public ResponseEntity<SuccessDataResult<PageDto<AuditEntryDto>>> auditLog(
             @RequestParam(required = false) UUID actor,
+            @Parameter(description = "Eylem kodu, tam ve büyük/küçük harf duyarlı eşleşme; kodlar küçük harftir "
+                    + "(ör. payout.release, audit.read, export). Büyük harfli yazım (EXPORT) hiçbir satırla eşleşmez.")
             @RequestParam(required = false) String action,
             @RequestParam(required = false) String permission,
             @RequestParam(required = false) String resourceType,
