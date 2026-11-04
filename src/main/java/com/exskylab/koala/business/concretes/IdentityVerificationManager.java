@@ -12,12 +12,14 @@ import com.exskylab.koala.core.dtos.user.request.VerifyIdentityDto;
 import com.exskylab.koala.core.exceptions.ConflictException;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ValidationException;
+import com.exskylab.koala.core.helpers.ExifOrientation;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.helpers.StorageRollbackCleanup;
 import com.exskylab.koala.core.helpers.UploadValidator;
 import com.exskylab.koala.core.producers.user.UserProducerService;
 import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.core.utilities.storage.FolderType;
+import com.exskylab.koala.core.utilities.storage.StorageKeys;
 import com.exskylab.koala.core.utilities.storage.StorageService;
 import com.exskylab.koala.core.helpers.StaffSearchQuery;
 import com.exskylab.koala.dataAccess.IdentityVerificationDao;
@@ -33,6 +35,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.imageio.ImageIO;
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Optional;
@@ -179,6 +188,13 @@ public class IdentityVerificationManager implements IdentityDocumentReviewServic
 
     @Override
     @Transactional(readOnly = true)
+    public boolean isIdentityDocumentKey(String storageKey) {
+        return StorageKeys.isIdentityDocument(storageKey)
+                || identityVerificationDao.existsDocumentWithStorageKey(storageKey);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public VerificationDocument getDocumentForStaffDownload(UUID reviewId, UUID documentId) {
         IdentityVerification review = getById(reviewId);
         VerificationDocument document = matchingDocument(review, documentId);
@@ -234,20 +250,21 @@ public class IdentityVerificationManager implements IdentityDocumentReviewServic
     }
 
     private VerificationDocument storePhoto(MultipartFile photo) {
-        uploadValidator.validate(photo, FolderType.IMAGE,
+        uploadValidator.validate(photo, FolderType.IDENTITY_DOCUMENT,
                 IdentityMessages.DOCUMENTS_REQUIRED, ImageMessages.IMAGE_SIZE_ERROR);
         try {
+            byte[] clean = withoutMetadata(photo);
             String key = storageService.uploadFile(
-                    photo.getBytes(),
+                    clean,
                     photo.getOriginalFilename(),
                     photo.getContentType(),
-                    FolderType.IMAGE);
+                    FolderType.IDENTITY_DOCUMENT);
             StorageRollbackCleanup.deleteOnRollback(storageService, key);
             VerificationDocument document = new VerificationDocument();
             document.setFileName(photo.getOriginalFilename());
             document.setFileType(photo.getContentType());
             document.setFileUrl(key);
-            document.setFileSize(photo.getSize());
+            document.setFileSize((long) clean.length);
             return document;
         } catch (ValidationException exception) {
             throw exception;
@@ -255,6 +272,38 @@ public class IdentityVerificationManager implements IdentityDocumentReviewServic
             log.error("TCKK photo upload failed fileName: {}", photo.getOriginalFilename(), exception);
             throw new ValidationException(ImageMessages.IMAGE_UPLOAD_ERROR);
         }
+    }
+
+    private static byte[] withoutMetadata(MultipartFile photo) throws IOException {
+        byte[] original = photo.getBytes();
+        BufferedImage decoded = ImageIO.read(new ByteArrayInputStream(original));
+        if (decoded == null) {
+            throw new IOException("Identity photo could not be decoded");
+        }
+        BufferedImage upright = ExifOrientation.applyToPixels(decoded, ExifOrientation.read(original));
+        String format = StorageKeys.extensionOf(photo.getOriginalFilename()).replace(".", "");
+        BufferedImage encodable = isJpeg(format) ? withoutAlpha(upright) : upright;
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        if (format.isEmpty() || !ImageIO.write(encodable, format, out)) {
+            throw new IOException("No image writer for identity photo format " + format);
+        }
+        return out.toByteArray();
+    }
+
+    private static boolean isJpeg(String format) {
+        return "jpg".equals(format) || "jpeg".equals(format);
+    }
+
+    private static BufferedImage withoutAlpha(BufferedImage image) {
+        if (!image.getColorModel().hasAlpha()) {
+            return image;
+        }
+        BufferedImage rgb = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = rgb.createGraphics();
+        graphics.drawImage(image, 0, 0, Color.WHITE, null);
+        graphics.dispose();
+        return rgb;
     }
 
     private static String capitalizeFirstLetter(String input) {

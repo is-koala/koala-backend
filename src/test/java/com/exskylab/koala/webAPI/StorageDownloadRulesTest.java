@@ -1,6 +1,7 @@
 package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.business.abstracts.CvService;
+import com.exskylab.koala.business.abstracts.IdentityDocumentReviewService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ValidationException;
@@ -25,6 +26,7 @@ class StorageDownloadRulesTest {
 
     private StorageService storageService;
     private CvService cvService;
+    private IdentityDocumentReviewService identityDocuments;
     private StorageDownloadController controller;
 
     @BeforeEach
@@ -34,7 +36,8 @@ class StorageDownloadRulesTest {
         when(securityService.getAuthenticatedUserId()).thenReturn(UUID.randomUUID());
 
         cvService = mock(CvService.class);
-        controller = new StorageDownloadController(storageService, securityService, cvService);
+        identityDocuments = mock(IdentityDocumentReviewService.class);
+        controller = new StorageDownloadController(storageService, securityService, cvService, identityDocuments);
     }
 
     private static HttpServletRequest requestFor(String key) {
@@ -101,6 +104,29 @@ class StorageDownloadRulesTest {
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(MediaType.APPLICATION_PDF, response.getHeaders().getContentType());
+    }
+
+    @Test
+    void aLegacyIdentityPhotoUnderImagesIsConcealedFromThePublicImageRoute() {
+        String legacyKey = "images/0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0.jpg";
+        when(identityDocuments.isIdentityDocumentKey(legacyKey)).thenReturn(true);
+
+        assertThrows(ResourceNotFoundException.class, () -> controller.downloadImage(requestFor(legacyKey)));
+
+        verifyNoInteractions(storageService);
+    }
+
+    @Test
+    void anIdentityDocumentKeyIsNotAddressableUnderAnyUploadsRoute() {
+        String key = "identity-documents/0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0.jpg";
+
+        assertThrows(ValidationException.class, () -> controller.downloadImage(requestFor(key)));
+        assertThrows(ValidationException.class, () -> controller.downloadPublicFile(requestFor(key)));
+        assertThrows(ValidationException.class, () -> controller.downloadPrivate(requestFor(key)));
+        assertThrows(ValidationException.class,
+                () -> controller.downloadImage(requestFor("images/../" + key)));
+
+        verifyNoInteractions(storageService, cvService);
     }
 
     @Test

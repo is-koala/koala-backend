@@ -12,6 +12,7 @@ public final class StorageKeys {
     public static final String PUBLIC_FILE_PREFIX = "public/";
     public static final String PRIVATE_PREFIX = "files/";
     public static final String DISPUTE_EVIDENCE_PREFIX = "files/dispute-evidence/";
+    public static final String IDENTITY_DOCUMENT_PREFIX = "identity-documents/";
 
     private static final String TURKISH = "çÇğĞıİöÖşŞüÜâÂîÎûÛ";
     private static final String ASCII = "cCgGiIoOsSuUaAiIuU";
@@ -30,6 +31,7 @@ public final class StorageKeys {
             case PUBLIC_FILE -> PUBLIC_FILE_PREFIX;
             case FILE -> PRIVATE_PREFIX;
             case DISPUTE_EVIDENCE -> DISPUTE_EVIDENCE_PREFIX;
+            case IDENTITY_DOCUMENT -> IDENTITY_DOCUMENT_PREFIX;
         };
     }
 
@@ -49,8 +51,27 @@ public final class StorageKeys {
         return key != null && key.startsWith(IMAGE_PREFIX);
     }
 
+    public static boolean isIdentityDocument(String key) {
+        return key != null && key.startsWith(IDENTITY_DOCUMENT_PREFIX);
+    }
+
     public static boolean isKnownPrefix(String key) {
+        if (key == null || climbsOut(key)) {
+            return false;
+        }
         return isImage(key) || isPublicFile(key) || isPrivate(key);
+    }
+
+    private static boolean climbsOut(String key) {
+        if (key.contains("\\")) {
+            return true;
+        }
+        for (String segment : key.split("/", -1)) {
+            if ("..".equals(segment) || ".".equals(segment)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static String fromRequestPath(String rawPath) {
@@ -60,7 +81,7 @@ public final class StorageKeys {
         return UriUtils.decode(rawPath, StandardCharsets.UTF_8);
     }
 
-    static String extensionOf(String originalFileName) {
+    public static String extensionOf(String originalFileName) {
         if (originalFileName == null) {
             return "";
         }

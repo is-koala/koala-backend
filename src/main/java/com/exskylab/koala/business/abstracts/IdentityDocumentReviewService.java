@@ -30,6 +30,8 @@ public interface IdentityDocumentReviewService {
 
     IdentityVerification latestForCurrentUser();
 
+    boolean isIdentityDocumentKey(String storageKey);
+
     VerificationDocument getDocumentForStaffDownload(UUID reviewId, UUID documentId);
 
     Optional<IdentityVerification> findLatestFor(UUID userId);

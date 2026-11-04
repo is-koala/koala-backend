@@ -96,4 +96,26 @@ class StorageKeysTest {
         assertFalse(StorageKeys.isKnownPrefix("../secret"));
         assertFalse(StorageKeys.isKnownPrefix("backups/db.sql"));
     }
+
+    @Test
+    void identityDocumentsLiveOutsideEveryServablePrefix() {
+        String key = StorageKeys.newKey(FolderType.IDENTITY_DOCUMENT, "kimlik_on_yuz.JPG");
+
+        assertTrue(key.startsWith("identity-documents/"), key);
+        assertTrue(key.endsWith(".jpg"), key);
+        assertFalse(key.contains("kimlik"), key);
+        assertTrue(StorageKeys.isIdentityDocument(key));
+        assertFalse(StorageKeys.isKnownPrefix(key));
+        assertFalse(StorageKeys.isImage(key));
+        assertFalse(StorageKeys.isPrivate(key));
+        assertFalse(StorageKeys.isPublicFile(key));
+    }
+
+    @Test
+    void aKeyThatClimbsOutOfItsPrefixIsNotServable() {
+        assertFalse(StorageKeys.isKnownPrefix("images/../identity-documents/a.jpg"));
+        assertFalse(StorageKeys.isKnownPrefix("files/./../identity-documents/a.jpg"));
+        assertFalse(StorageKeys.isKnownPrefix("images/..\\identity-documents\\a.jpg"));
+        assertTrue(StorageKeys.isKnownPrefix("images/foto..eski.jpg"));
+    }
 }

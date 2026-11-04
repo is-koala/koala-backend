@@ -38,6 +38,12 @@ public interface IdentityVerificationDao extends JpaRepository<IdentityVerificat
     @EntityGraph(attributePaths = {"user", "verificationDocument", "backDocument", "selfieDocument", "togetherDocument"})
     Optional<IdentityVerification> findTopByUser_IdOrderByCreatedAtDesc(UUID userId);
 
+    @Query(value = """
+            select exists(select 1 from media
+                          where media_type = 'VERIFICATION_DOCUMENT' and file_url = :storageKey)
+            """, nativeQuery = true)
+    boolean existsDocumentWithStorageKey(@Param("storageKey") String storageKey);
+
     @Query("""
             select v from IdentityVerification v
             left join v.user u

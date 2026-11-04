@@ -46,7 +46,7 @@ public class UploadValidator {
             throw new ValidationException(StorageMessages.UNSUPPORTED_TYPE);
         }
 
-        if (folderType == FolderType.IMAGE) {
+        if (folderType == FolderType.IMAGE || folderType == FolderType.IDENTITY_DOCUMENT) {
             rejectOversizedCanvas(file);
         }
 
@@ -117,7 +117,7 @@ public class UploadValidator {
 
     private Set<String> allowedExtensions(FolderType folderType) {
         return switch (folderType) {
-            case IMAGE -> uploadProperties.getImageExtensions();
+            case IMAGE, IDENTITY_DOCUMENT -> uploadProperties.getImageExtensions();
             case PUBLIC_FILE -> uploadProperties.getPublicFileExtensions();
             case FILE -> uploadProperties.getFileExtensions();
             case DISPUTE_EVIDENCE -> uploadProperties.getEvidenceExtensions();
@@ -126,7 +126,7 @@ public class UploadValidator {
 
     private long maximumBytes(FolderType folderType) {
         int megabytes = switch (folderType) {
-            case IMAGE -> uploadProperties.getMaxImageSizeMb();
+            case IMAGE, IDENTITY_DOCUMENT -> uploadProperties.getMaxImageSizeMb();
             case DISPUTE_EVIDENCE -> uploadProperties.getMaxEvidenceSizeMb();
             case FILE, PUBLIC_FILE -> uploadProperties.getMaxFileSizeMb();
         };
