@@ -196,6 +196,34 @@ class ClientAuditEventRulesTest {
     }
 
     @Test
+    void aStaffMemberWithoutTheListPermissionGetsTheSameRefusalAndRowWhetherOrNotTheSubjectExists() {
+        StaffPrincipal agent = staff("Destek", StaffPermission.USER_READ);
+        UUID stranger = UUID.randomUUID();
+        UUID worker = UUID.randomUUID();
+        when(auditSubjectService.exists(AuditSubject.user(stranger))).thenReturn(false);
+        ClientAuditEventDto aboutNobody = export(StaffExportList.JOB_ASSIGNMENTS, false);
+        aboutNobody.setSubjectType(AuditSubjectType.USER);
+        aboutNobody.setSubjectId(stranger);
+        ClientAuditEventDto aboutSomeone = export(StaffExportList.JOB_ASSIGNMENTS, false);
+        aboutSomeone.setSubjectType(AuditSubjectType.USER);
+        aboutSomeone.setSubjectId(worker);
+
+        ForbiddenException ghost = assertThrows(ForbiddenException.class,
+                () -> manager.record(agent, aboutNobody, null, null));
+        ForbiddenException real = assertThrows(ForbiddenException.class,
+                () -> manager.record(agent, aboutSomeone, null, null));
+
+        assertEquals("AUDIT_EVENT_LIST_PERMISSION_MISSING", ghost.getErrorCode());
+        assertEquals("AUDIT_EVENT_LIST_PERMISSION_MISSING", real.getErrorCode());
+        List<StaffAuditRecord> rows = recorded();
+        assertEquals(2, rows.size());
+        assertFalse(rows.get(0).allowed());
+        assertNull(rows.get(0).subjects().subject(), "Var olmayan kişi ret satırına konu olarak yazılmaz.");
+        assertFalse(rows.get(1).allowed());
+        assertEquals(AuditSubject.user(worker), rows.get(1).subjects().subject());
+    }
+
+    @Test
     void anExportWithoutASubjectNeverAsksWhetherAnyoneExists() {
         manager.record(staff("Finans", StaffPermission.PAYMENT_READ), export(StaffExportList.JOB_ASSIGNMENTS, false),
                 null, null);

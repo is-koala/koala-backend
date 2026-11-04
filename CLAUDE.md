@@ -4123,7 +4123,8 @@ sıkı bir bütçe artık meşru işi durdurur.
 `subject*`, işveren `related*` (şirket işvereni ise `COMPANY`); süzgeçsiz liste konusuz. `COMPANY` konu olarak kabul
 edilir ama bugünkü dört sayfa onu kullanmaz. Bildirilen konu ve karşı taraf **var olmalı** — soft-delete edilmiş kişi
 dahil (`AuditSubjectService.exists` → `UserService`/`CompanyService.existsIncludingDeleted`, #307'nin varlık kuralı);
-yoksa **400 `AUDIT_EVENT_SUBJECT_NOT_FOUND`** ve satır yazılmaz. Çift kuralları DTO'da (`@AssertTrue`, §2ah):
+yoksa **400 `AUDIT_EVENT_SUBJECT_NOT_FOUND`** ve satır yazılmaz — bu kontrol izin kontrolünden sonra gelir,
+yani yalnız listenin iznini taşıyan personel görür. Çift kuralları DTO'da (`@AssertTrue`, §2ah):
 `subjectComplete`, `relatedSubjectComplete`, `relatedSubjectBesideASubject` → `VALIDATION_FAILED` + alan adı.
 
 **`piiIncluded` = dosya kişiler hakkında kişisel veri sütunu ya da serbest metin taşıyor mu.** Ad soyad, e-posta,
@@ -4170,7 +4171,12 @@ anındaki kaydı kapatamaz. Kanıt: sorgu parametreli 403/403/201 → tam üç `
 kontrolü `StaffAuditManager`'a konsaydı `StaffAuditManager → AuditSubjectService → … → StaffAuditService` döngüsü
 olurdu (§1: döngü çözülür, gizlenmez). Orkestratör hiçbir DAO'ya uzanmaz; satırı
 `StaffAuditService.recordClientEvent(record, requestBody, rowCount, piiIncluded)` yazar (aynı `newEntry` kurulumu,
-üstüne iki çekirdek alan). Sıra: aktör → bütçe → konu varlığı → izin → kayıt → (izin yoksa) 403.
+üstüne iki çekirdek alan). Sıra: aktör → bütçe → izin → konu varlığı → kayıt. **İzin konu varlığından önce:** izni olmayan personel
+her zaman 403 `AUDIT_EVENT_LIST_PERMISSION_MISSING` ve `allowed=false` satırı alır (§2av kural 1); varlık önce
+bakılsaydı uydurma bir konuyla gelen yetkisiz deneme 400 alıp **hiç satır bırakmazdı** ve yanıt farkı izni olmayan
+birine kişinin var olup olmadığını söylerdi. Ret satırına konu yalnız var ise yazılır (uydurma kimlik kimsenin
+çizelgesine düşmesin); yanıt iki durumda da aynı
+(`ClientAuditEventRulesTest.aStaffMemberWithoutTheListPermissionGetsTheSameRefusalAndRowWhetherOrNotTheSubjectExists`).
 
 **Satır:** `action = "export"` (`GET /admin/audit-log?action=export`), `permission` listenin izni, `resourceType`
 listenin denetim kaynak türü (`job-assignments`, `payouts`, `reports`, `disputes` — aynı listenin GET satırlarıyla

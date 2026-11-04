@@ -62,19 +62,36 @@ public class ClientAuditEventManager implements ClientAuditEventService {
             throw new TooManyRequestsException(AuditMessages.EVENT_TOO_MANY);
         }
 
+        StaffExportList list = event.getResourceType();
+        StaffPermission permission = list.getPermission();
         AuditSubjects subjects = subjectsOf(event);
+        if (!actor.holds(permission)) {
+            AdminAuditEntry denied = write(actor, event, false, exists(subjects) ? subjects : AuditSubjects.NONE,
+                    ip, userAgent);
+            log.warn("Client audit event refused, the caller lacks the list permission: staff={} list={} "
+                    + "permission={} entry={}", actor.staffId(), list, permission.getCode(), denied.getId());
+            throw new ForbiddenException(AuditMessages.EVENT_LIST_PERMISSION_MISSING);
+        }
+
         if (!exists(subjects)) {
             log.warn("Client audit event refused, the reported subject does not exist: staff={} list={}",
                     actor.staffId(), event.getResourceType());
             throw new ValidationException(AuditMessages.EVENT_SUBJECT_NOT_FOUND);
         }
 
+        AdminAuditEntry entry = write(actor, event, true, subjects, ip, userAgent);
+        boolean piiIncluded = Boolean.TRUE.equals(event.getPiiIncluded());
+        log.info("Client audit event recorded: staff={} action={} list={} rows={} pii={} entry={}",
+                actor.staffId(), event.getAction(), list, event.getRowCount(), piiIncluded, entry.getId());
+        return entry;
+    }
+
+    private AdminAuditEntry write(StaffPrincipal actor, ClientAuditEventDto event, boolean allowed,
+                                  AuditSubjects subjects, String ip, String userAgent) {
         StaffExportList list = event.getResourceType();
         StaffPermission permission = list.getPermission();
-        boolean allowed = actor.holds(permission);
         boolean piiIncluded = Boolean.TRUE.equals(event.getPiiIncluded());
-
-        AdminAuditEntry entry = staffAuditService.recordClientEvent(new StaffAuditRecord(
+        return staffAuditService.recordClientEvent(new StaffAuditRecord(
                 actor.staffId(),
                 actor.displayName() == null || actor.displayName().isBlank() ? actor.email() : actor.displayName(),
                 permission.getCode(),
@@ -87,16 +104,6 @@ public class ClientAuditEventManager implements ClientAuditEventService {
                 ip,
                 userAgent,
                 subjects), objectMapper.writeValueAsString(event), event.getRowCount(), piiIncluded);
-
-        if (!allowed) {
-            log.warn("Client audit event refused, the caller lacks the list permission: staff={} list={} "
-                    + "permission={} entry={}", actor.staffId(), list, permission.getCode(), entry.getId());
-            throw new ForbiddenException(AuditMessages.EVENT_LIST_PERMISSION_MISSING);
-        }
-
-        log.info("Client audit event recorded: staff={} action={} list={} rows={} pii={} entry={}",
-                actor.staffId(), event.getAction(), list, event.getRowCount(), piiIncluded, entry.getId());
-        return entry;
     }
 
     private boolean exists(AuditSubjects subjects) {
