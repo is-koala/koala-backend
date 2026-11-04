@@ -3,6 +3,7 @@ package com.exskylab.koala.webAPI;
 import com.exskylab.koala.core.security.RequiresPermission;
 import com.exskylab.koala.entities.StaffExportList;
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
+import com.exskylab.koala.support.TestLatches;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -333,7 +334,8 @@ class ClientAuditEventIT extends AbstractStaffIntegrationTest {
                 .andExpect(jsonPath("$.details[0].field").value("filters"));
         long elapsedMillis = (System.nanoTime() - started) / 1_000_000;
 
-        assertTrue(elapsedMillis < 3_000, "15 bin karakterlik süzgeç özeti " + elapsedMillis + " ms sürdü");
+        assertTrue(elapsedMillis < TestLatches.progressTimeout().toMillis(),
+                "15 bin karakterlik süzgeç özeti " + elapsedMillis + " ms sürdü");
         assertEquals(0, exportRows().size());
     }
 

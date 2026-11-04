@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.dtos;
 
+import com.exskylab.koala.support.TestLatches;
 import com.exskylab.koala.core.dtos.availability.request.SaveAvailabilityDto;
 import com.exskylab.koala.core.dtos.address.request.AddressComponentsRequestDto;
 import com.exskylab.koala.core.dtos.address.request.AddressPositionRequestDto;
@@ -530,6 +531,7 @@ class RequestValidationTest {
         long elapsedMillis = (System.nanoTime() - started) / 1_000_000;
 
         assertEquals(Set.of("{audit.event.filters.too.long}"), messages);
-        assertTrue(elapsedMillis < 1_000, "200 bin karakterlik süzgeç özeti " + elapsedMillis + " ms sürdü");
+        assertTrue(elapsedMillis < TestLatches.progressTimeout().toMillis(),
+                "200 bin karakterlik süzgeç özeti " + elapsedMillis + " ms sürdü");
     }
 }

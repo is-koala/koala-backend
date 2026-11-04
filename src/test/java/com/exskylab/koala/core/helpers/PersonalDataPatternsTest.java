@@ -1,11 +1,11 @@
 package com.exskylab.koala.core.helpers;
 
+import com.exskylab.koala.support.TestLatches;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import java.time.Duration;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -91,7 +91,7 @@ class PersonalDataPatternsTest {
                 "123456789a".repeat(ONE_MEGABYTE / 10));
 
         for (String input : adversarial) {
-            assertTimeoutPreemptively(Duration.ofSeconds(2),
+            assertTimeoutPreemptively(TestLatches.progressTimeout(),
                     () -> PersonalDataPatterns.containsPersonalData(input),
                     "Doğrusal olmayan tarama: " + input.substring(0, 12) + "…");
         }

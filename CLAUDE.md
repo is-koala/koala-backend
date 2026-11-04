@@ -4199,7 +4199,8 @@ geri izliyordu (O(n²); 200 bin karakter dakikalar); e-posta artık elle yazılm
 solda bir karakter, sağda ayırıcıya kadar noktalı alan), diğer iki desen sınırlı (`{10}`/`{9}` — `find` için eşik
 yeter) ve iyelikli niceleyici taşıyor. Üç katman: (a) DTO `filters.length() > 1000` ise taramadan dönüp yalnız
 `@Size`'ın raporlamasına bırakır, (b) tarama doğrusal (`PersonalDataPatternsTest` 1 MB'lık on bir düşmanca girdiyi
-2 sn sınırında koşuyor), (c) `RateLimitFilter` bu ucun JSON gövdesini **16 KiB**'da keser → 413
+`TestLatches.progressTimeout()` sınırında koşuyor — yerelde 5 s, kapıda 30 s; eski desen dakikalar sürdüğü için sınır
+yük altında da ayırt edici, §3), (c) `RateLimitFilter` bu ucun JSON gövdesini **16 KiB**'da keser → 413
 `REQUEST_BODY_TOO_LARGE` (`prepareAuthRequest` kalıbı, `CachedBodyRequest`; kesim yalnız bu uçta — `/admin/**`'ın
 geri kalanında uzun gövdeli meşru yazmalar var, kör bir sınır onları kırardı). **Bilinen yanlış pozitif:** kimlik
 ya da tarih olmayan 10+ rakamlık her sayı reddedilir — epoch milisaniye (`1727740800000`), uzun sipariş numarası;
