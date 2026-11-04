@@ -135,12 +135,6 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
     boolean existsByJobIdAndWorkerIdAndStatusIn(UUID jobId, UUID workerId,
                                                  java.util.Collection<AssignmentStatus> statuses);
 
-    @Query("select distinct a.job.id from JobAssignment a where a.job.id in :jobIds "
-            + "and a.worker.id = :workerId and a.status in :statuses")
-    List<UUID> findVisibleAddressJobIds(@Param("jobIds") java.util.Collection<UUID> jobIds,
-                                        @Param("workerId") UUID workerId,
-                                        @Param("statuses") java.util.Collection<AssignmentStatus> statuses);
-
     long countByJobCreatorIdAndStatus(UUID creatorId, AssignmentStatus status);
 
     @Query("""

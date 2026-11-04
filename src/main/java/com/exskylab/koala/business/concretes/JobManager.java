@@ -256,7 +256,7 @@ public class JobManager implements JobService {
         job.setDuties(companiesCompanyIdJobsPostRequestDto.getDuties());
         job.setInsuranceRequired(companiesCompanyIdJobsPostRequestDto.getInsuranceRequired());
         job.setAddress(address);
-        job.setAddressPublic(companiesCompanyIdJobsPostRequestDto.isAddressPublic());
+        job.setAddressPublic(!Boolean.FALSE.equals(companiesCompanyIdJobsPostRequestDto.getAddressPublic()));
         job.setType(type);
         job.setStartDateTime(companiesCompanyIdJobsPostRequestDto.getStartDateTime());
         job.setEndDateTime(companiesCompanyIdJobsPostRequestDto.getEndDateTime());
@@ -554,12 +554,10 @@ public class JobManager implements JobService {
         Pageable pageable = pageableSanitizer.sanitize(requested, sortableFields, DEFAULT_SORT);
 
         Page<Job> jobs = query.apply(pageable);
-        Set<UUID> assignedJobIds =
-                assignedJobIds(jobs.getContent().stream().map(Job::getId).toList(), viewerId);
 
         return enrich(PageDto.of(jobs, job -> {
             JobSummaryDto summary = jobMapper.toJobSummaryDto(job, viewOf.apply(job));
-            addressVisibility.protect(job, summary, viewerId, assignedJobIds.contains(job.getId()));
+            addressVisibility.protectListing(job, summary, viewerId);
             return summary;
         }));
     }
@@ -633,12 +631,6 @@ public class JobManager implements JobService {
     private boolean hasAddressAccess(UUID jobId, UUID viewerId) {
         return viewerId != null && jobAssignmentDao.existsByJobIdAndWorkerIdAndStatusIn(
                 jobId, viewerId, ADDRESS_VISIBLE_ASSIGNMENT_STATUSES);
-    }
-
-    private Set<UUID> assignedJobIds(List<UUID> jobIds, UUID viewerId) {
-        return viewerId == null || jobIds.isEmpty() ? Set.of()
-                : Set.copyOf(jobAssignmentDao.findVisibleAddressJobIds(
-                        jobIds, viewerId, ADDRESS_VISIBLE_ASSIGNMENT_STATUSES));
     }
 
     @Override

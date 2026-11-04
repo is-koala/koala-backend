@@ -37,12 +37,7 @@ class RequestDtoPrimitiveContractTest {
             "private\\s+(boolean|int|long|double|float)\\s+(\\w+)\\s*;");
     private static final ObjectMapper JSON = new ObjectMapper();
 
-    /**
-     * Omitted JSON stays {@code false} for legacy job-create clients.
-     * {@link JobRequestPrimitiveContractTest} locks that default.
-     */
-    private static final Set<String> DOCUMENTED_PRIMITIVE_DEFAULTS = Set.of(
-            "CreateCompanyJobDto.addressPublic");
+    private static final Set<String> DOCUMENTED_PRIMITIVE_DEFAULTS = Set.of();
 
     private final Validator validator;
 

@@ -46,7 +46,6 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -211,19 +210,16 @@ class CompanyJobListingRulesTest {
     }
 
     @Test
-    void aContactAssignedToTheJobSeesTheExactAddressHereToo() {
+    void anAssignmentDoesNotRevealAHiddenAddressOnAListing() {
         Job job = companyJob(false);
         viewerIsAContact(secondContactId);
         when(jobDao.findAllByCompanyId(eq(companyId), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(job)));
-        when(jobAssignmentDao.findVisibleAddressJobIds(anyCollection(), eq(secondContactId), anyCollection()))
-                .thenReturn(List.of(job.getId()));
 
         JobSummaryDto summary = firstListedJob();
 
-        assertEquals(AddressPrecision.EXACT, summary.getAddressPrecision());
-        assertEquals(40.987654, summary.getLatitude());
-        assertEquals(29.034567, summary.getLongitude());
+        assertEquals(AddressPrecision.APPROXIMATE, summary.getAddressPrecision());
+        assertNull(summary.getLatitude(), "Liste kurali atamaya bakmaz, protect koordinata dokunmamali");
     }
 
     private JobSummaryDto firstListedJob() {

@@ -73,7 +73,10 @@ public class JobSummaryDto {
 
     private Double longitude;
 
-    @Schema(description = "Harita koordinatının yaklaşık mı kesin mi olduğunu belirtir.")
+    @Schema(description = "Harita koordinatının yaklaşık mı kesin mi olduğunu belirtir. Arama ve şirket ilan listesinde EXACT "
+            + "yalnız adresi herkese açık şirket ilanında ya da görüntüleyen ilan sahibiyse döner; etkin atama burada "
+            + "kesinliği yükseltmez. Atama, başvuru ve birleşik iş akışı gibi kişisel yüzeylerde etkin atamalı işçi de "
+            + "EXACT alır.")
     private AddressPrecision addressPrecision;
 
     @Schema(types = {"number", "null"}, format = "double",
