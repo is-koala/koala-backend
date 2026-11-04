@@ -20,7 +20,7 @@ import java.util.UUID;
 
 public interface AdminDetailService {
 
-    AdminAssignmentDetailDto getAssignmentDetail(UUID assignmentId);
+    AdminAssignmentDetailDto getAssignmentDetail(StaffPrincipal actor, UUID assignmentId);
 
     List<AdminPaymentDto> getPaymentsForAssignment(UUID assignmentId);
 

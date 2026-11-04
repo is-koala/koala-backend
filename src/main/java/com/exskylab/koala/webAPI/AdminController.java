@@ -161,7 +161,10 @@ public class AdminController {
                     + "plausibility bayrakları), cancellation (iptal eden taraf ve kullanıcı, gerekçe, bildirim süresi, "
                     + "kesinti ve iade tutarı, refundId; iptal yoksa null) ve reviews (yazar, konu, puan, yorum) ile "
                     + "createdAt, expectedCompletionDateTime, employerType ve notes taşınır. Emanetteki tutar finansal "
-                    + "veridir; uç payment.read ile korunur.")
+                    + "veridir; uç payment.read ile korunur. Konumlar kişisel veridir: personel user.read_pii "
+                    + "taşımıyorsa workSessions[].checkIn/checkOut enlem-boylamı ve timeline[] biniş satırlarının "
+                    + "latitude/longitude alanı null döner; durağa uzaklık (distanceToStopMeters) ve yön (direction) "
+                    + "türetilmiş, kişisel olmayan alanlar olarak kalır.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Atama detayı döndürüldü"),
             @ApiResponse(responseCode = "404", description = "Atama bulunamadı",
@@ -169,9 +172,10 @@ public class AdminController {
     })
     @RequiresPermission(StaffPermission.PAYMENT_READ)
     @GetMapping("/job-assignments/{assignmentId}")
-    public ResponseEntity<SuccessDataResult<AdminAssignmentDetailDto>> assignment(@PathVariable UUID assignmentId) {
+    public ResponseEntity<SuccessDataResult<AdminAssignmentDetailDto>> assignment(
+            @PathVariable UUID assignmentId, @AuthenticationPrincipal StaffPrincipal actor) {
         return ResponseEntity.ok(new SuccessDataResult<>(
-                adminDetailService.getAssignmentDetail(assignmentId),
+                adminDetailService.getAssignmentDetail(actor, assignmentId),
                 AdminMessages.ASSIGNMENT_DETAIL, HttpStatus.OK));
     }
 

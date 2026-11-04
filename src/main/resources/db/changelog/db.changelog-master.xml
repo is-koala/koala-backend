@@ -104,5 +104,6 @@
     <include file="db/changelog/2026/09/15-07-boarding-events.xml"/>
     <include file="db/changelog/2026/10/03-01-audit-subject.xml"/>
     <include file="db/changelog/2026/10/03-02-audit-client-event.xml"/>
+    <include file="db/changelog/2026/10/03-03-boarding-event-direction.xml"/>
     <include file="db/changelog/2026/10/03-04-dispute-evidence-metadata-scrub.xml"/>
 </databaseChangeLog>

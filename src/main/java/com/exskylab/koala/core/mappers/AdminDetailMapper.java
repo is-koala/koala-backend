@@ -7,6 +7,7 @@ import com.exskylab.koala.core.dtos.jobAssignment.response.AdminApplicationDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.AdminAssignmentDetailDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.AdminCancellationDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.AdminTimelineEventDto;
+import com.exskylab.koala.core.dtos.timesheet.response.WorkSessionDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.AdminReviewDto;
 import com.exskylab.koala.core.dtos.payment.response.AdminPaymentDto;
 import com.exskylab.koala.core.dtos.transport.response.AssignmentTransportDto;
@@ -38,7 +39,6 @@ import com.exskylab.koala.entities.Review;
 import com.exskylab.koala.entities.SettlementTask;
 import com.exskylab.koala.entities.User;
 import com.exskylab.koala.entities.UserBadge;
-import com.exskylab.koala.entities.WorkSession;
 import org.mapstruct.InjectionStrategy;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -48,7 +48,7 @@ import java.util.UUID;
 
 @Mapper(componentModel = "spring",
         uses = {UserMapper.class, PricingDtoMapper.class, AddressMapper.class, CompanyMapper.class,
-                GalleryMapper.class, JobCategoryMapper.class, TimesheetMapper.class, BadgeMapper.class,
+                GalleryMapper.class, JobCategoryMapper.class, BadgeMapper.class,
                 MediaUrlResolver.class},
         injectionStrategy = InjectionStrategy.CONSTRUCTOR,
         imports = {LogMasks.class, PlainDecimalStringConverter.class})
@@ -211,7 +211,7 @@ public interface AdminDetailMapper {
     @Mapping(target = "timeline", source = "timeline")
     @Mapping(target = "createdAt", source = "assignment.createdAt")
     @Mapping(target = "updatedAt", source = "assignment.updatedAt")
-    AdminAssignmentDetailDto toAdminAssignmentDetailDto(JobAssignment assignment, List<WorkSession> workSessions,
+    AdminAssignmentDetailDto toAdminAssignmentDetailDto(JobAssignment assignment, List<WorkSessionDto> workSessions,
                                                         Cancellation cancellation, List<Review> reviews,
                                                         List<Payment> payments, Payout payout,
                                                         List<Dispute> disputes, List<Report> reports,

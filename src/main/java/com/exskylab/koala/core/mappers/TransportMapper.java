@@ -98,6 +98,7 @@ public interface TransportMapper {
     AdminTimelineEventDto toSeatTimelineEvent(SeatAssignment seat);
 
     @Mapping(target = "type", constant = "BOARDING")
+    @Mapping(target = "direction", source = "event.direction")
     @Mapping(target = "at", source = "event.occurredAt")
     @Mapping(target = "id", source = "event.id")
     @Mapping(target = "kind", source = "event.kind")

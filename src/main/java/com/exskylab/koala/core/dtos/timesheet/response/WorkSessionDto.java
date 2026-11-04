@@ -18,7 +18,22 @@ public record WorkSessionDto(UUID id, UUID jobAssignmentId, Instant checkInAt, I
                              @ArraySchema(schema = @Schema(implementation = String.class,
                                      allowableValues = {"DEVICE_TIME_IMPLAUSIBLE", "OUTSIDE_JOB_WINDOW", "NON_MONOTONIC"}))
                              Set<TimesheetPlausibilityFlag> checkOutPlausibilityFlags,
-                             BigDecimal checkInLatitude, BigDecimal checkInLongitude,
-                             BigDecimal checkOutLatitude, BigDecimal checkOutLongitude,
+                             @Schema(types = {"number", "null"}, description = LOCATION)
+                             BigDecimal checkInLatitude,
+                             @Schema(types = {"number", "null"}, description = LOCATION)
+                             BigDecimal checkInLongitude,
+                             @Schema(types = {"number", "null"}, description = LOCATION)
+                             BigDecimal checkOutLatitude,
+                             @Schema(types = {"number", "null"}, description = LOCATION)
+                             BigDecimal checkOutLongitude,
                              Integer minutes) {
+
+    private static final String LOCATION = "Giriş/çıkış anındaki cihaz konumu (istemci göndermediyse null). Personel "
+            + "görünümünde (GET /admin/job-assignments/{id}) personel user.read_pii taşımıyorsa null.";
+
+    public WorkSessionDto withoutLocation() {
+        return new WorkSessionDto(id, jobAssignmentId, checkInAt, checkOutAt, checkInClientEventId, checkInCapturedAt,
+                checkInReceivedAt, checkInPlausibilityFlags, checkOutClientEventId, checkOutCapturedAt,
+                checkOutReceivedAt, checkOutPlausibilityFlags, null, null, null, null, minutes);
+    }
 }

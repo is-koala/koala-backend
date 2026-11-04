@@ -636,4 +636,17 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
                         .value(containsString("NO_SHOW")))
                 .andExpect(jsonPath("$.components.schemas.ShuttleBoardingDto.properties.token").exists());
     }
+
+    @Test
+    void theAssignmentDetailDocumentsThatLocationsNeedThePiiPermission() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath("$.paths['/admin/job-assignments/{assignmentId}'].get.description")
+                        .value(containsString("user.read_pii")))
+                .andExpect(jsonPath("$.components.schemas.AdminTimelineEventDto.properties.latitude.description")
+                        .value(containsString("user.read_pii")))
+                .andExpect(jsonPath("$.components.schemas.AdminTimelineEventDto.properties.direction.enum")
+                        .value(containsInAnyOrder("OUTBOUND", "RETURN")))
+                .andExpect(jsonPath("$.components.schemas.WorkSessionDto.properties.checkInLatitude.description")
+                        .value(containsString("user.read_pii")));
+    }
 }
