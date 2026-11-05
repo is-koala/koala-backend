@@ -1,9 +1,8 @@
 package com.exskylab.koala.webAPI;
 
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
+import com.exskylab.koala.support.QueryCounter;
 import jakarta.persistence.EntityManagerFactory;
-import org.hibernate.SessionFactory;
-import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -494,29 +493,27 @@ class AuditSubjectIT extends AbstractStaffIntegrationTest {
     @Test
     void theTimelineIsReadWithoutAQueryPerRow() throws Exception {
         insertAuditRow(workerId);
-        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
-        boolean wasEnabled = statistics.isStatisticsEnabled();
-        statistics.setStatisticsEnabled(true);
+        QueryCounter queries = QueryCounter.start(entityManagerFactory);
         try {
-            statistics.clear();
+            queries.clear();
             perform(get("/admin/audit-log").param("subjectId", workerId.toString()))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.content", hasSize(1)));
-            long statementsForOne = statistics.getPrepareStatementCount();
+            long statementsForOne = queries.getPrepareStatementCount();
 
             jdbc.update("delete from admin_audit_entries where action = 'audit.read'");
             insertAuditRow(workerId);
             insertAuditRow(workerId);
 
-            statistics.clear();
+            queries.clear();
             perform(get("/admin/audit-log").param("subjectId", workerId.toString()))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.content", hasSize(3)));
 
-            assertEquals(statementsForOne, statistics.getPrepareStatementCount(),
+            assertEquals(statementsForOne, queries.getPrepareStatementCount(),
                     "konuya göre denetim listesi satır başına sorgu atıyor (N+1)");
         } finally {
-            statistics.setStatisticsEnabled(wasEnabled);
+            queries.close();
         }
     }
 

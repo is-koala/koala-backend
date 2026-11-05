@@ -10,6 +10,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class QueryCounterUsageTest {
@@ -18,6 +19,10 @@ class QueryCounterUsageTest {
 
     private static final Set<String> MAY_READ_GLOBAL_STATISTICS = Set.of("QueryCounter.java", "QueryCounterIT.java",
             "QueryCounterUsageTest.java");
+
+    static boolean readsGlobalStatistics(String source) {
+        return source.contains("getStatistics()") || source.contains("import org.hibernate.stat.");
+    }
 
     private static List<Path> testSources() throws IOException {
         try (Stream<Path> files = Files.walk(TEST_SOURCES)) {
@@ -29,10 +34,7 @@ class QueryCounterUsageTest {
     void noTestCountsQueriesWithTheSessionFactoryWideStatistics() throws IOException {
         List<String> offenders = testSources().stream()
                 .filter(path -> !MAY_READ_GLOBAL_STATISTICS.contains(path.getFileName().toString()))
-                .filter(path -> {
-                    String source = read(path);
-                    return source.contains("getStatistics()") || source.contains("import org.hibernate.stat.");
-                })
+                .filter(path -> readsGlobalStatistics(read(path)))
                 .map(path -> path.getFileName().toString())
                 .toList();
 
@@ -42,12 +44,40 @@ class QueryCounterUsageTest {
     }
 
     @Test
+    void theDetectorFlagsTheGlobalCounterReadThroughTheSessionFactory() {
+        assertTrue(readsGlobalStatistics("""
+                long before = entityManagerFactory.unwrap(SessionFactory.class).getStatistics()
+                        .getPrepareStatementCount();
+                """));
+    }
+
+    @Test
+    void theDetectorFlagsAnImportOfTheHibernateStatisticsPackage() {
+        assertTrue(readsGlobalStatistics("""
+                import org.hibernate.stat.Statistics;
+
+                class SomeIT {
+                }
+                """));
+    }
+
+    @Test
+    void theDetectorLeavesAThreadScopedMeasurementAlone() {
+        assertFalse(readsGlobalStatistics("""
+                import com.exskylab.koala.support.QueryCounter;
+
+                QueryCounter queries = QueryCounter.start(entityManagerFactory);
+                long statements = queries.getPrepareStatementCount();
+                """));
+    }
+
+    @Test
     void theScanSeesTheQueryCountingTests() throws IOException {
         long users = testSources().stream()
                 .filter(path -> read(path).contains("QueryCounter.start("))
                 .count();
 
-        assertTrue(users >= 11, "QueryCounter kullanan dosya sayısı " + users
+        assertTrue(users >= 12, "QueryCounter kullanan dosya sayısı " + users
                 + "; tarama yanlış dizinde koşuyorsa yukarıdaki kural boşa geçer");
     }
 
