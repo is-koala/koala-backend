@@ -38,6 +38,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ObjectNode;
 import tools.jackson.databind.ObjectMapper;
 
 import javax.sql.DataSource;
@@ -237,6 +238,8 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
                     + "(select id from account_deletion_requests where user_id = ?)", id);
             jdbc.update("delete from account_deletion_requests where user_id = ?", id);
         }
+        jdbc.update("delete from work_sessions where job_assignment_id in (select id from job_assignments "
+                + "where job_id = ?)", jobId);
         jdbc.update("delete from job_assignments where job_id = ?", jobId);
         jdbc.update("delete from jobs where id = ?", jobId);
         jdbc.update("delete from job_categories where id = ?", categoryId);
@@ -874,16 +877,17 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
         Instant capturedAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
         String eventId = data(scan(workerId, shuttleA, shuttleToken(shuttleA, false), capturedAt, NEAR_LAT, NEAR_LNG,
                 UUID.randomUUID()).andExpect(status().isOk())).get("id").asText();
-        String token = staffTokenFor("boarding-staff-" + UUID.randomUUID() + "@iskoala.com", "Analist",
-                "FINANCE_ANALYST");
+        String token = staffTokenFor("boarding-staff-" + UUID.randomUUID() + "@iskoala.com", "Sahip", "OWNER");
 
         mockMvc.perform(get("/admin/job-assignments/{id}", assignmentId).header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.timeline", hasSize(2)))
                 .andExpect(jsonPath("$.data.timeline[0].type").value("SEAT"))
                 .andExpect(jsonPath("$.data.timeline[0].seatAssignmentId").value(seatId.toString()))
+                .andExpect(jsonPath("$.data.timeline[0].direction").value("OUTBOUND"))
                 .andExpect(jsonPath("$.data.timeline[1].type").value("BOARDING"))
-                .andExpect(jsonPath("$.data.timeline[1].id").value(eventId));
+                .andExpect(jsonPath("$.data.timeline[1].id").value(eventId))
+                .andExpect(jsonPath("$.data.timeline[1].direction").value("OUTBOUND"));
 
         putPlan(employerId, "{\"outboundMethod\":\"SELF\",\"returnMethod\":\"NONE\",\"shuttles\":[]}")
                 .andExpect(status().isOk());
@@ -901,6 +905,10 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
         assertEquals("WORKER", boarding.get("recorderRole").asText());
         assertEquals(shuttleA.toString(), boarding.get("shuttleId").asText());
         assertEquals(seatId.toString(), boarding.get("seatAssignmentId").asText());
+        assertEquals("OUTBOUND", boarding.get("direction").asText(),
+                "the seat is gone, so the direction has to come from the event's own snapshot");
+        assertEquals("OUTBOUND", jdbc.queryForObject("select direction from boarding_events where id = ?::uuid",
+                String.class, eventId));
         assertEquals("Kadıköy İskele", boarding.get("stopLabel").asText());
         assertEquals(departure, Instant.parse(boarding.get("stopScheduledAt").asText()));
         assertEquals(capturedAt, Instant.parse(boarding.get("capturedAt").asText()));
@@ -909,6 +917,110 @@ class TransportBoardingIT extends AbstractStaffIntegrationTest {
         assertEquals(new BigDecimal(NEAR_LNG), boarding.get("longitude").decimalValue().setScale(6));
         int meters = boarding.get("distanceToStopMeters").asInt();
         assertTrue(meters > 5 && meters < 30, "about 14 m from the pin, was " + meters);
+    }
+
+    @Test
+    void staffWithoutThePiiPermissionGetTheSameAssignmentDetailWithEveryLocationBlanked() throws Exception {
+        String owner = staffTokenFor("boarding-staff-" + UUID.randomUUID() + "@iskoala.com", "Sahip", "OWNER");
+        String analyst = staffTokenFor("boarding-staff-" + UUID.randomUUID() + "@iskoala.com", "Analist",
+                "FINANCE_ANALYST");
+        mockMvc.perform(get("/admin/job-assignments/{id}", assignmentId).header("Authorization", "Bearer " + owner))
+                .andExpect(status().isOk());
+
+        pickSeat(workerId, assignmentId, shuttleA);
+        scan(workerId, shuttleA, shuttleToken(shuttleA, false), Instant.now().truncatedTo(ChronoUnit.MILLIS),
+                NEAR_LAT, NEAR_LNG, UUID.randomUUID()).andExpect(status().isOk());
+        UUID located = UUID.randomUUID();
+        UUID checkInOnly = UUID.randomUUID();
+        jdbc.update("""
+                insert into work_sessions (id, created_at, is_deleted, job_assignment_id, check_in_at, check_out_at,
+                                           check_in_latitude, check_in_longitude, check_out_latitude,
+                                           check_out_longitude, check_in_plausibility_flags,
+                                           check_out_plausibility_flags, minutes)
+                values (?, now(), false, ?, now() - interval '9 hours', now() - interval '1 hour',
+                        41.048100, 29.009100, 41.060000, 29.030000, '', '', 480)
+                """, located, assignmentId);
+        jdbc.update("""
+                insert into work_sessions (id, created_at, is_deleted, job_assignment_id, check_in_at, check_out_at,
+                                           check_in_latitude, check_in_longitude, check_in_plausibility_flags,
+                                           check_out_plausibility_flags, minutes)
+                values (?, now(), false, ?, now() - interval '30 hours', now() - interval '26 hours',
+                        41.048100, 29.009100, '', '', 240)
+                """, checkInOnly, assignmentId);
+
+        JsonNode permitted = data(mockMvc.perform(get("/admin/job-assignments/{id}", assignmentId)
+                .header("Authorization", "Bearer " + owner)).andExpect(status().isOk()));
+        JsonNode withoutPii = data(mockMvc.perform(get("/admin/job-assignments/{id}", assignmentId)
+                .header("Authorization", "Bearer " + analyst)).andExpect(status().isOk()));
+
+        JsonNode boarding = boardingOf(permitted);
+        JsonNode session = sessionOf(permitted, located);
+        assertEquals(new BigDecimal(NEAR_LAT), boarding.get("latitude").decimalValue().setScale(6));
+        assertEquals(new BigDecimal(FAR_LNG), session.get("checkOutLongitude").decimalValue().setScale(6));
+        for (JsonNode event : permitted.get("timeline")) {
+            assertFalse(event.get("locationWithheld").asBoolean(), "nothing is withheld when permitted: " + event);
+        }
+        for (JsonNode row : permitted.get("workSessions")) {
+            assertFalse(row.get("checkInLocationWithheld").asBoolean(), "nothing is withheld when permitted: " + row);
+            assertFalse(row.get("checkOutLocationWithheld").asBoolean(), "nothing is withheld when permitted: " + row);
+            for (String flags : List.of("checkInPlausibilityFlags", "checkOutPlausibilityFlags")) {
+                assertTrue(row.get(flags).isArray() && row.get(flags).isEmpty(),
+                        "an empty flag column reads back as an empty set: " + row);
+            }
+        }
+        assertTrue(sessionOf(permitted, checkInOnly).get("checkOutLatitude").isNull());
+
+        JsonNode blankedBoarding = boardingOf(withoutPii);
+        JsonNode blankedSession = sessionOf(withoutPii, located);
+        for (String field : List.of("latitude", "longitude")) {
+            assertTrue(blankedBoarding.get(field).isNull(), "boarding " + field + " leaked: " + blankedBoarding);
+        }
+        for (String field : List.of("checkInLatitude", "checkInLongitude", "checkOutLatitude", "checkOutLongitude")) {
+            assertTrue(blankedSession.get(field).isNull(), "work session " + field + " leaked: " + blankedSession);
+        }
+        assertEquals(boarding.get("distanceToStopMeters"), blankedBoarding.get("distanceToStopMeters"),
+                "the distance to the stop is derived and not a location, so it stays");
+        assertFalse(blankedBoarding.get("distanceToStopMeters").isNull());
+
+        ObjectNode expected = (ObjectNode) permitted.deepCopy();
+        ((ObjectNode) boardingOf(expected)).putNull("latitude").putNull("longitude").put("locationWithheld", true);
+        ((ObjectNode) sessionOf(expected, located)).putNull("checkInLatitude").putNull("checkInLongitude")
+                .putNull("checkOutLatitude").putNull("checkOutLongitude")
+                .put("checkInLocationWithheld", true).put("checkOutLocationWithheld", true);
+        ((ObjectNode) sessionOf(expected, checkInOnly)).putNull("checkInLatitude").putNull("checkInLongitude")
+                .put("checkInLocationWithheld", true);
+        assertEquals(expected, withoutPii, "only the coordinates and the withheld flags may differ, and a flag is "
+                + "raised only where a coordinate was really there (the SEAT row and the missing check-out stay "
+                + "false)");
+
+        List<Map<String, Object>> audit = jdbc.queryForList("select permission, sensitivity from admin_audit_entries "
+                + "where resource_id = ? order by occurred_at", assignmentId.toString());
+        assertEquals(List.of(
+                        Map.of("permission", "payment.read", "sensitivity", "FINANCIAL"),
+                        Map.of("permission", "user.read_pii", "sensitivity", "FINANCIAL"),
+                        Map.of("permission", "payment.read", "sensitivity", "FINANCIAL")),
+                audit.stream().map(row -> Map.of("permission", row.get("permission"),
+                        "sensitivity", row.get("sensitivity"))).toList(),
+                "only the read that returned coordinates is audited as user.read_pii, and it keeps the "
+                        + "financial retention of payment.read");
+    }
+
+    private static JsonNode sessionOf(JsonNode detail, UUID sessionId) {
+        for (JsonNode session : detail.get("workSessions")) {
+            if (sessionId.toString().equals(session.get("id").asText())) {
+                return session;
+            }
+        }
+        throw new AssertionError("no work session " + sessionId + " in " + detail.get("workSessions"));
+    }
+
+    private static JsonNode boardingOf(JsonNode detail) {
+        for (JsonNode event : detail.get("timeline")) {
+            if ("BOARDING".equals(event.get("type").asText())) {
+                return event;
+            }
+        }
+        throw new AssertionError("no boarding event in " + detail.get("timeline"));
     }
 
     @Test

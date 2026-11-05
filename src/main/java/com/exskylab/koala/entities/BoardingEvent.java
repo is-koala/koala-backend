@@ -60,6 +60,10 @@ public class BoardingEvent extends BaseEntity {
     @Column(name = "stop_label", length = 120, updatable = false)
     private String stopLabel;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "direction", length = 16, updatable = false)
+    private TransportDirection direction;
+
     @Column(name = "stop_scheduled_at", nullable = false, updatable = false)
     private Instant stopScheduledAt;
 

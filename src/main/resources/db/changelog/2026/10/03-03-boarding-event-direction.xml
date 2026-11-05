@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-10-03-03-01-boarding-event-direction" author="koala">
+        <addColumn tableName="boarding_events">
+            <column name="direction" type="VARCHAR(16)"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="boarding_events" columnName="direction"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-10-03-03-02-boarding-event-direction-backfill" author="koala">
+        <sql>
+            UPDATE boarding_events b
+            SET direction = s.direction
+            FROM seat_assignments s
+            WHERE b.direction IS NULL
+              AND s.id = b.seat_assignment_id;
+
+            UPDATE boarding_events b
+            SET direction = sh.direction
+            FROM shuttles sh
+            WHERE b.direction IS NULL
+              AND sh.id = b.shuttle_id;
+        </sql>
+        <rollback/>
+    </changeSet>
+
+</databaseChangeLog>

@@ -28,6 +28,7 @@ import com.exskylab.koala.core.dtos.legal.response.AccountDeletionDto;
 import com.exskylab.koala.core.dtos.legal.response.DeletionBlockerDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.AdminAssignmentDetailDto;
 import com.exskylab.koala.core.dtos.jobAssignment.response.AdminTimelineEventDto;
+import com.exskylab.koala.core.dtos.timesheet.response.WorkSessionDto;
 import com.exskylab.koala.core.dtos.payment.response.AdminPaymentDto;
 import com.exskylab.koala.core.dtos.transport.response.AssignmentTransportDto;
 import com.exskylab.koala.core.dtos.payment.response.AdminRefundDto;
@@ -35,6 +36,8 @@ import com.exskylab.koala.core.dtos.user.response.AdminUserCountsDto;
 import com.exskylab.koala.core.dtos.user.response.AdminUserDetailDto;
 import com.exskylab.koala.core.mappers.AdminDetailMapper;
 import com.exskylab.koala.core.mappers.BankAccountMapper;
+import com.exskylab.koala.core.mappers.LocationPrivacyMapper;
+import com.exskylab.koala.core.mappers.TimesheetMapper;
 import com.exskylab.koala.core.mappers.CompanyMapper;
 import com.exskylab.koala.core.mappers.LegalMapper;
 import com.exskylab.koala.core.helpers.MessageResolver;
@@ -107,6 +110,8 @@ public class AdminDetailManager implements AdminDetailService {
     private final CompanyMapper companyMapper;
     private final LegalMapper legalMapper;
     private final BankAccountMapper bankAccountMapper;
+    private final TimesheetMapper timesheetMapper;
+    private final LocationPrivacyMapper locationPrivacyMapper;
     private final MessageResolver messageResolver;
 
     public AdminDetailManager(JobAssignmentService jobAssignmentService, PaymentService paymentService,
@@ -121,7 +126,8 @@ public class AdminDetailManager implements AdminDetailService {
                               StaffAccountService staffAccountService, BankAccountService bankAccountService,
                               SessionService sessionService, AdminDetailMapper adminDetailMapper,
                               CompanyMapper companyMapper, LegalMapper legalMapper,
-                              BankAccountMapper bankAccountMapper, MessageResolver messageResolver) {
+                              BankAccountMapper bankAccountMapper, TimesheetMapper timesheetMapper,
+                              LocationPrivacyMapper locationPrivacyMapper, MessageResolver messageResolver) {
         this.jobAssignmentService = jobAssignmentService;
         this.paymentService = paymentService;
         this.payoutService = payoutService;
@@ -146,6 +152,8 @@ public class AdminDetailManager implements AdminDetailService {
         this.companyMapper = companyMapper;
         this.legalMapper = legalMapper;
         this.bankAccountMapper = bankAccountMapper;
+        this.timesheetMapper = timesheetMapper;
+        this.locationPrivacyMapper = locationPrivacyMapper;
         this.messageResolver = messageResolver;
     }
 
@@ -209,7 +217,7 @@ public class AdminDetailManager implements AdminDetailService {
     @Transactional(readOnly = true)
     public AdminUserDetailDto getUserDetail(StaffPrincipal actor, UUID userId) {
         User user = userService.getById(userId);
-        boolean includePii = actor != null && actor.isRegistered() && actor.holds(StaffPermission.USER_READ_PII);
+        boolean includePii = readsPersonalData(actor);
         if (includePii) {
             StaffAuditContext.reclassify(StaffPermission.USER_READ_PII, StaffPermission.USER_READ_PII.getCode(), true);
             StaffAuditContext.about(AuditSubjects.of(AuditSubject.user(user.getId())));
@@ -264,15 +272,24 @@ public class AdminDetailManager implements AdminDetailService {
 
     @Override
     @Transactional(readOnly = true)
-    public AdminAssignmentDetailDto getAssignmentDetail(UUID assignmentId) {
+    public AdminAssignmentDetailDto getAssignmentDetail(StaffPrincipal actor, UUID assignmentId) {
         JobAssignment assignment = jobAssignmentService.getDetailedById(assignmentId);
         AssignmentTransportDto transport = transportService.viewsForAssignments(
                         List.of(assignment), assignment.getJob().getCreator().getId())
                 .get(assignment.getId());
         List<AdminTimelineEventDto> timeline = transportService.timelineForStaff(assignmentId);
+        List<WorkSessionDto> workSessions = timesheetMapper.toWorkSessionDtoList(
+                timesheetService.getSessionsForStaff(assignmentId));
+        if (!readsPersonalData(actor)) {
+            timeline = timeline.stream().map(locationPrivacyMapper::withoutLocation).toList();
+            workSessions = workSessions.stream().map(locationPrivacyMapper::withoutLocation).toList();
+        } else if (carriesLocation(timeline, workSessions)) {
+            StaffAuditContext.reclassify(StaffPermission.USER_READ_PII, StaffPermission.USER_READ_PII.getCode(), true);
+            log.info("Staff {} reads assignment {} with locations", actor.staffId(), assignmentId);
+        }
 
         return adminDetailMapper.toAdminAssignmentDetailDto(assignment,
-                timesheetService.getSessionsForStaff(assignmentId),
+                workSessions,
                 cancellationService.findForStaff(assignmentId).orElse(null),
                 reviewService.getReviewsForStaff(assignmentId),
                 paymentService.getAttemptsForStaff(assignmentId),
@@ -298,6 +315,17 @@ public class AdminDetailManager implements AdminDetailService {
         JobAssignment assignment = payment.getJobAssignment();
         return paymentDtos(List.of(payment),
                 Map.of(assignment.getId(), LoadedAssignmentSummary.of(assignment)), peopleOf(assignment)).getFirst();
+    }
+
+    private static boolean carriesLocation(List<AdminTimelineEventDto> timeline, List<WorkSessionDto> workSessions) {
+        return timeline.stream().anyMatch(event -> event.latitude() != null || event.longitude() != null)
+                || workSessions.stream().anyMatch(session -> session.checkInLatitude() != null
+                || session.checkInLongitude() != null || session.checkOutLatitude() != null
+                || session.checkOutLongitude() != null);
+    }
+
+    private static boolean readsPersonalData(StaffPrincipal actor) {
+        return actor != null && actor.isRegistered() && actor.holds(StaffPermission.USER_READ_PII);
     }
 
     private List<AdminPaymentDto> paymentDtos(List<Payment> attempts, Map<UUID, StaffAssignmentSummary> assignments,

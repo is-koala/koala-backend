@@ -2130,6 +2130,22 @@ yok. `companies[]{id,name,role}` `CompanyContactService.getMembershipsOf`, `badg
 `identityReviewStatus` kullanıcının **son** kimlik incelemesinin durumu (`IdentityReviewDto.statusOf` — kuyruk
 satırıyla aynı kural), `pendingDeletionRequestId` `REQUESTED` durumdaki son talep.
 
+**Atama detayındaki konumlar da `user.read_pii` arkasında (#349).** `GET /admin/job-assignments/{id}`
+`payment.read` ile korunur; `user.read_pii` taşımayan personele `timeline[]` biniş satırlarının `latitude`/`longitude`'u
+ve `workSessions[]`'in `checkIn*/checkOut*` enlem-boylamı `null` döner, `distanceToStopMeters` ve `direction` kalır.
+`null` tek başına "konum hiç alınmamış" ile "konum var, izin yok"u ayıramadığı için panel üç bayrak okur:
+`timeline[].locationWithheld`, `workSessions[].checkInLocationWithheld`, `workSessions[].checkOutLocationWithheld`.
+Bayrak yalnız kayıtlı bir koordinat maskelendiğinde `true`; izinli görünümde, koordinatsız satırda ve personel dışı
+uçlarda (`WorkSessionDto` işçi/işveren uçlarında da dönüyor) daima `false`. Maskeleyen kopya `LocationPrivacyMapper`'da,
+MapStruct ile: kayıt bileşenleri adla eşlendiği için DTO'ya alan eklemek kopyayı kaydırmaz, eşlenmemiş yeni hedef
+`unmappedTargetPolicy=ERROR` ile derlemeyi düşürür. Bu eşleyici başka bir eşleyicinin `uses` listesine **girmemeli** —
+girerse MapStruct aynı tipten aynı tipe bu yöntemi başka DTO'ların eleman kopyası için seçebilir ve izinli görünüm de sessizce maskelenir. Koordinat
+dönen izinli okuma `reclassify(USER_READ_PII, "user.read_pii", true)` ile denetlenir; koordinatsız okuma `payment.read`
+kalır. **`reclassify` hassasiyeti düşürmez:** kayıt, mevcut ve yeni iznin hassasiyetinden yükseğini taşır; yoksa
+`payment.read`'in `FINANCIAL` (10 yıl) satırı `PERSONAL_DATA` (2 yıl) olurdu. Ölçen testler
+`TransportBoardingIT.staffWithoutThePiiPermissionGetTheSameAssignmentDetailWithEveryLocationBlanked` ve
+`StaffAuditContextTest`.
+
 **Bileşim yine `AdminDetailManager`'da (§2s6).** Kullanıcı detayı, şirket inceleme sayfası ve ödeme/iade
 kaynağı orada kuruluyor; orkestratör hiçbir DAO'ya uzanmıyor, `Timesheet/Cancellation/Review/CompanyContact/
 Badge/IdentityDocumentReview/Legal/Company/Job` servislerinin yeni `*ForStaff`/`count*`/`find*` metotlarını çağırıyor.

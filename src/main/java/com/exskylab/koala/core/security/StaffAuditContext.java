@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.security;
 
+import com.exskylab.koala.entities.PermissionSensitivity;
 import com.exskylab.koala.entities.StaffPermission;
 
 public final class StaffAuditContext {
@@ -81,10 +82,17 @@ public final class StaffAuditContext {
                 source.resourceId(),
                 allowed,
                 permission.isMutating(),
-                permission.getSensitivity(),
+                higherOf(source.sensitivity(), permission.getSensitivity()),
                 source.ip(),
                 source.userAgent(),
                 source.subjects());
+    }
+
+    private static PermissionSensitivity higherOf(PermissionSensitivity current, PermissionSensitivity next) {
+        if (current == null || next.getRank() > current.getRank()) {
+            return next;
+        }
+        return current;
     }
 
     public StaffAuditRecord pending() {

@@ -958,6 +958,7 @@ public class TransportManager implements TransportService {
         event.setShuttle(seat.getShuttle());
         event.setStop(stop);
         event.setStopLabel(stop.getLabel());
+        event.setDirection(seat.getDirection());
         event.setStopScheduledAt(stop.getScheduledAt());
         event.setDistanceToStopMeters(distance);
         event.setKind(mark.kind());

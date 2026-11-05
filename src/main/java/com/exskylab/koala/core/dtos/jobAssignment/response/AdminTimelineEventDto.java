@@ -5,6 +5,7 @@ import com.exskylab.koala.entities.BoardingKind;
 import com.exskylab.koala.entities.BoardingRecorderRole;
 import com.exskylab.koala.entities.BoardingSource;
 import com.exskylab.koala.entities.TimesheetPlausibilityFlag;
+import com.exskylab.koala.entities.TransportDirection;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -16,6 +17,11 @@ import java.util.UUID;
 public record AdminTimelineEventDto(
         @Schema(description = "SEAT (koltuk seçimi) ya da BOARDING (biniş/gelmedi kaydı).")
         AdminTimelineEventType type,
+        @Schema(types = {"string", "null"},
+                description = "Yön: koltukta koltuğun yönü, binişte olay anında yazılan anlık görüntü — plan yeniden "
+                        + "yazılıp koltuk düşse de kalır. Alan eklenmeden önce yazılan biniş satırları koltuktan ya da "
+                        + "servisten geri dolduruldu.")
+        TransportDirection direction,
         @Schema(description = "Olayın anı; koltukta seçim anı, binişte occurredAt.")
         Instant at,
         UUID id,
@@ -46,10 +52,15 @@ public record AdminTimelineEventDto(
         @Schema(types = {"string", "null"}, format = "date-time",
                 description = "Yalnız BOARDING: sunucunun kaydı aldığı an.")
         Instant receivedAt,
-        @Schema(types = {"number", "null"}, description = "Yalnız BOARDING: okutma/işaretleme konumu; hesap silinince null.")
+        @Schema(types = {"number", "null"}, description = "Yalnız BOARDING: okutma/işaretleme konumu. Personel "
+                + "user.read_pii taşımıyorsa ve hesap silinince null.")
         BigDecimal latitude,
-        @Schema(types = {"number", "null"}, description = "Yalnız BOARDING: okutma/işaretleme konumu; hesap silinince null.")
+        @Schema(types = {"number", "null"}, description = "Yalnız BOARDING: okutma/işaretleme konumu. Personel "
+                + "user.read_pii taşımıyorsa ve hesap silinince null.")
         BigDecimal longitude,
+        @Schema(description = "Konum gizlendi: olayın konumu kayıtlı ama personel user.read_pii taşımadığı için "
+                + "latitude/longitude null döndü. Konum hiç alınmamışsa ya da gösteriliyorsa false.")
+        boolean locationWithheld,
         @Schema(types = {"integer", "null"}, description = "Yalnız BOARDING: konumun durak pinine metre cinsinden uzaklığı.")
         Integer distanceToStopMeters) {
 }
