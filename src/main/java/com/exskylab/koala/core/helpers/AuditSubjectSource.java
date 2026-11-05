@@ -35,7 +35,10 @@ public enum AuditSubjectSource {
             "personel rol grafiği; konu türleri pazaryeri tarafıdır, personel değil"),
     CLIENT_EVENTS("audit-log", Resolution.SERVICE, null,
             "istemci olayının satırını yetki kararı değil StaffAuditManager.recordClientEvent yazar; konuyu "
-                    + "gövdedeki subjectType/subjectId'den, varlığını doğrulayarak o verir");
+                    + "gövdedeki subjectType/subjectId'den, varlığını doğrulayarak o verir"),
+    DISPUTE_EVIDENCE_SCRUB("dispute-evidence", Resolution.NONE, null,
+            "toplu kanıt temizliği; bir parti birden çok kişinin kanıtını işler, tek bir konusu yok, "
+                    + "işlenen satırlar denetim detayında");
 
     public enum Resolution {
         PATH,

@@ -9,11 +9,13 @@ import com.exskylab.koala.business.abstracts.StaffPayoutService;
 import com.exskylab.koala.business.abstracts.StaffAccountService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.DisputeMessages;
+import com.exskylab.koala.core.constants.StorageMessages;
 import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.helpers.AssignmentParticipants;
 import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.core.security.StaffAuditContext;
 import com.exskylab.koala.core.helpers.Checksums;
+import com.exskylab.koala.core.helpers.ImageMetadataStripper;
 import com.exskylab.koala.core.helpers.Concealment;
 import com.exskylab.koala.core.helpers.StorageRollbackCleanup;
 import com.exskylab.koala.core.helpers.UploadValidator;
@@ -256,10 +258,13 @@ public class DisputeManager implements DisputeService {
         uploadValidator.validate(file, FolderType.DISPUTE_EVIDENCE,
                 DisputeMessages.EVIDENCE_EMPTY, DisputeMessages.EVIDENCE_TOO_LARGE);
 
-        byte[] content = contentOf(file, actorId);
         String fileName = file.getOriginalFilename();
         String contentType = MediaTypeFactory.getMediaType(fileName)
                 .orElse(MediaType.APPLICATION_OCTET_STREAM).toString();
+        boolean image = !MediaType.APPLICATION_PDF_VALUE.equals(contentType);
+        byte[] content = image
+                ? withoutMetadata(contentOf(file, actorId), contentType, actorId)
+                : contentOf(file, actorId);
         String key = storageService.uploadFile(content, fileName, contentType, FolderType.DISPUTE_EVIDENCE);
         StorageRollbackCleanup.deleteOnRollback(storageService, key);
 
@@ -271,6 +276,7 @@ public class DisputeManager implements DisputeService {
         evidence.setContentType(contentType);
         evidence.setFileSize(content.length);
         evidence.setChecksumSha256(Checksums.sha256Hex(content));
+        evidence.setMetadataScrubbedAt(image ? Instant.now() : null);
 
         DisputeEvidence saved = disputeEvidenceDao.save(evidence);
         log.info("Evidence {} attached to dispute {} by user {}", saved.getId(), disputeId, actorId);
@@ -332,6 +338,19 @@ public class DisputeManager implements DisputeService {
         return assignment.getWorker().getId().equals(uploaderId)
                 ? EvidenceUploaderSide.WORKER
                 : EvidenceUploaderSide.EMPLOYER;
+    }
+
+    private byte[] withoutMetadata(byte[] received, String contentType, UUID actorId) {
+        String format = ImageMetadataStripper.formatOfContentType(contentType);
+        if (format == null) {
+            throw new ValidationException(StorageMessages.UNSUPPORTED_TYPE);
+        }
+        try {
+            return ImageMetadataStripper.strip(received, format);
+        } catch (IOException e) {
+            log.warn("Dispute evidence image could not be re-encoded for user {}", actorId, e);
+            throw new ValidationException(StorageMessages.UNSUPPORTED_TYPE);
+        }
     }
 
     private byte[] contentOf(MultipartFile file, UUID actorId) {

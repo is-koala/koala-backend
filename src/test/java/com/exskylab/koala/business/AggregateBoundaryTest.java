@@ -33,6 +33,7 @@ class AggregateBoundaryTest {
             Map.entry("TimesheetManager", Set.of("WorkSessionDao")),
             Map.entry("CvManager", Set.of("MediaDao")),
             Map.entry("DisputeManager", Set.of("DisputeDao", "DisputeEvidenceDao")),
+            Map.entry("DisputeEvidenceScrubManager", Set.of("DisputeEvidenceDao")),
             Map.entry("StaffAuthorizationManager", Set.of("StaffRoleDao",
                     "StaffRolePermissionDao", "StaffRoleIncludeDao")),
             Map.entry("StaffAccountManager", Set.of("StaffMemberDao", "StaffMemberRoleDao")),

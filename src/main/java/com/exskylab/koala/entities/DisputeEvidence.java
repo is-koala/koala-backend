@@ -8,6 +8,7 @@ import lombok.Setter;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.SQLRestriction;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @SQLDelete(sql = "UPDATE dispute_evidence SET is_deleted = true, deleted_at = now() WHERE id = ?")
@@ -47,4 +48,20 @@ public class DisputeEvidence extends BaseEntity {
 
     @Column(name = "checksum_sha256", length = 64)
     private String checksumSha256;
+
+    @Column(name = "metadata_scrubbed_at")
+    private Instant metadataScrubbedAt;
+
+    @Column(name = "metadata_scrubbed_by_staff_id")
+    private UUID metadataScrubbedByStaffId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "metadata_scrub_error", length = 32)
+    private EvidenceScrubFailure metadataScrubError;
+
+    @Column(name = "pre_scrub_file_size")
+    private Long preScrubFileSize;
+
+    @Column(name = "pre_scrub_checksum_sha256", length = 64)
+    private String preScrubChecksumSha256;
 }

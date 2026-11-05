@@ -188,10 +188,12 @@ class DisputeEvidenceRulesTest {
 
         DisputeEvidence saved = disputeManager.attachEvidence(dispute.getId(), file);
 
+        ArgumentCaptor<byte[]> stored = ArgumentCaptor.forClass(byte[].class);
+        verify(storageService).uploadFile(stored.capture(), any(), any(), eq(FolderType.DISPUTE_EVIDENCE));
         assertEquals(STORED_KEY, saved.getStorageKey());
         assertEquals("kanit.png", saved.getOriginalFileName());
-        assertEquals(file.getBytes().length, saved.getFileSize());
-        assertEquals(Checksums.sha256Hex(file.getBytes()), saved.getChecksumSha256());
+        assertEquals(stored.getValue().length, saved.getFileSize());
+        assertEquals(Checksums.sha256Hex(stored.getValue()), saved.getChecksumSha256());
         assertEquals(worker.getId(), saved.getUploadedBy().getId());
     }
 

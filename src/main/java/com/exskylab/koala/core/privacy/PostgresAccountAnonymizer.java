@@ -116,7 +116,8 @@ public class PostgresAccountAnonymizer implements AccountAnonymizer {
         jdbcTemplate.update("""
                 update dispute_evidence
                    set original_file_name = ?, content_type = null, storage_key = null,
-                       checksum_sha256 = null, file_size = 0, is_deleted = true, deleted_at = now()
+                       checksum_sha256 = null, file_size = 0, pre_scrub_checksum_sha256 = null,
+                       pre_scrub_file_size = null, is_deleted = true, deleted_at = now()
                  where uploaded_by_id = ?
                     or dispute_id in (
                        select d.id from disputes d
