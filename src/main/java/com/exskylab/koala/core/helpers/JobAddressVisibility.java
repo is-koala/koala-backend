@@ -14,41 +14,63 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public final class JobAddressVisibility {
 
     public void protect(Job job, JobDetailDto detail, UUID viewerId, boolean assignedWorker) {
-        AddressPrecision precision = precision(job, viewerId, assignedWorker);
+        boolean participant = isOwner(job, viewerId) || assignedWorker;
+        AddressPrecision precision = participant || publishesAddress(job)
+                ? AddressPrecision.EXACT : AddressPrecision.APPROXIMATE;
         detail.setAddressPrecision(precision);
         if (precision == AddressPrecision.APPROXIMATE) {
             mask(detail.getAddress());
+        } else if (!participant) {
+            withholdUnit(detail.getAddress());
         }
     }
 
     public void protect(Job job, JobSummaryDto summary, UUID viewerId, boolean assignedWorker) {
-        AddressPrecision precision = precision(job, viewerId, assignedWorker);
-        summary.setAddressPrecision(precision);
-        if (precision == AddressPrecision.EXACT && job.getAddress() != null) {
-            summary.setLatitude(exactCoordinate(job.getAddress().getLatitude()));
-            summary.setLongitude(exactCoordinate(job.getAddress().getLongitude()));
-        }
+        reveal(job, summary, isOwner(job, viewerId) || assignedWorker || publishesAddress(job));
     }
 
-    private AddressPrecision precision(Job job, UUID viewerId, boolean assignedWorker) {
-        boolean owner = viewerId != null && job.getCreator() != null
-                && viewerId.equals(job.getCreator().getId());
-        boolean publicCompanyAddress = job.getEmployerType() == JobEmployerType.COMPANY
-                && job.isAddressPublic();
-        return publicCompanyAddress || owner || assignedWorker
-                ? AddressPrecision.EXACT : AddressPrecision.APPROXIMATE;
+    public void protectListing(Job job, JobSummaryDto summary, UUID viewerId) {
+        reveal(job, summary, isOwner(job, viewerId) || publishesAddress(job));
     }
 
     public void approximate(AddressDto address) {
         mask(address);
     }
 
-    private void mask(AddressDto address) {
+    private static void reveal(Job job, JobSummaryDto summary, boolean exact) {
+        summary.setAddressPrecision(exact ? AddressPrecision.EXACT : AddressPrecision.APPROXIMATE);
+        if (exact && job.getAddress() != null) {
+            summary.setLatitude(exactCoordinate(job.getAddress().getLatitude()));
+            summary.setLongitude(exactCoordinate(job.getAddress().getLongitude()));
+        }
+    }
+
+    private static boolean isOwner(Job job, UUID viewerId) {
+        return viewerId != null && job.getCreator() != null && viewerId.equals(job.getCreator().getId());
+    }
+
+    private static boolean publishesAddress(Job job) {
+        return job.getEmployerType() == JobEmployerType.COMPANY && job.isAddressPublic();
+    }
+
+    private static void withholdUnit(AddressDto address) {
+        if (address == null || address.getComponents() == null) {
+            return;
+        }
+        AddressComponentsDto components = address.getComponents();
+        components.setFloor(null);
+        components.setUnitNumber(null);
+        components.setAdditionalDirections(null);
+        address.setDisplayAddress(AddressFormatter.displayAddress(address));
+    }
+
+    private static void mask(AddressDto address) {
         if (address == null) {
             return;
         }
@@ -74,15 +96,11 @@ public final class JobAddressVisibility {
         address.setDisplayAddress(Stream.of(neighborhood, address.getDistrictName(), address.getCityName())
                 .filter(Objects::nonNull)
                 .filter(value -> !value.isBlank())
-                .collect(java.util.stream.Collectors.joining(", ")));
+                .collect(Collectors.joining(", ")));
     }
 
     private static BigDecimal round(BigDecimal value) {
         return value == null ? null : value.setScale(2, RoundingMode.HALF_UP);
-    }
-
-    private static Double round(Double value) {
-        return value == null ? null : BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).doubleValue();
     }
 
     @Named("approximateCoordinate")

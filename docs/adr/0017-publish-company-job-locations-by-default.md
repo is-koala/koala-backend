@@ -1,0 +1,23 @@
+# Şirket ilanının tam konumunu varsayılan olarak yayımla, haritada atamaya göre yükseltme
+
+Durum: Kabul edildi — 4 Kasım 2026 (Yusuf'un ürün kararı). [ADR-0003](0003-hide-exact-job-address-by-default.md)'ün yerine geçer.
+
+## Karar
+
+1. **Şirket ilanı:** tam konum varsayılan olarak **açıktır**. `CreateCompanyJobDto.addressPublic` opsiyoneldir (`Boolean`); gönderilmezse ya da `null` ise `true` sayılır, `false` gönderen işveren kapatır. Mevcut bütün şirket ilanları `2026/11/04-01-company-job-address-public-by-default.xml` ile `address_public = true` yapıldı (canlıda gerçek kullanıcı yoktu; geriye dönük değişiklik onaylı). Bugün ilan düzenleme ucu yok; geldiğinde aynı alanı aynı varsayılanla taşır.
+2. **"Tam konum" = kesin koordinat + sokak/bina düzeyi adres** (mahalle, cadde/sokak, site, blok, bina adı ve numarası, posta kodu). Herkese, anonim ziyaretçi dahil, açıktır. **Kat, daire ve yön tarifi** (`floor`, `unitNumber`, `additionalDirections`) birim düzeyidir ve yalnız ilan sahibine (creator) ve etkin atamalı (`PENDING_CONFIRMATION`/`CONFIRMED`/`IN_PROGRESS`) işçiye döner. `addressPrecision` enum'u değişmedi: `EXACT` koordinatın kesinliğini söyler, birim alanlarının dolu olduğunu değil.
+3. **Bireysel ilan:** herkese yaklaşık konum (ilçe/mahalle, iki ondalığa yuvarlanmış koordinat), ADR-0003'teki gibi. Etkin atamalı işçi tam adresi iş/atama/ilan detay yüzeylerinde görmeye devam eder (`GET /jobs/{id}`, `GET /job-assignments/{id}`, `/users/me/assignments`, `/users/me/work`).
+4. **Harita ve arama listesi** (`GET /jobs` ve `GET /companies/{id}/jobs`): etkin atama kesinliği **yükseltmez**. `EXACT` yalnız adresi herkese açık şirket ilanında ya da görüntüleyen ilanın sahibiyse döner.
+5. **Harita kutusu (bbox) herkese açık koordinata uygulanır**, kesin koordinata değil. Kutuya en küçük boyut konmadı. Bilinçli yan etki: ilan sahibi kendi gizli şirket ya da bireysel ilanını haritada `EXACT` (kesin pin) görür ama kutu onu da yuvarlanmış hücreye göre süzer; yakın zoom'da kesin pin görünür alandayken hücre dışarıda kalırsa ilan listeden düşebilir. Bu bir sızıntı değil — kural kimseye bilmediğini göstermiyor — ve sahibine özel bir süzgeç dalı açmak tek kuralı iki ifadeye bölerdi.
+
+## Neden
+
+- Şirket ilanının adresi bir işyeridir; işe ulaşım için gerekli ve gizlenecek bir ev adresi değildir. Varsayılanı kapalı tutmak, istemciler alanı hiç göndermediği için pratikte bütün şirket ilanlarını yaklaşık gösteriyordu.
+- Birim alanları (kat, daire, tarif) işyerinde bile kişisel bir mekâna işaret edebilir ve işe başvurmak için gerekli değildir; işe gelecek kişiye açılmaları yeterli.
+- **Harita listesinde atama yükseltmesinin kaldırılması:** harita ve arama sonuçları istemcilerde önbelleğe alınır ve birbirinin üstüne çizilir. Atama geri alınabilir (iptal, ret, tamamlanma); o anda haritaya giren kesin konum önbellekte kalır ve artık hakkı olmayan kişide durur. Kişisel yüzeyler zaten o atamaya bağlı ekranlardır ve atama bitince yeniden okunur. Bu, listeler için yüzey bazlı bir ayrım getirir: CLAUDE.md §2l'de `listJobs` için uca göre dallanma bilinçli olarak kaldırılmıştı; yeni karar onu *uç* bazında değil *yüzey* bazında geri getiriyor — `listJobs`'u kullanan üç ucun (`search`, `/users/me/jobs`, `/companies/{id}/jobs`) üçü de aynı liste kuralını uygular, atama yükseltmesi yalnız kişisel yüzeylerde (`MyAssignmentDto`, `MyApplicationDto`, `WorkItemDto`, detay) kalır. `/users/me/jobs` görüntüleyenin kendi açtığı ilanları listelediği için iki kural orada aynı sonucu verir.
+- **bbox sızıntısı:** kutu süzgeci kesin koordinata bakıyordu ve en küçük alan sınırı yoktu; kutuyu daraltarak ikili aramayla bireysel işverenin kesin konumu bulunabiliyordu. Süzgeç artık mesafe hesabının da kullandığı `JobDao.PUBLIC_LATITUDE/LONGITUDE` üzerinden çalışıyor. Kutuyu ne kadar daraltırsanız daraltın öğrenilebilecek en ince bilgi yanıtta zaten dönen yuvarlanmış hücredir (0,01° ≈ 1,1 km enlem, ~0,8 km boylam); herkese açık şirket ilanının kesin konumu ise zaten herkese açık. Bu yüzden en küçük kutu boyutu eklemek yeni bir koruma getirmez, yalnız istemci yakınlaştırmasını kırar.
+
+## Kapsam dışı / açık
+
+- **Servis durağı adresleri** (`TransportManager`) değiştirilmedi. Herkese açık ulaşım özeti (`JobTransportDto`) durak için yalnız ilçe/semt adı ve saat taşır; tam durak adresi atamalı işçiye ve işverene açık. İlanın adresi herkese açık olduğunda durak adresinin de açılıp açılmayacağı ayrı bir ürün kararıdır.
+- `/users/me/saved-jobs` özetleri `protect` görmeden mapper'ın yaklaşık varsayılanıyla döner; adresi herkese açık şirket ilanı orada da `APPROXIMATE` görünür. Gizleme yönünde bir tutarsızlık, sızıntı değil. Takip: [#357](https://github.com/is-koala/koala-backend/issues/357) (`protectListing`'e bağlanmalı).

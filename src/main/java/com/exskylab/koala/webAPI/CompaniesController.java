@@ -166,7 +166,8 @@ public class CompaniesController {
     @Operation(summary = "Şirketin ilanları",
             description = "Şirketin bütün ilanlarını, hangi yetkilinin açtığından bağımsız olarak listeler; "
                     + "kendi açtıklarınız için GET /users/me/jobs kullanılır. Şirketin yetkilisi olmak şarttır, "
-                    + "sıralama createdAt/salary/startDateTime/title ile sınırlıdır, adres ADR-0003'e tabidir.")
+                    + "sıralama createdAt/salary/startDateTime/title ile sınırlıdır. Konum harita listesi kuralına tabidir (ADR-0017): "
+                    + "EXACT yalnız adresi herkese açık ilanda ya da ilanı açan yetkiliye döner, etkin atama kesinliği yükseltmez.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "İlanlar listelendi"),
             @ApiResponse(responseCode = "400", description = "Sıralama alanı desteklenmiyor",

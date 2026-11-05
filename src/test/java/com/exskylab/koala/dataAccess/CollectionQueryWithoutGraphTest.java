@@ -74,7 +74,6 @@ class CollectionQueryWithoutGraphTest {
             "IysPermissionStateDao.findByNextReconciliationAtLessThanEqualOrderByNextReconciliationAtAsc",
             "JobApplicationDao.countByJobIds",
             "JobApplicationDao.findCompanyIdsAppliedToBy",
-            "JobAssignmentDao.findVisibleAddressJobIds",
             // Conversation list resolves its DIRECT (job, worker) pairs in one batch; the page already loaded
             // those jobs and workers, so the eager to-ones come from the persistence context (#257).
             "JobAssignmentDao.findAllByJobIdInAndWorkerIdIn",

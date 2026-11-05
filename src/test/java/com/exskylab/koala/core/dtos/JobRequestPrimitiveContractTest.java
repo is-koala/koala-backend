@@ -45,7 +45,7 @@ class JobRequestPrimitiveContractTest {
 
         assertNull(dto.getExperienceRequired());
         assertNull(dto.getInsuranceRequired());
-        assertFalse(dto.isAddressPublic(), "addressPublic omitted from legacy clients must default to false");
+        assertNull(dto.getAddressPublic(), "eksik addressPublic false olmamali; yoneticide true sayilir");
         assertTrue(violatedFields(dto).containsAll(
                 Set.of("experienceRequired", "insuranceRequired", "minAge", "maxAge")));
     }
@@ -63,6 +63,18 @@ class JobRequestPrimitiveContractTest {
 
         assertTrue(JSON.writeValueAsString(dto).contains("\"experienceRequired\":true"));
         assertTrue(JSON.writeValueAsString(dto).contains("\"insuranceRequired\":true"));
+    }
+
+    @Test
+    void addressPublicIsOptionalAndAnExplicitChoiceRoundTrips() {
+        var omitted = JSON.readValue("{}", CreateCompanyJobDto.class);
+        var hidden = JSON.readValue("{\"addressPublic\": false}", CreateCompanyJobDto.class);
+        var shown = JSON.readValue("{\"addressPublic\": true}", CreateCompanyJobDto.class);
+
+        assertFalse(violatedFields(omitted).contains("addressPublic"), "alan opsiyonel, eksikligi 400 degil");
+        assertEquals(Boolean.FALSE, hidden.getAddressPublic());
+        assertEquals(Boolean.TRUE, shown.getAddressPublic());
+        assertTrue(JSON.writeValueAsString(hidden).contains("\"addressPublic\":false"));
     }
 
     @Test

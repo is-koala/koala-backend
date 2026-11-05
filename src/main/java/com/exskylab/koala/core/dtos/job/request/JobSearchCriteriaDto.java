@@ -26,6 +26,14 @@ import java.util.UUID;
 @NoArgsConstructor
 public class JobSearchCriteriaDto {
 
+    /**
+     * Kutu sınırları istemcinin harita bölgesinden ham double olarak gelir (mobil
+     * {@code region.southwest}, web 6 ondalık); {@code lat}/{@code lng}'deki 6 ondalık sınırı burada
+     * istemciyi 400'e düşürürdü. Aralık ve bu geniş üst sınır yalnız Postgres numeric taşmasını
+     * (çok büyük/çok uzun değer → 500) önler. Boylamda 180 dahil: web kutuyu 180'e kırpıyor.
+     */
+    private static final int BOUNDS_MAX_FRACTION = 20;
+
     private String query;
     private UUID companyId;
     private UUID categoryId;
@@ -39,13 +47,30 @@ public class JobSearchCriteriaDto {
     private Boolean insuranceRequired;
     private Boolean experienceRequired;
 
-    private Double minLatitude;
+    @Parameter(description = "Harita kutusunun güney sınırı (dahil). Kutu ilanın herkese açık koordinatına uygulanır: "
+            + "adresi herkese açık şirket ilanında kesin, diğer ilanlarda iki ondalığa yuvarlanmış koordinat.")
+    @DecimalMin(value = "-90", message = AddressMessages.LATITUDE_RANGE)
+    @DecimalMax(value = "90", message = AddressMessages.LATITUDE_RANGE)
+    @Digits(integer = 2, fraction = BOUNDS_MAX_FRACTION, message = AddressMessages.LATITUDE_RANGE)
+    private BigDecimal minLatitude;
 
-    private Double maxLatitude;
+    @Parameter(description = "Harita kutusunun kuzey sınırı (dahil); herkese açık koordinata uygulanır.")
+    @DecimalMin(value = "-90", message = AddressMessages.LATITUDE_RANGE)
+    @DecimalMax(value = "90", message = AddressMessages.LATITUDE_RANGE)
+    @Digits(integer = 2, fraction = BOUNDS_MAX_FRACTION, message = AddressMessages.LATITUDE_RANGE)
+    private BigDecimal maxLatitude;
 
-    private Double minLongitude;
+    @Parameter(description = "Harita kutusunun batı sınırı (dahil); herkese açık koordinata uygulanır.")
+    @DecimalMin(value = "-180", message = AddressMessages.LONGITUDE_RANGE)
+    @DecimalMax(value = "180", message = AddressMessages.LONGITUDE_RANGE)
+    @Digits(integer = 3, fraction = BOUNDS_MAX_FRACTION, message = AddressMessages.LONGITUDE_RANGE)
+    private BigDecimal minLongitude;
 
-    private Double maxLongitude;
+    @Parameter(description = "Harita kutusunun doğu sınırı (dahil); herkese açık koordinata uygulanır.")
+    @DecimalMin(value = "-180", message = AddressMessages.LONGITUDE_RANGE)
+    @DecimalMax(value = "180", message = AddressMessages.LONGITUDE_RANGE)
+    @Digits(integer = 3, fraction = BOUNDS_MAX_FRACTION, message = AddressMessages.LONGITUDE_RANGE)
+    private BigDecimal maxLongitude;
 
     @Parameter(description = "Başlangıç aralığının alt sınırı (dahil). Dilimli ISO-8601 an, örn. 2026-09-20T21:00:00Z "
             + "veya 2026-09-21T00:00:00+03:00; job-search.zone-id (Europe/Istanbul) duvar saatine çevrilip ilanın "

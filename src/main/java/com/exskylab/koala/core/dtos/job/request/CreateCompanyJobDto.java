@@ -42,9 +42,13 @@ public class CreateCompanyJobDto {
     @Valid
     private AddressWriteDto address;
 
-    @Schema(description = "Bu ilanda doğrulanmış tam işyeri adresinin herkese gösterilip gösterilmeyeceği.",
-            defaultValue = "false")
-    private boolean addressPublic;
+    @Schema(types = {"boolean", "null"},
+            description = "İlanın tam konumunun (kesin koordinat ve sokak/bina düzeyi adres) herkese, anonim "
+                    + "ziyaretçi dahil, gösterilip gösterilmeyeceği. Gönderilmezse ya da null ise true: şirket "
+                    + "ilanında tam konum varsayılan olarak açıktır, false göndererek kapatılır. Kat, daire ve "
+                    + "yön tarifi bu değerden bağımsız olarak yalnız ilan sahibine ve etkin atamalı işçiye döner.",
+            defaultValue = "true")
+    private Boolean addressPublic;
 
     @NotBlank(message = JobMessages.TYPE_NOT_BLANK)
     private String type;

@@ -104,7 +104,7 @@ class JobSearchIT extends AbstractIntegrationTest {
                 new java.math.BigDecimal("5000.00"),
                 Boolean.FALSE,
                 Boolean.TRUE,
-                40.9, 41.2, 28.9, 29.3,
+                new java.math.BigDecimal("40.9"), new java.math.BigDecimal("41.2"), new java.math.BigDecimal("28.9"), new java.math.BigDecimal("29.3"),
                 PageRequest.of(0, 20)));
     }
 
@@ -115,7 +115,7 @@ class JobSearchIT extends AbstractIntegrationTest {
                 java.time.LocalDateTime.now(),
                 false, NO_LOWER_BOUND, NO_UPPER_BOUND, false, 0d, 0d,
                 null, null, null, null, null, null, null, null, null, null, null,
-                null, 40.98, 41.10, 28.95, 29.15,
+                null, new java.math.BigDecimal("40.98"), new java.math.BigDecimal("41.10"), new java.math.BigDecimal("28.95"), new java.math.BigDecimal("29.15"),
                 PageRequest.of(0, 20)));
     }
 

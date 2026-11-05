@@ -57,7 +57,8 @@ public class JobDetailDto {
     @Schema(description = "İlanın durum ve bitiş zamanına göre şu anda başvuru kabul edip etmediğini belirtir.")
     private boolean acceptingApplications;
     private AddressDto address;
-    @Schema(description = "Adres ve koordinatın yaklaşık mı kesin mi olduğunu belirtir.")
+    @Schema(description = "Adres ve koordinatın yaklaşık mı kesin mi olduğunu belirtir. EXACT iken koordinat ve sokak/bina "
+            + "düzeyi adres kesindir; kat, daire ve yön tarifi yalnız ilan sahibine ve etkin atamalı işçiye doludur.")
     private AddressPrecision addressPrecision;
     private SafeUserDto creator;
     private JobCompanyDto company;

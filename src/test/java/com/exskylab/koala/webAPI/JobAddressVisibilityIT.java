@@ -14,6 +14,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -201,14 +203,18 @@ class JobAddressVisibilityIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void aPublicCompanyAddressIsExactForAnAnonymousViewer() throws Exception {
+    void aPublicCompanyAddressIsExactForAnAnonymousViewerDownToTheBuildingButNotTheUnit() throws Exception {
         jdbc.update("update jobs set address_public = true, employer_type = 'COMPANY', company_id = ? where id = ?",
                 companyId, jobId);
 
         mockMvc.perform(get("/jobs/{jobId}", jobId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.addressPrecision").value("EXACT"))
-                .andExpect(jsonPath("$.data.address.components.unitNumber").value("4"))
+                .andExpect(jsonPath("$.data.address.components.thoroughfare").value("Caferağa Sokak"))
+                .andExpect(jsonPath("$.data.address.components.buildingNumber").value("12"))
+                .andExpect(jsonPath("$.data.address.position.latitude").value(40.987654))
+                .andExpect(jsonPath("$.data.address.components.unitNumber").doesNotExist())
+                .andExpect(jsonPath("$.data.address.displayAddress").value(not(containsString("Daire"))))
                 .andExpect(jsonPath("$.data.company.address").doesNotExist());
     }
 
