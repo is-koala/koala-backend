@@ -26,6 +26,9 @@ public class StorageUrlResolver {
 
         String normalized = key.startsWith("/") ? key.substring(1) : key;
 
+        if (StorageKeys.isIdentityDocument(normalized)) {
+            return null;
+        }
         if (StorageKeys.isPrivate(normalized) || StorageKeys.isPublicFile(normalized)) {
             return apiUrl + "/uploads/" + normalized;
         }

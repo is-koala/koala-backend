@@ -2671,7 +2671,8 @@ Sayaç yerine gösterge (`Gauge`) seçildi: soru "kaç kez oldu" değil, "**şu 
 |---|---|---|
 | `images/` | profil fotoğrafı, logo, rozet görseli | CDN üzerinden doğrudan, herkese açık |
 | `public/` | giriş istemeyen belgeler (sözleşme metinleri) | nesne özel kalır, `/uploads/public/**` kısa ömürlü imzalı adrese yönlendirir |
-| `files/` | özgeçmiş, kimlik belgesi | nesne özel kalır, `/uploads/files/**` **kimlik doğrulaması ister**, sonra imzalı adrese yönlendirir |
+| `files/` | özgeçmiş, uyuşmazlık kanıtı | nesne özel kalır, `/uploads/files/**` **kimlik doğrulaması ister**, sonra imzalı adrese yönlendirir |
+| `identity-documents/` | TCKK kimlik fotoğrafları (yüz, ön, arka, yüzün altında) | hiçbir `/uploads/**` ucundan adreslenemez; yalnız `identity.review` izinli personel, denetim kaydıyla (§2ab §Kimlik fotoğrafları) |
 
 İmzalı adresin ömrü `storage.signed-url-minutes` (varsayılan 3 dk). Yönlendirme uçları `StorageDownloadController`'da; tanınmayan önek 400 döner, yani depo anahtarı uydurup rastgele nesne çekilemez.
 
@@ -2679,7 +2680,7 @@ Sayaç yerine gösterge (`Gauge`) seçildi: soru "kaç kez oldu" değil, "**şu 
 
 Yan kazanç: `Media` soft delete edildiğinde `@SQLRestriction` yüzünden `findByFileUrl` onu bulamıyor, yani **silinen özgeçmiş artık indirilemiyor.** Öncesinde satır silinse bile anahtarı bilen indirebiliyordu. Depodaki nesne hâlâ duruyor — kalıcı silme Faz 9B'ye bağlı.
 
-**Bugün `files/` altında yalnızca özgeçmiş var.** Kimlik doğrulaması KPS üzerinden ad/soyad/TCKN/doğum yılı ile yapılıyor, belge yüklenmiyor. §2ab'de kimlik belgesi kategorisi tanımlı ama henüz o yola yazan bir uç yok.
+**`files/` altında özgeçmiş ve uyuşmazlık kanıtı var.** Kimlik belgesi bu tabloda ilk günden `files/` satırına yazılmıştı ama belge yolu açıldığında (#193) oraya hiç yazmadı — aşağıdaki başlık.
 
 **`/uploads/**` yönlendirme yapmak zorunda değil.** İlk sürümde üç uç da `temporaryUrl`/`urlFor` sonucuna 302 atıyordu. `STORAGE_PUBLIC_URL` boşken `urlFor("images/x.png")` zaten `{apiUrl}/uploads/images/x.png` üretiyor — yani uç **kendine** yönlendiriyor ve tarayıcı sonsuz döngüye giriyordu. Aynısı `storage.type=local` için üç ucun üçünde birden geçerliydi: `LocalStorageService.temporaryUrl` de aynı adresi döndürüyor, `/uploads/**` için statik kaynak işleyicisi de yok. Yani yerel depolama hiçbir zaman dosya servis edememişti; R2/S3 + CDN ile çalışıldığı için fark edilmemişti.
 
@@ -2696,6 +2697,82 @@ Artık karar depoya ait: `StorageService.supportsSignedUrls()` true ise imzalı 
 **Kimlik bilgisi zorunlu değil.** `S3ClientConfig` statik anahtar verilmemişse `DefaultCredentialsProvider`'a düşer, yani EC2/ECS üzerinde IAM rolü ile anahtarsız çalışır. `storage.endpoint` verilirse S3 uyumlu servisler (R2 dahil) aynı kodla çalışmaya devam eder — geri dönüş yolu açık.
 
 **Mevcut veriler taşınmalı.** Kayıtlardaki `file_url` değerleri anahtarı tutuyor ve önekler (`images/`, `files/`) korundu, yani şema değişikliği gerekmiyor; ancak **nesnelerin R2'den S3'e kopyalanması gerekiyor.** Bu bir kod işi değil, tek seferlik bir `aws s3 sync`.
+
+### Kimlik fotoğrafları — `identity-documents/`, hiçbir genel uçtan servis edilmez
+
+**Kusur (KVKK, yüksek).** Yukarıdaki tablo kimlik belgesini baştan özel öneke koymuştu, ama #193'ün belge yolu
+(`POST /users/me/identity-documents`) dört TCKK fotoğrafını `FolderType.IMAGE` ile yazdı: anahtar `images/<uuid>.jpg`,
+yani profil fotoğrafıyla aynı sınıf — CDN'den ve `GET /uploads/images/**` (`permitAll`) üzerinden **anonim**, kalıcı ve
+denetimsiz okunabilir; bayt da telefonun yazdığı gibi **ham** (EXIF/GPS dahil), çünkü metadata temizliği yalnız
+`ImageManager` yolundaydı. Anahtar rastgele UUID ve hiçbir yanıt DTO'su taşımıyordu (personel kuyruğu yalnız belge
+id'si döner), yani tahmin edilerek değil **sızarak** (S3 yükleme logu, veritabanı/yedek erişimi, CDN logu)
+okunabiliyordu; bu tablonun "tahmin edilemez URL yeterli koruma değildir" ilkesinin ta kendisi. Doğru karar,
+sonradan eklenen bir yolun onu sessizce görmezden gelmesiyle geçersiz kalmıştı (§2d2, #77 dersi).
+
+**Ayrım tek yerde: önek.** `FolderType.IDENTITY_DOCUMENT` → `StorageKeys.IDENTITY_DOCUMENT_PREFIX = "identity-documents/"`.
+Bu önek `StorageKeys.isKnownPrefix` kümesinde **yok**, dolayısıyla `StorageDownloadController`'ın üç ucunun hiçbiri
+onu adresleyemez (önek istek yolundan türer: `/uploads/images/…` yalnız `images/…` anahtarı üretir). `files/` altına
+konmadı, çünkü `VerificationDocument` bir `Media` ve `/uploads/files/**`'ın kapısı `CvManager.assertCanDownload`
+`media.createdBy` sahibine, `ROLE_ADMIN`'e ve **başvurusu olan işverene** izin veriyor — kimlik fotoğrafı o kümeye
+hiç girmemeli. Okumanın tek yolu `GET /admin/identity-verifications/{id}/documents/{documentId}/download`
+(`identity.review`, `PERSONAL_DATA` → her okuma `admin_audit_entries`'e `identity.document.download` satırı yazar,
+reddedilen deneme `allowed=false` ile); depo okuması `SignedFileResponses` üzerinden ve anahtarın önekine bakmaz.
+Sahibin fotoğrafı geri okuması gerekmiyor — `GET /users/me/identity-documents` yalnız belge id'si döner.
+S3'te nesne `Content-Disposition: attachment` ile yazılır (uyuşmazlık kanıtı gibi). `StorageUrlResolver.urlFor`
+`identity-documents/` anahtarı için adres üretmez (`null`, boş anahtarla aynı kalıp): bir mapper yanlışlıkla bu
+anahtarı eşlerse CDN adresi sessizce tele çıkmasın. `StorageKeys.isWellFormed` boş (`//`, sondaki `/`), `.`, `..`
+segmenti ya da ters eğik çizgi taşıyan anahtarı reddeder ve `StorageDownloadController` bunu **404**
+`storage.file.not.found` ile karşılar (bilinmeyen önek ise 400 kalır). Gerekçe `LocalStorageService`'in anahtarı
+`normalize` etmesi: `images/<uuid>.jpg/` ya da `images/../identity-documents/x` diskte aynı dosyaya çözülür ama
+eski-kayıt kontrolündeki birebir `file_url` karşılaştırmasını atlatırdı. `StrictHttpFirewall` `..` ve `//`'yi zaten
+400 ile kesiyor, sondaki eğik çizgiyi kesmiyor; savunma iki katmanlı.
+
+**Yeni yüklemede EXIF/GPS yok.** `IdentityVerificationManager.storePhoto` baytı depoya yazmadan önce çözüp
+yeniden kodluyor (EXIF yönü piksele uygulanır, APP1/XMP ve PNG metin parçaları düşer; JPEG'de alfa beyaza
+düzleştirilir; JPEG `ImageWriteParam` ile 0,92 kalitede yazılır — varsayılan 0,75 TCKK'nın küçük yazılarını ve MRZ'yi
+bulandırıyordu). Kabul listesi #348'den beri `png`/`jpg`/`jpeg`; liste dışı uzantı `UploadValidator`'da
+`STORAGE_UNSUPPORTED_TYPE` ile düşer. Listede olup çözülemeyen dosya (bozuk ya da uzantısı yalan) ham saklanmaz,
+`IMAGE_UPLOAD_ERROR` ile reddedilir. Kalıp #351'in `ImageMetadataStripper`'ının aynısı; #351 main'e inince `withoutMetadata` o ortak sınıfa
+çevrilmeli (aynı davranış, tek kopya; 0,92 JPEG kalitesi korunarak — #362). `file_size` artık saklanan temiz baytın boyu.
+
+**Eski kayıtlar (images/ altında kalmış).** `GET /uploads/images/**` her istekte
+`IdentityDocumentReviewService.isIdentityDocumentKey` soruyor: anahtar `identity-documents/` ise ya da
+`media_type='VERIFICATION_DOCUMENT'` bir satırın `file_url`'ü ise (silinmiş satır dahil, native sorgu) 404
+`storage.file.not.found`. **Yerel depoda** bu, var olmayan görselin yanıtıyla aynı; S3'te var olmayan görsel kontrolsüz
+imzalı adrese 302 alır (varlık sorulmuyor), eski kimlik anahtarı ise 404 — yani S3'te iki yanıt ayırt edilebilir, ama
+ayırt edilen şey yalnız "bu anahtar bir kimlik belgesine ait" bilgisi, içerik değil. Bedeli görsel ucunda tek `exists`
+sorgusu; `idx_media_verification_document_file_url` (`media(file_url) WHERE media_type='VERIFICATION_DOCUMENT'`,
+`2026/11/04-02`) onu indeks taramasına indirir. CDN açıkken görseller bu uca hiç gelmez.
+
+**CDN yolunu kod kapatamaz** — `STORAGE_PUBLIC_URL` doluyken `images/` nesneleri doğrudan bucket/CDN'den okunur. Eski
+nesneler için insan adımları (#361; #359 bunlar bitince kapanır):
+
+1. **Önce ortamı doğrula:** prod `STORAGE_TYPE` gerçekten `s3` mü (yerelse taşıma `mv` ile diskte yapılır), ve
+   CDN/bucket genel okuması yalnız `images/*` önekiyle mi sınırlı. R2'nin genel alan adı (r2.dev ya da özel alan adı)
+   **bütün bucket'ı** açar; öyleyse `files/` (özgeçmiş, uyuşmazlık kanıtı) ve `identity-documents/` de anahtarı
+   bilene açıktır ve önek ayrımı CDN katmanında hiçbir şey sağlamaz — erişim bir Worker/WAF kuralıyla `images/*`'a
+   daraltılmalı.
+2. Sayı: `select count(*) from media where media_type='VERIFICATION_DOCUMENT' and file_url like 'images/%'`.
+3. Nesneleri taşı ya da (test kaydıysa) sil: `aws s3 mv s3://<bucket>/images/<ad> s3://<bucket>/identity-documents/<ad>`.
+   **S3 taşıması bir veritabanı transaction'ına girmez;** eski nesne `media.file_url` güncellenmeden **önce**
+   taşınmış/silinmiş olmalı, yoksa satır güncellendiği an personel indirmesi 404 olur ve yarıda kalan bir taşıma eski
+   nesneyi açıkta bırakır. Her anahtarın yeni yerde okunabildiği doğrulanmadan 4'e geçilmez.
+4. `update media set file_url = 'identity-documents/' || substr(file_url, 8) where media_type='VERIFICATION_DOCUMENT' and file_url like 'images/%'`.
+5. **CDN önbelleğini temizle (purge):** taşınan her `images/<ad>` adresi CDN'de önbellekte kalmış olabilir; bucket'tan
+   silinse de önbellek süresince servis edilir. En azından bu adresler, mümkünse `images/*` için purge.
+
+**EXIF backfill yazılmadı:**
+canlıda gerçek kullanıcı yok, eski nesneler taşındıktan sonra yalnız denetimli personel okumasıyla erişilebilir; test
+kayıtlarının nesneleri taşınmak yerine silinebilir. Gerçek kullanıcı verisi taşınacaksa #351'in
+`DisputeEvidenceScrubManager` kalıbı (özet kontrolü, yeni anahtara yaz-geri oku, eskiyi silme kuyruğuna al) uygulanır.
+
+**Sabitleyen testler.** `StorageKeysTest` (önek hiçbir servis edilebilir kümede değil, `..`/boş segment reddi,
+`urlFor` kimlik anahtarına `null`), `StorageDownloadRulesTest` (eski `images/` kimlik anahtarı 404, sondaki/çift eğik
+çizgi 404, `identity-documents/` üç uçta da reddedilir), `IdentityDocumentReviewRulesTest` (dört yükleme
+`IDENTITY_DOCUMENT` ile ve EXIF'siz, yön 6'lı foto dik saklanır — en/boy yer değiştirir —, çözülemeyen foto saklanmaz),
+`IdentityPhotoPrivacyIT` (gerçek HTTP + Postgres: anonim, yabancı ve sahibi her `/uploads/**` biçiminde 401/403/404
+alır; eski kayıt — `is_deleted=true` olanı ve sonda eğik çizgili adresi dahil — anonim 404, profil görseli hâlâ 200;
+`TRUST_LEAD` indirir ve denetim satırı yazılır, `COMPANY_APPROVER` 403 + `allowed=false` satırı).
 
 ## 2ac. Çalışma zamanı ayarları
 

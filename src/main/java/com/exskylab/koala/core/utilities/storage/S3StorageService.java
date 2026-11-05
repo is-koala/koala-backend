@@ -54,7 +54,7 @@ public class S3StorageService implements StorageService {
     }
 
     private static String dispositionFor(FolderType folderType, String originalFileName) {
-        return folderType == FolderType.DISPUTE_EVIDENCE
+        return folderType == FolderType.DISPUTE_EVIDENCE || folderType == FolderType.IDENTITY_DOCUMENT
                 ? FileDispositions.attachment(originalFileName)
                 : FileDispositions.inline(originalFileName);
     }

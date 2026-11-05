@@ -14,6 +14,7 @@ import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.helpers.UploadValidator;
 import com.exskylab.koala.core.producers.user.UserProducerService;
 import com.exskylab.koala.core.security.StaffPrincipal;
+import com.exskylab.koala.core.utilities.storage.FolderType;
 import com.exskylab.koala.core.utilities.storage.StorageService;
 import com.exskylab.koala.dataAccess.IdentityVerificationDao;
 import com.exskylab.koala.entities.IdentityVerification;
@@ -24,8 +25,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.springframework.mock.web.MockMultipartFile;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -42,8 +49,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -60,6 +69,7 @@ class IdentityDocumentReviewRulesTest {
 
     private User current;
     private StaffPrincipal staff;
+    private StorageService storage;
 
     @BeforeEach
     void setUp() {
@@ -75,7 +85,7 @@ class IdentityDocumentReviewRulesTest {
         SecurityService security = mock(SecurityService.class);
         when(security.getAuthenticatedUser()).thenReturn(current);
 
-        StorageService storage = mock(StorageService.class);
+        storage = mock(StorageService.class);
         when(storage.uploadFile(any(), any(), any(), any()))
                 .thenReturn("selfie-key", "front-key", "back-key", "together-key");
 
@@ -108,7 +118,86 @@ class IdentityDocumentReviewRulesTest {
     }
 
     private static MockMultipartFile photo(String name) {
-        return new MockMultipartFile(name, name + ".jpg", "image/jpeg", new byte[]{1, 2, 3});
+        return new MockMultipartFile(name, name + ".jpg", "image/jpeg", jpegWithExif(GPS_MARKER));
+    }
+
+    private static final String GPS_MARKER = "KOALA-GPS-41.0082N-28.9784E";
+
+    static byte[] jpegWithExif(String marker) {
+        try {
+            ByteArrayOutputStream encoded = new ByteArrayOutputStream();
+            ImageIO.write(new BufferedImage(16, 12, BufferedImage.TYPE_INT_RGB), "jpg", encoded);
+            byte[] jpeg = encoded.toByteArray();
+
+            ByteArrayOutputStream payload = new ByteArrayOutputStream();
+            payload.write("Exif".getBytes(StandardCharsets.US_ASCII));
+            payload.write(new byte[]{0, 0, 'M', 'M', 0, 42, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0});
+            payload.write(marker.getBytes(StandardCharsets.US_ASCII));
+            int length = payload.size() + 2;
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            out.write(jpeg, 0, 2);
+            out.write(new byte[]{(byte) 0xFF, (byte) 0xE1, (byte) (length >> 8), (byte) length});
+            out.write(payload.toByteArray());
+            out.write(jpeg, 2, jpeg.length - 2);
+            return out.toByteArray();
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static boolean contains(byte[] haystack, String needle) {
+        return new String(haystack, StandardCharsets.ISO_8859_1).contains(needle);
+    }
+
+    @Test
+    void identityPhotosAreStoredUnderThePrivatePrefixWithoutTheirExifSegment() throws Exception {
+        assertTrue(contains(photo("selfie").getBytes(), GPS_MARKER), "fixture must carry the marker");
+
+        submitFour();
+
+        ArgumentCaptor<byte[]> stored = ArgumentCaptor.forClass(byte[].class);
+        verify(storage, times(4)).uploadFile(stored.capture(), any(), any(), eq(FolderType.IDENTITY_DOCUMENT));
+        verify(storage, never()).uploadFile(any(), any(), any(), eq(FolderType.IMAGE));
+        for (byte[] bytes : stored.getAllValues()) {
+            assertFalse(contains(bytes, GPS_MARKER), "EXIF payload reached storage");
+            assertFalse(contains(bytes, "Exif"), "APP1 Exif segment reached storage");
+            assertNotNull(ImageIO.read(new ByteArrayInputStream(bytes)), "stored photo must stay decodable");
+        }
+    }
+
+    @Test
+    void aSidewaysIdentityPhotoIsStoredUprightSoItsWidthAndHeightSwap() throws Exception {
+        byte[] sideways = ImageOrientationTest.jpegWithExifOrientation(40, 20, 6);
+
+        reviews.submit(declared(), new MockMultipartFile("selfie", "selfie.jpg", "image/jpeg", sideways),
+                photo("front"), photo("back"), photo("together"));
+
+        ArgumentCaptor<byte[]> stored = ArgumentCaptor.forClass(byte[].class);
+        verify(storage, times(4)).uploadFile(stored.capture(), any(), any(), eq(FolderType.IDENTITY_DOCUMENT));
+        BufferedImage selfie = ImageIO.read(new ByteArrayInputStream(stored.getAllValues().get(0)));
+        assertEquals(20, selfie.getWidth());
+        assertEquals(40, selfie.getHeight());
+    }
+
+    @Test
+    void aPhotoThatCannotBeDecodedIsRefusedInsteadOfBeingStoredRaw() {
+        MockMultipartFile garbage = new MockMultipartFile("selfie", "selfie.jpg", "image/jpeg",
+                ("not a jpeg " + GPS_MARKER).getBytes(StandardCharsets.US_ASCII));
+
+        assertThrows(ValidationException.class, () -> reviews.submit(declared(), garbage,
+                photo("front"), photo("back"), photo("together")));
+
+        verify(storage, never()).uploadFile(any(), any(), any(), any());
+    }
+
+    @Test
+    void aLegacyImageKeyThatBelongsToAnIdentityDocumentIsRecognised() {
+        when(identityVerificationDao.existsDocumentWithStorageKey("images/legacy.jpg")).thenReturn(true);
+
+        assertTrue(reviews.isIdentityDocumentKey("images/legacy.jpg"));
+        assertTrue(reviews.isIdentityDocumentKey("identity-documents/any.jpg"));
+        assertFalse(reviews.isIdentityDocumentKey("images/profile.jpg"));
     }
 
     @Test

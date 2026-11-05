@@ -12,11 +12,13 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.business.abstracts.CvService;
+import com.exskylab.koala.business.abstracts.IdentityDocumentReviewService;
 import com.exskylab.koala.business.abstracts.SecurityService;
 import com.exskylab.koala.core.constants.StorageMessages;
 import com.exskylab.koala.core.utilities.storage.StorageKeys;
 import com.exskylab.koala.core.utilities.storage.StorageService;
 import jakarta.servlet.http.HttpServletRequest;
+import com.exskylab.koala.core.exceptions.ResourceNotFoundException;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -37,12 +39,15 @@ public class StorageDownloadController {
     private final StorageService storageService;
     private final SecurityService securityService;
     private final CvService cvService;
+    private final IdentityDocumentReviewService identityDocumentReviewService;
 
     public StorageDownloadController(StorageService storageService, SecurityService securityService,
-                                     CvService cvService) {
+                                     CvService cvService,
+                                     IdentityDocumentReviewService identityDocumentReviewService) {
         this.storageService = storageService;
         this.securityService = securityService;
         this.cvService = cvService;
+        this.identityDocumentReviewService = identityDocumentReviewService;
     }
 
     @Operation(summary = "Özel dosya indir",
@@ -82,7 +87,8 @@ public class StorageDownloadController {
 
     @SecurityRequirements
     @Operation(summary = "Görsel indir",
-            description = "Görseller CDN üzerinden doğrudan servis edilir.")
+            description = "Görseller CDN üzerinden doğrudan servis edilir. Kimlik doğrulama (TCKK) fotoğrafları bu "
+                    + "uçtan hiçbir koşulda verilmez; eski kayıtlarda images/ altında kalmış olanlar da 404 döner.")
     @ApiResponses({
             @ApiResponse(responseCode = "302", description = "S3 kullanılıyorsa imzalı adrese yönlendirilir",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class))),
@@ -93,13 +99,21 @@ public class StorageDownloadController {
     })
     @GetMapping("/uploads/images/**")
     public ResponseEntity<?> downloadImage(HttpServletRequest request) {
-        return serve(keyOf(request));
+        String key = keyOf(request);
+        if (identityDocumentReviewService.isIdentityDocumentKey(key)) {
+            log.warn("Refused a public image request for an identity document object");
+            throw new ResourceNotFoundException(StorageMessages.FILE_NOT_FOUND);
+        }
+        return serve(key);
     }
 
     private String keyOf(HttpServletRequest request) {
         String uri = request.getRequestURI();
         String key = StorageKeys.fromRequestPath(uri.substring(uri.indexOf(BASE_PATH) + BASE_PATH.length()));
 
+        if (!StorageKeys.isWellFormed(key)) {
+            throw new ResourceNotFoundException(StorageMessages.FILE_NOT_FOUND);
+        }
         if (!StorageKeys.isKnownPrefix(key)) {
             throw new ValidationException(StorageMessages.UNKNOWN_KEY);
         }
