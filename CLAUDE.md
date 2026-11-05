@@ -2733,7 +2733,7 @@ düzleştirilir; JPEG `ImageWriteParam` ile 0,92 kalitede yazılır — varsayı
 bulandırıyordu). Kabul listesi #348'den beri `png`/`jpg`/`jpeg`; liste dışı uzantı `UploadValidator`'da
 `STORAGE_UNSUPPORTED_TYPE` ile düşer. Listede olup çözülemeyen dosya (bozuk ya da uzantısı yalan) ham saklanmaz,
 `IMAGE_UPLOAD_ERROR` ile reddedilir. Kalıp #351'in `ImageMetadataStripper`'ının aynısı; #351 main'e inince `withoutMetadata` o ortak sınıfa
-çevrilmeli (aynı davranış, tek kopya). `file_size` artık saklanan temiz baytın boyu.
+çevrilmeli (aynı davranış, tek kopya; 0,92 JPEG kalitesi korunarak — #362). `file_size` artık saklanan temiz baytın boyu.
 
 **Eski kayıtlar (images/ altında kalmış).** `GET /uploads/images/**` her istekte
 `IdentityDocumentReviewService.isIdentityDocumentKey` soruyor: anahtar `identity-documents/` ise ya da
@@ -2745,7 +2745,7 @@ sorgusu; `idx_media_verification_document_file_url` (`media(file_url) WHERE medi
 `2026/11/04-02`) onu indeks taramasına indirir. CDN açıkken görseller bu uca hiç gelmez.
 
 **CDN yolunu kod kapatamaz** — `STORAGE_PUBLIC_URL` doluyken `images/` nesneleri doğrudan bucket/CDN'den okunur. Eski
-nesneler için insan adımları (takip issue'sunda; #359 bunlar bitince kapanır):
+nesneler için insan adımları (#361; #359 bunlar bitince kapanır):
 
 1. **Önce ortamı doğrula:** prod `STORAGE_TYPE` gerçekten `s3` mü (yerelse taşıma `mv` ile diskte yapılır), ve
    CDN/bucket genel okuması yalnız `images/*` önekiyle mi sınırlı. R2'nin genel alan adı (r2.dev ya da özel alan adı)
