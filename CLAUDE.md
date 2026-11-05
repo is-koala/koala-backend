@@ -5875,7 +5875,7 @@ runner kaldırıldı. İki workflow var, sıra `docs/runbooks/release.md`.
 
 `GITHUB_TOKEN` `packages: write` ile `ghcr.io/is-koala/koala`'ya yazabiliyor: paket `is-koala/koala-backend`'e bağlı ve Pi döneminde aynı token `main-<sha7>` etiketlerini bastı.
 
-Sürümleme: `v1.2.3` tag'i Dokploy'un çektiği `:latest` ile aynı digest'i varsayar. `main` push imaj basmaz. Maven `pom.xml` sürümü git tag'iyle aynı semver'dir (`0.9.31` ↔ `v0.9.31`); `build-info` ve `info.app.version` / ECS `SERVICE_VERSION` (boşsa) buradan okunur. Dokploy'da `SERVICE_VERSION` hâlâ `0.0.1` ise o satır imaj varsayılanını ezer — boşaltın veya tag'le eşleyin.
+Sürümleme: `v1.2.3` tag'i Dokploy'un çektiği `:latest` ile aynı digest'i varsayar. `main` push imaj basmaz. Maven `pom.xml` sürümü git tag'iyle aynı semver'dir (`0.9.32` ↔ `v0.9.32`); `build-info` ve `info.app.version` / ECS `SERVICE_VERSION` (boşsa) buradan okunur. Dokploy'da `SERVICE_VERSION` hâlâ `0.0.1` ise o satır imaj varsayılanını ezer — boşaltın veya tag'le eşleyin.
 
 Uygulama root olmayan `koala` kullanıcısıyla, JRE tabanlı imajda çalışıyor. Sağlık kontrolü `/actuator/health/readiness` üzerinden; `/actuator/health/**` herkese açık, kalan actuator uçları ADMIN rolü istiyor.
 
