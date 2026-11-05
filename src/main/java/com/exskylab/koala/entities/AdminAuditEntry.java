@@ -80,6 +80,12 @@ public class AdminAuditEntry {
     @Column(name = "related_subject_id", updatable = false)
     private UUID relatedSubjectId;
 
+    @Column(name = "row_count", updatable = false)
+    private Integer rowCount;
+
+    @Column(name = "pii_included", updatable = false)
+    private Boolean piiIncluded;
+
     @OneToOne(mappedBy = "entry", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     private AdminAuditEntryDetail detail;
 }

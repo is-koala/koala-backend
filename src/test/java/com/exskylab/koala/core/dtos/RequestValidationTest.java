@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.dtos;
 
+import com.exskylab.koala.support.TestLatches;
 import com.exskylab.koala.core.dtos.availability.request.SaveAvailabilityDto;
 import com.exskylab.koala.core.dtos.address.request.AddressComponentsRequestDto;
 import com.exskylab.koala.core.dtos.address.request.AddressPositionRequestDto;
@@ -434,5 +435,103 @@ class RequestValidationTest {
 
         assertTrue(messagesFor(badge).stream().allMatch(m -> m.startsWith("{") && m.endsWith("}")),
                 "doğrulama mesajları çözümlenebilir anahtar olmalı: " + messagesFor(badge));
+    }
+
+    private static com.exskylab.koala.core.dtos.audit.request.ClientAuditEventDto exportEvent() {
+        var event = new com.exskylab.koala.core.dtos.audit.request.ClientAuditEventDto();
+        event.setAction(ClientAuditAction.EXPORT);
+        event.setResourceType(StaffExportList.JOB_ASSIGNMENTS);
+        event.setFilters("durum=CONFIRMED");
+        event.setRowCount(1000);
+        event.setPiiIncluded(false);
+        return event;
+    }
+
+    @Test
+    void aClientAuditEventNeedsAnActionAListARowCountAndThePersonalDataFlag() {
+        assertTrue(isValid(exportEvent()));
+
+        var event = exportEvent();
+        event.setAction(null);
+        event.setResourceType(null);
+        event.setRowCount(null);
+        event.setPiiIncluded(null);
+
+        assertEquals(Set.of("{audit.event.action.required}", "{audit.event.list.required}",
+                "{audit.event.row.count.required}", "{audit.event.pii.flag.required}"), messagesFor(event));
+    }
+
+    @Test
+    void aClientAuditEventRowCountStaysWithinTheExportCeiling() {
+        var negative = exportEvent();
+        negative.setRowCount(-1);
+        var tooMany = exportEvent();
+        tooMany.setRowCount(1001);
+
+        assertEquals(Set.of("{audit.event.row.count.range}"), messagesFor(negative));
+        assertEquals(Set.of("{audit.event.row.count.range}"), messagesFor(tooMany));
+    }
+
+    @Test
+    void aClientAuditEventFilterSummaryIsBoundedAndCarriesNoPersonalData() {
+        var tooLong = exportEvent();
+        tooLong.setFilters("d".repeat(1001));
+        var withEmail = exportEvent();
+        withEmail.setFilters("arama=ali@example.com");
+        var withoutFilters = exportEvent();
+        withoutFilters.setFilters(null);
+
+        assertEquals(Set.of("{audit.event.filters.too.long}"), messagesFor(tooLong));
+        assertEquals(Set.of("{audit.event.filters.personal.data}"), messagesFor(withEmail));
+        assertTrue(isValid(withoutFilters));
+    }
+
+    @Test
+    void aClientAuditEventSubjectNeedsBothItsTypeAndItsId() {
+        var typeOnly = exportEvent();
+        typeOnly.setSubjectType(AuditSubjectType.USER);
+        var idOnly = exportEvent();
+        idOnly.setSubjectId(UUID.randomUUID());
+        var both = exportEvent();
+        both.setSubjectType(AuditSubjectType.COMPANY);
+        both.setSubjectId(UUID.randomUUID());
+
+        assertEquals(Set.of("{audit.event.subject.incomplete}"), messagesFor(typeOnly));
+        assertEquals(Set.of("{audit.event.subject.incomplete}"), messagesFor(idOnly));
+        assertTrue(isValid(both));
+    }
+
+    @Test
+    void aClientAuditEventCounterpartyComesInPairsAndOnlyBesideASubject() {
+        var withBoth = exportEvent();
+        withBoth.setSubjectType(AuditSubjectType.USER);
+        withBoth.setSubjectId(UUID.randomUUID());
+        withBoth.setRelatedSubjectType(AuditSubjectType.USER);
+        withBoth.setRelatedSubjectId(UUID.randomUUID());
+        var relatedTypeOnly = exportEvent();
+        relatedTypeOnly.setSubjectType(AuditSubjectType.USER);
+        relatedTypeOnly.setSubjectId(UUID.randomUUID());
+        relatedTypeOnly.setRelatedSubjectType(AuditSubjectType.COMPANY);
+        var relatedWithoutSubject = exportEvent();
+        relatedWithoutSubject.setRelatedSubjectType(AuditSubjectType.USER);
+        relatedWithoutSubject.setRelatedSubjectId(UUID.randomUUID());
+
+        assertTrue(isValid(withBoth));
+        assertEquals(Set.of("{audit.event.related.subject.incomplete}"), messagesFor(relatedTypeOnly));
+        assertEquals(Set.of("{audit.event.related.subject.without.subject}"), messagesFor(relatedWithoutSubject));
+    }
+
+    @Test
+    void anOversizedFilterSummaryIsRefusedForItsLengthWithoutBeingScanned() {
+        var huge = exportEvent();
+        huge.setFilters("arama=ali@example.com&" + "a".repeat(200_000));
+
+        long started = System.nanoTime();
+        Set<String> messages = messagesFor(huge);
+        long elapsedMillis = (System.nanoTime() - started) / 1_000_000;
+
+        assertEquals(Set.of("{audit.event.filters.too.long}"), messages);
+        assertTrue(elapsedMillis < TestLatches.progressTimeout().toMillis(),
+                "200 bin karakterlik süzgeç özeti " + elapsedMillis + " ms sürdü");
     }
 }

@@ -40,6 +40,11 @@ public class StaffAuditRecorder {
 
     public void observe(HttpServletRequest request, RequiresPermission required,
                         Authentication authentication, boolean allowed) {
+        // The handler writes the row only for a call that passed authorization; a call refused here never reaches
+        // it, so its allowed=false row is written here (§2av rule 1).
+        if (required.auditedByHandler() && allowed) {
+            return;
+        }
 
         StaffPermission[] permissions = required.value();
         String pattern = patternOf(request);

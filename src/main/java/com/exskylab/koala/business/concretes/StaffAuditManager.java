@@ -60,6 +60,10 @@ public class StaffAuditManager implements StaffAuditService {
     @Override
     @Transactional
     public AdminAuditEntry record(StaffAuditRecord source, String requestBody, String before, String after) {
+        return adminAuditEntryDao.save(newEntry(source, requestBody, before, after));
+    }
+
+    private AdminAuditEntry newEntry(StaffAuditRecord source, String requestBody, String before, String after) {
         Instant now = Instant.now();
 
         AdminAuditEntry entry = new AdminAuditEntry();
@@ -85,7 +89,16 @@ public class StaffAuditManager implements StaffAuditService {
         detail.setAfterValue(after);
         detail.setPurgeAfter(plusMonths(now, retentionProperties.getDetailMonths()));
         entry.setDetail(detail);
+        return entry;
+    }
 
+    @Override
+    @Transactional
+    public AdminAuditEntry recordClientEvent(StaffAuditRecord source, String requestBody, int rowCount,
+                                             boolean piiIncluded) {
+        AdminAuditEntry entry = newEntry(source, requestBody, null, null);
+        entry.setRowCount(rowCount);
+        entry.setPiiIncluded(piiIncluded);
         return adminAuditEntryDao.save(entry);
     }
 

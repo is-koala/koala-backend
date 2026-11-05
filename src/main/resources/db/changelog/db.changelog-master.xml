@@ -103,4 +103,5 @@
     <include file="db/changelog/2026/09/15-06-notification-template-parameters-text.xml"/>
     <include file="db/changelog/2026/09/15-07-boarding-events.xml"/>
     <include file="db/changelog/2026/10/03-01-audit-subject.xml"/>
+    <include file="db/changelog/2026/10/03-02-audit-client-event.xml"/>
 </databaseChangeLog>

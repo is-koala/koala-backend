@@ -1,8 +1,19 @@
 package com.exskylab.koala.webAPI;
 
+import com.exskylab.koala.business.abstracts.ClientAuditEventService;
 import com.exskylab.koala.business.abstracts.StaffAuditService;
 import com.exskylab.koala.core.constants.AuditMessages;
+import com.exskylab.koala.core.dtos.audit.request.ClientAuditEventDto;
 import com.exskylab.koala.core.dtos.audit.response.AuditEntryDto;
+import com.exskylab.koala.core.dtos.audit.response.RecordedAuditEventDto;
+import com.exskylab.koala.core.helpers.ClientIpResolver;
+import com.exskylab.koala.core.security.StaffPrincipal;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import com.exskylab.koala.core.dtos.common.PageDto;
 import com.exskylab.koala.core.mappers.AuditEntryMapper;
 import com.exskylab.koala.core.security.RequiresPermission;
@@ -40,11 +51,74 @@ import java.util.UUID;
 public class AuditLogController {
 
     private final StaffAuditService staffAuditService;
+    private final ClientAuditEventService clientAuditEventService;
     private final AuditEntryMapper auditEntryMapper;
+    private final ClientIpResolver clientIpResolver;
 
-    public AuditLogController(StaffAuditService staffAuditService, AuditEntryMapper auditEntryMapper) {
+    public AuditLogController(StaffAuditService staffAuditService, ClientAuditEventService clientAuditEventService,
+                              AuditEntryMapper auditEntryMapper, ClientIpResolver clientIpResolver) {
         this.staffAuditService = staffAuditService;
+        this.clientAuditEventService = clientAuditEventService;
         this.auditEntryMapper = auditEntryMapper;
+        this.clientIpResolver = clientIpResolver;
+    }
+
+    @Operation(summary = "İstemci denetim olayı kaydet (CSV dışa aktarma)",
+            description = "Yönetim paneli bir personel listesini CSV olarak dışa aktarmadan önce bu uca bildirir. "
+                    + "Sözleşme kapalı başarısızlıktır: panel önce bu çağrıyı yapar ve dosyayı ancak 201 aldıktan "
+                    + "sonra kullanıcıya verir; 201 dışındaki her yanıtta (400, 403, 413, 429, 5xx, ağ hatası) "
+                    + "dışa aktarma reddedilir ve dosya üretilmez. Olay denetim kaydına tek satır olarak yazılır ve "
+                    + "GET /admin/audit-log?action=export ile listelenir (gövdedeki action enum adıdır, bugün yalnız "
+                    + "EXPORT kabul edilir; satıra ve süzgece eylem kodu küçük harfle, export olarak yazılır); sorgu "
+                    + "parametresi ikinci bir satır açmaz; uçta idempotency yoktur, tekrar eden her istek kendi "
+                    + "satırını yazar. Aktör her zaman "
+                    + "token'daki kayıtlı personeldir; gövdede aktör alanı yoktur, gönderilirse yok sayılır. Uç her "
+                    + "personele açıktır ama kayıt, çağıranın dışa aktarılan liste için taşıdığı izinle yazılır "
+                    + "(JOB_ASSIGNMENTS payment.read, PAYOUTS payout.reconcile, REPORTS content.moderate, DISPUTES "
+                    + "dispute.resolve): izin yoksa satır allowed=false olarak yazılır ve 403 döner. Satır "
+                    + "mutating=false; hassasiyet listenin izninden gelir, piiIncluded=true ise en az PERSONAL_DATA "
+                    + "olur. resourceType kaydın kaynak türü olur (job-assignments, payouts, reports, disputes), "
+                    + "resourceId boş. rowCount ve piiIncluded çekirdek satırda (AuditEntryDto.rowCount/piiIncluded) "
+                    + "saklanır; filters ve gövdenin tamamı detayın requestBody alanında (6 ay). Konu kuralı: liste "
+                    + "tek bir taraf süzgeciyle (workerId, reportedUserId, userId gibi) daraltıldıysa subjectType=USER "
+                    + "ve subjectId o kişi; işçi ve işveren süzgeci birlikteyse işçi subject*, işveren related*; "
+                    + "süzgeçsiz liste konusuz. Bildirilen konu ve karşı taraf var olmalıdır (soft-delete edilmiş "
+                    + "dahil). Personel başına saatlik 120 olaylık bütçe var (429); bütçeyi aşan çağrı kayda geçmez. "
+                    + "İstek gövdesi en çok 16 KiB'dır (413).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Olay kaydedildi; panel dosyayı ancak şimdi verebilir"),
+            @ApiResponse(responseCode = "400", description = "Gövde doğrulanamadı: VALIDATION_FAILED ve details[].field "
+                    + "hangi kuralın bozulduğunu söyler (action, resourceType, rowCount, piiIncluded, filters — 1000 "
+                    + "karakteri aşan süzgeç özeti —, filtersFreeOfPersonalData — süzgeç özetinde e-posta, 10+ "
+                    + "rakamlık dizi ya da IBAN —, subjectComplete, relatedSubjectComplete, "
+                    + "relatedSubjectBesideASubject); tanınmayan action/resourceType REQUEST_MALFORMED; bildirilen "
+                    + "konu ya da karşı taraf yoksa AUDIT_EVENT_SUBJECT_NOT_FOUND. Hiçbiri satır yazmaz",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "403", description = "Çağıran dışa aktarılan listenin iznini taşımıyor "
+                    + "(AUDIT_EVENT_LIST_PERMISSION_MISSING; ret de denetim kaydına yazılır), yetki katmanı çağrıyı "
+                    + "reddediyor (ACCESS_DENIED: kayıtsız ya da parolasını değiştirmesi gereken personel, köprü "
+                    + "kapalıyken marketplace hesabı; ret allowed=false satırı yazar) ya da köprü açıkken marketplace "
+                    + "ROLE_ADMIN (AUDIT_EVENT_STAFF_ONLY; satır yazılmaz)",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "413", description = "İstek gövdesi 16 KiB'ı aşıyor (REQUEST_BODY_TOO_LARGE); "
+                    + "satır yazılmaz",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class))),
+            @ApiResponse(responseCode = "429", description = "Personel başına olay bütçesi doldu (AUDIT_EVENT_TOO_MANY) "
+                    + "ya da personel yazma kovası doldu (TOO_MANY_REQUESTS); satır yazılmaz",
+                    content = @Content(schema = @Schema(implementation = ErrorResult.class)))
+    })
+    @RequiresPermission(action = "audit.event.record", auditedByHandler = true)
+    @PostMapping("/events")
+    public ResponseEntity<SuccessDataResult<RecordedAuditEventDto>> recordEvent(
+            @RequestBody @Valid ClientAuditEventDto request,
+            @AuthenticationPrincipal StaffPrincipal actor,
+            HttpServletRequest httpRequest) {
+
+        AdminAuditEntry entry = clientAuditEventService.record(actor, request,
+                clientIpResolver.resolve(httpRequest), httpRequest.getHeader(HttpHeaders.USER_AGENT));
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(new SuccessDataResult<>(
+                auditEntryMapper.toRecordedAuditEventDto(entry), AuditMessages.EVENT_RECORDED, HttpStatus.CREATED));
     }
 
     @Operation(summary = "Denetim kaydını listele",
@@ -68,6 +142,8 @@ public class AuditLogController {
     @GetMapping
     public ResponseEntity<SuccessDataResult<PageDto<AuditEntryDto>>> auditLog(
             @RequestParam(required = false) UUID actor,
+            @Parameter(description = "Eylem kodu, tam ve büyük/küçük harf duyarlı eşleşme; kodlar küçük harftir "
+                    + "(ör. payout.release, audit.read, export). Büyük harfli yazım (EXPORT) hiçbir satırla eşleşmez.")
             @RequestParam(required = false) String action,
             @RequestParam(required = false) String permission,
             @RequestParam(required = false) String resourceType,

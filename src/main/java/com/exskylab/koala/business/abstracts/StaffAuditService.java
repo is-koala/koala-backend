@@ -18,6 +18,9 @@ public interface StaffAuditService {
                                  Instant from, Instant to, Boolean allowed, Boolean mutating,
                                  Pageable pageable);
 
+    AdminAuditEntry recordClientEvent(StaffAuditRecord record, String requestBody, int rowCount,
+                                      boolean piiIncluded);
+
     int purgeExpiredDetails();
 
     int purgeExpiredEntries();
