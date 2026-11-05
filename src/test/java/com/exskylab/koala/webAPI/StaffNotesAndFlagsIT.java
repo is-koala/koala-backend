@@ -5,10 +5,9 @@ import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.entities.StaffFlagKind;
 import com.exskylab.koala.entities.StaffResourceType;
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
+import com.exskylab.koala.support.QueryCounter;
 import com.exskylab.koala.support.OverlappingWrites;
 import jakarta.persistence.EntityManagerFactory;
-import org.hibernate.SessionFactory;
-import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -448,39 +447,37 @@ class StaffNotesAndFlagsIT extends AbstractStaffIntegrationTest {
         setFlag(lead, second, "VIP", null).andExpect(status().isOk());
         setFlag(lead, third, "WATCH", null).andExpect(status().isOk());
 
-        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
-        boolean wasEnabled = statistics.isStatisticsEnabled();
-        statistics.setStatisticsEnabled(true);
+        QueryCounter queries = QueryCounter.start(entityManagerFactory);
         try {
-            statistics.clear();
+            queries.clear();
             perform(get("/admin/notes").param("resourceType", "USER").param("resourceId", subjectId.toString())
                     .param("size", "1"), agent).andExpect(status().isOk());
-            long statementsForOneNote = statistics.getPrepareStatementCount();
-            long fetchesForOneNote = statistics.getEntityFetchCount();
+            long statementsForOneNote = queries.getPrepareStatementCount();
+            long fetchesForOneNote = queries.getEntityFetchCount();
 
-            statistics.clear();
+            queries.clear();
             perform(get("/admin/notes").param("resourceType", "USER").param("resourceId", subjectId.toString())
                     .param("size", "3"), agent)
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.content", hasSize(3)));
-            assertEquals(statementsForOneNote, statistics.getPrepareStatementCount(),
+            assertEquals(statementsForOneNote, queries.getPrepareStatementCount(),
                     "not listesi satır sayısıyla büyüyen sorgu atıyor (N+1)");
             assertEquals(0, fetchesForOneNote, "not listesi satır başına lazy entity yüklüyor");
-            assertEquals(0, statistics.getEntityFetchCount(), "not listesi satır başına lazy entity yüklüyor");
+            assertEquals(0, queries.getEntityFetchCount(), "not listesi satır başına lazy entity yüklüyor");
 
-            statistics.clear();
+            queries.clear();
             readFlags(lead, subjectId.toString()).andExpect(status().isOk());
-            long statementsForOneResource = statistics.getPrepareStatementCount();
+            long statementsForOneResource = queries.getPrepareStatementCount();
 
-            statistics.clear();
+            queries.clear();
             readFlags(lead, subjectId + "," + second + "," + third)
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data", hasSize(3)));
-            assertEquals(statementsForOneResource, statistics.getPrepareStatementCount(),
+            assertEquals(statementsForOneResource, queries.getPrepareStatementCount(),
                     "rozet okuması kaynak sayısıyla büyüyen sorgu atıyor (N+1)");
-            assertEquals(0, statistics.getEntityFetchCount(), "rozet okuması satır başına lazy entity yüklüyor");
+            assertEquals(0, queries.getEntityFetchCount(), "rozet okuması satır başına lazy entity yüklüyor");
         } finally {
-            statistics.setStatisticsEnabled(wasEnabled);
+            queries.close();
         }
     }
 

@@ -13,9 +13,8 @@ import com.exskylab.koala.entities.NotificationChannel;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.entities.User;
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
+import com.exskylab.koala.support.QueryCounter;
 import jakarta.persistence.EntityManagerFactory;
-import org.hibernate.SessionFactory;
-import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -259,30 +258,28 @@ class CompanyApprovalIT extends AbstractStaffIntegrationTest {
                     values (?, now(), false, ?, ?, 'Sayım', 'OPEN', 'COMPANY', false, true, false, 18, 65)
                     """, jobId, founder.getId(), company.getId());
         }
-        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
-        boolean wasEnabled = statistics.isStatisticsEnabled();
-        statistics.setStatisticsEnabled(true);
+        QueryCounter queries = QueryCounter.start(entityManagerFactory);
         try {
-            statistics.clear();
+            queries.clear();
             asOperator(get("/admin/companies").param("query", "sayım").param("size", "1"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.content", hasSize(1)))
                     .andExpect(jsonPath("$.data.content[0].companyContacts", hasSize(1)))
                     .andExpect(jsonPath("$.data.content[0].jobCount").value(1));
-            long statementsForOneRow = statistics.getPrepareStatementCount();
+            long statementsForOneRow = queries.getPrepareStatementCount();
 
-            statistics.clear();
+            queries.clear();
             asOperator(get("/admin/companies").param("query", "sayım").param("size", "2"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.content", hasSize(2)))
                     .andExpect(jsonPath("$.data.content[1].companyContacts", hasSize(1)))
                     .andExpect(jsonPath("$.data.content[1].jobCount").value(1));
-            long statementsForTwoRows = statistics.getPrepareStatementCount();
+            long statementsForTwoRows = queries.getPrepareStatementCount();
 
             assertEquals(statementsForOneRow, statementsForTwoRows,
                     "şirket kuyruğu yetkilileri ya da ilan sayılarını satır başına sorguyla çekiyor (N+1)");
         } finally {
-            statistics.setStatisticsEnabled(wasEnabled);
+            queries.close();
             for (UUID jobId : jobIds) {
                 jdbcTemplate.update("delete from jobs where id = ?", jobId);
             }

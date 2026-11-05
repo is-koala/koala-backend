@@ -3,10 +3,9 @@ package com.exskylab.koala.webAPI;
 import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
+import com.exskylab.koala.support.QueryCounter;
 import org.springframework.http.MediaType;
 import jakarta.persistence.EntityManagerFactory;
-import org.hibernate.SessionFactory;
-import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -520,40 +519,36 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
     @Test
     void theJobListIsBuiltWithoutAQueryPerRow() throws Exception {
         String token = tokenFor("SUPPORT_AGENT");
-        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
-        boolean wasEnabled = statistics.isStatisticsEnabled();
-        statistics.setStatisticsEnabled(true);
+        QueryCounter queries = QueryCounter.start(entityManagerFactory);
         try {
-            statistics.clear();
+            queries.clear();
             read("/admin/jobs?size=1&query=" + employerEmail, token).andExpect(status().isOk());
-            long statementsForOneRow = statistics.getPrepareStatementCount();
-            long fetchesForOneRow = statistics.getEntityFetchCount();
+            long statementsForOneRow = queries.getPrepareStatementCount();
+            long fetchesForOneRow = queries.getEntityFetchCount();
 
-            statistics.clear();
+            queries.clear();
             read("/admin/jobs?size=2&query=" + employerEmail, token)
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.content", hasSize(2)));
-            long statementsForTwoRows = statistics.getPrepareStatementCount();
+            long statementsForTwoRows = queries.getPrepareStatementCount();
 
             assertEquals(statementsForOneRow, statementsForTwoRows,
                     "ilan listesi satır sayısıyla büyüyen sorgu atıyor (N+1)");
             assertEquals(0, fetchesForOneRow, "ilan listesi satır başına lazy entity yüklüyor");
-            assertEquals(0, statistics.getEntityFetchCount(), "ilan listesi satır başına lazy entity yüklüyor");
+            assertEquals(0, queries.getEntityFetchCount(), "ilan listesi satır başına lazy entity yüklüyor");
         } finally {
-            statistics.setStatisticsEnabled(wasEnabled);
+            queries.close();
         }
     }
 
     @Test
     void thePaymentListIsBuiltWithoutAQueryPerAttempt() throws Exception {
         String token = tokenFor("FINANCE_ANALYST");
-        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
-        boolean wasEnabled = statistics.isStatisticsEnabled();
-        statistics.setStatisticsEnabled(true);
+        QueryCounter queries = QueryCounter.start(entityManagerFactory);
         try {
-            statistics.clear();
+            queries.clear();
             read("/admin/job-assignments/" + assignmentId + "/payments", token).andExpect(status().isOk());
-            long statementsForTwoAttempts = statistics.getPrepareStatementCount();
+            long statementsForTwoAttempts = queries.getPrepareStatementCount();
 
             UUID third = UUID.randomUUID();
             jdbcTemplate.update("""
@@ -561,16 +556,16 @@ class AdminDetailReadIT extends AbstractStaffIntegrationTest {
                                           currency, verification_attempts)
                     values (?, now() - interval '3 hours', false, ?, ?, 'FAILED', 'TRY', 0)
                     """, third, assignmentId, "conv-third-" + third);
-            statistics.clear();
+            queries.clear();
             read("/admin/job-assignments/" + assignmentId + "/payments", token)
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data", hasSize(3)));
-            long statementsForThreeAttempts = statistics.getPrepareStatementCount();
+            long statementsForThreeAttempts = queries.getPrepareStatementCount();
 
             assertEquals(statementsForTwoAttempts, statementsForThreeAttempts,
                     "ödeme denemeleri listesi deneme sayısıyla büyüyen sorgu atıyor (N+1)");
         } finally {
-            statistics.setStatisticsEnabled(wasEnabled);
+            queries.close();
         }
     }
 

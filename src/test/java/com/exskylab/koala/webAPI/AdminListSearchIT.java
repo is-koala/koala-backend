@@ -3,10 +3,9 @@ package com.exskylab.koala.webAPI;
 import com.exskylab.koala.core.security.UserPrincipal;
 import com.exskylab.koala.entities.Role;
 import com.exskylab.koala.support.AbstractStaffIntegrationTest;
+import com.exskylab.koala.support.QueryCounter;
 import org.springframework.http.MediaType;
 import jakarta.persistence.EntityManagerFactory;
-import org.hibernate.SessionFactory;
-import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -431,20 +430,18 @@ class AdminListSearchIT extends AbstractStaffIntegrationTest {
                     (id, user_id, subject_id, status, reason, requested_at, created_at, is_deleted)
                 values (?, ?, ?, 'REQUESTED', 'n+1 testi', now() + interval '1 second', now(), false)
                 """, secondDeletionId, employerId, employerId);
-        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
-        boolean wasEnabled = statistics.isStatisticsEnabled();
-        statistics.setStatisticsEnabled(true);
+        QueryCounter queries = QueryCounter.start(entityManagerFactory);
         try {
-            statistics.clear();
+            queries.clear();
             filtered("/admin/account-deletions", trustToken, "status", "REQUESTED", "size", "1",
                     "sort", "requestedAt,desc")
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.content", hasSize(1)))
                     .andExpect(jsonPath("$.data.content[0].id").value(secondDeletionId.toString()))
                     .andExpect(jsonPath("$.data.content[0].blockers[*].type", hasItem("DISPUTE")));
-            long statementsForOneRow = statistics.getPrepareStatementCount();
+            long statementsForOneRow = queries.getPrepareStatementCount();
 
-            statistics.clear();
+            queries.clear();
             filtered("/admin/account-deletions", trustToken, "status", "REQUESTED", "size", "2",
                     "sort", "requestedAt,desc")
                     .andExpect(status().isOk())
@@ -453,12 +450,12 @@ class AdminListSearchIT extends AbstractStaffIntegrationTest {
                             containsInAnyOrder(secondDeletionId.toString(), matchingDeletionId.toString())))
                     .andExpect(jsonPath("$.data.content[?(@.id == '" + matchingDeletionId + "')].blockers[*].type",
                             hasItem("DISPUTE")));
-            long statementsForTwoRows = statistics.getPrepareStatementCount();
+            long statementsForTwoRows = queries.getPrepareStatementCount();
 
             assertEquals(statementsForOneRow, statementsForTwoRows,
                     "silme kuyruğu engelleyicileri satır sayısıyla büyüyen sorgu atıyor (N+1)");
         } finally {
-            statistics.setStatisticsEnabled(wasEnabled);
+            queries.close();
             jdbc.update("delete from account_deletion_requests where id = ?", secondDeletionId);
         }
     }
@@ -599,8 +596,7 @@ class AdminListSearchIT extends AbstractStaffIntegrationTest {
         UUID failedPaymentId = UUID.randomUUID();
         UUID succeededPaymentId = UUID.randomUUID();
         UUID refundId = UUID.randomUUID();
-        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
-        boolean wasEnabled = statistics.isStatisticsEnabled();
+        QueryCounter queries = QueryCounter.start(entityManagerFactory);
         try {
             insertPayment(stuckPaymentId, matchingAssignmentId, "VERIFY_PENDING", "now() - interval '3 hours'", null);
             insertPayment(failedPaymentId, otherAssignmentId, "FAILED", "now() - interval '2 hours'", null);
@@ -647,26 +643,25 @@ class AdminListSearchIT extends AbstractStaffIntegrationTest {
                     "FINANCE_ANALYST"), "status", "FAILED")
                     .andExpect(status().isOk());
 
-            statistics.setStatisticsEnabled(true);
-            statistics.clear();
+            queries.clear();
             filtered("/admin/payments", financeToken, "size", "1", "sort", "createdAt,desc")
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.content", hasSize(1)))
                     .andExpect(jsonPath("$.data.content[0].id").value(succeededPaymentId.toString()));
-            long statementsForOneRow = statistics.getPrepareStatementCount();
+            long statementsForOneRow = queries.getPrepareStatementCount();
 
-            statistics.clear();
+            queries.clear();
             filtered("/admin/payments", financeToken, "size", "3", "sort", "createdAt,desc")
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.content", hasSize(3)))
                     .andExpect(jsonPath("$.data.content[*].id", containsInAnyOrder(succeededPaymentId.toString(),
                             failedPaymentId.toString(), stuckPaymentId.toString())));
-            long statementsForThreeRows = statistics.getPrepareStatementCount();
+            long statementsForThreeRows = queries.getPrepareStatementCount();
 
             assertEquals(statementsForOneRow, statementsForThreeRows,
                     "ödeme listesi satır sayısıyla büyüyen sorgu atıyor (N+1)");
         } finally {
-            statistics.setStatisticsEnabled(wasEnabled);
+            queries.close();
             jdbc.update("update payouts set payment_id = null where id = ?", matchingPayoutId);
             jdbc.update("delete from refunds where id = ?", refundId);
             jdbc.update("delete from payments where id in (?, ?, ?)", stuckPaymentId, failedPaymentId,
@@ -736,34 +731,32 @@ class AdminListSearchIT extends AbstractStaffIntegrationTest {
 
     @Test
     void theAssignmentListResolvesWorkersWithOneBatchQueryAndNeverOpensTheWorkerProxy() throws Exception {
-        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
-        boolean wasEnabled = statistics.isStatisticsEnabled();
-        statistics.setStatisticsEnabled(true);
+        QueryCounter queries = QueryCounter.start(entityManagerFactory);
         try {
-            statistics.clear();
+            queries.clear();
             filtered("/admin/job-assignments", financeToken, "size", "1", "sort", "createdAt,desc")
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.content", hasSize(1)))
                     .andExpect(jsonPath("$.data.content[0].worker.id").isNotEmpty());
-            long statementsForOneRow = statistics.getPrepareStatementCount();
-            long lazyFetchesForOneRow = statistics.getEntityFetchCount();
+            long statementsForOneRow = queries.getPrepareStatementCount();
+            long lazyFetchesForOneRow = queries.getEntityFetchCount();
 
-            statistics.clear();
+            queries.clear();
             filtered("/admin/job-assignments", financeToken, "size", "2", "sort", "createdAt,desc")
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.content", hasSize(2)))
                     .andExpect(jsonPath("$.data.content[*].worker.id",
                             containsInAnyOrder(workerId.toString(), bystanderId.toString())));
-            long statementsForTwoRows = statistics.getPrepareStatementCount();
+            long statementsForTwoRows = queries.getPrepareStatementCount();
 
             assertEquals(0L, lazyFetchesForOneRow,
                     "atama listesi worker proxy'sini açmamalı; çalışanlar tek toplu sorguyla gelir");
-            assertEquals(0L, statistics.getEntityFetchCount(),
+            assertEquals(0L, queries.getEntityFetchCount(),
                     "atama listesi worker proxy'sini açmamalı; çalışanlar tek toplu sorguyla gelir");
             assertEquals(statementsForOneRow, statementsForTwoRows,
                     "atama listesi satır sayısıyla büyüyen sorgu atıyor (N+1)");
         } finally {
-            statistics.setStatisticsEnabled(wasEnabled);
+            queries.close();
         }
     }
 
