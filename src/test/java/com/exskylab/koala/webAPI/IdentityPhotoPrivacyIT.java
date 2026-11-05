@@ -133,6 +133,26 @@ class IdentityPhotoPrivacyIT extends AbstractStaffIntegrationTest {
     }
 
     @Test
+    void aSoftDeletedLegacyIdentityPhotoStaysHiddenFromThePublicImageRoute() throws Exception {
+        UUID reviewId = legacyReview();
+        String legacyKey = (String) frontDocument(reviewId).get("file_url");
+        jdbc.update("update media set is_deleted = true, deleted_at = now() where file_url = ?", legacyKey);
+
+        mockMvc.perform(get("/uploads/" + legacyKey)).andExpect(status().isNotFound());
+        mockMvc.perform(get("/uploads/" + legacyKey + "/")).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void aTrailingSlashDoesNotSlipALegacyIdentityPhotoPastTheCheck() throws Exception {
+        UUID reviewId = legacyReview();
+        String legacyKey = (String) frontDocument(reviewId).get("file_url");
+
+        mockMvc.perform(get("/uploads/" + legacyKey + "/")).andExpect(status().isNotFound());
+        mockMvc.perform(get("/uploads/" + legacyKey + "/").with(user(principal(strangerId))))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void aStaffMemberHoldingIdentityReviewDownloadsThePhotoAndTheReadIsAudited() throws Exception {
         submitIdentityPhotos();
         UUID reviewId = reviewOf(ownerId);

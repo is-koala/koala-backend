@@ -123,10 +123,25 @@ class StorageDownloadRulesTest {
         assertThrows(ValidationException.class, () -> controller.downloadImage(requestFor(key)));
         assertThrows(ValidationException.class, () -> controller.downloadPublicFile(requestFor(key)));
         assertThrows(ValidationException.class, () -> controller.downloadPrivate(requestFor(key)));
-        assertThrows(ValidationException.class,
+        assertThrows(ResourceNotFoundException.class,
                 () -> controller.downloadImage(requestFor("images/../" + key)));
 
         verifyNoInteractions(storageService, cvService);
+    }
+
+    @Test
+    void aTrailingOrDoubledSlashCannotSlipALegacyIdentityKeyPastTheCheck() {
+        String legacyKey = "images/0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0.jpg";
+        when(identityDocuments.isIdentityDocumentKey(legacyKey)).thenReturn(true);
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> controller.downloadImage(requestFor(legacyKey + "/")));
+        assertThrows(ResourceNotFoundException.class,
+                () -> controller.downloadImage(requestFor(legacyKey.replace("images/", "images//"))));
+        assertThrows(ResourceNotFoundException.class,
+                () -> controller.downloadImage(requestFor("images/./" + legacyKey.substring(7))));
+
+        verifyNoInteractions(storageService);
     }
 
     @Test

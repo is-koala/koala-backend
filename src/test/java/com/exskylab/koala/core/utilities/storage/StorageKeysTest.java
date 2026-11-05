@@ -74,6 +74,16 @@ class StorageKeysTest {
     }
 
     @Test
+    void anIdentityDocumentKeyNeverResolvesToAnAddress() {
+        String key = StorageKeys.newKey(FolderType.IDENTITY_DOCUMENT, "on.jpg");
+
+        assertNull(resolver().urlFor(key));
+        assertNull(resolver().urlFor("/" + key));
+        StorageProperties withoutCdn = new StorageProperties();
+        assertNull(new StorageUrlResolver(withoutCdn, new AppProperties(API, "http://localhost:3000")).urlFor(key));
+    }
+
+    @Test
     void aMissingKeyResolvesToNothing() {
         assertNull(resolver().urlFor(null));
         assertNull(resolver().urlFor("  "));
@@ -117,5 +127,10 @@ class StorageKeysTest {
         assertFalse(StorageKeys.isKnownPrefix("files/./../identity-documents/a.jpg"));
         assertFalse(StorageKeys.isKnownPrefix("images/..\\identity-documents\\a.jpg"));
         assertTrue(StorageKeys.isKnownPrefix("images/foto..eski.jpg"));
+        assertFalse(StorageKeys.isKnownPrefix("images/a.jpg/"));
+        assertFalse(StorageKeys.isKnownPrefix("images//a.jpg"));
+        assertFalse(StorageKeys.isWellFormed("images/a.jpg/"));
+        assertFalse(StorageKeys.isWellFormed(""));
+        assertTrue(StorageKeys.isWellFormed("images/a.jpg"));
     }
 }

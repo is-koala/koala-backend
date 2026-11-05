@@ -111,6 +111,9 @@ public class StorageDownloadController {
         String uri = request.getRequestURI();
         String key = StorageKeys.fromRequestPath(uri.substring(uri.indexOf(BASE_PATH) + BASE_PATH.length()));
 
+        if (!StorageKeys.isWellFormed(key)) {
+            throw new ResourceNotFoundException(StorageMessages.FILE_NOT_FOUND);
+        }
         if (!StorageKeys.isKnownPrefix(key)) {
             throw new ValidationException(StorageMessages.UNKNOWN_KEY);
         }

@@ -56,10 +56,14 @@ public final class StorageKeys {
     }
 
     public static boolean isKnownPrefix(String key) {
-        if (key == null || climbsOut(key)) {
+        if (!isWellFormed(key)) {
             return false;
         }
         return isImage(key) || isPublicFile(key) || isPrivate(key);
+    }
+
+    public static boolean isWellFormed(String key) {
+        return key != null && !climbsOut(key);
     }
 
     private static boolean climbsOut(String key) {
@@ -67,7 +71,7 @@ public final class StorageKeys {
             return true;
         }
         for (String segment : key.split("/", -1)) {
-            if ("..".equals(segment) || ".".equals(segment)) {
+            if (segment.isEmpty() || "..".equals(segment) || ".".equals(segment)) {
                 return true;
             }
         }

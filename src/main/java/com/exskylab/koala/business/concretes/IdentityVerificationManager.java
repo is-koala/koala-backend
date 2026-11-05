@@ -35,7 +35,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
@@ -43,6 +47,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.Instant;
+import java.util.Iterator;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
@@ -54,6 +59,7 @@ public class IdentityVerificationManager implements IdentityDocumentReviewServic
 
     private static final Locale TURKISH = Locale.forLanguageTag("tr-TR");
     private static final Set<String> SORTABLE = Set.of("createdAt", "id");
+    private static final float IDENTITY_JPEG_QUALITY = 0.92f;
 
     private final IdentityVerificationDao identityVerificationDao;
     private final UserService userService;
@@ -285,10 +291,29 @@ public class IdentityVerificationManager implements IdentityDocumentReviewServic
         BufferedImage encodable = isJpeg(format) ? withoutAlpha(upright) : upright;
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        if (format.isEmpty() || !ImageIO.write(encodable, format, out)) {
+        if (isJpeg(format)) {
+            writeJpeg(encodable, out);
+        } else if (format.isEmpty() || !ImageIO.write(encodable, format, out)) {
             throw new IOException("No image writer for identity photo format " + format);
         }
         return out.toByteArray();
+    }
+
+    private static void writeJpeg(BufferedImage image, ByteArrayOutputStream out) throws IOException {
+        Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("jpeg");
+        if (!writers.hasNext()) {
+            throw new IOException("No JPEG writer for identity photo");
+        }
+        ImageWriter writer = writers.next();
+        ImageWriteParam param = writer.getDefaultWriteParam();
+        param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+        param.setCompressionQuality(IDENTITY_JPEG_QUALITY);
+        try (ImageOutputStream stream = ImageIO.createImageOutputStream(out)) {
+            writer.setOutput(stream);
+            writer.write(null, new IIOImage(image, null, null), param);
+        } finally {
+            writer.dispose();
+        }
     }
 
     private static boolean isJpeg(String format) {

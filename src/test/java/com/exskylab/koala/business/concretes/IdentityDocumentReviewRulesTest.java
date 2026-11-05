@@ -167,6 +167,20 @@ class IdentityDocumentReviewRulesTest {
     }
 
     @Test
+    void aSidewaysIdentityPhotoIsStoredUprightSoItsWidthAndHeightSwap() throws Exception {
+        byte[] sideways = ImageOrientationTest.jpegWithExifOrientation(40, 20, 6);
+
+        reviews.submit(declared(), new MockMultipartFile("selfie", "selfie.jpg", "image/jpeg", sideways),
+                photo("front"), photo("back"), photo("together"));
+
+        ArgumentCaptor<byte[]> stored = ArgumentCaptor.forClass(byte[].class);
+        verify(storage, times(4)).uploadFile(stored.capture(), any(), any(), eq(FolderType.IDENTITY_DOCUMENT));
+        BufferedImage selfie = ImageIO.read(new ByteArrayInputStream(stored.getAllValues().get(0)));
+        assertEquals(20, selfie.getWidth());
+        assertEquals(40, selfie.getHeight());
+    }
+
+    @Test
     void aPhotoThatCannotBeDecodedIsRefusedInsteadOfBeingStoredRaw() {
         MockMultipartFile garbage = new MockMultipartFile("selfie", "selfie.jpg", "image/jpeg",
                 ("not a jpeg " + GPS_MARKER).getBytes(StandardCharsets.US_ASCII));
