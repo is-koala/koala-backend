@@ -46,6 +46,6 @@ class StaffAuditContextTest {
     private static void pend(StaffPermission permission) {
         StaffAuditContext.pend(new StaffAuditRecord(UUID.randomUUID(), "Personel", permission.getCode(),
                 permission.getCode(), "job-assignments", UUID.randomUUID().toString(), true,
-                permission.isMutating(), permission.getSensitivity(), "127.0.0.1", "test"));
+                permission.isMutating(), permission.getSensitivity(), "127.0.0.1", "test", AuditSubjects.NONE));
     }
 }
