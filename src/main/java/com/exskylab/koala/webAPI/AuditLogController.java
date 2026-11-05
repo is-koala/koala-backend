@@ -9,8 +9,10 @@ import com.exskylab.koala.core.security.RequiresPermission;
 import com.exskylab.koala.core.utilities.results.ErrorResult;
 import com.exskylab.koala.core.utilities.results.SuccessDataResult;
 import com.exskylab.koala.entities.AdminAuditEntry;
+import com.exskylab.koala.entities.AuditSubjectType;
 import com.exskylab.koala.entities.StaffPermission;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -48,10 +50,18 @@ public class AuditLogController {
     @Operation(summary = "Denetim kaydını listele",
             description = "Süzme tümüyle sunucuda yapılır; panel dönen sayfa içinde ikinci bir süzme uygulamaz. "
                     + "Çekirdek alanlar hiçbir zaman boş dönmez; detay alanları saklama süresi dolduğunda ya da "
-                    + "KVKK silme talebiyle silindiği için null olabilir.")
+                    + "KVKK silme talebiyle silindiği için null olabilir. subjectId verilirse kararın konusu "
+                    + "(subjectId) ya da karşı tarafı (relatedSubjectId) o kimlik olan satırlar döner; subjectType "
+                    + "(USER|COMPANY) verilirse eşleşme o türle sınırlanır, tek başına verilirse o türde konusu ya da "
+                    + "karşı tarafı olan satırlar döner. Kullanıcı ve şirket zaman çizelgesi bu süzgeçle kurulur: "
+                    + "personelin kimlik, silme talebi, görsel, IBAN, hakediş, atama, uyuşmazlık ve şikayet kararları "
+                    + "kendi kaynak kimliklerinin altında yazılsa da konuya göre bulunur. Konu yazma satırlarında ve "
+                    + "hassas (PERSONAL_DATA/FINANCIAL) okumalarda tutulur — ör. kimlik belgesi görüntüleme, iletişim "
+                    + "bilgisiyle kullanıcı detayı; mutating=true kararları, mutating=false görüntülemeleri ayırır. "
+                    + "Personel notu ve işareti yazımları da hedeflerinin konusunu taşır. Diğer süzgeçlerle kesişir.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Denetim kaydı listelendi"),
-            @ApiResponse(responseCode = "400", description = "Sıralama alanı tanınmıyor",
+            @ApiResponse(responseCode = "400", description = "Sıralama alanı tanınmıyor ya da subjectType/subjectId geçersiz",
                     content = @Content(schema = @Schema(implementation = ErrorResult.class)))
     })
     @RequiresPermission(StaffPermission.AUDIT_READ)
@@ -62,16 +72,24 @@ public class AuditLogController {
             @RequestParam(required = false) String permission,
             @RequestParam(required = false) String resourceType,
             @RequestParam(required = false) String resourceId,
+            @Parameter(description = "Kararın konusunun türü: USER ya da COMPANY.")
+            @RequestParam(required = false) AuditSubjectType subjectType,
+            @Parameter(description = "Kararın konusu ya da karşı tarafı olan kullanıcının veya şirketin kimliği.")
+            @RequestParam(required = false) UUID subjectId,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
             @RequestParam(required = false) Boolean allowed,
+            @Parameter(description = "true: yalnız yazma (karar) satırları, false: yalnız okuma satırları; verilmezse "
+                    + "ikisi de. Zaman çizelgesi kararları görüntülemelerden bununla ayırır.")
+            @RequestParam(required = false) Boolean mutating,
             @ParameterObject @PageableDefault(size = 20, sort = "occurredAt",
                     direction = Sort.Direction.DESC) Pageable pageable) {
 
         Page<AdminAuditEntry> page = staffAuditService.search(
-                actor, action, permission, resourceType, resourceId, from, to, allowed, pageable);
+                actor, action, permission, resourceType, resourceId, subjectType, subjectId, from, to, allowed,
+                mutating, pageable);
 
         return ResponseEntity.ok(new SuccessDataResult<>(
                 PageDto.of(page, auditEntryMapper::toAuditEntryDto),

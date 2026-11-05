@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="2026-10-03-01-01-admin-audit-subject-columns" author="koala">
+        <addColumn tableName="admin_audit_entries">
+            <column name="subject_type" type="VARCHAR(16)"/>
+            <column name="subject_id" type="UUID"/>
+            <column name="related_subject_type" type="VARCHAR(16)"/>
+            <column name="related_subject_id" type="UUID"/>
+        </addColumn>
+        <sql>
+            ALTER TABLE admin_audit_entries
+                ADD CONSTRAINT ck_admin_audit_entries_subject_pair
+                    CHECK ((subject_type IS NULL) = (subject_id IS NULL)
+                        AND (subject_type IS NULL OR subject_type IN ('USER', 'COMPANY'))) NOT VALID,
+                ADD CONSTRAINT ck_admin_audit_entries_related_subject_pair
+                    CHECK ((related_subject_type IS NULL) = (related_subject_id IS NULL)
+                        AND (related_subject_type IS NULL OR related_subject_type IN ('USER', 'COMPANY'))
+                        AND (related_subject_id IS NULL OR subject_id IS NOT NULL)) NOT VALID;
+        </sql>
+        <rollback>
+            <sql>
+                ALTER TABLE admin_audit_entries
+                    DROP CONSTRAINT IF EXISTS ck_admin_audit_entries_related_subject_pair,
+                    DROP CONSTRAINT IF EXISTS ck_admin_audit_entries_subject_pair;
+            </sql>
+            <dropColumn tableName="admin_audit_entries" columnName="related_subject_id"/>
+            <dropColumn tableName="admin_audit_entries" columnName="related_subject_type"/>
+            <dropColumn tableName="admin_audit_entries" columnName="subject_id"/>
+            <dropColumn tableName="admin_audit_entries" columnName="subject_type"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-10-03-01-02-admin-audit-subject-backfill" author="koala">
+        <sql>
+            UPDATE admin_audit_entries e
+            SET subject_type = 'USER', subject_id = u.id
+            FROM users u
+            WHERE (e.mutating OR e.sensitivity &lt;&gt; 'NORMAL') AND e.subject_id IS NULL
+              AND e.resource_type = 'users'
+              AND u.id::text = e.resource_id;
+
+            UPDATE admin_audit_entries e
+            SET subject_type = 'COMPANY', subject_id = c.id
+            FROM companies c
+            WHERE (e.mutating OR e.sensitivity &lt;&gt; 'NORMAL') AND e.subject_id IS NULL
+              AND e.resource_type = 'companies'
+              AND c.id::text = e.resource_id;
+
+            UPDATE admin_audit_entries e
+            SET subject_type = 'USER', subject_id = v.user_id
+            FROM user_verifications v
+            WHERE (e.mutating OR e.sensitivity &lt;&gt; 'NORMAL') AND e.subject_id IS NULL
+              AND e.resource_type = 'identity-verifications'
+              AND v.id::text = e.resource_id
+              AND v.user_id IS NOT NULL;
+
+            UPDATE admin_audit_entries e
+            SET subject_type = 'USER', subject_id = COALESCE(r.subject_id, r.user_id)
+            FROM account_deletion_requests r
+            WHERE (e.mutating OR e.sensitivity &lt;&gt; 'NORMAL') AND e.subject_id IS NULL
+              AND e.resource_type = 'account-deletions'
+              AND r.id::text = e.resource_id
+              AND COALESCE(r.subject_id, r.user_id) IS NOT NULL;
+
+            UPDATE admin_audit_entries e
+            SET subject_type = 'COMPANY', subject_id = ci.company_id
+            FROM company_images ci
+            WHERE (e.mutating OR e.sensitivity &lt;&gt; 'NORMAL') AND e.subject_id IS NULL
+              AND e.resource_type = 'images'
+              AND ci.image_id::text = e.resource_id;
+
+            UPDATE admin_audit_entries e
+            SET subject_type = CASE WHEN j.company_id IS NOT NULL THEN 'COMPANY' ELSE 'USER' END,
+                subject_id = COALESCE(j.company_id, j.creator_id)
+            FROM job_images ji
+            JOIN jobs j ON j.id = ji.job_id
+            WHERE (e.mutating OR e.sensitivity &lt;&gt; 'NORMAL') AND e.subject_id IS NULL
+              AND e.resource_type = 'images'
+              AND ji.image_id::text = e.resource_id
+              AND COALESCE(j.company_id, j.creator_id) IS NOT NULL;
+
+            UPDATE admin_audit_entries e
+            SET subject_type = CASE WHEN j.company_id IS NOT NULL THEN 'COMPANY' ELSE 'USER' END,
+                subject_id = COALESCE(j.company_id, j.creator_id)
+            FROM jobs j
+            WHERE (e.mutating OR e.sensitivity &lt;&gt; 'NORMAL') AND e.subject_id IS NULL
+              AND e.resource_type = 'jobs'
+              AND j.id::text = e.resource_id
+              AND COALESCE(j.company_id, j.creator_id) IS NOT NULL;
+
+            UPDATE admin_audit_entries e
+            SET subject_type = 'USER', subject_id = b.user_id
+            FROM bank_accounts b
+            WHERE (e.mutating OR e.sensitivity &lt;&gt; 'NORMAL') AND e.subject_id IS NULL
+              AND e.resource_type = 'bank-account-verifications'
+              AND b.verification_reference = e.resource_id;
+
+            UPDATE admin_audit_entries e
+            SET subject_type = 'USER', subject_id = a.worker_id,
+                related_subject_type = CASE WHEN j.company_id IS NOT NULL THEN 'COMPANY'
+                                            WHEN j.creator_id IS NOT NULL THEN 'USER' END,
+                related_subject_id = COALESCE(j.company_id, j.creator_id)
+            FROM job_assignments a
+            JOIN jobs j ON j.id = a.job_id
+            WHERE (e.mutating OR e.sensitivity &lt;&gt; 'NORMAL') AND e.subject_id IS NULL
+              AND e.resource_type = 'job-assignments'
+              AND a.id::text = e.resource_id;
+
+            UPDATE admin_audit_entries e
+            SET subject_type = 'USER', subject_id = p.worker_id
+            FROM payouts p
+            WHERE (e.mutating OR e.sensitivity &lt;&gt; 'NORMAL') AND e.subject_id IS NULL
+              AND e.resource_type = 'payouts'
+              AND p.id::text = e.resource_id;
+
+            UPDATE admin_audit_entries e
+            SET subject_type = 'USER', subject_id = a.worker_id,
+                related_subject_type = CASE WHEN j.company_id IS NOT NULL THEN 'COMPANY'
+                                            WHEN j.creator_id IS NOT NULL THEN 'USER' END,
+                related_subject_id = COALESCE(j.company_id, j.creator_id)
+            FROM payments p
+            JOIN job_assignments a ON a.id = p.job_assignment_id
+            JOIN jobs j ON j.id = a.job_id
+            WHERE (e.mutating OR e.sensitivity &lt;&gt; 'NORMAL') AND e.subject_id IS NULL
+              AND e.resource_type = 'payments'
+              AND p.id::text = e.resource_id;
+
+            UPDATE admin_audit_entries e
+            SET subject_type = 'USER', subject_id = a.worker_id,
+                related_subject_type = CASE WHEN j.company_id IS NOT NULL THEN 'COMPANY'
+                                            WHEN j.creator_id IS NOT NULL THEN 'USER' END,
+                related_subject_id = COALESCE(j.company_id, j.creator_id)
+            FROM disputes d
+            JOIN job_assignments a ON a.id = d.job_assignment_id
+            JOIN jobs j ON j.id = a.job_id
+            WHERE (e.mutating OR e.sensitivity &lt;&gt; 'NORMAL') AND e.subject_id IS NULL
+              AND e.resource_type = 'disputes'
+              AND d.id::text = e.resource_id;
+
+            UPDATE admin_audit_entries e
+            SET subject_type = CASE WHEN r.reported_user_id IS NOT NULL THEN 'USER'
+                                    WHEN j.company_id IS NOT NULL THEN 'COMPANY'
+                                    ELSE 'USER' END,
+                subject_id = COALESCE(r.reported_user_id, j.company_id, j.creator_id)
+            FROM reports r
+            LEFT JOIN jobs j ON j.id = r.job_id
+            WHERE (e.mutating OR e.sensitivity &lt;&gt; 'NORMAL') AND e.subject_id IS NULL
+              AND e.resource_type = 'reports'
+              AND r.id::text = e.resource_id
+              AND COALESCE(r.reported_user_id, j.company_id, j.creator_id) IS NOT NULL;
+
+            UPDATE admin_audit_entries e
+            SET subject_type = 'COMPANY', subject_id = ci.company_id
+            FROM reports r
+            JOIN company_images ci ON ci.image_id = r.image_id
+            WHERE (e.mutating OR e.sensitivity &lt;&gt; 'NORMAL') AND e.subject_id IS NULL
+              AND e.resource_type = 'reports'
+              AND r.id::text = e.resource_id
+              AND r.reported_user_id IS NULL AND r.job_id IS NULL;
+
+            UPDATE admin_audit_entries e
+            SET subject_type = CASE WHEN j.company_id IS NOT NULL THEN 'COMPANY' ELSE 'USER' END,
+                subject_id = COALESCE(j.company_id, j.creator_id)
+            FROM reports r
+            JOIN job_images ji ON ji.image_id = r.image_id
+            JOIN jobs j ON j.id = ji.job_id
+            WHERE (e.mutating OR e.sensitivity &lt;&gt; 'NORMAL') AND e.subject_id IS NULL
+              AND e.resource_type = 'reports'
+              AND r.id::text = e.resource_id
+              AND r.reported_user_id IS NULL AND r.job_id IS NULL
+              AND COALESCE(j.company_id, j.creator_id) IS NOT NULL;
+        </sql>
+        <rollback/>
+    </changeSet>
+
+    <changeSet id="2026-10-03-01-03-admin-audit-subject-validate" author="koala">
+        <sql>
+            ALTER TABLE admin_audit_entries VALIDATE CONSTRAINT ck_admin_audit_entries_subject_pair;
+            ALTER TABLE admin_audit_entries VALIDATE CONSTRAINT ck_admin_audit_entries_related_subject_pair;
+        </sql>
+        <rollback/>
+    </changeSet>
+
+    <changeSet id="2026-10-03-01-04-admin-audit-subject-index" author="koala" runInTransaction="false">
+        <sql>CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_admin_audit_entries_subject
+            ON admin_audit_entries (subject_id, occurred_at DESC) WHERE subject_id IS NOT NULL</sql>
+        <rollback>
+            <sql>DROP INDEX CONCURRENTLY IF EXISTS ix_admin_audit_entries_subject</sql>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2026-10-03-01-05-admin-audit-related-subject-index" author="koala" runInTransaction="false">
+        <sql>CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_admin_audit_entries_related_subject
+            ON admin_audit_entries (related_subject_id, occurred_at DESC) WHERE related_subject_id IS NOT NULL</sql>
+        <rollback>
+            <sql>DROP INDEX CONCURRENTLY IF EXISTS ix_admin_audit_entries_related_subject</sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

@@ -27,6 +27,10 @@ public final class AuditScope {
         return targetsARecord || filtered;
     }
 
+    public static boolean carriesASubject(boolean mutating, PermissionSensitivity sensitivity) {
+        return mutating || sensitivity != PermissionSensitivity.NORMAL;
+    }
+
     public static boolean isMutating(String method, StaffPermission[] permissions) {
         if (method == null || READ_METHODS.contains(method)) {
             return false;

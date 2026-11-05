@@ -1,5 +1,7 @@
 package com.exskylab.koala.business.abstracts;
 
+import java.util.Optional;
+import com.exskylab.koala.core.security.AuditSubject;
 import com.exskylab.koala.core.dtos.gallery.request.UpdateGalleryDto;
 import com.exskylab.koala.core.dtos.gallery.response.GalleryImageDto;
 import com.exskylab.koala.core.dtos.job.response.JobSummaryDto;
@@ -36,6 +38,8 @@ public interface GalleryService {
     void fillJobCovers(List<JobSummaryDto> jobs);
 
     void removeImageEverywhere(UUID imageId);
+
+    Optional<AuditSubject> findImageOwner(UUID imageId);
 
     Image getCompanyImageForStaffDownload(UUID companyId, UUID imageId);
 }

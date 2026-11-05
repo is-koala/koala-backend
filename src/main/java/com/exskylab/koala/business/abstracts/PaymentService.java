@@ -47,6 +47,8 @@ public interface PaymentService {
 
     Payment getForStaff(UUID paymentId);
 
+    Optional<UUID> findJobAssignmentIdOf(UUID paymentId);
+
     Page<Payment> searchForStaff(List<PaymentAttemptStatus> statuses, Pageable pageable);
 
     long countStuckVerifications();

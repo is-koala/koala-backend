@@ -1,5 +1,7 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.dataAccess.ReportedParty;
+import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.exceptions.ConflictException;
@@ -308,6 +310,12 @@ public class ReportManager implements ReportService {
                             ? null
                             : report.getDescription().trim());
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<ReportedParty> findReportedParty(UUID reportId) {
+        return reportDao.findReportedPartyById(reportId);
     }
 
     @Override

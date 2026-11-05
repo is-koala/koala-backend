@@ -66,6 +66,20 @@ public class AdminAuditEntry {
     @Column(name = "retain_until", nullable = false, updatable = false)
     private Instant retainUntil;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "subject_type", updatable = false, length = 16)
+    private AuditSubjectType subjectType;
+
+    @Column(name = "subject_id", updatable = false)
+    private UUID subjectId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "related_subject_type", updatable = false, length = 16)
+    private AuditSubjectType relatedSubjectType;
+
+    @Column(name = "related_subject_id", updatable = false)
+    private UUID relatedSubjectId;
+
     @OneToOne(mappedBy = "entry", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     private AdminAuditEntryDetail detail;
 }

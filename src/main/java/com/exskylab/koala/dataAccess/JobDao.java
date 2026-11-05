@@ -22,6 +22,10 @@ import java.util.UUID;
 @Repository
 public interface JobDao extends JpaRepository<Job, UUID> {
 
+    @Query(value = "select j.company_id as \"companyId\", j.creator_id as \"creatorId\" from jobs j where j.id = :id",
+            nativeQuery = true)
+    Optional<EmployerIds> findEmployerIdsById(@Param("id") UUID id);
+
     String PUBLIC_LATITUDE = """
             case when j.employerType = com.exskylab.koala.entities.JobEmployerType.COMPANY and j.addressPublic = true
                  then j.address.latitude else round(j.address.latitude, 2) end""";

@@ -16,6 +16,9 @@ import java.util.UUID;
 @Repository
 public interface CompanyDao extends JpaRepository<Company, UUID> {
 
+    @Query(value = "select exists(select 1 from companies where id = :id)", nativeQuery = true)
+    boolean existsIncludingDeletedById(@Param("id") UUID id);
+
     Optional<Company> findById(UUID id);
 
     @EntityGraph(attributePaths = {

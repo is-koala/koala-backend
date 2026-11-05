@@ -22,6 +22,15 @@ import java.util.UUID;
 @Repository
 public interface ReportDao extends JpaRepository<Report, UUID> {
 
+    @Query(value = """
+            select r.reported_user_id as "reportedUserId", j.company_id as "jobCompanyId",
+                   j.creator_id as "jobCreatorId", r.image_id as "imageId"
+            from reports r
+            left join jobs j on j.id = r.job_id
+            where r.id = :id
+            """, nativeQuery = true)
+    Optional<ReportedParty> findReportedPartyById(@Param("id") UUID id);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select r from Report r where r.id = :id")
     Optional<Report> findByIdForUpdate(@Param("id") UUID id);

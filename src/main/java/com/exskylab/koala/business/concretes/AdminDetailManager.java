@@ -39,6 +39,8 @@ import com.exskylab.koala.core.mappers.CompanyMapper;
 import com.exskylab.koala.core.mappers.LegalMapper;
 import com.exskylab.koala.core.helpers.MessageResolver;
 import com.exskylab.koala.core.security.StaffAuditContext;
+import com.exskylab.koala.core.security.AuditSubjects;
+import com.exskylab.koala.core.security.AuditSubject;
 import com.exskylab.koala.core.security.StaffPrincipal;
 import com.exskylab.koala.dataAccess.StaffAssignmentSummary;
 import com.exskylab.koala.entities.AccountDeletionRequest;
@@ -210,6 +212,7 @@ public class AdminDetailManager implements AdminDetailService {
         boolean includePii = actor != null && actor.isRegistered() && actor.holds(StaffPermission.USER_READ_PII);
         if (includePii) {
             StaffAuditContext.reclassify(StaffPermission.USER_READ_PII, StaffPermission.USER_READ_PII.getCode(), true);
+            StaffAuditContext.about(AuditSubjects.of(AuditSubject.user(user.getId())));
             log.info("Staff {} reads user {} with contact details", actor.staffId(), userId);
         }
 

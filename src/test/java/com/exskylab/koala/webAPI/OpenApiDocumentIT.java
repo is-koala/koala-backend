@@ -492,6 +492,23 @@ class OpenApiDocumentIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void theAuditTrailDocumentsItsSubjectFieldsAndTimelineFilterInTurkish() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath("$.paths['/admin/audit-log'].get.parameters[?(@.name == 'subjectId')].description")
+                        .value(hasItem(containsString("karşı tarafı"))))
+                .andExpect(jsonPath("$.paths['/admin/audit-log'].get.parameters[?(@.name == 'subjectType')]")
+                        .isNotEmpty())
+                .andExpect(jsonPath("$.paths['/admin/audit-log'].get.description",
+                        containsString("zaman çizelgesi")))
+                .andExpect(jsonPath("$.components.schemas.AuditEntryDto.properties.subjectType.description",
+                        containsString("geri dolduruldu")))
+                .andExpect(jsonPath("$.components.schemas.AuditEntryDto.properties.subjectType.enum",
+                        containsInAnyOrder("USER", "COMPANY")))
+                .andExpect(jsonPath("$.components.schemas.AuditEntryDto.properties.relatedSubjectId.description",
+                        containsString("işveren")));
+    }
+
+    @Test
     void theSessionDetailAndDeviceRenameAreDocumentedInTurkish() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(jsonPath("$.paths['/users/me/sessions/{sessionId}'].get.summary").value("Oturum detayı"))

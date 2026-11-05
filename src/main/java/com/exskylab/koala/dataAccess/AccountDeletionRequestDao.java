@@ -20,6 +20,9 @@ import java.util.UUID;
 @Repository
 public interface AccountDeletionRequestDao extends JpaRepository<AccountDeletionRequest, UUID> {
 
+    @Query("select coalesce(r.subjectId, r.user.id) from AccountDeletionRequest r where r.id = :id")
+    Optional<UUID> findRequesterIdById(@Param("id") UUID id);
+
     Optional<AccountDeletionRequest> findFirstByUserIdAndStatusOrderByRequestedAtDesc(
             UUID userId, AccountDeletionStatus status);
 

@@ -45,6 +45,8 @@ public interface PayoutService {
 
     Optional<Payout> findForAssignment(UUID jobAssignmentId);
 
+    Optional<UUID> findWorkerIdOf(UUID payoutId);
+
     List<Payout> findForAssignments(Collection<UUID> jobAssignmentIds);
 
     List<Refund> getRefundsForPayments(Collection<UUID> paymentIds);

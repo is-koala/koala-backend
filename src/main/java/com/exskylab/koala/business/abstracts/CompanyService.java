@@ -63,4 +63,6 @@ public interface CompanyService {
     Company approveCompany(StaffPrincipal actor, UUID companyId, String note);
 
     Company rejectCompany(StaffPrincipal actor, UUID companyId, String reason);
+
+    boolean existsIncludingDeleted(UUID id);
 }

@@ -20,6 +20,9 @@ import java.util.UUID;
 @Repository
 public interface UserDao extends JpaRepository<User, UUID> {
 
+    @Query(value = "select exists(select 1 from users where id = :id)", nativeQuery = true)
+    boolean existsIncludingDeletedById(@Param("id") UUID id);
+
     Optional<User> findByEmail(String email);
 
     boolean existsByEmail(String email);

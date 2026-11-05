@@ -200,20 +200,20 @@ class LegalConsentTest {
     }
 
     @Test
-    void anErasureRequestDropsTheAuditDetailAboutThatPerson() {
+    void queuingAnErasureRequestDropsNoAuditDetailYet() {
         legalManager.requestAccountDeletion(user, "kvkk");
 
-        verify(staffAuditService).eraseDetailsForResource(user.getId().toString());
+        verify(staffAuditService, never()).eraseDetailsForResource(any());
     }
 
     @Test
-    void aQueuedButBlockedErasureRequestStillDropsTheAuditDetail() {
+    void aQueuedButBlockedErasureRequestDropsNoAuditDetail() {
         when(jobAssignmentService.findEscrowLinksForUsers(any())).thenReturn(linkTo(user));
 
         AccountDeletionRequest request = legalManager.requestAccountDeletion(user, "kvkk");
 
         assertEquals(LegalMessages.DELETION_BLOCKED_BY_ESCROW, request.getBlockedReason());
-        verify(staffAuditService).eraseDetailsForResource(user.getId().toString());
+        verify(staffAuditService, never()).eraseDetailsForResource(any());
     }
 
     @Test
@@ -226,9 +226,10 @@ class LegalConsentTest {
         assertNotNull(request.getProcessedAt());
         assertNull(request.getReason());
         verify(accountAnonymizer).anonymize(user.getId(), request.getId());
+        verify(staffAuditService).eraseDetailsForResource(user.getId().toString());
 
         assertFalse(legalManager.processDeletionRequest(request.getId()));
-        verifyNoMoreInteractions(accountAnonymizer);
+        verifyNoMoreInteractions(accountAnonymizer, staffAuditService);
     }
 
     @Test
@@ -242,6 +243,7 @@ class LegalConsentTest {
         assertEquals(LegalMessages.DELETION_BLOCKED_BY_DISPUTE, request.getBlockedReason());
         assertTrue(request.getNextAttemptAt().isAfter(Instant.now()));
         verifyNoInteractions(accountAnonymizer);
+        verify(staffAuditService, never()).eraseDetailsForResource(any());
     }
 
     @Test
@@ -256,6 +258,7 @@ class LegalConsentTest {
         assertNull(request.getBlockedReason());
         assertNull(request.getRejectedByStaffId());
         assertNotNull(request.getProcessedAt());
+        verify(staffAuditService, never()).eraseDetailsForResource(any());
     }
 
     private AccountDeletionRequest deletionRequest() {

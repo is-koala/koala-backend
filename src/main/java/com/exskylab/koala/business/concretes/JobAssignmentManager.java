@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import com.exskylab.koala.dataAccess.AssignmentParties;
 import com.exskylab.koala.core.dtos.jobAssignment.response.AdminAssignmentDto;
 
 import lombok.extern.slf4j.Slf4j;
@@ -797,5 +798,11 @@ public class JobAssignmentManager implements JobAssignmentService {
             return List.of();
         }
         return jobAssignmentDao.findActiveLinksForUsers(userIds, ACTIVE_WORK_STATUSES);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<AssignmentParties> findAuditParties(UUID jobAssignmentId) {
+        return jobAssignmentDao.findPartiesById(jobAssignmentId);
     }
 }

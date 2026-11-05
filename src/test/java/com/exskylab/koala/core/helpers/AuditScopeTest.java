@@ -48,6 +48,15 @@ class AuditScopeTest {
     }
 
     @Test
+    void decisionsAndSensitiveReadsCarryASubjectButOrdinaryReadsDoNot() {
+        assertTrue(AuditScope.carriesASubject(true, PermissionSensitivity.NORMAL));
+        assertTrue(AuditScope.carriesASubject(false, PermissionSensitivity.PERSONAL_DATA));
+        assertTrue(AuditScope.carriesASubject(false, PermissionSensitivity.FINANCIAL));
+        assertFalse(AuditScope.carriesASubject(false, PermissionSensitivity.NORMAL),
+                "Sıradan okuma konu zaman çizelgesini gözatmayla doldurmaz.");
+    }
+
+    @Test
     void pagingParametersAreNotFilters() {
         assertFalse(AuditScope.hasFilter(Map.of("page", new String[]{"2"}, "size", new String[]{"20"},
                 "sort", new String[]{"occurredAt,desc"})));

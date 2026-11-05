@@ -2,6 +2,7 @@ package com.exskylab.koala.core.security;
 
 import com.exskylab.koala.entities.PermissionSensitivity;
 
+import java.util.Objects;
 import java.util.UUID;
 
 public record StaffAuditRecord(UUID actorStaffId,
@@ -14,5 +15,10 @@ public record StaffAuditRecord(UUID actorStaffId,
                                boolean mutating,
                                PermissionSensitivity sensitivity,
                                String ip,
-                               String userAgent) {
+                               String userAgent,
+                               AuditSubjects subjects) {
+
+    public StaffAuditRecord {
+        Objects.requireNonNull(subjects, "subjects");
+    }
 }

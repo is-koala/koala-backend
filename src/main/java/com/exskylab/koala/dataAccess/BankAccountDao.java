@@ -32,6 +32,10 @@ public interface BankAccountDao extends JpaRepository<BankAccount, UUID> {
 
     Optional<BankAccount> findByVerificationReferenceAndActiveTrue(String verificationReference);
 
+    @Query(value = "select user_id from bank_accounts where verification_reference = :reference",
+            nativeQuery = true)
+    Optional<UUID> findOwnerIdIncludingInactiveByVerificationReference(@Param("reference") String reference);
+
     @Query("""
             select account from BankAccount account
             left join account.user owner

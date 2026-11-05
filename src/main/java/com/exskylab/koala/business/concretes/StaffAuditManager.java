@@ -4,11 +4,14 @@ import com.exskylab.koala.business.abstracts.StaffAuditService;
 import com.exskylab.koala.core.helpers.CreatedAtRange;
 import com.exskylab.koala.core.helpers.PageableSanitizer;
 import com.exskylab.koala.core.properties.AuditRetentionProperties;
+import com.exskylab.koala.core.security.AuditSubject;
+import com.exskylab.koala.core.security.AuditSubjects;
 import com.exskylab.koala.core.security.StaffAuditRecord;
 import com.exskylab.koala.dataAccess.AdminAuditEntryDao;
 import com.exskylab.koala.dataAccess.AdminAuditEntryDetailDao;
 import com.exskylab.koala.entities.AdminAuditEntry;
 import com.exskylab.koala.entities.AdminAuditEntryDetail;
+import com.exskylab.koala.entities.AuditSubjectType;
 import com.exskylab.koala.entities.PermissionSensitivity;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -19,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -70,6 +74,7 @@ public class StaffAuditManager implements StaffAuditService {
         entry.setMutating(source.mutating());
         entry.setSensitivity(source.sensitivity());
         entry.setRetainUntil(plusMonths(now, coreMonthsFor(source.sensitivity())));
+        stampSubjects(entry, source.subjects());
 
         AdminAuditEntryDetail detail = new AdminAuditEntryDetail();
         detail.setEntry(entry);
@@ -87,7 +92,8 @@ public class StaffAuditManager implements StaffAuditService {
     @Override
     @Transactional(readOnly = true)
     public Page<AdminAuditEntry> search(UUID actor, String action, String permission, String resourceType,
-                                        String resourceId, Instant from, Instant to, Boolean allowed,
+                                        String resourceId, AuditSubjectType subjectType, UUID subjectId,
+                                        Instant from, Instant to, Boolean allowed, Boolean mutating,
                                         Pageable pageable) {
         pageableSanitizer.rejectUnknownSort(pageable, SORTABLE);
         Pageable page = pageableSanitizer.sanitize(pageable, SORTABLE, NEWEST_FIRST);
@@ -95,8 +101,10 @@ public class StaffAuditManager implements StaffAuditService {
         CreatedAtRange occurredAt = CreatedAtRange.of(from, to);
         return adminAuditEntryDao.search(actor, blankToNull(action), blankToNull(permission),
                 blankToNull(resourceType), blankToNull(resourceId),
+                subjectType == null ? null : subjectType.name(), subjectId,
                 occurredAt.from(), occurredAt.to(),
-                allowed != null, Boolean.TRUE.equals(allowed), page);
+                allowed != null, Boolean.TRUE.equals(allowed),
+                mutating != null, Boolean.TRUE.equals(mutating), page);
     }
 
     @Override
@@ -125,11 +133,34 @@ public class StaffAuditManager implements StaffAuditService {
         if (resourceId == null || resourceId.isBlank()) {
             return 0;
         }
-        int erased = adminAuditEntryDetailDao.deleteByResourceId(resourceId);
+        int erased = personIdOf(resourceId)
+                .map(personId -> adminAuditEntryDetailDao.deleteAboutPerson(resourceId, personId))
+                .orElseGet(() -> adminAuditEntryDetailDao.deleteByResourceId(resourceId));
         if (erased > 0) {
-            log.info("Audit detail rows erased on request for resource {}: {}", resourceId, erased);
+            log.info("Audit detail rows erased on anonymization for resource {}: {}", resourceId, erased);
         }
         return erased;
+    }
+
+    private static void stampSubjects(AdminAuditEntry entry, AuditSubjects subjects) {
+        AuditSubject subject = subjects.subject();
+        if (subject != null) {
+            entry.setSubjectType(subject.type());
+            entry.setSubjectId(subject.id());
+        }
+        AuditSubject related = subjects.related();
+        if (related != null) {
+            entry.setRelatedSubjectType(related.type());
+            entry.setRelatedSubjectId(related.id());
+        }
+    }
+
+    private static Optional<UUID> personIdOf(String resourceId) {
+        try {
+            return Optional.of(UUID.fromString(resourceId));
+        } catch (IllegalArgumentException notAPerson) {
+            return Optional.empty();
+        }
     }
 
     private int coreMonthsFor(PermissionSensitivity sensitivity) {

@@ -379,6 +379,11 @@ public class PaymentManager implements PaymentService {
     }
 
     @Override
+    public Optional<UUID> findJobAssignmentIdOf(UUID paymentId) {
+        return paymentDao.findJobAssignmentIdIncludingDeletedById(paymentId);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public Payment getForStaff(UUID paymentId) {
         return paymentDao.findForStaffById(paymentId)

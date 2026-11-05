@@ -316,4 +316,10 @@ public class BankAccountManager implements BankAccountService {
     public int verificationAttemptsAllowed() {
         return verificationProperties.getMaxAttempts();
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<UUID> findOwnerIdByVerificationReference(String reference) {
+        return bankAccountDao.findOwnerIdIncludingInactiveByVerificationReference(reference);
+    }
 }

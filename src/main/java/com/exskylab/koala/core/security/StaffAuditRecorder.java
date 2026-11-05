@@ -1,5 +1,6 @@
 package com.exskylab.koala.core.security;
 
+import com.exskylab.koala.business.abstracts.AuditSubjectService;
 import com.exskylab.koala.business.abstracts.StaffAuditService;
 import com.exskylab.koala.core.helpers.AuditScope;
 import com.exskylab.koala.core.helpers.ClientIpResolver;
@@ -24,10 +25,13 @@ public class StaffAuditRecorder {
     private static final String USER_AGENT_HEADER = "User-Agent";
 
     private final StaffAuditService staffAuditService;
+    private final AuditSubjectService auditSubjectService;
     private final ClientIpResolver clientIpResolver;
 
-    public StaffAuditRecorder(StaffAuditService staffAuditService, ClientIpResolver clientIpResolver) {
+    public StaffAuditRecorder(StaffAuditService staffAuditService, AuditSubjectService auditSubjectService,
+                              ClientIpResolver clientIpResolver) {
         this.staffAuditService = staffAuditService;
+        this.auditSubjectService = auditSubjectService;
         this.clientIpResolver = clientIpResolver;
     }
 
@@ -53,18 +57,22 @@ public class StaffAuditRecorder {
             return;
         }
 
+        String resourceType = AuditScope.resourceTypeOf(pattern);
         StaffAuditRecord record = new StaffAuditRecord(
                 actor.id(),
                 actor.displayName(),
                 permissionCodeOf(permissions),
                 actionOf(required, permissions),
-                AuditScope.resourceTypeOf(pattern),
+                resourceType,
                 resourceId,
                 allowed,
                 mutating,
                 sensitivity,
                 clientIpResolver.resolve(request),
-                request.getHeader(USER_AGENT_HEADER));
+                request.getHeader(USER_AGENT_HEADER),
+                AuditScope.carriesASubject(mutating, sensitivity)
+                        ? subjectsOf(resourceType, resourceId)
+                        : AuditSubjects.NONE);
 
         if (StaffAuditContext.pend(record)) {
             return;
@@ -74,6 +82,15 @@ public class StaffAuditRecorder {
             staffAuditService.record(record, null, null, null);
         } catch (Exception exception) {
             log.error("Audit record could not be written: {}", record.action(), exception);
+        }
+    }
+
+    private AuditSubjects subjectsOf(String resourceType, String resourceId) {
+        try {
+            return auditSubjectService.resolve(resourceType, resourceId);
+        } catch (Exception exception) {
+            log.warn("Audit subject could not be resolved for {} {}", resourceType, resourceId, exception);
+            return AuditSubjects.NONE;
         }
     }
 

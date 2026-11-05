@@ -21,6 +21,9 @@ import java.util.UUID;
 @Repository
 public interface PaymentDao extends JpaRepository<Payment, UUID> {
 
+    @Query(value = "select job_assignment_id from payments where id = :id", nativeQuery = true)
+    Optional<UUID> findJobAssignmentIdIncludingDeletedById(@Param("id") UUID id);
+
     @Query("select p from Payment p where p.status in :statuses")
     Page<Payment> searchForStaff(@Param("statuses") List<PaymentAttemptStatus> statuses, Pageable pageable);
 

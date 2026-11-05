@@ -43,6 +43,28 @@ public final class StaffAuditContext {
         context.after = after;
     }
 
+    public static void about(AuditSubjects subjects) {
+        StaffAuditContext context = CURRENT.get();
+        if (context == null || context.pending == null || subjects == null) {
+            return;
+        }
+
+        StaffAuditRecord source = context.pending;
+        context.pending = new StaffAuditRecord(
+                source.actorStaffId(),
+                source.actorDisplayName(),
+                source.permission(),
+                source.action(),
+                source.resourceType(),
+                source.resourceId(),
+                source.allowed(),
+                source.mutating(),
+                source.sensitivity(),
+                source.ip(),
+                source.userAgent(),
+                subjects);
+    }
+
     public static void reclassify(StaffPermission permission, String action, boolean allowed) {
         StaffAuditContext context = CURRENT.get();
         if (context == null || context.pending == null) {
@@ -61,7 +83,8 @@ public final class StaffAuditContext {
                 permission.isMutating(),
                 permission.getSensitivity(),
                 source.ip(),
-                source.userAgent());
+                source.userAgent(),
+                source.subjects());
     }
 
     public StaffAuditRecord pending() {

@@ -59,6 +59,14 @@ public interface JobAssignmentDao extends JpaRepository<JobAssignment, UUID> {
             """)
     List<StaffAssignmentSummary> findStaffSummariesByIdIn(@Param("ids") java.util.Collection<UUID> ids);
 
+    @Query(value = """
+            select a.worker_id as "workerId", j.company_id as "companyId", j.creator_id as "creatorId"
+            from job_assignments a
+            join jobs j on j.id = a.job_id
+            where a.id = :id
+            """, nativeQuery = true)
+    Optional<AssignmentParties> findPartiesById(@Param("id") UUID id);
+
     @Query("""
             select a.id as id, a.worker.id as workerId, a.job.creator.id as employerId
             from JobAssignment a

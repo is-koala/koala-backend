@@ -47,5 +47,7 @@ public interface LegalService {
 
     Optional<UUID> findOpenDeletionRequestId(UUID userId);
 
+    Optional<UUID> findDeletionRequesterId(UUID requestId);
+
     Map<UUID, List<DeletionBlockerDto>> findDeletionBlockers(Collection<AccountDeletionRequest> requests);
 }

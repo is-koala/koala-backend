@@ -16,6 +16,7 @@ import com.exskylab.koala.core.helpers.StaffSeparationOfDuties;
 import com.exskylab.koala.core.properties.StaffAuthProperties;
 import com.exskylab.koala.core.security.JwtService;
 import com.exskylab.koala.core.security.StaffAuditContext;
+import com.exskylab.koala.core.security.AuditSubjects;
 import com.exskylab.koala.core.security.StaffAuditRecord;
 import com.exskylab.koala.core.security.StaffAuthorization;
 import com.exskylab.koala.core.security.StaffBootstrapResult;
@@ -408,7 +409,8 @@ public class StaffAccountManager implements StaffAccountService {
                 true,
                 PermissionSensitivity.PERSONAL_DATA,
                 null,
-                null), null, null, "email=" + member.getEmail() + "; roles=[OWNER]");
+                null,
+                AuditSubjects.NONE), null, null, "email=" + member.getEmail() + "; roles=[OWNER]");
 
         return new StaffBootstrapResult(true, 0);
     }

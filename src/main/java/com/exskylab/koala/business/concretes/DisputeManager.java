@@ -1,5 +1,6 @@
 package com.exskylab.koala.business.concretes;
 
+import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 import com.exskylab.koala.core.exceptions.ValidationException;
 import com.exskylab.koala.core.exceptions.ConflictException;
@@ -218,6 +219,12 @@ public class DisputeManager implements DisputeService {
     public Dispute getForStaff(UUID disputeId) {
         return disputeDao.findByIdForStaff(disputeId)
                 .orElseThrow(() -> new ResourceNotFoundException(DisputeMessages.NOT_FOUND));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<UUID> findJobAssignmentIdOf(UUID disputeId) {
+        return disputeDao.findJobAssignmentIdById(disputeId);
     }
 
     @Override

@@ -38,4 +38,6 @@ public interface BankAccountService {
     List<BankAccount> getAccountsForStaff(UUID userId);
 
     int verificationAttemptsAllowed();
+
+    Optional<UUID> findOwnerIdByVerificationReference(String reference);
 }
